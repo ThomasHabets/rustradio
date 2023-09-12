@@ -14,7 +14,7 @@ where
     }
     pub fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
         let mut v: Vec<T> = Vec::new();
-        for d in r.buffer().clone().into_iter() {
+        for d in r.buffer().clone().iter() {
             v.push(*d * self.val);
         }
         w.write(v.as_slice())?;

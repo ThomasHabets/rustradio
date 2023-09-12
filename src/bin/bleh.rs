@@ -15,12 +15,14 @@ fn main() -> Result<()> {
     let mut s1 = Stream::new(10);
     let mut s2 = Stream::new(10);
     let mut s3 = Stream::new(10);
+
+    let wait = std::time::Duration::from_secs(1);
+
     loop {
         src.work(&mut s1)?;
         mul.work(&mut s1, &mut s2)?;
         f2i.work(&mut s2, &mut s3)?;
         sink.work(&mut s3)?;
-        break;
+        std::thread::sleep(wait);
     }
-    Ok(())
 }

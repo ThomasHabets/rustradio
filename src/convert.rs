@@ -18,6 +18,7 @@ impl FloatToU32 {
             .iter()
             .map(|e| (*e * self.scale) as u32)
             .collect();
+        r.consume(v.len());
         w.write(&v)
     }
 }
