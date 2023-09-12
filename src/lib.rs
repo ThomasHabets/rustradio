@@ -1,6 +1,47 @@
 use anyhow::Result;
+
+pub mod constant_source;
+pub mod convert;
+pub mod debug_sink;
+pub mod multiply_const;
+
 type Float = f32;
 type Complex = num::complex::Complex<Float>;
+
+pub trait Sample {
+    type Type;
+    fn size() -> usize;
+    fn parse(data: &[u8]) -> Result<Self::Type>;
+}
+
+impl Sample for Complex {
+    type Type = Complex;
+    fn size() -> usize {
+        8
+    }
+    fn parse(_data: &[u8]) -> Result<Self::Type> {
+        todo!();
+    }
+}
+
+impl Sample for Float {
+    type Type = Float;
+    fn size() -> usize {
+        4
+    }
+    fn parse(_data: &[u8]) -> Result<Self::Type> {
+        todo!();
+    }
+}
+impl Sample for u32 {
+    type Type = u32;
+    fn size() -> usize {
+        4
+    }
+    fn parse(_data: &[u8]) -> Result<Self::Type> {
+        todo!();
+    }
+}
 
 pub struct Stream<T> {
     max_samples: usize,
@@ -46,92 +87,6 @@ impl<T> Stream<T> {
     }
 }
 
-pub trait Sample {
-    type Type;
-    fn size() -> usize;
-    fn parse(data: &[u8]) -> Result<Self::Type>;
-}
-
-impl Sample for Complex {
-    type Type = Complex;
-    fn size() -> usize {
-        8
-    }
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
-    }
-}
-
-impl Sample for Float {
-    type Type = Float;
-    fn size() -> usize {
-        4
-    }
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
-    }
-}
-impl Sample for u32 {
-    type Type = u32;
-    fn size() -> usize {
-        4
-    }
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
-    }
-}
-
-pub struct ConstantSource<T> {
-    val: T,
-}
-
-impl<T: Copy + Sample<Type = T> + std::fmt::Debug> ConstantSource<T> {
-    pub fn new(val: T) -> Self {
-        Self { val }
-    }
-    pub fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        w.write(&vec![self.val; w.available()])
-    }
-}
-
-pub struct DebugSink {}
-impl DebugSink {
-    pub fn new() -> Self {
-        Self {}
-    }
-    pub fn work<T: Copy + Sample<Type = T> + std::fmt::Debug>(
-        &mut self,
-        r: &mut dyn StreamReader<T>,
-    ) -> Result<()> {
-        for d in r.buffer().clone().into_iter() {
-            println!("debug: {:?}", d);
-        }
-        r.consume(r.buffer().len());
-        Ok(())
-    }
-}
-pub struct MultiplyConst<T> {
-    val: T,
-}
-
-impl<T> MultiplyConst<T>
-where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + std::ops::Mul<Output = T>,
-{
-    pub fn new(val: T) -> Self {
-        Self { val }
-    }
-    pub fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        let mut v: Vec<T> = Vec::new();
-        for d in r.buffer().clone().into_iter() {
-            v.push(*d * self.val);
-        }
-        w.write(v.as_slice())?;
-        r.consume(v.len());
-        Ok(())
-    }
-}
-
 /*
 struct Convert<From, To> {
     scale_from: From,
@@ -163,23 +118,3 @@ where From: std::ops::Mul<Output=From> + std::convert::TryInto<To>,
     }
 }
 */
-pub struct FloatToU32 {
-    scale: Float,
-}
-impl FloatToU32 {
-    pub fn new(scale: Float) -> Self {
-        Self { scale }
-    }
-    pub fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Float>,
-        w: &mut dyn StreamWriter<u32>,
-    ) -> Result<()> {
-        let v: Vec<u32> = r
-            .buffer()
-            .iter()
-            .map(|e| (*e * self.scale) as u32)
-            .collect();
-        w.write(&v)
-    }
-}

@@ -1,6 +1,11 @@
 use anyhow::Result;
 
+use lib::constant_source::*;
+use lib::convert::*;
+use lib::debug_sink::*;
+use lib::multiply_const::*;
 use lib::*;
+
 fn main() -> Result<()> {
     println!("Hello, world!");
     let mut src = ConstantSource::new(1f32);
