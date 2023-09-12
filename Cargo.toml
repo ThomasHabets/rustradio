@@ -8,3 +8,11 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 num = "0.4.1"
+
+[lib]
+name = "lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bleh"
+path = "src/bin/bleh.rs"
