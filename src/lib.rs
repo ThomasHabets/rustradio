@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 pub mod constant_source;
+pub mod file_source;
 pub mod convert;
 pub mod debug_sink;
 pub mod multiply_const;
