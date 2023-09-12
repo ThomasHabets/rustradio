@@ -1,10 +1,11 @@
 use anyhow::Result;
 
 pub mod constant_source;
-pub mod file_source;
 pub mod convert;
 pub mod debug_sink;
+pub mod file_source;
 pub mod multiply_const;
+pub mod quadrature_demod;
 
 type Float = f32;
 type Complex = num::complex::Complex<Float>;
@@ -52,6 +53,7 @@ pub struct Stream<T> {
 pub trait StreamReader<T> {
     fn consume(&mut self, n: usize);
     fn buffer(&self) -> &[T];
+    fn available(&self) -> usize;
 }
 
 pub trait StreamWriter<T: Copy> {
@@ -65,6 +67,9 @@ impl<T> StreamReader<T> for Stream<T> {
     }
     fn buffer(&self) -> &[T] {
         &self.data
+    }
+    fn available(&self) -> usize {
+        self.data.len()
     }
 }
 
