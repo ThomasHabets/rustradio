@@ -3,6 +3,7 @@ use anyhow::Result;
 pub mod constant_source;
 pub mod convert;
 pub mod debug_sink;
+pub mod file_sink;
 pub mod file_source;
 pub mod multiply_const;
 pub mod quadrature_demod;
@@ -10,10 +11,17 @@ pub mod quadrature_demod;
 type Float = f32;
 type Complex = num::complex::Complex<Float>;
 
+pub trait Sink<T> {
+    fn work(&mut self, r: &mut dyn StreamReader<T>) -> Result<()>
+    where
+        T: Copy + Sample<Type = T> + std::fmt::Debug + Default;
+}
+
 pub trait Sample {
     type Type;
     fn size() -> usize;
     fn parse(data: &[u8]) -> Result<Self::Type>;
+    fn serialize(&self) -> Vec<u8>;
 }
 
 impl Sample for Complex {
@@ -23,6 +31,12 @@ impl Sample for Complex {
     }
     fn parse(_data: &[u8]) -> Result<Self::Type> {
         todo!();
+    }
+    fn serialize(&self) -> Vec<u8> {
+        let mut ret = Vec::new();
+        ret.extend(Float::to_be_bytes(self.re));
+        ret.extend(Float::to_be_bytes(self.im));
+        ret
     }
 }
 
@@ -34,7 +48,11 @@ impl Sample for Float {
     fn parse(_data: &[u8]) -> Result<Self::Type> {
         todo!();
     }
+    fn serialize(&self) -> Vec<u8> {
+        f32::to_be_bytes(*self).to_vec()
+    }
 }
+
 impl Sample for u32 {
     type Type = u32;
     fn size() -> usize {
@@ -42,6 +60,9 @@ impl Sample for u32 {
     }
     fn parse(_data: &[u8]) -> Result<Self::Type> {
         todo!();
+    }
+    fn serialize(&self) -> Vec<u8> {
+        u32::to_be_bytes(*self).to_vec()
     }
 }
 
