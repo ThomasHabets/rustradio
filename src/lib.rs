@@ -3,6 +3,7 @@ use anyhow::Result;
 pub mod constant_source;
 pub mod convert;
 pub mod debug_sink;
+pub mod delay;
 pub mod file_sink;
 pub mod file_source;
 pub mod multiply_const;
@@ -15,6 +16,12 @@ type Complex = num::complex::Complex<Float>;
 
 pub trait Sink<T> {
     fn work(&mut self, r: &mut dyn StreamReader<T>) -> Result<()>
+    where
+        T: Copy + Sample<Type = T> + std::fmt::Debug + Default;
+}
+
+pub trait Block<T> {
+    fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()>
     where
         T: Copy + Sample<Type = T> + std::fmt::Debug + Default;
 }
@@ -85,6 +92,8 @@ pub struct Stream<T> {
 }
 
 pub trait StreamReader<T> {
+    fn set_history(&mut self, n: usize);
+
     fn consume(&mut self, n: usize);
     fn buffer(&self) -> &[T];
     fn available(&self) -> usize;
@@ -96,6 +105,9 @@ pub trait StreamWriter<T: Copy> {
 }
 
 impl<T> StreamReader<T> for Stream<T> {
+    fn set_history(&mut self, _n: usize) {
+        todo!();
+    }
     fn consume(&mut self, n: usize) {
         self.data.drain(0..n);
     }
