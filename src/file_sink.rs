@@ -57,15 +57,11 @@ pub enum Mode {
     Append,
 }
 
-pub struct FileSink<T> {
-    _t: T, // TODO: remove this dummy.
+pub struct FileSink {
     f: std::fs::File,
 }
 
-impl<T> FileSink<T>
-where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
-{
+impl FileSink {
     pub fn new(filename: String, mode: Mode) -> Result<Self> {
         let f = match mode {
             Mode::Create => std::fs::File::create(&filename)?, // TODO: don't overwrite.
@@ -75,14 +71,11 @@ where
             }
         };
         debug!("Opening sink {filename}");
-        Ok(Self {
-            f,
-            _t: T::default(),
-        })
+        Ok(Self { f })
     }
 }
 
-impl<T> Sink<T> for FileSink<T>
+impl<T> Sink<T> for FileSink
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {
