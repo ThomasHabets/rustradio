@@ -1,7 +1,11 @@
 #!/bin/bash
 
 cargo fmt -- --check || {
-    echo "Run: cargo fmt"
+    echo "Run: cargo fmt" >&2
+    exit 1
+}
+cargo test || {
+    echo "Tests fail" >&2
     exit 1
 }
 exit 0
