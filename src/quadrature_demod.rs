@@ -1,5 +1,6 @@
-use crate::{Complex, Float, StreamReader, StreamWriter};
 use anyhow::Result;
+
+use crate::{Complex, Float, StreamReader, StreamWriter};
 
 pub struct QuadratureDemod {
     gain: Float,
