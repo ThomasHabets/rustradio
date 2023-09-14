@@ -1,5 +1,6 @@
-use crate::{Sample, StreamWriter};
 use anyhow::Result;
+
+use crate::{Sample, StreamWriter};
 
 pub struct ConstantSource<T> {
     val: T,

@@ -11,6 +11,7 @@ description = "Software defined radio library"
 anyhow = "1.0.75"
 log = "0.4.20"
 num = "0.4.1"
+tempfile = "3.8.0"
 
 [lib]
 name = "lib"
