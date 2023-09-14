@@ -4,6 +4,60 @@ use std::io::Read;
 
 use crate::{Sample, StreamWriter};
 
+mod tests {
+    // These warnings about unused stuff are incorrect.
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use crate::vector_sink::VectorSink;
+    #[allow(unused_imports)]
+    use crate::{Complex, Float, Stream};
+
+    #[test]
+    fn sink_f32() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+
+        std::fs::write(
+            &tmpfn,
+            vec![
+                63, 128, 0, 0, 64, 64, 0, 0, 64, 72, 245, 195, 192, 72, 245, 195,
+            ],
+        )?;
+
+        let mut src = FileSource::new(tmpfn.clone(), false)?;
+        let mut sink: VectorSink<Float> = VectorSink::new();
+        let mut s = Stream::new(10);
+        src.work(&mut s)?;
+        sink.work(&mut s)?;
+
+        assert_eq!(sink.to_vec(), vec![1.0 as Float, 3.0, 3.14, -3.14]);
+        Ok(())
+    }
+
+    #[test]
+    fn sink_c32() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+
+        std::fs::write(
+            &tmpfn,
+            vec![0, 0, 0, 0, 0, 0, 0, 0, 64, 72, 245, 195, 192, 44, 204, 205],
+        )?;
+
+        let mut src = FileSource::new(tmpfn.clone(), false)?;
+        let mut sink: VectorSink<Complex> = VectorSink::new();
+        let mut s = Stream::new(10);
+        src.work(&mut s)?;
+        sink.work(&mut s)?;
+        assert_eq!(
+            sink.to_vec(),
+            vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]
+        );
+        Ok(())
+    }
+}
+
 pub struct FileSource {
     filename: String,
     f: std::fs::File,

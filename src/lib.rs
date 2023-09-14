@@ -7,6 +7,7 @@ pub mod file_sink;
 pub mod file_source;
 pub mod multiply_const;
 pub mod quadrature_demod;
+pub mod vector_sink;
 pub mod vector_source;
 
 type Float = f32;
@@ -30,8 +31,13 @@ impl Sample for Complex {
     fn size() -> usize {
         8
     }
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
+    fn parse(data: &[u8]) -> Result<Self::Type> {
+        if data.len() != Self::size() {
+            panic!("TODO: Complex is wrong size");
+        }
+        let i = Float::from_be_bytes(data[0..Self::size() / 2].try_into()?);
+        let q = Float::from_be_bytes(data[Self::size() / 2..].try_into()?);
+        Ok(Complex::new(i, q))
     }
     fn serialize(&self) -> Vec<u8> {
         let mut ret = Vec::new();
@@ -46,8 +52,11 @@ impl Sample for Float {
     fn size() -> usize {
         4
     }
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
+    fn parse(data: &[u8]) -> Result<Self::Type> {
+        if data.len() != Self::size() {
+            panic!("TODO: Float is wrong size");
+        }
+        Ok(Float::from_be_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
         f32::to_be_bytes(*self).to_vec()
@@ -59,8 +68,11 @@ impl Sample for u32 {
     fn size() -> usize {
         4
     }
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
+    fn parse(data: &[u8]) -> Result<Self::Type> {
+        if data.len() != Self::size() {
+            panic!("TODO: Float is wrong size");
+        }
+        Ok(u32::from_be_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
         u32::to_be_bytes(*self).to_vec()
