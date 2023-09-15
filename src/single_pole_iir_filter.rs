@@ -10,7 +10,7 @@ mod tests {
     #[allow(unused_imports)]
     use crate::vector_source::VectorSource;
     #[allow(unused_imports)]
-    use crate::{Complex, Float, Stream};
+    use crate::{Complex, Error, Float, Stream};
 
     #[test]
     fn iir_ff() -> Result<()> {
@@ -19,7 +19,7 @@ mod tests {
         let mut sink = VectorSink::new();
         let mut s1 = Stream::new(10);
         let mut s2 = Stream::new(10);
-        let mut iir = SinglePoleIIRFilter::new(0.2);
+        let mut iir = SinglePoleIIRFilter::new(0.2).ok_or(Error::new("alpha out of range"))?;
 
         src.work(&mut s1)?;
         iir.work(&mut s1, &mut s2)?;
@@ -35,12 +35,26 @@ mod tests {
         let mut sink = VectorSink::new();
         let mut s1 = Stream::new(10);
         let mut s2 = Stream::new(10);
-        let mut iir = SinglePoleIIRFilter::new(0.2);
+        let mut iir = SinglePoleIIRFilter::new(0.2).ok_or(Error::new("alpha out of range"))?;
 
         src.work(&mut s1)?;
         iir.work(&mut s1, &mut s2)?;
         sink.work(&mut s2)?;
         //assert_eq!(sink.to_vec(), vec![1u32, 2, 3]);
+        Ok(())
+    }
+
+    #[test]
+    fn reject_bad_alpha() -> Result<()> {
+        SinglePoleIIRFilter::<Float>::new(0.0).ok_or(Error::new("should accept 0.0"))?;
+        SinglePoleIIRFilter::<Float>::new(0.1).ok_or(Error::new("should accept 0.1"))?;
+        SinglePoleIIRFilter::<Float>::new(1.0).ok_or(Error::new("should accept 1.0"))?;
+        if let Some(_) = SinglePoleIIRFilter::<Float>::new(-0.1) {
+            return Err(Error::new("should not accept -0.1").into());
+        }
+        if let Some(_) = SinglePoleIIRFilter::<Float>::new(1.1) {
+            return Err(Error::new("should not accept 1.1").into());
+        }
         Ok(())
     }
 }
@@ -56,15 +70,14 @@ where
     Tout: Copy + Default + std::ops::Mul<Float, Output = Tout> + std::ops::Add<Output = Tout>,
     f32: std::ops::Mul<Tout, Output = Tout>,
 {
-    fn new(alpha: Float) -> Self {
-        assert!(alpha > 0.0 && alpha < 1.0);
+    fn new(alpha: Float) -> Option<Self> {
         let mut r = Self {
             alpha: Float::default(),
             one_minus_alpha: Float::default(),
             prev_output: Tout::default(),
         };
-        r.set_taps(alpha);
-        r
+        r.set_taps(alpha)?;
+        Some(r)
     }
     fn filter<Tin>(&mut self, sample: Tin) -> Tout
     where
@@ -74,10 +87,13 @@ where
         self.prev_output = o;
         o
     }
-    fn set_taps(&mut self, alpha: Float) {
-        assert!(alpha > 0.0 && alpha < 1.0);
+    fn set_taps(&mut self, alpha: Float) -> Option<()> {
+        if !(0.0..=1.0).contains(&alpha) {
+            return None;
+        }
         self.alpha = alpha;
         self.one_minus_alpha = 1.0 - alpha;
+        Some(())
     }
 }
 
@@ -98,10 +114,10 @@ where
         + std::ops::Add<T, Output = T>,
     Float: std::ops::Mul<T, Output = T>,
 {
-    pub fn new(alpha: Float) -> Self {
-        Self {
-            iir: SinglePoleIIR::<T>::new(alpha),
-        }
+    pub fn new(alpha: Float) -> Option<Self> {
+        Some(Self {
+            iir: SinglePoleIIR::<T>::new(alpha)?,
+        })
     }
     pub fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
         let n = std::cmp::min(w.available(), r.available());

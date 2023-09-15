@@ -15,6 +15,28 @@ pub mod vector_source;
 type Float = f32;
 type Complex = num::complex::Complex<Float>;
 
+#[derive(Debug, Clone)]
+pub struct Error {
+    msg: String,
+}
+
+impl Error {
+    #[allow(dead_code)] // Only used by test code.
+    fn new(msg: &str) -> Self {
+        Self {
+            msg: msg.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "RustRadio Error: {}", self.msg)
+    }
+}
+
+impl std::error::Error for Error {}
+
 pub trait Sink<T> {
     fn work(&mut self, r: &mut dyn StreamReader<T>) -> Result<()>
     where
