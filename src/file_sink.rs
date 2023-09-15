@@ -80,9 +80,12 @@ where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {
     fn work(&mut self, r: &mut dyn StreamReader<T>) -> Result<()> {
+        let mut v = Vec::new();
+        v.reserve(T::size() * r.available());
         for s in r.buffer() {
-            self.f.write_all(&s.serialize())?;
+            v.extend(&s.serialize());
         }
+        self.f.write_all(&v)?;
         r.consume(r.available());
         Ok(())
     }
