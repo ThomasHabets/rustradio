@@ -64,11 +64,17 @@ pub struct FileSink {
 impl FileSink {
     pub fn new(filename: &str, mode: Mode) -> Result<Self> {
         let f = match mode {
-            Mode::Create => std::fs::File::create(filename)?, // TODO: don't overwrite.
+            Mode::Create => std::fs::File::options()
+                .read(false)
+                .write(true)
+                .create_new(true)
+                .open(filename)?,
             Mode::Overwrite => std::fs::File::create(filename)?,
-            Mode::Append => {
-                todo!()
-            }
+            Mode::Append => std::fs::File::options()
+                .read(false)
+                .write(true)
+                .append(true)
+                .open(filename)?,
         };
         debug!("Opening sink {filename}");
         Ok(Self { f })
