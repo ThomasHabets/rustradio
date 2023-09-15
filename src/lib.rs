@@ -145,7 +145,7 @@ impl<T> StreamReader<T> for Stream<T> {
 
 impl<T: Copy> StreamWriter<T> for Stream<T> {
     fn write(&mut self, data: &[T]) -> Result<()> {
-        println!("Writing {} samples", data.len());
+        //println!("Writing {} samples", data.len());
         self.data.extend_from_slice(data);
         Ok(())
     }

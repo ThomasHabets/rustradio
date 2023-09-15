@@ -8,6 +8,7 @@ use lib::file_sink::*;
 use lib::file_source::*;
 use lib::multiply_const::*;
 use lib::*;
+use std::time::Instant;
 
 fn bleh() -> Result<()> {
     let mut src = ConstantSource::new(1f32);
@@ -44,24 +45,32 @@ fn main() -> Result<()> {
     let mut src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
     let mut mag = ComplexToMag2::new();
     let mut sink = FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?;
-    let mut s1 = Stream::new(1000000);
-    let mut s2 = Stream::new(1000000);
+    let mut s1 = Stream::new(2000000);
+    let mut s2 = Stream::new(2000000);
 
     loop {
-        eprintln!(">>> src");
+        let st = Instant::now();
         src.work(&mut s1)?;
-        println!("data left in s1 {}", lib::StreamReader::available(&s1));
+        println!(
+            "reading {} took {:?}",
+            lib::StreamReader::available(&s1),
+            st.elapsed()
+        );
 
-        eprintln!(">>> mag");
+        let st = Instant::now();
         mag.work(&mut s1, &mut s2)?;
         if lib::StreamReader::available(&s2) == 0 {
             break;
         }
-        println!("about to print {}", lib::StreamReader::available(&s2));
+        println!(
+            "mag {} took {:?}",
+            lib::StreamReader::available(&s2),
+            st.elapsed()
+        );
 
-        eprintln!(">>> sink");
+        let st = Instant::now();
         sink.work(&mut s2)?;
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        println!("sink took {:?}", st.elapsed());
     }
     Ok(())
 }
