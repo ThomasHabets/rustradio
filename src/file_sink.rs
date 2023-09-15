@@ -83,6 +83,7 @@ where
         for s in r.buffer() {
             self.f.write_all(&s.serialize())?;
         }
+        r.consume(r.available());
         Ok(())
     }
 }
