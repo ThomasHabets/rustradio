@@ -11,6 +11,6 @@ impl<T: Copy + Sample<Type = T> + std::fmt::Debug> ConstantSource<T> {
         Self { val }
     }
     pub fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        w.write(&vec![self.val; w.available()])
+        w.write(&vec![self.val; w.capacity()])
     }
 }

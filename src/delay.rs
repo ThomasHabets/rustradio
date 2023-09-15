@@ -110,7 +110,7 @@ where
 {
     fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
         if self.current_delay > 0 {
-            let n = std::cmp::min(self.current_delay, w.available());
+            let n = std::cmp::min(self.current_delay, w.capacity());
             w.write(&vec![T::default(); n])?;
             self.current_delay -= n;
         }
@@ -121,7 +121,7 @@ where
             self.skip -= n;
         }
 
-        let n = std::cmp::min(r.available(), w.available());
+        let n = std::cmp::min(r.available(), w.capacity());
         w.write(&r.buffer()[0..n])?;
         r.consume(n);
         Ok(())

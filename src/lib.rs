@@ -131,7 +131,7 @@ pub trait StreamReader<T> {
 }
 
 pub trait StreamWriter<T: Copy> {
-    fn available(&self) -> usize;
+    fn capacity(&self) -> usize;
     fn write(&mut self, data: &[T]) -> Result<()>;
 }
 
@@ -156,7 +156,7 @@ impl<T: Copy> StreamWriter<T> for Stream<T> {
         self.data.extend_from_slice(data);
         Ok(())
     }
-    fn available(&self) -> usize {
+    fn capacity(&self) -> usize {
         self.max_samples - self.data.len()
     }
 }
