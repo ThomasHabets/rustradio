@@ -8,6 +8,7 @@ pub mod file_sink;
 pub mod file_source;
 pub mod multiply_const;
 pub mod quadrature_demod;
+pub mod single_pole_iir_filter;
 pub mod vector_sink;
 pub mod vector_source;
 
