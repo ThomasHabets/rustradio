@@ -38,16 +38,23 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+pub trait Source<T> {
+    fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()>
+    where
+        T: Copy + Sample<Type = T> + std::fmt::Debug + Default;
+}
+
 pub trait Sink<T> {
     fn work(&mut self, r: &mut dyn StreamReader<T>) -> Result<()>
     where
         T: Copy + Sample<Type = T> + std::fmt::Debug + Default;
 }
 
-pub trait Block<T> {
-    fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()>
+pub trait Block<Tin, Tout> {
+    fn work(&mut self, r: &mut dyn StreamReader<Tin>, w: &mut dyn StreamWriter<Tout>) -> Result<()>
     where
-        T: Copy + Sample<Type = T> + std::fmt::Debug + Default;
+        Tin: Copy + Sample<Type = Tin> + std::fmt::Debug + Default,
+        Tout: Copy + Sample<Type = Tout> + std::fmt::Debug + Default;
 }
 
 pub trait Sample {

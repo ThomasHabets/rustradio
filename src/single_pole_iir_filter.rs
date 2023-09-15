@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{Float, StreamReader, StreamWriter};
+use crate::{Block, Float, StreamReader, StreamWriter};
 
 mod tests {
     #[allow(unused_imports)]
@@ -119,8 +119,19 @@ where
             iir: SinglePoleIIR::<T>::new(alpha)?,
         })
     }
-    pub fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        let n = std::cmp::min(w.available(), r.available());
+}
+
+impl<T> Block<T, T> for SinglePoleIIRFilter<T>
+where
+    T: Copy
+        + Default
+        + std::ops::Mul<Float, Output = T>
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>,
+    Float: std::ops::Mul<T, Output = T>,
+{
+    fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
+        let n = std::cmp::min(w.capacity(), r.available());
         w.write(
             &r.buffer()
                 .iter()

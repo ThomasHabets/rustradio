@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::{debug, warn};
 use std::io::Read;
 
-use crate::{Sample, StreamWriter};
+use crate::{Sample, Source, StreamWriter};
 
 mod tests {
     // These warnings about unused stuff are incorrect.
@@ -74,10 +74,12 @@ impl FileSource {
             repeat,
         })
     }
-    pub fn work<T>(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()>
-    where
-        T: Copy + Sample<Type = T> + std::fmt::Debug,
-    {
+}
+impl<T> Source<T> for FileSource
+where
+    T: Sample<Type = T> + Copy + std::fmt::Debug,
+{
+    fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()> {
         let mut buffer = Vec::new();
         self.f.read_to_end(&mut buffer)?;
         let n = buffer.len();

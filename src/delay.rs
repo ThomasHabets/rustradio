@@ -104,7 +104,7 @@ impl Delay {
     }
 }
 
-impl<T> Block<T> for Delay
+impl<T> Block<T, T> for Delay
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {

@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{Complex, Float, StreamReader, StreamWriter};
+use crate::{Block, Complex, Float, StreamReader, StreamWriter};
 
 pub struct ComplexToMag2;
 
@@ -8,12 +8,15 @@ impl ComplexToMag2 {
     pub fn new() -> Self {
         Self {}
     }
-    pub fn work(
+}
+
+impl Block<Complex, Float> for ComplexToMag2 {
+    fn work(
         &mut self,
         r: &mut dyn StreamReader<Complex>,
         w: &mut dyn StreamWriter<Float>,
     ) -> Result<()> {
-        let n = std::cmp::min(r.available(), w.available());
+        let n = std::cmp::min(r.available(), w.capacity());
         w.write(
             &r.buffer()
                 .iter()
