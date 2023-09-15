@@ -14,7 +14,7 @@ pub mod vector_sink;
 pub mod vector_source;
 
 type Float = f32;
-type Complex = num::complex::Complex<Float>;
+pub type Complex = num::complex::Complex<Float>;
 
 #[derive(Debug, Clone)]
 pub struct Error {
