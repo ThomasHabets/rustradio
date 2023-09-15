@@ -66,14 +66,14 @@ impl Sample for Complex {
         if data.len() != Self::size() {
             panic!("TODO: Complex is wrong size");
         }
-        let i = Float::from_be_bytes(data[0..Self::size() / 2].try_into()?);
-        let q = Float::from_be_bytes(data[Self::size() / 2..].try_into()?);
+        let i = Float::from_le_bytes(data[0..Self::size() / 2].try_into()?);
+        let q = Float::from_le_bytes(data[Self::size() / 2..].try_into()?);
         Ok(Complex::new(i, q))
     }
     fn serialize(&self) -> Vec<u8> {
         let mut ret = Vec::new();
-        ret.extend(Float::to_be_bytes(self.re));
-        ret.extend(Float::to_be_bytes(self.im));
+        ret.extend(Float::to_le_bytes(self.re));
+        ret.extend(Float::to_le_bytes(self.im));
         ret
     }
 }
@@ -87,10 +87,10 @@ impl Sample for Float {
         if data.len() != Self::size() {
             panic!("TODO: Float is wrong size");
         }
-        Ok(Float::from_be_bytes(data[0..Self::size()].try_into()?))
+        Ok(Float::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
-        f32::to_be_bytes(*self).to_vec()
+        f32::to_le_bytes(*self).to_vec()
     }
 }
 
@@ -103,10 +103,10 @@ impl Sample for u32 {
         if data.len() != Self::size() {
             panic!("TODO: Float is wrong size");
         }
-        Ok(u32::from_be_bytes(data[0..Self::size()].try_into()?))
+        Ok(u32::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
-        u32::to_be_bytes(*self).to_vec()
+        u32::to_le_bytes(*self).to_vec()
     }
 }
 
