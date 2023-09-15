@@ -7,6 +7,7 @@ use lib::debug_sink::*;
 use lib::file_sink::*;
 use lib::file_source::*;
 use lib::multiply_const::*;
+use lib::single_pole_iir_filter::*;
 use lib::*;
 use std::time::Instant;
 
@@ -44,9 +45,11 @@ fn main() -> Result<()> {
 
     let mut src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
     let mut mag = ComplexToMag2::new();
+    let mut iir = SinglePoleIIRFilter::new(0.02).ok_or(Error::new("iir init"))?;
     let mut sink = FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?;
     let mut s1 = Stream::new(2000000);
     let mut s2 = Stream::new(2000000);
+    let mut s3 = Stream::new(2000000);
 
     loop {
         let st = Instant::now();
@@ -56,12 +59,12 @@ fn main() -> Result<()> {
             lib::StreamReader::available(&s1),
             st.elapsed()
         );
+        if lib::StreamReader::available(&s1) == 0 {
+            break;
+        }
 
         let st = Instant::now();
         mag.work(&mut s1, &mut s2)?;
-        if lib::StreamReader::available(&s2) == 0 {
-            break;
-        }
         println!(
             "mag {} took {:?}",
             lib::StreamReader::available(&s2),
@@ -69,7 +72,15 @@ fn main() -> Result<()> {
         );
 
         let st = Instant::now();
-        sink.work(&mut s2)?;
+        iir.work(&mut s2, &mut s3)?;
+        println!(
+            "iir {} took {:?}",
+            lib::StreamReader::available(&s3),
+            st.elapsed()
+        );
+
+        let st = Instant::now();
+        sink.work(&mut s3)?;
         println!("sink took {:?}", st.elapsed());
     }
     Ok(())

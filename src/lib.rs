@@ -23,7 +23,7 @@ pub struct Error {
 
 impl Error {
     #[allow(dead_code)] // Only used by test code.
-    fn new(msg: &str) -> Self {
+    pub fn new(msg: &str) -> Self {
         Self {
             msg: msg.to_string(),
         }
