@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+pub mod complex_to_mag2;
 pub mod constant_source;
 pub mod convert;
 pub mod debug_sink;
