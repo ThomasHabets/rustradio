@@ -1,4 +1,6 @@
 use anyhow::Result;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use lib::complex_to_mag2::*;
 use lib::constant_source::*;
@@ -37,12 +39,62 @@ fn bleh() -> Result<()> {
     }
 }
 
-fn main() -> Result<()> {
-    println!("Hello, world!");
-    if false {
-        bleh()?;
-    }
+struct Graph {
+    work: Vec<Box<dyn FnMut() -> Result<usize>>>,
+}
 
+impl Graph {
+    fn new() -> Self {
+        Self { work: Vec::new() }
+    }
+    fn add_source<T>(&mut self, mut block: Box<dyn Source<T>>) -> Rc<RefCell<Stream<T>>>
+    where
+        T: Copy + std::fmt::Debug + Sample<Type = T> + Default + 'static,
+    {
+        let stream = Rc::new(RefCell::new(Stream::new(819200)));
+        let ws = Rc::clone(&stream);
+        self.work.push(Box::new(move || {
+            block.work(&mut *ws.borrow_mut())?;
+            Ok(ws.borrow().available())
+        }));
+        stream
+    }
+    fn add_block<Tin, Tout>(
+        &mut self,
+        input: Rc<RefCell<Stream<Tin>>>,
+        mut block: Box<dyn Block<Tin, Tout>>,
+    ) -> Rc<RefCell<Stream<Tout>>>
+    where
+        Tin: Copy + std::fmt::Debug + Sample<Type = Tin> + Default + 'static,
+        Tout: Copy + std::fmt::Debug + Sample<Type = Tout> + Default + 'static,
+    {
+        let stream = Rc::new(RefCell::new(Stream::new(819200)));
+        let ws = Rc::clone(&stream);
+        self.work.push(Box::new(move || {
+            block.work(&mut *input.borrow_mut(), &mut *ws.borrow_mut())?;
+            Ok(ws.borrow().available())
+        }));
+        stream
+    }
+    fn add_sink<T>(&mut self, input: Rc<RefCell<Stream<T>>>, mut block: Box<dyn Sink<T>>)
+    where
+        T: Copy + std::fmt::Debug + Sample<Type = T> + Default + 'static,
+    {
+        self.work.push(Box::new(move || {
+            block.work(&mut *input.borrow_mut())?;
+            Ok(0)
+        }));
+    }
+    fn work(&mut self) -> Result<usize> {
+        let mut total = 0;
+        for w in &mut self.work {
+            total += w()?;
+        }
+        Ok(total)
+    }
+}
+
+fn bleh2() -> Result<()> {
     let mut src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
     let mut mag = ComplexToMag2::new();
     let mut iir = SinglePoleIIRFilter::new(0.02).ok_or(Error::new("iir init"))?;
@@ -82,6 +134,39 @@ fn main() -> Result<()> {
         let st = Instant::now();
         sink.work(&mut s3)?;
         println!("sink took {:?}", st.elapsed());
+    }
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    println!("Hello, world!");
+    if false {
+        bleh()?;
+    }
+    if false {
+        bleh2()?;
+    }
+
+    {
+        let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
+        let mut g = Graph::new();
+        let s = g.add_source::<Complex>(Box::new(src));
+        let s = g.add_block(s, Box::new(ComplexToMag2::new()));
+        let s = g.add_block(
+            s,
+            Box::new(SinglePoleIIRFilter::new(0.02).ok_or(Error::new("IIR init"))?),
+        );
+        g.add_sink(
+            s,
+            Box::new(FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?),
+        );
+        loop {
+            println!("Working…");
+            if g.work()? == 0 {
+                break;
+            }
+            //std::thread::sleep(std::time::Duration::from_secs(1));
+        }
     }
     Ok(())
 }
