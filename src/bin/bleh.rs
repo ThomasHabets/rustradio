@@ -37,6 +37,9 @@ fn bleh() -> Result<()> {
 
 fn main() -> Result<()> {
     println!("Hello, world!");
+    if false {
+        bleh()?;
+    }
 
     let mut src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
     let mut mag = ComplexToMag2::new();
@@ -46,18 +49,18 @@ fn main() -> Result<()> {
 
     loop {
         eprintln!(">>> src");
-        src.work(&mut s1);
+        src.work(&mut s1)?;
         println!("data left in s1 {}", lib::StreamReader::available(&s1));
 
         eprintln!(">>> mag");
-        mag.work(&mut s1, &mut s2);
+        mag.work(&mut s1, &mut s2)?;
         if lib::StreamReader::available(&s2) == 0 {
             break;
         }
         println!("about to print {}", lib::StreamReader::available(&s2));
 
         eprintln!(">>> sink");
-        sink.work(&mut s2);
+        sink.work(&mut s2)?;
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
     Ok(())

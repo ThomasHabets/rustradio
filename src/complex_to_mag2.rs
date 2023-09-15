@@ -25,3 +25,9 @@ impl ComplexToMag2 {
         Ok(())
     }
 }
+
+impl Default for ComplexToMag2 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
