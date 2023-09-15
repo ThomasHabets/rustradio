@@ -19,7 +19,7 @@ mod tests {
 
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-        let mut sink = FileSink::new(tmpfn.clone(), Mode::Create)?;
+        let mut sink = FileSink::new(&tmpfn, Mode::Create)?;
         let mut s = Stream::new(10);
         src.work(&mut s)?;
         sink.work(&mut s)?;
@@ -37,7 +37,7 @@ mod tests {
 
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-        let mut sink = FileSink::new(tmpfn.clone(), Mode::Create)?;
+        let mut sink = FileSink::new(&tmpfn, Mode::Create)?;
         let mut s = Stream::new(10);
         src.work(&mut s)?;
         sink.work(&mut s)?;
@@ -62,10 +62,10 @@ pub struct FileSink {
 }
 
 impl FileSink {
-    pub fn new(filename: String, mode: Mode) -> Result<Self> {
+    pub fn new(filename: &str, mode: Mode) -> Result<Self> {
         let f = match mode {
-            Mode::Create => std::fs::File::create(&filename)?, // TODO: don't overwrite.
-            Mode::Overwrite => std::fs::File::create(&filename)?,
+            Mode::Create => std::fs::File::create(filename)?, // TODO: don't overwrite.
+            Mode::Overwrite => std::fs::File::create(filename)?,
             Mode::Append => {
                 todo!()
             }

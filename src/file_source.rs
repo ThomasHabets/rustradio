@@ -25,7 +25,7 @@ mod tests {
             ],
         )?;
 
-        let mut src = FileSource::new(tmpfn.clone(), false)?;
+        let mut src = FileSource::new(&tmpfn, false)?;
         let mut sink: VectorSink<Float> = VectorSink::new();
         let mut s = Stream::new(10);
         src.work(&mut s)?;
@@ -45,7 +45,7 @@ mod tests {
             vec![0, 0, 0, 0, 0, 0, 0, 0, 195, 245, 72, 64, 205, 204, 44, 192],
         )?;
 
-        let mut src = FileSource::new(tmpfn.clone(), false)?;
+        let mut src = FileSource::new(&tmpfn, false)?;
         let mut sink: VectorSink<Complex> = VectorSink::new();
         let mut s = Stream::new(10);
         src.work(&mut s)?;
@@ -65,11 +65,11 @@ pub struct FileSource {
 }
 
 impl FileSource {
-    pub fn new(filename: String, repeat: bool) -> Result<Self> {
-        let f = std::fs::File::open(&filename)?;
+    pub fn new(filename: &str, repeat: bool) -> Result<Self> {
+        let f = std::fs::File::open(filename)?;
         debug!("Opening source {filename}");
         Ok(Self {
-            filename,
+            filename: filename.to_string(),
             f,
             repeat,
         })
