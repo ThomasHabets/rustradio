@@ -13,7 +13,7 @@ pub mod single_pole_iir_filter;
 pub mod vector_sink;
 pub mod vector_source;
 
-type Float = f32;
+pub type Float = f32;
 pub type Complex = num::complex::Complex<Float>;
 
 #[derive(Debug, Clone)]
