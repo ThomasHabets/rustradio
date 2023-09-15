@@ -19,3 +19,9 @@ impl<T: Copy + Sample<Type = T> + std::fmt::Debug> VectorSink<T> {
         Ok(())
     }
 }
+
+impl<T: Copy + Sample<Type = T> + std::fmt::Debug> Default for VectorSink<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
