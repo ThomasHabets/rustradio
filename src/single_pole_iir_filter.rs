@@ -2,6 +2,49 @@ use anyhow::Result;
 
 use crate::{Float, StreamReader, StreamWriter};
 
+mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use crate::vector_sink::VectorSink;
+    #[allow(unused_imports)]
+    use crate::vector_source::VectorSource;
+    #[allow(unused_imports)]
+    use crate::{Complex, Float, Stream};
+
+    #[test]
+    fn iir_ff() -> Result<()> {
+        // TODO: create an actual test.
+        let mut src = VectorSource::new(vec![1f32, 2.0, 3.0]);
+        let mut sink = VectorSink::new();
+        let mut s1 = Stream::new(10);
+        let mut s2 = Stream::new(10);
+        let mut iir = SinglePoleIIRFilter::new(0.2);
+
+        src.work(&mut s1)?;
+        iir.work(&mut s1, &mut s2)?;
+        sink.work(&mut s2)?;
+        //assert_eq!(sink.to_vec(), vec![1u32, 2, 3]);
+        Ok(())
+    }
+
+    #[test]
+    fn iir_cc() -> Result<()> {
+        // TODO: create an actual test.
+        let mut src = VectorSource::new(vec![Complex::default()]);
+        let mut sink = VectorSink::new();
+        let mut s1 = Stream::new(10);
+        let mut s2 = Stream::new(10);
+        let mut iir = SinglePoleIIRFilter::new(0.2);
+
+        src.work(&mut s1)?;
+        iir.work(&mut s1, &mut s2)?;
+        sink.work(&mut s2)?;
+        //assert_eq!(sink.to_vec(), vec![1u32, 2, 3]);
+        Ok(())
+    }
+}
+
 struct SinglePoleIIR<Tout> {
     alpha: Float, // TODO: GNURadio uses double
     one_minus_alpha: Float,
@@ -38,29 +81,36 @@ where
     }
 }
 
-// TODO: only supports float output.
-pub struct SinglePoleIIRFilter {
-    iir: SinglePoleIIR<Float>, // TODO: GNURadio uses double, here
+pub struct SinglePoleIIRFilter<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    Float: std::ops::Mul<T, Output = T>,
+{
+    iir: SinglePoleIIR<T>,
 }
 
-impl SinglePoleIIRFilter {
+impl<T> SinglePoleIIRFilter<T>
+where
+    T: Copy
+        + Default
+        + std::ops::Mul<Float, Output = T>
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>,
+    Float: std::ops::Mul<T, Output = T>,
+{
     pub fn new(alpha: Float) -> Self {
         Self {
-            iir: SinglePoleIIR::new(alpha),
+            iir: SinglePoleIIR::<T>::new(alpha),
         }
     }
-    pub fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Float>,
-        w: &mut dyn StreamWriter<Float>,
-    ) -> Result<()> {
+    pub fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
         let n = std::cmp::min(w.available(), r.available());
         w.write(
             &r.buffer()
                 .iter()
                 .take(n)
                 .map(|item| self.iir.filter(*item))
-                .collect::<Vec<Float>>(),
+                .collect::<Vec<T>>(),
         )?;
         r.consume(n);
         Ok(())
