@@ -9,6 +9,7 @@ use lib::debug_sink::*;
 use lib::file_sink::*;
 use lib::file_source::*;
 use lib::multiply_const::*;
+use lib::quadrature_demod::*;
 use lib::single_pole_iir_filter::*;
 use lib::*;
 use std::time::Instant;
@@ -147,7 +148,7 @@ fn main() -> Result<()> {
         bleh2()?;
     }
 
-    {
+    if false {
         let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
         let mut g = Graph::new();
         let s = g.add_source::<Complex>(Box::new(src));
@@ -165,6 +166,25 @@ fn main() -> Result<()> {
             if g.work()? == 0 {
                 break;
             }
+            //std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
+    if true {
+        let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
+        let mut g = Graph::new();
+        let s = g.add_source::<Complex>(Box::new(src));
+        //let s = g.add_block(s, Box::new(RationalResampler::new(1024000, 200000)));
+        let s = g.add_block(s, Box::new(QuadratureDemod::new(1.0)));
+        g.add_sink(
+            s,
+            Box::new(FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?),
+        );
+        loop {
+            let n = g.work()?;
+            if n <= 1 {
+                break;
+            }
+            println!("Got {n}…");
             //std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }

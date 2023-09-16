@@ -80,6 +80,7 @@ where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
     fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()> {
+        // TODO: only read as much as w.capacity()
         let mut buffer = Vec::new();
         self.f.read_to_end(&mut buffer)?;
         let n = buffer.len();

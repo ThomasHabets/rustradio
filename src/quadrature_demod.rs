@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{Complex, Float, StreamReader, StreamWriter};
+use crate::{Block, Complex, Float, StreamReader, StreamWriter};
 
 pub struct QuadratureDemod {
     gain: Float,
@@ -10,7 +10,10 @@ impl QuadratureDemod {
     pub fn new(gain: Float) -> Self {
         Self { gain }
     }
-    pub fn work(
+}
+
+impl Block<Complex, Float> for QuadratureDemod {
+    fn work(
         &mut self,
         r: &mut dyn StreamReader<Complex>,
         w: &mut dyn StreamWriter<Float>,
