@@ -15,6 +15,7 @@ mod tests {
 
     #[test]
     fn sink_f32() -> Result<()> {
+        #[allow(clippy::approx_constant)]
         let mut src = VectorSource::new(vec![1.0 as Float, 3.0, 3.14, -3.14]);
 
         let tmpd = tempfile::tempdir()?;
@@ -33,6 +34,7 @@ mod tests {
 
     #[test]
     fn sink_c32() -> Result<()> {
+        #[allow(clippy::approx_constant)]
         let mut src = VectorSource::new(vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
 
         let tmpd = tempfile::tempdir()?;

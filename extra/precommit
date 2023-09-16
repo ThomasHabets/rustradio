@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 cargo fmt -- --check || {
     echo "Run: cargo fmt" >&2
@@ -8,6 +8,8 @@ cargo test || {
     echo "Tests fail" >&2
     exit 1
 }
+
+# TODO: maybe add --alltargets
 cargo clippy -- -D warnings || {
     echo "Clippy fail" >&2
     exit 1

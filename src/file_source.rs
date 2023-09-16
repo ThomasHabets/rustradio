@@ -31,7 +31,9 @@ mod tests {
         src.work(&mut s)?;
         sink.work(&mut s)?;
 
-        assert_eq!(sink.to_vec(), vec![1.0 as Float, 3.0, 3.14, -3.14]);
+        #[allow(clippy::approx_constant)]
+        let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
+        assert_eq!(sink.to_vec(), correct);
         Ok(())
     }
 
@@ -50,10 +52,9 @@ mod tests {
         let mut s = Stream::new(10);
         src.work(&mut s)?;
         sink.work(&mut s)?;
-        assert_eq!(
-            sink.to_vec(),
-            vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]
-        );
+        #[allow(clippy::approx_constant)]
+        let correct = vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)];
+        assert_eq!(sink.to_vec(), correct);
         Ok(())
     }
 }

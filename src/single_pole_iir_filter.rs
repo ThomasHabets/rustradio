@@ -49,10 +49,10 @@ mod tests {
         SinglePoleIIRFilter::<Float>::new(0.0).ok_or(Error::new("should accept 0.0"))?;
         SinglePoleIIRFilter::<Float>::new(0.1).ok_or(Error::new("should accept 0.1"))?;
         SinglePoleIIRFilter::<Float>::new(1.0).ok_or(Error::new("should accept 1.0"))?;
-        if let Some(_) = SinglePoleIIRFilter::<Float>::new(-0.1) {
+        if SinglePoleIIRFilter::<Float>::new(-0.1).is_some() {
             return Err(Error::new("should not accept -0.1").into());
         }
-        if let Some(_) = SinglePoleIIRFilter::<Float>::new(1.1) {
+        if SinglePoleIIRFilter::<Float>::new(1.1).is_some() {
             return Err(Error::new("should not accept 1.1").into());
         }
         Ok(())
