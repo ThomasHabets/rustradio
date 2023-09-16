@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::warn;
 
 pub mod complex_to_mag2;
 pub mod constant_source;
@@ -159,6 +160,10 @@ impl<T: Copy> StreamWriter<T> for Stream<T> {
         Ok(())
     }
     fn capacity(&self) -> usize {
+        if self.max_samples < self.data.len() {
+            warn!("Already more samples than there should be in the buffer");
+            return 0;
+        }
         self.max_samples - self.data.len()
     }
 }

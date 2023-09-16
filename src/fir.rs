@@ -3,11 +3,11 @@
  * * Only handles case where input, output, and tap type are all the same.
  */
 
+#[cfg(test)]
 mod tests {
-    #[cfg(test)]
     use super::*;
-    #[cfg(test)]
     use crate::Complex;
+
     #[test]
     fn test_complex() {
         let input = vec![
@@ -35,7 +35,6 @@ mod tests {
         );
     }
 
-    #[cfg(test)]
     fn assert_almost_equal(left: &[Complex], right: &[Complex]) {
         assert_eq!(
             left.len(),
@@ -63,7 +62,7 @@ where
 {
     pub fn new(taps: &[T]) -> Self {
         Self {
-            taps: taps.to_vec().into_iter().rev().collect(),
+            taps: taps.iter().copied().rev().collect(),
         }
     }
     pub fn filter(&self, input: &[T]) -> T {

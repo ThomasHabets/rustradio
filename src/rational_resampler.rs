@@ -79,12 +79,12 @@ impl Block<Complex, Complex> for RationalResampler {
         let n = std::cmp::min(w.capacity(), r.available());
         let input = r.buffer();
         let mut v = Vec::new();
-        self.counter -= self.deci as i64;
+        self.counter -= self.deci;
         for s in &input[..n] {
-            self.counter += self.interp as i64;
+            self.counter += self.interp;
             while self.counter >= 0 {
                 v.push(*s);
-                self.counter -= self.deci as i64;
+                self.counter -= self.deci;
             }
         }
         r.consume(n);
