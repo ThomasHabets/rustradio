@@ -3,6 +3,8 @@
  * * Only handles case where input, output, and tap type are all the same.
  */
 
+use anyhow::Result;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -52,6 +54,8 @@ mod tests {
     }
 }
 
+use crate::{Block, StreamReader, StreamWriter};
+
 pub struct FIR<T> {
     taps: Vec<T>,
 }
@@ -75,5 +79,34 @@ where
     pub fn filter_n(&self, input: &[T]) -> Vec<T> {
         let n = input.len() - self.taps.len() + 1;
         (0..n).map(|i| self.filter(&input[i..])).collect()
+    }
+}
+
+pub struct FIRFilter<T> {
+    fir: FIR<T>,
+}
+
+impl<T> FIRFilter<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+{
+    pub fn new(taps: &[T]) -> Self {
+        Self {
+            fir: FIR::new(taps),
+        }
+    }
+}
+
+impl<T> Block<T, T> for FIRFilter<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+{
+    fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
+        let n = std::cmp::min(r.available(), w.capacity());
+        if n > 0 {
+            w.write(&self.fir.filter_n(&r.buffer()[..n]))?;
+            r.consume(n);
+        }
+        Ok(())
     }
 }

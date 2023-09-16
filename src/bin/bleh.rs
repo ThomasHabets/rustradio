@@ -8,6 +8,7 @@ use lib::convert::*;
 use lib::debug_sink::*;
 use lib::file_sink::*;
 use lib::file_source::*;
+use lib::fir::FIRFilter;
 use lib::multiply_const::*;
 use lib::quadrature_demod::*;
 use lib::rational_resampler::*;
@@ -174,6 +175,7 @@ fn main() -> Result<()> {
         let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
         let mut g = Graph::new();
         let s = g.add_source::<Complex>(Box::new(src));
+        let s = g.add_block(s, Box::new(FIRFilter::new(&[Complex::new(1.0, 0.0)])));
         let s = g.add_block(s, Box::new(RationalResampler::new(1024000, 200000)?));
         let s = g.add_block(s, Box::new(QuadratureDemod::new(1.0)));
         g.add_sink(
