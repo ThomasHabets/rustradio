@@ -68,7 +68,7 @@ struct SinglePoleIIR<Tout> {
 impl<Tout> SinglePoleIIR<Tout>
 where
     Tout: Copy + Default + std::ops::Mul<Float, Output = Tout> + std::ops::Add<Output = Tout>,
-    f32: std::ops::Mul<Tout, Output = Tout>,
+    Float: std::ops::Mul<Tout, Output = Tout>,
 {
     fn new(alpha: Float) -> Option<Self> {
         let mut r = Self {

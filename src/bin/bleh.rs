@@ -17,7 +17,7 @@ use lib::*;
 use std::time::Instant;
 
 fn bleh() -> Result<()> {
-    let mut src = ConstantSource::new(1f32);
+    let mut src = ConstantSource::new(1.0 as Float);
     let mut sink: Box<dyn Sink<u32>> = {
         if false {
             Box::new(DebugSink::<u32>::new())

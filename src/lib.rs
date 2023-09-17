@@ -70,7 +70,7 @@ pub trait Sample {
 impl Sample for Complex {
     type Type = Complex;
     fn size() -> usize {
-        8
+        std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
         if data.len() != Self::size() {
@@ -91,7 +91,7 @@ impl Sample for Complex {
 impl Sample for Float {
     type Type = Float;
     fn size() -> usize {
-        4
+        std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
         if data.len() != Self::size() {
@@ -100,7 +100,7 @@ impl Sample for Float {
         Ok(Float::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
-        f32::to_le_bytes(*self).to_vec()
+        Float::to_le_bytes(*self).to_vec()
     }
 }
 

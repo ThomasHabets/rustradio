@@ -147,6 +147,7 @@ where
     }
 }
 
+// TODO: this would be faster if we supported filtering a Complex by a Float.
 pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Complex> {
     let pi = std::f64::consts::PI as Float;
     let ntaps = {
