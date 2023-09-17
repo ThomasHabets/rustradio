@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use lib::add_const::*;
 use lib::complex_to_mag2::*;
 use lib::constant_source::*;
 use lib::convert::*;
@@ -189,6 +190,7 @@ fn main() -> Result<()> {
         let _samp_rate = new_samp_rate;
 
         let s = g.add_block(s, Box::new(QuadratureDemod::new(1.0)));
+        let s = g.add_block(s, Box::new(AddConst::new(-0.3)));
         // TODO: symbol sync
         // TODO: binary slicer
         // TODO: CAC

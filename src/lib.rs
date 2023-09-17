@@ -1,6 +1,7 @@
 use anyhow::Result;
 use log::warn;
 
+pub mod add_const;
 pub mod complex_to_mag2;
 pub mod constant_source;
 pub mod convert;
