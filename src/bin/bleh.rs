@@ -173,11 +173,25 @@ fn main() -> Result<()> {
     }
     if true {
         let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
+        let samp_rate = 1024000.0;
         let mut g = Graph::new();
         let s = g.add_source::<Complex>(Box::new(src));
-        let s = g.add_block(s, Box::new(FIRFilter::new(&[Complex::new(1.0, 0.0)])));
-        let s = g.add_block(s, Box::new(RationalResampler::new(1024000, 200000)?));
+        let taps = lib::fir::low_pass(samp_rate, 50000.0, 1000.0);
+        let s = g.add_block(s, Box::new(FIRFilter::new(taps.as_slice())));
+        let new_samp_rate = 200000.0;
+        let s = g.add_block(
+            s,
+            Box::new(RationalResampler::new(
+                new_samp_rate as usize,
+                samp_rate as usize,
+            )?),
+        );
+        let _samp_rate = new_samp_rate;
+
         let s = g.add_block(s, Box::new(QuadratureDemod::new(1.0)));
+        // TODO: symbol sync
+        // TODO: binary slicer
+        // TODO: CAC
         g.add_sink(
             s,
             Box::new(FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?),
