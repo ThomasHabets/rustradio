@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use lib::add_const::*;
+use lib::binary_slicer::*;
 use lib::complex_to_mag2::*;
 use lib::constant_source::*;
 use lib::convert::*;
@@ -195,12 +196,12 @@ fn main() -> Result<()> {
         let s = g.add_block(s, Box::new(AddConst::new(-0.3)));
         let baud = 38383.5;
         let s = g.add_block(s, Box::new(SymbolSync::new(samp_rate / baud, 0.1)));
-        // TODO: symbol sync
+        let s = g.add_block(s, Box::new(BinarySlicer::new()));
         // TODO: binary slicer
         // TODO: CAC
         g.add_sink(
             s,
-            Box::new(FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?),
+            Box::new(FileSink::new("out.u8", lib::file_sink::Mode::Overwrite)?),
         );
         loop {
             let n = g.work()?;
