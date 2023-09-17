@@ -14,7 +14,7 @@ num = "0.4.1"
 tempfile = "3.8.0"
 
 [lib]
-name = "lib"
+name = "rustradio"
 path = "src/lib.rs"
 
 [[bin]]

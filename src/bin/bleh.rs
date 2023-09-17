@@ -3,21 +3,21 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
 
-use lib::add_const::*;
-use lib::binary_slicer::*;
-use lib::complex_to_mag2::*;
-use lib::constant_source::*;
-use lib::convert::*;
-use lib::debug_sink::*;
-use lib::file_sink::*;
-use lib::file_source::*;
-use lib::fir::FIRFilter;
-use lib::multiply_const::*;
-use lib::quadrature_demod::*;
-use lib::rational_resampler::*;
-use lib::single_pole_iir_filter::*;
-use lib::symbol_sync::*;
-use lib::*;
+use rustradio::add_const::*;
+use rustradio::binary_slicer::*;
+use rustradio::complex_to_mag2::*;
+use rustradio::constant_source::*;
+use rustradio::convert::*;
+use rustradio::debug_sink::*;
+use rustradio::file_sink::*;
+use rustradio::file_source::*;
+use rustradio::fir::FIRFilter;
+use rustradio::multiply_const::*;
+use rustradio::quadrature_demod::*;
+use rustradio::rational_resampler::*;
+use rustradio::single_pole_iir_filter::*;
+use rustradio::symbol_sync::*;
+use rustradio::*;
 
 fn bleh() -> Result<()> {
     let mut src = ConstantSource::new(1.0 as Float);
@@ -25,7 +25,10 @@ fn bleh() -> Result<()> {
         if false {
             Box::new(DebugSink::<u32>::new())
         } else {
-            Box::new(FileSink::new("out.bin", lib::file_sink::Mode::Overwrite)?)
+            Box::new(FileSink::new(
+                "out.bin",
+                rustradio::file_sink::Mode::Overwrite,
+            )?)
         }
     };
     let mut mul = MultiplyConst::new(2.0);
@@ -104,7 +107,7 @@ fn bleh2() -> Result<()> {
     let mut src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
     let mut mag = ComplexToMag2::new();
     let mut iir = SinglePoleIIRFilter::new(0.02).ok_or(Error::new("iir init"))?;
-    let mut sink = FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?;
+    let mut sink = FileSink::new("out.f32", rustradio::file_sink::Mode::Overwrite)?;
     let mut s1 = Stream::new(2000000);
     let mut s2 = Stream::new(2000000);
     let mut s3 = Stream::new(2000000);
@@ -114,10 +117,10 @@ fn bleh2() -> Result<()> {
         src.work(&mut s1)?;
         println!(
             "reading {} took {:?}",
-            lib::StreamReader::available(&s1),
+            rustradio::StreamReader::available(&s1),
             st.elapsed()
         );
-        if lib::StreamReader::available(&s1) == 0 {
+        if rustradio::StreamReader::available(&s1) == 0 {
             break;
         }
 
@@ -125,7 +128,7 @@ fn bleh2() -> Result<()> {
         mag.work(&mut s1, &mut s2)?;
         println!(
             "mag {} took {:?}",
-            lib::StreamReader::available(&s2),
+            rustradio::StreamReader::available(&s2),
             st.elapsed()
         );
 
@@ -133,7 +136,7 @@ fn bleh2() -> Result<()> {
         iir.work(&mut s2, &mut s3)?;
         println!(
             "iir {} took {:?}",
-            lib::StreamReader::available(&s3),
+            rustradio::StreamReader::available(&s3),
             st.elapsed()
         );
 
@@ -164,7 +167,10 @@ fn main() -> Result<()> {
         );
         g.add_sink(
             s,
-            Box::new(FileSink::new("out.f32", lib::file_sink::Mode::Overwrite)?),
+            Box::new(FileSink::new(
+                "out.f32",
+                rustradio::file_sink::Mode::Overwrite,
+            )?),
         );
         loop {
             println!("Working…");
@@ -180,7 +186,7 @@ fn main() -> Result<()> {
         let samp_rate = 1024000.0;
         let mut g = Graph::new();
         let s = g.add_source::<Complex>(Box::new(src));
-        let taps = lib::fir::low_pass(samp_rate, 50000.0, 1000.0);
+        let taps = rustradio::fir::low_pass(samp_rate, 50000.0, 1000.0);
         let s = g.add_block(s, Box::new(FIRFilter::new(taps.as_slice())));
         let new_samp_rate = 200000.0;
         let s = g.add_block(
@@ -201,7 +207,10 @@ fn main() -> Result<()> {
         // TODO: CAC
         g.add_sink(
             s,
-            Box::new(FileSink::new("out.u8", lib::file_sink::Mode::Overwrite)?),
+            Box::new(FileSink::new(
+                "out.u8",
+                rustradio::file_sink::Mode::Overwrite,
+            )?),
         );
         loop {
             let n = g.work()?;
