@@ -106,6 +106,22 @@ impl Sample for Float {
     }
 }
 
+impl Sample for u8 {
+    type Type = u8;
+    fn size() -> usize {
+        std::mem::size_of::<Self>()
+    }
+    fn parse(data: &[u8]) -> Result<Self::Type> {
+        if data.len() != Self::size() {
+            panic!("TODO: u8 is wrong size");
+        }
+        Ok(data[0])
+    }
+    fn serialize(&self) -> Vec<u8> {
+        vec![*self]
+    }
+}
+
 impl Sample for u32 {
     type Type = u32;
     fn size() -> usize {
