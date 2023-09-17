@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Instant;
 
 use lib::add_const::*;
 use lib::complex_to_mag2::*;
@@ -14,8 +15,8 @@ use lib::multiply_const::*;
 use lib::quadrature_demod::*;
 use lib::rational_resampler::*;
 use lib::single_pole_iir_filter::*;
+use lib::symbol_sync::*;
 use lib::*;
-use std::time::Instant;
 
 fn bleh() -> Result<()> {
     let mut src = ConstantSource::new(1.0 as Float);
@@ -173,7 +174,8 @@ fn main() -> Result<()> {
         }
     }
     if true {
-        let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
+        //let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
+        let src = FileSource::new("burst.c32", false)?;
         let samp_rate = 1024000.0;
         let mut g = Graph::new();
         let s = g.add_source::<Complex>(Box::new(src));
@@ -187,10 +189,12 @@ fn main() -> Result<()> {
                 samp_rate as usize,
             )?),
         );
-        let _samp_rate = new_samp_rate;
+        let samp_rate = new_samp_rate;
 
         let s = g.add_block(s, Box::new(QuadratureDemod::new(1.0)));
         let s = g.add_block(s, Box::new(AddConst::new(-0.3)));
+        let baud = 38383.5;
+        let s = g.add_block(s, Box::new(SymbolSync::new(samp_rate / baud, 0.1)));
         // TODO: symbol sync
         // TODO: binary slicer
         // TODO: CAC
