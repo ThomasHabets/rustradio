@@ -23,7 +23,7 @@ impl Block<Complex, Float> for QuadratureDemod {
         let input = r.buffer();
         let mut tmp = vec![Complex::default(); n];
         for i in 0..n {
-            tmp[i] = input[i] * input[i + 1].conj();
+            tmp[i] = input[i + 1] * input[i].conj();
         }
         let mut v = vec![0.0; n];
         for i in 0..n {
