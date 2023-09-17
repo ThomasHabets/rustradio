@@ -2,10 +2,14 @@
 
 A library for digital signals processing in the spirit of GNU Radio.
 
+## TODO before actually usable
+
+* Fix SymbolSync block.
+
 ## TODO before version 1.0.0
 
-* Multiple readers from one output
-* Multiple inputs and outputs from a block
+* Multiple readers from one output.
+* Multiple inputs and outputs from a block.
 
 ## Publish new version
 
