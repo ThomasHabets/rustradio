@@ -67,9 +67,9 @@ impl Block<Float, Float> for SymbolSync {
             }
             let error = self.ted.error(&r.buffer()[i..i + 1]);
             if error > 0.0 {
-                pos += 0.1;
+                pos += 0.3;
             } else {
-                pos -= 0.1;
+                pos -= 0.3;
             }
             v.push(r.buffer()[i]);
             pos += self.clock;

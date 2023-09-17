@@ -199,11 +199,10 @@ fn main() -> Result<()> {
         let samp_rate = new_samp_rate;
 
         let s = g.add_block(s, Box::new(QuadratureDemod::new(1.0)));
-        let s = g.add_block(s, Box::new(AddConst::new(-0.3)));
+        let s = g.add_block(s, Box::new(AddConst::new(0.4)));
         let baud = 38383.5;
         let s = g.add_block(s, Box::new(SymbolSync::new(samp_rate / baud, 0.1)));
         let s = g.add_block(s, Box::new(BinarySlicer::new()));
-        // TODO: binary slicer
         // TODO: CAC
         g.add_sink(
             s,
