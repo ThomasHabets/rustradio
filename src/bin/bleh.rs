@@ -23,7 +23,7 @@ fn bleh() -> Result<()> {
     let mut src = ConstantSource::new(1.0 as Float);
     let mut sink: Box<dyn Sink<u32>> = {
         if false {
-            Box::new(DebugSink::<u32>::new())
+            Box::new(DebugSink::new())
         } else {
             Box::new(FileSink::new(
                 "out.bin",

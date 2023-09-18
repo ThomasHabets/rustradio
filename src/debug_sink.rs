@@ -2,21 +2,16 @@ use anyhow::Result;
 
 use crate::{Sample, Sink, StreamReader};
 
-pub struct DebugSink<T> {
-    _t: T, // TODO: remote this dummy.
-}
+pub struct DebugSink;
 
 #[allow(clippy::new_without_default)]
-impl<T> DebugSink<T>
-where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
-{
+impl DebugSink {
     pub fn new() -> Self {
-        Self { _t: T::default() }
+        Self {}
     }
 }
 
-impl<T> Sink<T> for DebugSink<T>
+impl<T> Sink<T> for DebugSink
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {
