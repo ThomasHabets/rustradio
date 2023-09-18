@@ -27,7 +27,7 @@ mod tests {
 
         let mut src = FileSource::new(&tmpfn, false)?;
         let mut sink: VectorSink<Float> = VectorSink::new();
-        let mut s = Stream::new(10);
+        let mut s = Stream::new(100);
         src.work(&mut s)?;
         sink.work(&mut s)?;
 
@@ -49,7 +49,7 @@ mod tests {
 
         let mut src = FileSource::new(&tmpfn, false)?;
         let mut sink: VectorSink<Complex> = VectorSink::new();
-        let mut s = Stream::new(10);
+        let mut s = Stream::new(100);
         src.work(&mut s)?;
         sink.work(&mut s)?;
         #[allow(clippy::approx_constant)]
@@ -81,10 +81,8 @@ where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
     fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        // TODO: only read as much as w.capacity()
-        let mut buffer = Vec::new();
-        self.f.read_to_end(&mut buffer)?;
-        let n = buffer.len();
+        let mut buffer = vec![0; w.capacity()];
+        let n = self.f.read(&mut buffer[..])?;
         if n == 0 {
             warn!(
                 "Not handling EOF on {}. Repeat: {}",
