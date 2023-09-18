@@ -27,6 +27,12 @@ where
             warn!("TCP connection closed?");
             return Ok(());
         }
+        let partial = n % T::size();
+        if partial != 0 {
+            let mut buf2 = vec![0; T::size() - partial];
+            self.stream.read_exact(&mut buf2)?;
+            buffer.extend(buf2);
+        }
         let size = T::size();
         let mut v = Vec::new();
         for pos in (0..n).step_by(size) {
