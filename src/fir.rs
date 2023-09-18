@@ -120,6 +120,7 @@ where
 
 pub struct FIRFilter<T> {
     fir: FIR<T>,
+    ntaps: usize,
 }
 
 impl<T> FIRFilter<T>
@@ -128,6 +129,7 @@ where
 {
     pub fn new(taps: &[T]) -> Self {
         Self {
+            ntaps: taps.len(),
             fir: FIR::new(taps),
         }
     }
@@ -139,7 +141,7 @@ where
 {
     fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
         let n = std::cmp::min(r.available(), w.capacity());
-        if n > 0 {
+        if n > self.ntaps {
             w.write(&self.fir.filter_n(&r.buffer()[..n]))?;
             r.consume(n);
         }
