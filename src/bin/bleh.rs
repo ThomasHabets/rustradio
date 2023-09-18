@@ -183,6 +183,7 @@ fn main() -> Result<()> {
     if true {
         //let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
         let src = FileSource::new("burst.c32", false)?;
+        //let src = FileSource::new("/dev/stdin", false)?;
         let samp_rate = 1024000.0;
         let mut g = Graph::new();
         let s = g.add_source::<Complex>(Box::new(src));
@@ -199,18 +200,32 @@ fn main() -> Result<()> {
         let samp_rate = new_samp_rate;
 
         let s = g.add_block(s, Box::new(QuadratureDemod::new(1.0)));
+
         let s = g.add_block(s, Box::new(AddConst::new(0.4)));
         let baud = 38383.5;
-        let s = g.add_block(s, Box::new(SymbolSync::new(samp_rate / baud, 0.1)));
+        //let s = g.add_block(s, Box::new(SymbolSync::new(samp_rate / baud, 0.1)));
+        let s = g.add_block(s, Box::new(ZeroCrossing::new(samp_rate / baud, 1.0)));
         let s = g.add_block(s, Box::new(BinarySlicer::new()));
         // TODO: CAC
-        g.add_sink(
-            s,
-            Box::new(FileSink::new(
-                "out.u8",
-                rustradio::file_sink::Mode::Overwrite,
-            )?),
-        );
+
+        if false {
+            g.add_sink(
+                s,
+                Box::new(FileSink::new(
+                    "out.f32",
+                    rustradio::file_sink::Mode::Overwrite,
+                )?),
+            );
+        } else {
+            g.add_sink(
+                s,
+                Box::new(FileSink::new(
+                    "out.u8",
+                    rustradio::file_sink::Mode::Overwrite,
+                )?),
+            );
+        }
+
         loop {
             let n = g.work()?;
             if n <= 1 {

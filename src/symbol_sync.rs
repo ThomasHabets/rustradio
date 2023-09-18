@@ -78,3 +78,54 @@ impl Block<Float, Float> for SymbolSync {
         w.write(&v)
     }
 }
+
+pub struct ZeroCrossing {
+    sps: Float,
+    max_deviation: Float,
+    clock: Float,
+    last_sign: bool,
+    last_cross: u64,
+    counter: u64,
+}
+
+impl ZeroCrossing {
+    pub fn new(sps: Float, max_deviation: Float) -> Self {
+        assert!(sps > 1.0);
+        Self {
+            sps,
+            clock: sps,
+            max_deviation,
+            last_sign: false,
+            last_cross: 0,
+            counter: 0,
+        }
+    }
+}
+
+impl Block<Float, Float> for ZeroCrossing {
+    fn work(
+        &mut self,
+        r: &mut dyn StreamReader<Float>,
+        w: &mut dyn StreamWriter<Float>,
+    ) -> Result<()> {
+        let mut v = Vec::new();
+        for sample in r.buffer().iter() {
+            if self.counter == self.last_cross + (self.clock / 2.0) as u64 {
+                v.push(*sample);
+                self.last_cross += self.clock as u64;
+            }
+
+            let sign = *sample > 0.0;
+            if sign != self.last_sign {
+                self.last_cross = self.counter;
+                // TODO: adjust clock, within sps. Here just shut up the linter.
+                self.sps *= 1.0;
+                self.max_deviation *= 1.0;
+            }
+            self.last_sign = sign;
+            self.counter += 1;
+        }
+        r.consume(r.buffer().len());
+        w.write(&v)
+    }
+}
