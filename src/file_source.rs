@@ -76,6 +76,7 @@ impl FileSource {
         })
     }
 }
+
 impl<T> Source<T> for FileSource
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
