@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/ThomasHabets/rustradio"
 description = "Software defined radio library"
-include = ["/src", "/extra", "README.md", "/examples"]
+include = ["/src/*.rs", "/src/bin/*.rs", ".gitignore", "/extra/precommit", "README.md", "/examples", "/Cargo.toml"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
