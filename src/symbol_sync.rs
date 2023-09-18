@@ -84,7 +84,7 @@ pub struct ZeroCrossing {
     max_deviation: Float,
     clock: Float,
     last_sign: bool,
-    last_cross: u64,
+    last_cross: f32,
     counter: u64,
 }
 
@@ -96,12 +96,13 @@ impl ZeroCrossing {
             clock: sps,
             max_deviation,
             last_sign: false,
-            last_cross: 0,
+            last_cross: 0.0,
             counter: 0,
         }
     }
 }
 
+// TODO: reset counter so that float retains precision later in the stream.
 impl Block<Float, Float> for ZeroCrossing {
     fn work(
         &mut self,
@@ -110,14 +111,14 @@ impl Block<Float, Float> for ZeroCrossing {
     ) -> Result<()> {
         let mut v = Vec::new();
         for sample in r.buffer().iter() {
-            if self.counter == self.last_cross + (self.clock / 2.0) as u64 {
+            if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 v.push(*sample);
-                self.last_cross += self.clock as u64;
+                self.last_cross += self.clock;
             }
 
             let sign = *sample > 0.0;
             if sign != self.last_sign {
-                self.last_cross = self.counter;
+                self.last_cross = self.counter as f32;
                 // TODO: adjust clock, within sps. Here just shut up the linter.
                 self.sps *= 1.0;
                 self.max_deviation *= 1.0;
