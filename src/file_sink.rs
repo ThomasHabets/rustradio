@@ -4,14 +4,11 @@ use std::io::Write;
 
 use crate::{Sample, Sink, StreamReader};
 
+#[cfg(test)]
 mod tests {
-    // These warnings about unused stuff are incorrect.
-    #[allow(unused_imports)]
     use super::*;
-    #[allow(unused_imports)]
     use crate::vector_source::VectorSource;
-    #[allow(unused_imports)]
-    use crate::{Complex, Float, Stream};
+    use crate::{Complex, Float, Source, Stream};
 
     #[test]
     fn sink_f32() -> Result<()> {

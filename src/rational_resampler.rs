@@ -10,7 +10,7 @@ mod tests {
     use super::*;
     use crate::vector_sink::VectorSink;
     use crate::vector_source::VectorSource;
-    use crate::{Complex, Float, Stream};
+    use crate::{Complex, Float, Source, Stream};
 
     fn runtest(inputsize: usize, interp: usize, deci: usize, finalcount: usize) -> Result<()> {
         let input: Vec<_> = (0..inputsize)

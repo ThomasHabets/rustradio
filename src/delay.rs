@@ -2,15 +2,12 @@ use anyhow::Result;
 
 use crate::{Block, Sample, StreamReader, StreamWriter};
 
+#[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
-    #[allow(unused_imports)]
     use crate::vector_sink::VectorSink;
-    #[allow(unused_imports)]
     use crate::vector_source::VectorSource;
-    #[allow(unused_imports)]
-    use crate::{Complex, Float, Stream};
+    use crate::{Source, Stream};
 
     #[test]
     fn delay_zero() -> Result<()> {

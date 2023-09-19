@@ -2,15 +2,12 @@ use anyhow::Result;
 
 use crate::{Block, Float, StreamReader, StreamWriter};
 
+#[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
-    #[allow(unused_imports)]
     use crate::vector_sink::VectorSink;
-    #[allow(unused_imports)]
     use crate::vector_source::VectorSource;
-    #[allow(unused_imports)]
-    use crate::{Complex, Error, Float, Stream};
+    use crate::{Complex, Error, Float, Source, Stream};
 
     #[test]
     fn iir_ff() -> Result<()> {
