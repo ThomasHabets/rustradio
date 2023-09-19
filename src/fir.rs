@@ -8,6 +8,7 @@ use anyhow::Result;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tests::assert_almost_equal_complex;
     use crate::Complex;
 
     #[test]
@@ -26,7 +27,7 @@ mod tests {
             Complex::new(0.0, 0.2),
         ];
         let filter = FIR::new(&taps);
-        assert_almost_equal(
+        assert_almost_equal_complex(
             &filter.filter_n(&input),
             &[
                 Complex::new(2.3, 0.22),
@@ -71,22 +72,6 @@ mod tests {
                 Complex::new(0.002010403, 0.0)
             ]
         );
-    }
-
-    fn assert_almost_equal(left: &[Complex], right: &[Complex]) {
-        assert_eq!(
-            left.len(),
-            right.len(),
-            "\nleft: {:?}\nright: {:?}",
-            left,
-            right
-        );
-        for i in 0..left.len() {
-            let dist = (left[i] - right[i]).norm_sqr();
-            if dist > 0.001 {
-                assert_eq!(left[i], right[i], "\nleft: {:?}\nright: {:?}", left, right);
-            }
-        }
     }
 }
 

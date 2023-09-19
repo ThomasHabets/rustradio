@@ -24,6 +24,41 @@ pub mod vector_source;
 pub type Float = f32;
 pub type Complex = num::complex::Complex<Float>;
 
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    pub fn assert_almost_equal_complex(left: &[Complex], right: &[Complex]) {
+        assert_eq!(
+            left.len(),
+            right.len(),
+            "\nleft: {:?}\nright: {:?}",
+            left,
+            right
+        );
+        for i in 0..left.len() {
+            let dist = (left[i] - right[i]).norm_sqr().sqrt();
+            if dist > 0.001 {
+                assert_eq!(left[i], right[i], "\nleft: {:?}\nright: {:?}", left, right);
+            }
+        }
+    }
+    pub fn assert_almost_equal_float(left: &[Float], right: &[Float]) {
+        assert_eq!(
+            left.len(),
+            right.len(),
+            "\nleft: {:?}\nright: {:?}",
+            left,
+            right
+        );
+        for i in 0..left.len() {
+            let dist = (left[i] - right[i]).sqrt();
+            if dist > 0.001 {
+                assert_eq!(left[i], right[i], "\nleft: {:?}\nright: {:?}", left, right);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Error {
     msg: String,
