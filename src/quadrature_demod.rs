@@ -19,7 +19,11 @@ impl Block<Complex, Float> for QuadratureDemod {
         w: &mut dyn StreamWriter<Float>,
     ) -> Result<()> {
         // TODO: fix this when there's history.
-        let n = std::cmp::min(w.capacity(), r.available()) - 1;
+        let n = std::cmp::min(w.capacity(), r.available());
+        if n == 0 {
+            return Ok(());
+        }
+        let n = n - 1;
         let input = r.buffer();
         let mut tmp = vec![Complex::default(); n];
         for i in 0..n {
