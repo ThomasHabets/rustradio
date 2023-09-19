@@ -102,7 +102,6 @@ impl ZeroCrossing {
     }
 }
 
-// TODO: reset counter so that float retains precision later in the stream.
 impl Block<Float, Float> for ZeroCrossing {
     fn work(
         &mut self,
@@ -125,6 +124,12 @@ impl Block<Float, Float> for ZeroCrossing {
             }
             self.last_sign = sign;
             self.counter += 1;
+
+            let step_back = (10.0 * self.clock) as u64;
+            if self.counter > step_back && self.last_cross as u64 > step_back {
+                self.counter -= step_back;
+                self.last_cross -= step_back as f32;
+            }
         }
         r.consume(r.buffer().len());
         w.write(&v)
