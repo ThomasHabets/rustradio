@@ -8,7 +8,7 @@ use crate::{Sample, Source, StreamWriter};
 mod tests {
     use super::*;
     use crate::vector_sink::VectorSink;
-    use crate::{Complex, Float, Stream};
+    use crate::{Complex, Float, Sink, Stream};
 
     #[test]
     fn source_f32() -> Result<()> {

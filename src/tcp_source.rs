@@ -8,7 +8,7 @@ use crate::{Sample, Source, StreamWriter};
 mod tests {
     use super::*;
     use crate::vector_sink::VectorSink;
-    use crate::{Float, Stream};
+    use crate::{Float, Sink, Stream};
     use std::io::Write;
 
     #[test]

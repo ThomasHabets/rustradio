@@ -8,7 +8,7 @@ mod tests {
     use crate::tests::*;
     use crate::vector_sink::VectorSink;
     use crate::vector_source::VectorSource;
-    use crate::{Complex, Float, Source, Stream};
+    use crate::{Complex, Float, Sink, Source, Stream};
 
     #[test]
     fn floats() -> Result<()> {

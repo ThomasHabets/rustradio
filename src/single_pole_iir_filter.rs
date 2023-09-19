@@ -7,7 +7,7 @@ mod tests {
     use super::*;
     use crate::vector_sink::VectorSink;
     use crate::vector_source::VectorSource;
-    use crate::{Complex, Error, Float, Source, Stream};
+    use crate::{Complex, Error, Float, Sink, Source, Stream};
 
     #[test]
     fn iir_ff() -> Result<()> {

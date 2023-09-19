@@ -7,7 +7,7 @@ mod tests {
     use super::*;
     use crate::vector_sink::VectorSink;
     use crate::vector_source::VectorSource;
-    use crate::{Source, Stream};
+    use crate::{Sink, Source, Stream};
 
     #[test]
     fn delay_zero() -> Result<()> {
