@@ -4,17 +4,14 @@ use std::io::Read;
 
 use crate::{Sample, Source, StreamWriter};
 
+#[cfg(test)]
 mod tests {
-    // These warnings about unused stuff are incorrect.
-    #[allow(unused_imports)]
     use super::*;
-    #[allow(unused_imports)]
     use crate::vector_sink::VectorSink;
-    #[allow(unused_imports)]
     use crate::{Complex, Float, Stream};
 
     #[test]
-    fn sink_f32() -> Result<()> {
+    fn source_f32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
 
@@ -38,7 +35,7 @@ mod tests {
     }
 
     #[test]
-    fn sink_c32() -> Result<()> {
+    fn source_c32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
 
