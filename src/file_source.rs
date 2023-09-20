@@ -60,6 +60,7 @@ pub struct FileSource {
     filename: String,
     f: std::fs::File,
     repeat: bool,
+    buf: Vec<u8>,
 }
 
 impl FileSource {
@@ -70,6 +71,7 @@ impl FileSource {
             filename: filename.to_string(),
             f,
             repeat,
+            buf: Vec::new(),
         })
     }
 }
@@ -87,14 +89,15 @@ where
                 self.filename, self.repeat
             );
         }
+        self.buf.extend(&buffer[..n]);
 
         let size = T::size();
+        let samples = self.buf.len() / size;
         let mut v = Vec::new();
-        for c in 0..(n / size) {
-            let a = size * c;
-            let b = a + size;
-            v.push(T::parse(&buffer[a..b])?);
+        for i in (0..(samples * size)).step_by(size) {
+            v.push(T::parse(&self.buf[i..i + size])?);
         }
+        self.buf.drain(0..(samples * size));
         w.write(&v)
     }
 }
