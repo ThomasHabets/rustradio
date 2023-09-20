@@ -8,6 +8,7 @@ pub mod constant_source;
 pub mod convert;
 pub mod debug_sink;
 pub mod delay;
+pub mod fft_filter;
 pub mod file_sink;
 pub mod file_source;
 pub mod fir;
@@ -38,7 +39,11 @@ pub mod tests {
         for i in 0..left.len() {
             let dist = (left[i] - right[i]).norm_sqr().sqrt();
             if dist > 0.001 {
-                assert_eq!(left[i], right[i], "\nleft: {:?}\nright: {:?}", left, right);
+                assert_eq!(
+                    left[i], right[i],
+                    "\nElement {i}:\nleft: {:?}\nright: {:?}",
+                    left, right
+                );
             }
         }
     }

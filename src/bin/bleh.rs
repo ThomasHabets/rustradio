@@ -9,6 +9,7 @@ use rustradio::complex_to_mag2::*;
 use rustradio::constant_source::*;
 use rustradio::convert::*;
 use rustradio::debug_sink::*;
+use rustradio::fft_filter::FftFilter;
 use rustradio::file_sink::*;
 use rustradio::file_source::*;
 use rustradio::fir::FIRFilter;
