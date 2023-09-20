@@ -11,7 +11,7 @@ mod tests {
     use crate::tests::*;
 
     #[test]
-    fn blah() {
+    fn fft_then_ifft() {
         let buf = vec![
             Complex {
                 re: -0.045228414,
@@ -144,34 +144,55 @@ mod tests {
 pub struct FftFilter {
     buf: Vec<Complex>,
     taps_fft: Vec<Complex>,
-    len: usize,
+    nsamples: usize,
+    fftsize: usize,
+    tail: Vec<Complex>,
     fft: Arc<dyn rustfft::Fft<Float>>,
     ifft: Arc<dyn rustfft::Fft<Float>>,
 }
 
 impl FftFilter {
+    fn calc_fftsize(from: usize) -> usize {
+        let mut n = 1;
+        while n < from {
+            n <<= 1;
+        }
+        2 * n
+    }
+
     pub fn new(taps: &[Complex]) -> Self {
+        let ntaps = taps.len();
+        println!("Creating FFT with {ntaps} taps");
         let mut taps_fft = taps.to_vec();
-        let len = taps_fft.len();
-        //taps_fft.resize(2048, Complex::default());
+        let fftsize = Self::calc_fftsize(ntaps);
+        let nsamples = fftsize - taps_fft.len();
+        taps_fft.resize(fftsize, Complex::default());
+
+        let mut tail = Vec::new();
+        tail.resize(ntaps, Complex::default());
 
         let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(len);
-        let ifft = planner.plan_fft_inverse(len);
+        let fft = planner.plan_fft_forward(fftsize);
+        let ifft = planner.plan_fft_inverse(fftsize);
 
-        //
         fft.process(&mut taps_fft);
+
+        // Normalization is actually the square root of this
+        // expression, but since we'll do two FFTs we can just skip
+        // the square root here and do it just once.
         let f = 1.0 / taps_fft.len() as Float;
         taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
 
         let mut buf = Vec::new();
-        buf.reserve(len);
+        buf.reserve(fftsize);
         Self {
-            len,
-            buf,
+            fftsize,
             taps_fft,
+            tail,
             fft,
             ifft,
+            buf,
+            nsamples,
         }
     }
 }
@@ -182,15 +203,11 @@ impl Block<Complex, Complex> for FftFilter {
         r: &mut dyn StreamReader<Complex>,
         w: &mut dyn StreamWriter<Complex>,
     ) -> Result<()> {
-        let add = std::cmp::min(r.available(), self.len - self.buf.len());
-        for s in r.buffer() {
-            if s.re > 1000.0 {
-                panic!("wat?! {}", s);
-            }
-        }
-
+        let add = std::cmp::min(r.available(), self.nsamples - self.buf.len());
         self.buf.extend(&r.buffer()[..add]);
-        if self.buf.len() == self.len {
+
+        if self.buf.len() == self.nsamples {
+            self.buf.resize(self.fftsize, Complex::default());
             self.fft.process(&mut self.buf);
             let mut filtered = self
                 .buf
@@ -199,7 +216,20 @@ impl Block<Complex, Complex> for FftFilter {
                 .map(|(x, y)| x * y)
                 .collect::<Vec<Complex>>();
             self.ifft.process(&mut filtered);
-            w.write(&filtered)?;
+
+            // Add overlapping tail.
+            for (i, t) in self.tail.iter().enumerate() {
+                filtered[i] += t;
+            }
+
+            // Output.
+            w.write(&filtered[..self.nsamples])?;
+
+            // Stash tail.
+            for i in 0..self.tail.len() {
+                self.tail[i] = filtered[self.nsamples + i];
+            }
+
             self.buf.clear();
         }
         r.consume(add);

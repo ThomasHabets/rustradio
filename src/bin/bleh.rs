@@ -189,8 +189,9 @@ fn main() -> Result<()> {
             false,
         )?));
         //let s = g.add_source::<Complex>(Box::new(FileSource::new("several.c32", false)?));
-        let taps = rustradio::fir::low_pass(1024000.0, 50000.0, 1000.0);
-        let s = g.add_block(s, Box::new(FftFilter::new(taps.as_slice())));
+        let taps = rustradio::fir::low_pass(1024000.0, 50000.0, 10000.0);
+        let s = g.add_block(s, Box::new(FftFilter::new(&taps)));
+        //let s = g.add_block(s, Box::new(FIRFilter::new(&taps)));
         g.add_sink(
             s,
             Box::new(FileSink::new(
