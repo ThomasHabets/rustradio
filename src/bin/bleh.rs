@@ -181,7 +181,35 @@ fn main() -> Result<()> {
             //std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
+
     if true {
+        let mut g = Graph::new();
+        let s = g.add_source::<Complex>(Box::new(FileSource::new(
+            "b200-868M-1024k-ofs-1s.c32",
+            false,
+        )?));
+        //let s = g.add_source::<Complex>(Box::new(FileSource::new("several.c32", false)?));
+        let taps = rustradio::fir::low_pass(1024000.0, 50000.0, 1000.0);
+        let s = g.add_block(s, Box::new(FftFilter::new(taps.as_slice())));
+        g.add_sink(
+            s,
+            Box::new(FileSink::new(
+                "out.c32",
+                rustradio::file_sink::Mode::Overwrite,
+            )?),
+        );
+        loop {
+            let n = g.work()?;
+            if n <= 1 {
+                break;
+            }
+            println!("Got {n}…");
+            //break;
+            //std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
+
+    if false {
         //let src = FileSource::new("b200-868M-1024k-ofs-1s.c32", false)?;
         let src = FileSource::new("burst.c32", false)?;
         //let src = FileSource::new("/dev/stdin", false)?;
