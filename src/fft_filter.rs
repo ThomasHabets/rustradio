@@ -162,7 +162,6 @@ impl FftFilter {
 
     pub fn new(taps: &[Complex]) -> Self {
         let ntaps = taps.len();
-        println!("Creating FFT with {ntaps} taps");
         let mut taps_fft = taps.to_vec();
         let fftsize = Self::calc_fftsize(ntaps);
         let nsamples = fftsize - taps_fft.len();
