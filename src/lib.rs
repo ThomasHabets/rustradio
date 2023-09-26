@@ -1,6 +1,7 @@
 pub mod add_const;
 pub mod block;
 pub mod blocks;
+pub mod multiply_const;
 pub mod stream;
 
 pub type Float = f32;

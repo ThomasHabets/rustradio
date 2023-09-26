@@ -1,5 +1,6 @@
-use crate::{Block, Sample, StreamReader, StreamWriter};
-use anyhow::Result;
+use crate::block::{Block, BlockRet, MapBlock};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::{map_block_macro, Error};
 
 pub struct MultiplyConst<T> {
     val: T,
@@ -7,24 +8,21 @@ pub struct MultiplyConst<T> {
 
 impl<T> MultiplyConst<T>
 where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + std::ops::Mul<Output = T>,
+    T: Copy + std::ops::Mul<Output = T>,
 {
     pub fn new(val: T) -> Self {
         Self { val }
     }
 }
 
-impl<T> Block<T, T> for MultiplyConst<T>
+impl<T> MapBlock<T> for MultiplyConst<T>
 where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + std::ops::Mul<Output = T>,
+    T: Copy + std::ops::Mul<Output = T>,
+    Streamp<T>: From<StreamType>,
 {
-    fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        let mut v: Vec<T> = Vec::new();
-        for d in r.buffer().clone().iter() {
-            v.push(*d * self.val);
-        }
-        w.write(v.as_slice())?;
-        r.consume(v.len());
-        Ok(())
+    fn process_one(&self, a: T) -> T {
+        a * self.val
     }
 }
+
+map_block_macro![MultiplyConst, std::ops::Mul<Output = T>];

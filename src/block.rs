@@ -62,10 +62,10 @@ where
 */
 #[macro_export]
 macro_rules! map_block_macro {
-    ($blockname:ident) => {
+    ($blockname:ident, $tr:path) => {
         impl<T> Block for $blockname<T>
         where
-            T: Copy + std::ops::Add<Output = T>,
+            T: Copy + $tr,
             Streamp<T>: From<StreamType>,
         {
             fn work(

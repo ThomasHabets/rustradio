@@ -3,7 +3,10 @@ use crate::map_block_macro;
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
-pub struct AddConst<T> {
+pub struct AddConst<T>
+where
+    T: Copy + std::ops::Add<Output = T>,
+{
     val: T,
 }
 
@@ -26,4 +29,4 @@ where
     }
 }
 
-map_block_macro![AddConst];
+map_block_macro![AddConst, std::ops::Add<Output = T>];
