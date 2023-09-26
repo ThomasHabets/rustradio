@@ -1,6 +1,6 @@
-use crate::block::{Block, BlockRet, MapBlock};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
-use crate::{map_block_macro, Error};
+use crate::{map_block_macro_v2, Error};
 
 pub struct MultiplyConst<T> {
     val: T,
@@ -13,16 +13,9 @@ where
     pub fn new(val: T) -> Self {
         Self { val }
     }
-}
-
-impl<T> MapBlock<T> for MultiplyConst<T>
-where
-    T: Copy + std::ops::Mul<Output = T>,
-    Streamp<T>: From<StreamType>,
-{
-    fn process_one(&self, a: T) -> T {
-        a * self.val
+    fn process_one(&self, x: &T) -> T {
+        *x * self.val
     }
 }
 
-map_block_macro![MultiplyConst, std::ops::Mul<Output = T>];
+map_block_macro_v2![MultiplyConst<T>, std::ops::Mul<Output = T>];

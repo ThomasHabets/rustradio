@@ -3,12 +3,14 @@ use anyhow::Result;
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
+#[macro_export]
 macro_rules! get_output {
     ($w:expr, $index:expr) => {
         Self::get_output($w, $index).borrow_mut()
     };
 }
 
+#[macro_export]
 macro_rules! get_input {
     ($r:expr, $index:expr) => {
         Self::get_input($r, $index).borrow()
@@ -74,6 +76,31 @@ macro_rules! map_block_macro {
                 w: &mut OutputStreams,
             ) -> Result<BlockRet, Error> {
                 self.work_map_block(r, w)
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! map_block_macro_v2 {
+    ($name:path, $($tr:path), *) => {
+        impl<T> Block for $name
+        where
+            T: Copy $(+$tr)*,
+            Streamp<T>: From<StreamType>,
+        {
+            fn work(
+                &mut self,
+                r: &mut InputStreams,
+                w: &mut OutputStreams,
+            ) -> Result<BlockRet, Error> {
+                Self::get_output(w, 0)
+                    .borrow_mut()
+                    .write(Self::get_input(r, 0)
+                           .borrow()
+                           .iter()
+                           .map(|x| self.process_one(x)));
+                Ok(BlockRet::Ok)
             }
         }
     };
