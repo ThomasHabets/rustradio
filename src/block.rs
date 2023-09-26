@@ -1,6 +1,7 @@
 use anyhow::Result;
 
-use crate::{Error, InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::Error;
 
 macro_rules! get_output {
     ($w:expr, $index:expr) => {
@@ -56,6 +57,9 @@ where
     fn process_one(&self, a: T) -> T;
 }
 
+/*
+* TODO: why is this macro needed? Why can't MapBlock<T> override work()?
+*/
 #[macro_export]
 macro_rules! map_block_macro {
     ($blockname:ident) => {

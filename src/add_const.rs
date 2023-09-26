@@ -1,6 +1,7 @@
 use crate::block::{Block, BlockRet, MapBlock};
 use crate::map_block_macro;
-use crate::{Error, InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::Error;
 
 pub struct AddConst<T> {
     val: T,
