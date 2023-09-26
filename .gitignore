@@ -1,2 +1,8 @@
 /target
 *~
+*.data
+*.c32
+*.u8
+*.f32
+keff
+*.bin
