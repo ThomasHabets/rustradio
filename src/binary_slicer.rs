@@ -1,12 +1,22 @@
 use anyhow::Result;
 
-use crate::{Block, Float, StreamReader, StreamWriter};
+use crate::block::{Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams};
+use crate::{map_block_convert_macro, Error, Float};
 
 pub struct BinarySlicer;
 
 impl BinarySlicer {
     pub fn new() -> Self {
         Self {}
+    }
+
+    fn process_one(&self, a: Float) -> u8 {
+        if a > 0.0 {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -16,20 +26,4 @@ impl Default for BinarySlicer {
     }
 }
 
-impl Block<Float, u8> for BinarySlicer {
-    fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Float>,
-        w: &mut dyn StreamWriter<u8>,
-    ) -> Result<()> {
-        w.write(
-            r.buffer()
-                .iter()
-                .map(|f| if *f > 0.0 { 1u8 } else { 0u8 })
-                .collect::<Vec<u8>>()
-                .as_slice(),
-        )?;
-        r.consume(r.buffer().len());
-        Ok(())
-    }
-}
+map_block_convert_macro![BinarySlicer];

@@ -107,3 +107,23 @@ macro_rules! map_block_macro_v2 {
         }
     };
 }
+
+#[macro_export]
+macro_rules! map_block_convert_macro {
+    ($name:path) => {
+        impl Block for $name {
+            fn work(
+                &mut self,
+                r: &mut InputStreams,
+                w: &mut OutputStreams,
+            ) -> Result<BlockRet, Error> {
+                let i = Self::get_input(r, 0);
+                Self::get_output(w, 0)
+                    .borrow_mut()
+                    .write(i.borrow().iter().map(|x| self.process_one(*x)));
+                i.borrow_mut().clear();
+                Ok(BlockRet::Ok)
+            }
+        }
+    };
+}

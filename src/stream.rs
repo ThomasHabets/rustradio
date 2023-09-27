@@ -58,11 +58,21 @@ impl From<StreamType> for Streamp<u32> {
     }
 }
 
+impl From<StreamType> for Streamp<u8> {
+    fn from(f: StreamType) -> Self {
+        match f {
+            StreamType::U8(x) => x,
+            _ => panic!(),
+        }
+    }
+}
+
 pub type Streamp<T> = Rc<RefCell<Stream<T>>>;
 
 pub enum StreamType {
     Float(Streamp<Float>),
     U32(Streamp<u32>),
+    U8(Streamp<u8>),
 }
 impl StreamType {
     pub fn new_float_from_slice(data: &[Float]) -> Self {
@@ -77,6 +87,7 @@ impl Clone for StreamType {
         match &self {
             Self::Float(x) => Self::Float(x.clone()),
             Self::U32(x) => Self::U32(x.clone()),
+            Self::U8(x) => Self::U8(x.clone()),
         }
     }
 }
