@@ -3,28 +3,33 @@
 */
 use anyhow::Result;
 
-use crate::{Block, Complex, StreamReader, StreamWriter};
+use crate::block::{Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams};
+use crate::{Complex, Error};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vector_sink::VectorSink;
-    use crate::vector_source::VectorSource;
-    use crate::{Complex, Float, Sink, Source, Stream};
+    use crate::stream::{StreamType, Streamp};
+    use crate::Float;
 
     fn runtest(inputsize: usize, interp: usize, deci: usize, finalcount: usize) -> Result<()> {
         let input: Vec<_> = (0..inputsize)
             .map(|i| Complex::new(i as Float, 0.0))
             .collect();
-        let mut src = VectorSource::new(input.clone());
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        is.add_stream(StreamType::new_complex_from_slice(&input));
+        os.add_stream(StreamType::new_complex());
         let mut resamp = RationalResampler::new(interp, deci)?;
-        let mut sink = VectorSink::new();
-        let mut s1 = Stream::new(8192);
-        let mut s2 = Stream::new(8192);
-        src.work(&mut s1)?;
-        resamp.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
-        assert_eq!(finalcount, sink.to_vec().len(), "{:?}", sink.to_vec());
+        resamp.work(&mut is, &mut os)?;
+        let res: Streamp<Complex> = os.get(0).into();
+        assert_eq!(
+            finalcount,
+            res.borrow().available(),
+            "{:?}",
+            res.borrow().data()
+        );
         Ok(())
     }
 
@@ -69,25 +74,21 @@ impl RationalResampler {
     }
 }
 
-impl Block<Complex, Complex> for RationalResampler {
-    fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Complex>,
-        w: &mut dyn StreamWriter<Complex>,
-    ) -> Result<()> {
-        // TODO: don't overblow the buffer.
-        let n = std::cmp::min(w.capacity(), r.available());
-        let input = r.buffer();
+impl Block for RationalResampler {
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
         self.counter -= self.deci;
-        for s in &input[..n] {
+        for s in Self::get_input(r, 0).borrow().iter() {
             self.counter += self.interp;
             while self.counter >= 0 {
                 v.push(*s);
                 self.counter -= self.deci;
             }
         }
-        r.consume(n);
-        w.write(&v)
+        Self::get_input::<Complex>(r, 0).borrow_mut().clear();
+        Self::get_output::<Complex>(w, 0)
+            .borrow_mut()
+            .write_slice(&v);
+        Ok(BlockRet::Ok)
     }
 }

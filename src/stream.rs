@@ -106,11 +106,19 @@ pub enum StreamType {
     U8(Streamp<u8>),
 }
 impl StreamType {
+    pub fn new_float() -> Self {
+        Self::Float(Rc::new(RefCell::new(Stream::<Float>::new())))
+    }
     pub fn new_float_from_slice(data: &[Float]) -> Self {
         Self::Float(Rc::new(RefCell::new(Stream::<Float>::new_from_slice(data))))
     }
-    pub fn new_float() -> Self {
-        Self::Float(Rc::new(RefCell::new(Stream::<Float>::new())))
+    pub fn new_complex() -> Self {
+        Self::Complex(Rc::new(RefCell::new(Stream::<Complex>::new())))
+    }
+    pub fn new_complex_from_slice(data: &[Complex]) -> Self {
+        Self::Complex(Rc::new(RefCell::new(Stream::<Complex>::new_from_slice(
+            data,
+        ))))
     }
 }
 impl Clone for StreamType {
