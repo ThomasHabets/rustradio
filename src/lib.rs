@@ -5,7 +5,10 @@ pub mod add_const;
 pub mod binary_slicer;
 pub mod fft_filter;
 pub mod multiply_const;
+pub mod quadrature_demod;
 pub mod tcp_source;
+// pub mod symbol_sync;
+// pub mod rational_resampler;
 
 pub mod block;
 pub mod blocks;

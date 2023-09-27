@@ -1,39 +1,25 @@
 use anyhow::Result;
 
-use crate::{Block, Complex, Float, StreamReader, StreamWriter};
+use crate::block::{Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams};
+use crate::{map_block_convert_macro, Complex, Error, Float};
 
 pub struct QuadratureDemod {
     gain: Float,
+    last: Complex,
 }
 
 impl QuadratureDemod {
     pub fn new(gain: Float) -> Self {
-        Self { gain }
+        Self {
+            gain,
+            last: Complex::default(),
+        }
+    }
+    fn process_one(&mut self, s: Complex) -> Float {
+        let t = s * self.last.conj();
+        self.last = s;
+        self.gain * t.im.atan2(t.re)
     }
 }
-
-impl Block<Complex, Float> for QuadratureDemod {
-    fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Complex>,
-        w: &mut dyn StreamWriter<Float>,
-    ) -> Result<()> {
-        // TODO: fix this when there's history.
-        let n = std::cmp::min(w.capacity(), r.available());
-        if n == 0 {
-            return Ok(());
-        }
-        let n = n - 1;
-        let input = r.buffer();
-        let mut tmp = vec![Complex::default(); n];
-        for i in 0..n {
-            tmp[i] = input[i + 1] * input[i].conj();
-        }
-        let mut v = vec![0.0; n];
-        for i in 0..n {
-            v[i] = self.gain * tmp[i].im.atan2(tmp[i].re);
-        }
-        r.consume(n);
-        w.write(&v)
-    }
-}
+map_block_convert_macro![QuadratureDemod];
