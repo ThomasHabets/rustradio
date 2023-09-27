@@ -2,8 +2,9 @@
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
-
-use anyhow::Result;
+use crate::block::{Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::{Complex, Error, Float};
 
 #[cfg(test)]
 mod tests {
@@ -75,8 +76,6 @@ mod tests {
     }
 }
 
-use crate::{Block, Complex, Float, StreamReader, StreamWriter};
-
 pub struct FIR<T> {
     taps: Vec<T>,
 }
@@ -120,17 +119,22 @@ where
     }
 }
 
-impl<T> Block<T, T> for FIRFilter<T>
+impl<T> Block for FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    Streamp<T>: From<StreamType>,
 {
-    fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        let n = std::cmp::min(r.available(), w.capacity());
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let input = Self::get_input(r, 0);
+        let out = Self::get_output(w, 0);
+        let n = std::cmp::min(input.borrow().available(), out.borrow().capacity());
         if n > self.ntaps {
-            w.write(&self.fir.filter_n(&r.buffer()[..n]))?;
-            r.consume(n);
+            // TODO: needless copy.
+            let v: Vec<T> = input.borrow().data().clone().into();
+            out.borrow_mut().write_slice(&self.fir.filter_n(&v[..n]));
+            input.borrow_mut().consume(n);
         }
-        Ok(())
+        Ok(BlockRet::Ok)
     }
 }
 
