@@ -6,7 +6,9 @@
 */
 use anyhow::Result;
 
-use crate::{Block, Float, StreamReader, StreamWriter};
+use crate::block::{Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams};
+use crate::{Error, Float};
 
 trait Ted {
     fn error(&self, input: &[Float]) -> Float;
@@ -51,31 +53,31 @@ error = sign(x) * deriv(x)
 positive error means "early", neagive error means "late"
 */
 
-impl Block<Float, Float> for SymbolSync {
-    fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Float>,
-        w: &mut dyn StreamWriter<Float>,
-    ) -> Result<()> {
+impl Block for SymbolSync {
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let input = Self::get_input::<Float>(r, 0);
         let mut v = Vec::new();
-        let n = r.buffer().len();
+        let n = input.borrow().available();
         let mut pos = Float::default();
         loop {
             let i = pos as usize;
             if i + 1 >= n {
                 break;
             }
-            let error = self.ted.error(&r.buffer()[i..i + 1]);
+            // TODO: needless copy.
+            let t: Vec<Float> = input.borrow().data().clone().into();
+            let error = self.ted.error(&t);
             if error > 0.0 {
                 pos += 0.3;
             } else {
                 pos -= 0.3;
             }
-            v.push(r.buffer()[i]);
+            v.push(input.borrow().data()[i]);
             pos += self.clock;
         }
-        r.consume(n);
-        w.write(&v)
+        input.borrow_mut().clear();
+        Self::get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
+        Ok(BlockRet::Ok)
     }
 }
 
@@ -102,14 +104,11 @@ impl ZeroCrossing {
     }
 }
 
-impl Block<Float, Float> for ZeroCrossing {
-    fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Float>,
-        w: &mut dyn StreamWriter<Float>,
-    ) -> Result<()> {
+impl Block for ZeroCrossing {
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
-        for sample in r.buffer().iter() {
+        let input = Self::get_input(r, 0);
+        for sample in input.borrow().iter() {
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 v.push(*sample);
                 self.last_cross += self.clock;
@@ -131,7 +130,8 @@ impl Block<Float, Float> for ZeroCrossing {
                 self.last_cross -= step_back as f32;
             }
         }
-        r.consume(r.buffer().len());
-        w.write(&v)
+        input.borrow_mut().clear();
+        Self::get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
+        Ok(BlockRet::Ok)
     }
 }
