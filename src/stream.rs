@@ -153,6 +153,16 @@ impl InputStreams {
     pub fn get(&self, n: usize) -> StreamType {
         self.streams[n].clone()
     }
+
+    // Return the number of samples.
+    pub fn available(&self, n: usize) -> usize {
+        match &self.streams[n] {
+            StreamType::Float(x) => x.borrow().available(),
+            StreamType::U32(x) => x.borrow().available(),
+            StreamType::U8(x) => x.borrow().available(),
+            StreamType::Complex(x) => x.borrow().available(),
+        }
+    }
 }
 impl Default for InputStreams {
     fn default() -> Self {

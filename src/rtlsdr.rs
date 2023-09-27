@@ -1,6 +1,8 @@
 use anyhow::Result;
 
-use crate::{Block, Complex, Float, StreamReader, StreamWriter};
+use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams};
+use crate::{Complex, Error, Float};
 
 pub struct RtlSdrDecode;
 
@@ -16,27 +18,28 @@ impl Default for RtlSdrDecode {
     }
 }
 
-impl Block<u8, Complex> for RtlSdrDecode {
-    fn work(
-        &mut self,
-        r: &mut dyn StreamReader<u8>,
-        w: &mut dyn StreamWriter<Complex>,
-    ) -> Result<()> {
-        let samples = r.available() - r.available() % 2;
+impl Block for RtlSdrDecode {
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let samples: usize = r.available(0) - r.available(0) % 2;
+        let input = get_input(r, 0);
+        let out = get_output(w, 0);
 
-        w.write(
+        // TODO: needless copy.
+        let buf: Vec<u8> = input.borrow().data().clone().into();
+        let buf = &buf[..samples];
+        out.borrow_mut().write_slice(
             (0..samples)
                 .step_by(2)
                 .map(|e| {
                     Complex::new(
-                        ((r.buffer()[e] as Float) - 127.0) * 0.008,
-                        ((r.buffer()[e + 1] as Float) - 127.0) * 0.008,
+                        ((buf[e] as Float) - 127.0) * 0.008,
+                        ((buf[e + 1] as Float) - 127.0) * 0.008,
                     )
                 })
                 .collect::<Vec<Complex>>()
                 .as_slice(),
-        )?;
-        r.consume(samples);
-        Ok(())
+        );
+        input.borrow_mut().consume(samples);
+        Ok(BlockRet::Ok)
     }
 }

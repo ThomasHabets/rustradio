@@ -5,5 +5,6 @@ pub use crate::fir::FIRFilter;
 pub use crate::multiply_const::MultiplyConst;
 pub use crate::quadrature_demod::QuadratureDemod;
 pub use crate::rational_resampler::RationalResampler;
+pub use crate::rtlsdr::RtlSdrDecode;
 pub use crate::symbol_sync::SymbolSync;
 pub use crate::tcp_source::TcpSource;
