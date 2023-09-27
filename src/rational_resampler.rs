@@ -3,7 +3,7 @@
 */
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{get_input, get_output, Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Complex, Error};
 
@@ -78,17 +78,15 @@ impl Block for RationalResampler {
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
         self.counter -= self.deci;
-        for s in Self::get_input(r, 0).borrow().iter() {
+        for s in get_input(r, 0).borrow().iter() {
             self.counter += self.interp;
             while self.counter >= 0 {
                 v.push(*s);
                 self.counter -= self.deci;
             }
         }
-        Self::get_input::<Complex>(r, 0).borrow_mut().clear();
-        Self::get_output::<Complex>(w, 0)
-            .borrow_mut()
-            .write_slice(&v);
+        get_input::<Complex>(r, 0).borrow_mut().clear();
+        get_output::<Complex>(w, 0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }

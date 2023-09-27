@@ -6,7 +6,7 @@
 */
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{get_input, get_output, Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Error, Float};
 
@@ -55,7 +55,7 @@ positive error means "early", neagive error means "late"
 
 impl Block for SymbolSync {
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = Self::get_input::<Float>(r, 0);
+        let input = get_input::<Float>(r, 0);
         let mut v = Vec::new();
         let n = input.borrow().available();
         let mut pos = Float::default();
@@ -76,7 +76,7 @@ impl Block for SymbolSync {
             pos += self.clock;
         }
         input.borrow_mut().clear();
-        Self::get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
+        get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }
@@ -107,7 +107,7 @@ impl ZeroCrossing {
 impl Block for ZeroCrossing {
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
-        let input = Self::get_input(r, 0);
+        let input = get_input(r, 0);
         for sample in input.borrow().iter() {
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 v.push(*sample);
@@ -131,7 +131,7 @@ impl Block for ZeroCrossing {
             }
         }
         input.borrow_mut().clear();
-        Self::get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
+        get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }
