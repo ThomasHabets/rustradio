@@ -94,12 +94,14 @@ macro_rules! map_block_macro_v2 {
                 r: &mut InputStreams,
                 w: &mut OutputStreams,
             ) -> Result<BlockRet, Error> {
+                let i = Self::get_input(r, 0);
                 Self::get_output(w, 0)
                     .borrow_mut()
-                    .write(Self::get_input(r, 0)
+                    .write(i
                            .borrow()
                            .iter()
                            .map(|x| self.process_one(x)));
+                i.borrow_mut().clear();
                 Ok(BlockRet::Ok)
             }
         }

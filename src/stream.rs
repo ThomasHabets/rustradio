@@ -31,6 +31,9 @@ where
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.data.iter()
     }
+    pub fn clear(&mut self) {
+        self.data.clear();
+    }
 }
 impl<T: Copy> Default for Stream<T> {
     fn default() -> Self {
