@@ -1,12 +1,8 @@
-use crate::block::{Block, BlockRet, MapBlock};
-use crate::map_block_macro;
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
-use crate::Error;
+use crate::{map_block_macro_v2, Error};
 
-pub struct AddConst<T>
-where
-    T: Copy + std::ops::Add<Output = T>,
-{
+pub struct AddConst<T> {
     val: T,
 }
 
@@ -17,16 +13,9 @@ where
     pub fn new(val: T) -> Self {
         Self { val }
     }
-}
-
-impl<T> MapBlock<T> for AddConst<T>
-where
-    T: Copy + std::ops::Add<Output = T>,
-    Streamp<T>: From<StreamType>,
-{
-    fn process_one(&self, a: T) -> T {
-        a + self.val
+    fn process_one(&self, a: &T) -> T {
+        *a + self.val
     }
 }
 
-map_block_macro![AddConst, std::ops::Add<Output = T>];
+map_block_macro_v2![AddConst<T>, std::ops::Add<Output = T>];
