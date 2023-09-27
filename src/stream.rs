@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use crate::Float;
+use crate::{Complex, Float};
 
 pub struct Stream<T>
 where
@@ -25,6 +25,11 @@ where
             data: VecDeque::from(data.to_vec()),
         }
     }
+
+    // TODO: why can't a slice be turned into a suitable iterator?
+    pub fn write_slice(&mut self, data: &[T]) {
+        self.data.extend(data);
+    }
     pub fn write<I: IntoIterator<Item = T>>(&mut self, data: I) {
         self.data.extend(data);
     }
@@ -34,16 +39,32 @@ where
     pub fn clear(&mut self) {
         self.data.clear();
     }
+    pub fn consume(&mut self, n: usize) {
+        self.data.drain(0..n);
+    }
+    pub fn available(&self) -> usize {
+        self.data.len()
+    }
 }
 impl<T: Copy> Default for Stream<T> {
     fn default() -> Self {
         Self::new()
     }
 }
+
 impl From<StreamType> for Streamp<Float> {
     fn from(f: StreamType) -> Self {
         match f {
             StreamType::Float(x) => x,
+            _ => panic!(),
+        }
+    }
+}
+
+impl From<StreamType> for Streamp<Complex> {
+    fn from(f: StreamType) -> Self {
+        match f {
+            StreamType::Complex(x) => x,
             _ => panic!(),
         }
     }
@@ -71,6 +92,7 @@ pub type Streamp<T> = Rc<RefCell<Stream<T>>>;
 
 pub enum StreamType {
     Float(Streamp<Float>),
+    Complex(Streamp<Complex>),
     U32(Streamp<u32>),
     U8(Streamp<u8>),
 }
@@ -86,6 +108,7 @@ impl Clone for StreamType {
     fn clone(&self) -> Self {
         match &self {
             Self::Float(x) => Self::Float(x.clone()),
+            Self::Complex(x) => Self::Complex(x.clone()),
             Self::U32(x) => Self::U32(x.clone()),
             Self::U8(x) => Self::U8(x.clone()),
         }

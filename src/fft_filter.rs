@@ -3,7 +3,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use rustfft::FftPlanner;
 
-use crate::{Block, Complex, Float, StreamReader, StreamWriter};
+use crate::block::{Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams, Streamp};
+use crate::{Complex, Error, Float};
 
 #[cfg(test)]
 mod tests {
@@ -196,19 +198,18 @@ impl FftFilter {
     }
 }
 
-impl Block<Complex, Complex> for FftFilter {
-    fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Complex>,
-        w: &mut dyn StreamWriter<Complex>,
-    ) -> Result<()> {
-        let add = std::cmp::min(r.available(), self.nsamples - self.buf.len());
-        self.buf.extend(&r.buffer()[..add]);
+impl Block for FftFilter {
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let input = Self::get_input(r, 0);
 
+        let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
+        self.buf.extend(input.borrow().iter().take(add));
+        input.borrow_mut().consume(add);
+        let o: Streamp<Complex> = Self::get_output(w, 0);
         if self.buf.len() == self.nsamples {
             self.buf.resize(self.fftsize, Complex::default());
             self.fft.process(&mut self.buf);
-            let mut filtered = self
+            let mut filtered: Vec<Complex> = self
                 .buf
                 .iter()
                 .zip(self.taps_fft.iter())
@@ -222,7 +223,7 @@ impl Block<Complex, Complex> for FftFilter {
             }
 
             // Output.
-            w.write(&filtered[..self.nsamples])?;
+            o.borrow_mut().write_slice(&filtered[..self.nsamples]);
 
             // Stash tail.
             for i in 0..self.tail.len() {
@@ -231,7 +232,6 @@ impl Block<Complex, Complex> for FftFilter {
 
             self.buf.clear();
         }
-        r.consume(add);
-        Ok(())
+        Ok(BlockRet::Ok)
     }
 }
