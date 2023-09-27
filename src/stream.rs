@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use crate::{Complex, Float};
 
+#[derive(Debug)]
 pub struct Stream<T>
 where
     T: Copy,
@@ -65,7 +66,7 @@ impl From<StreamType> for Streamp<Float> {
     fn from(f: StreamType) -> Self {
         match f {
             StreamType::Float(x) => x,
-            _ => panic!(),
+            _ => panic!("tried to convert to Float {:?}", f),
         }
     }
 }
@@ -74,7 +75,7 @@ impl From<StreamType> for Streamp<Complex> {
     fn from(f: StreamType) -> Self {
         match f {
             StreamType::Complex(x) => x,
-            _ => panic!(),
+            _ => panic!("tried to convert to Complex {:?}", f),
         }
     }
 }
@@ -83,7 +84,7 @@ impl From<StreamType> for Streamp<u32> {
     fn from(f: StreamType) -> Self {
         match f {
             StreamType::U32(x) => x,
-            _ => panic!(),
+            _ => panic!("tried to convert to U32 {:?}", f),
         }
     }
 }
@@ -92,19 +93,21 @@ impl From<StreamType> for Streamp<u8> {
     fn from(f: StreamType) -> Self {
         match f {
             StreamType::U8(x) => x,
-            _ => panic!(),
+            _ => panic!("tried to convert to U8 {:?}", f),
         }
     }
 }
 
 pub type Streamp<T> = Rc<RefCell<Stream<T>>>;
 
+#[derive(Debug)]
 pub enum StreamType {
     Float(Streamp<Float>),
     Complex(Streamp<Complex>),
     U32(Streamp<u32>),
     U8(Streamp<u8>),
 }
+
 impl StreamType {
     pub fn new_u8() -> Self {
         Self::U8(Rc::new(RefCell::new(Stream::<u8>::new())))
