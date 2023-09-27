@@ -2,13 +2,14 @@ use anyhow::Result;
 use log::{debug, warn};
 use std::io::Read;
 
-use crate::{Sample, Source, StreamWriter};
+use crate::block::{get_output, Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::{Error, Sample};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vector_sink::VectorSink;
-    use crate::{Complex, Float, Sink, Stream};
+    use crate::{Complex, Float};
 
     #[test]
     fn source_f32() -> Result<()> {
@@ -22,15 +23,16 @@ mod tests {
             ],
         )?;
 
-        let mut src = FileSource::new(&tmpfn, false)?;
-        let mut sink: VectorSink<Float> = VectorSink::new();
-        let mut s = Stream::new(100);
-        src.work(&mut s)?;
-        sink.work(&mut s)?;
+        let mut src = FileSource::<Float>::new(&tmpfn, false)?;
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_float());
+        src.work(&mut is, &mut os)?;
 
+        let res: Streamp<Float> = os.get(0).into();
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
-        assert_eq!(sink.to_vec(), correct);
+        assert_eq!(*res.borrow().data(), correct);
         Ok(())
     }
 
@@ -44,26 +46,29 @@ mod tests {
             vec![0, 0, 0, 0, 0, 0, 0, 0, 195, 245, 72, 64, 205, 204, 44, 192],
         )?;
 
-        let mut src = FileSource::new(&tmpfn, false)?;
-        let mut sink: VectorSink<Complex> = VectorSink::new();
-        let mut s = Stream::new(100);
-        src.work(&mut s)?;
-        sink.work(&mut s)?;
+        let mut src = FileSource::<Complex>::new(&tmpfn, false)?;
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_complex());
+        src.work(&mut is, &mut os)?;
+
+        let res: Streamp<Complex> = os.get(0).into();
         #[allow(clippy::approx_constant)]
         let correct = vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)];
-        assert_eq!(sink.to_vec(), correct);
+        assert_eq!(*res.borrow().data(), correct);
         Ok(())
     }
 }
 
-pub struct FileSource {
+pub struct FileSource<T> {
     filename: String,
     f: std::fs::File,
     repeat: bool,
     buf: Vec<u8>,
+    _t: T,
 }
 
-impl FileSource {
+impl<T: Default> FileSource<T> {
     pub fn new(filename: &str, repeat: bool) -> Result<Self> {
         let f = std::fs::File::open(filename)?;
         debug!("Opening source {filename}");
@@ -72,17 +77,22 @@ impl FileSource {
             f,
             repeat,
             buf: Vec::new(),
+            _t: T::default(),
         })
     }
 }
 
-impl<T> Source<T> for FileSource
+impl<T> Block for FileSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
+    Streamp<T>: From<StreamType>,
 {
-    fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()> {
-        let mut buffer = vec![0; w.capacity()];
-        let n = self.f.read(&mut buffer[..])?;
+    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let mut buffer = vec![0; w.capacity(0)];
+        let n = self
+            .f
+            .read(&mut buffer[..])
+            .map_err(|e| -> anyhow::Error { e.into() })?;
         if n == 0 {
             warn!(
                 "Not handling EOF on {}. Repeat: {}",
@@ -98,6 +108,7 @@ where
             v.push(T::parse(&self.buf[i..i + size])?);
         }
         self.buf.drain(0..(samples * size));
-        w.write(&v)
+        get_output(w, 0).borrow_mut().write_slice(&v);
+        Ok(BlockRet::Ok)
     }
 }

@@ -2,6 +2,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use log::debug;
+
 use crate::{Complex, Float};
 
 #[derive(Debug)]
@@ -53,7 +55,13 @@ where
         self.data.len()
     }
     pub fn capacity(&self) -> usize {
-        self.max_size - self.available()
+        let avail = self.available();
+        if self.max_size < avail {
+            debug!("Over capacity {} > {}", avail, self.max_size);
+            0
+        } else {
+            self.max_size - avail
+        }
     }
 }
 impl<T: Copy> Default for Stream<T> {
@@ -184,6 +192,14 @@ impl OutputStreams {
     }
     pub fn get(&self, n: usize) -> StreamType {
         self.streams[n].clone()
+    }
+    pub fn capacity(&self, n: usize) -> usize {
+        match &self.streams[n] {
+            StreamType::Float(x) => x.borrow().capacity(),
+            StreamType::U32(x) => x.borrow().capacity(),
+            StreamType::U8(x) => x.borrow().capacity(),
+            StreamType::Complex(x) => x.borrow().capacity(),
+        }
     }
 }
 impl Default for OutputStreams {

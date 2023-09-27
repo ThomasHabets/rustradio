@@ -4,6 +4,7 @@ use anyhow::Result;
 pub mod add_const;
 pub mod binary_slicer;
 pub mod fft_filter;
+pub mod file_source;
 pub mod fir;
 pub mod multiply_const;
 pub mod quadrature_demod;
