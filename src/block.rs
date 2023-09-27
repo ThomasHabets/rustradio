@@ -19,6 +19,7 @@ macro_rules! get_input {
 
 pub enum BlockRet {
     Ok,
+    EOF,
 }
 
 pub trait Block {

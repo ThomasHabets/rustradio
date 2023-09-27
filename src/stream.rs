@@ -9,6 +9,7 @@ where
     T: Copy,
 {
     data: VecDeque<T>,
+    max_size: usize,
 }
 
 impl<T> Stream<T>
@@ -18,11 +19,13 @@ where
     pub fn new() -> Self {
         Self {
             data: VecDeque::new(),
+            max_size: 1048576,
         }
     }
     pub fn new_from_slice(data: &[T]) -> Self {
         Self {
             data: VecDeque::from(data.to_vec()),
+            max_size: 1048576,
         }
     }
 
@@ -36,6 +39,9 @@ where
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.data.iter()
     }
+    pub fn data(&self) -> &VecDeque<T> {
+        &self.data
+    }
     pub fn clear(&mut self) {
         self.data.clear();
     }
@@ -44,6 +50,9 @@ where
     }
     pub fn available(&self) -> usize {
         self.data.len()
+    }
+    pub fn capacity(&self) -> usize {
+        self.max_size - self.available()
     }
 }
 impl<T: Copy> Default for Stream<T> {

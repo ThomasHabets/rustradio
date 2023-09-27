@@ -1,21 +1,23 @@
-use anyhow::Result;
-use log::warn;
 use std::io::Read;
 
-use crate::{Sample, Source, StreamWriter};
+use anyhow::Result;
+use log::warn;
+
+use crate::block::{Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::{Error, Sample};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vector_sink::VectorSink;
-    use crate::{Float, Sink, Stream};
+
+    use std::collections::VecDeque;
     use std::io::Write;
+
+    use crate::Float;
 
     #[test]
     fn partials() -> Result<()> {
-        let mut s = Stream::new(10000);
-        let mut sink: VectorSink<Float> = VectorSink::new();
-
         let listener = std::net::TcpListener::bind("[::1]:0")?;
         let addr = listener.local_addr()?;
         std::thread::spawn(move || {
@@ -39,29 +41,31 @@ mod tests {
 
             stream.write_all(&data[pos + n..]).unwrap();
         });
-        let mut src = match addr {
+        let mut src: TcpSource<Float> = match addr {
             std::net::SocketAddr::V4(_) => panic!("Where did IPv4 come from?"),
             std::net::SocketAddr::V6(a) => {
                 println!("Connecting to port {}", a.port());
                 TcpSource::new("[::1]", a.port())?
             }
         };
-        src.work(&mut s)?;
-        sink.work(&mut s)?;
-        assert_eq!(sink.to_vec(), vec![12345678.91817], "first failed");
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_float());
+        src.work(&mut is, &mut os)?;
+        let res: Streamp<Float> = os.get(0).into();
+        let want: VecDeque<Float> = [12345678.91817].into();
+        assert_eq!(*res.borrow().data(), want, "first failed");
 
-        src.work(&mut s)?;
-        sink.work(&mut s)?;
+        src.work(&mut is, &mut os)?;
         assert_eq!(
-            sink.to_vec(),
+            *res.borrow().data(),
             vec![12345678.91817, 91817.12345678],
             "second failed"
         );
 
-        src.work(&mut s)?;
-        sink.work(&mut s)?;
+        src.work(&mut is, &mut os)?;
         assert_eq!(
-            sink.to_vec(),
+            *res.borrow().data(),
             vec![
                 12345678.91817,
                 91817.12345678,
@@ -70,35 +74,43 @@ mod tests {
             ],
             "third failed"
         );
+
         Ok(())
     }
 }
 
-pub struct TcpSource {
+pub struct TcpSource<T> {
     stream: std::net::TcpStream,
     buf: Vec<u8>,
+    _t: T,
 }
 
-impl TcpSource {
+impl<T: Default> TcpSource<T> {
     pub fn new(addr: &str, port: u16) -> Result<Self> {
         Ok(Self {
             stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
             buf: Vec::new(),
+            _t: T::default(), // TODO: remove ugly.
         })
     }
 }
 
-impl<T> Source<T> for TcpSource
+impl<T> Block for TcpSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
+    Streamp<T>: From<StreamType>,
 {
-    fn work(&mut self, w: &mut dyn StreamWriter<T>) -> Result<()> {
+    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let o: Streamp<T> = Self::get_output(w, 0);
         let size = T::size();
-        let mut buffer = vec![0; w.capacity()];
-        let n = self.stream.read(&mut buffer[..])?;
+        let mut buffer = vec![0; o.borrow().capacity()];
+        let n = self
+            .stream
+            .read(&mut buffer[..])
+            .map_err(|e| -> anyhow::Error { e.into() })?;
         if n == 0 {
             warn!("TCP connection closed?");
-            return Ok(());
+            return Ok(BlockRet::EOF);
         }
         let mut v = Vec::new();
         v.reserve(n / size + 1);
@@ -115,6 +127,7 @@ where
             v.push(T::parse(&buffer[pos..pos + size])?);
         }
         self.buf.extend(&buffer[n - remaining..n]);
-        w.write(&v)
+        o.borrow_mut().write(v.into_iter());
+        Ok(BlockRet::Ok)
     }
 }
