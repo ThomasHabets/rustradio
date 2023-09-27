@@ -94,10 +94,8 @@ where
             .read(&mut buffer[..])
             .map_err(|e| -> anyhow::Error { e.into() })?;
         if n == 0 {
-            warn!(
-                "Not handling EOF on {}. Repeat: {}",
-                self.filename, self.repeat
-            );
+            warn!("EOF on {}. Repeat: {}", self.filename, self.repeat);
+            return Ok(BlockRet::EOF);
         }
         self.buf.extend(&buffer[..n]);
 
