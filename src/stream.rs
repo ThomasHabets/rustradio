@@ -106,6 +106,9 @@ pub enum StreamType {
     U8(Streamp<u8>),
 }
 impl StreamType {
+    pub fn new_u8() -> Self {
+        Self::U8(Rc::new(RefCell::new(Stream::<u8>::new())))
+    }
     pub fn new_float() -> Self {
         Self::Float(Rc::new(RefCell::new(Stream::<Float>::new())))
     }
