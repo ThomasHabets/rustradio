@@ -42,45 +42,6 @@ pub trait Block {
     }
 }
 
-pub trait MapBlock<T>: Block
-where
-    T: Copy,
-    Streamp<T>: From<StreamType>,
-{
-    fn work_map_block(
-        &mut self,
-        r: &mut InputStreams,
-        w: &mut OutputStreams,
-    ) -> Result<BlockRet, Error> {
-        // get_output!(w, 0).write(get_input!(r, 0).iter().map(|x| *x + self.val));
-        get_output!(w, 0).write(get_input!(r, 0).iter().map(|x| self.process_one(*x)));
-        Ok(BlockRet::Ok)
-    }
-    fn process_one(&self, a: T) -> T;
-}
-
-/*
-* TODO: why is this macro needed? Why can't MapBlock<T> override work()?
-*/
-#[macro_export]
-macro_rules! map_block_macro {
-    ($blockname:ident, $($tr:path), *) => {
-        impl<T> Block for $blockname<T>
-        where
-            T: Copy $(+$tr)*,
-            Streamp<T>: From<StreamType>,
-        {
-            fn work(
-                &mut self,
-                r: &mut InputStreams,
-                w: &mut OutputStreams,
-            ) -> Result<BlockRet, Error> {
-                self.work_map_block(r, w)
-            }
-        }
-    };
-}
-
 #[macro_export]
 macro_rules! map_block_macro_v2 {
     ($name:path, $($tr:path), *) => {
