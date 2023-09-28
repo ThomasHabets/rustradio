@@ -1,6 +1,6 @@
 [package]
 name = "rustradio"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/ThomasHabets/rustradio"
