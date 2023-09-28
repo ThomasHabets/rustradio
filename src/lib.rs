@@ -7,6 +7,7 @@ pub mod fft_filter;
 pub mod file_source;
 pub mod fir;
 pub mod multiply_const;
+pub mod null_sink;
 pub mod quadrature_demod;
 pub mod rational_resampler;
 pub mod rtlsdr;

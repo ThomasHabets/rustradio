@@ -4,6 +4,7 @@ pub use crate::fft_filter::FftFilter;
 pub use crate::file_source::FileSource;
 pub use crate::fir::FIRFilter;
 pub use crate::multiply_const::MultiplyConst;
+pub use crate::null_sink::NullSink;
 pub use crate::quadrature_demod::QuadratureDemod;
 pub use crate::rational_resampler::RationalResampler;
 pub use crate::rtlsdr::RtlSdrDecode;
