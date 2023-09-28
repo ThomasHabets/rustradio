@@ -27,6 +27,9 @@ pub enum BlockRet {
 }
 
 pub trait Block {
+    fn block_name(&self) -> &'static str {
+        "unnamed"
+    }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error>;
 }
 

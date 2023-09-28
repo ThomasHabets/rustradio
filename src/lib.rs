@@ -16,6 +16,7 @@ pub mod tcp_source;
 
 pub mod block;
 pub mod blocks;
+pub mod graph;
 pub mod stream;
 
 pub type Float = f32;

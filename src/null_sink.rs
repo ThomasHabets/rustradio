@@ -25,6 +25,9 @@ where
     T: Copy,
     Streamp<T>: From<StreamType>,
 {
+    fn block_name(&self) -> &'static str {
+        "NullSink"
+    }
     fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
         get_input::<T>(r, 0).borrow_mut().clear();
         Ok(BlockRet::Ok)
