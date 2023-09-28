@@ -18,3 +18,9 @@ A library for digital signals processing in the spirit of GNU Radio.
 
 1. Bump version in `Cargo.toml`
 2. `cargo publish`
+
+## Benchmark
+
+```
+cargo +nightly bench
+```
