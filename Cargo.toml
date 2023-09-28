@@ -3,11 +3,15 @@ name = "rustradio"
 version = "0.2.5"
 edition = "2021"
 license = "MIT"
+authors = ["Thomas Habets <thomas@habets.se>"]
+readme = "README.md"
 repository = "https://github.com/ThomasHabets/rustradio"
 description = "Software defined radio library"
+keywords = ["SDR", "radio"]
 include = ["/src/*.rs", "/src/bin/*.rs", ".gitignore", "/extra/precommit", "README.md", "/examples", "/Cargo.toml"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# See more keys and their definitions at
+# https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.75"
@@ -25,4 +29,9 @@ name = "bleh"
 path = "src/bin/bleh.rs"
 
 [profile.release]
+overflow-checks = true
+#lto = true
+#codegen-units = 1  # Higher is faster, lower gives more opt potential.
+
+[profile.release.package."*"]
 overflow-checks = true
