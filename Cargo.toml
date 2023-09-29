@@ -8,7 +8,6 @@ readme = "README.md"
 repository = "https://github.com/ThomasHabets/rustradio"
 description = "Software defined radio library"
 keywords = ["SDR", "radio"]
-include = ["/src/*.rs", "/src/bin/*.rs", ".gitignore", "/extra/precommit", "README.md", "/examples", "/Cargo.toml"]
 
 # See more keys and their definitions at
 # https://doc.rust-lang.org/cargo/reference/manifest.html
