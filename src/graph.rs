@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use log::debug;
 
-use crate::block::Block;
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType};
 
 type BlockHandle = usize;
@@ -46,6 +46,12 @@ impl Graph {
     }
 
     pub fn run(&mut self) -> Result<()> {
+        while !self.run_one()? {}
+        Ok(())
+    }
+
+    fn run_one(&mut self) -> Result<bool> {
+        let mut done = true;
         for (n, b) in self.blocks.iter_mut().enumerate() {
             let mut is = InputStreams::new();
             let mut os = OutputStreams::new();
@@ -61,10 +67,21 @@ impl Graph {
                     os.add_stream(self.streams[*e].clone());
                 }
             }
-            b.work(&mut is, &mut os)?;
+            let eof = matches!(b.work(&mut is, &mut os)?, BlockRet::EOF);
+
+            // If source block then only done if EOF.
+            if is.is_empty() && !eof {
+                done = false;
+            }
+            for n in 0..os.len() {
+                if os.get(n).available() > 0 {
+                    done = false;
+                }
+            }
             debug!("work() done for {}", b.block_name());
         }
-        Ok(())
+        debug!("done status: {done}");
+        Ok(done)
     }
 }
 

@@ -169,6 +169,12 @@ impl InputStreams {
     pub fn get(&self, n: usize) -> StreamType {
         self.streams[n].clone()
     }
+    pub fn len(&self) -> usize {
+        self.streams.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.streams.is_empty()
+    }
 
     // Return the number of samples.
     pub fn available(&self, n: usize) -> usize {
@@ -195,6 +201,12 @@ impl OutputStreams {
     }
     pub fn get(&self, n: usize) -> StreamType {
         self.streams[n].clone()
+    }
+    pub fn len(&self) -> usize {
+        self.streams.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.streams.is_empty()
     }
     pub fn capacity(&self, n: usize) -> usize {
         match &self.streams[n] {
