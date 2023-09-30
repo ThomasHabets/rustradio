@@ -6,9 +6,14 @@ use log::debug;
 use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType};
 
-type BlockHandle = usize;
-type StreamHandle = usize;
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub struct BlockHandle(usize);
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+struct StreamHandle(usize);
+
 type Port = usize;
+
 pub struct Graph {
     blocks: Vec<Box<dyn Block>>,
     streams: Vec<StreamType>,
@@ -28,7 +33,7 @@ impl Graph {
     }
     pub fn add(&mut self, b: Box<dyn Block>) -> BlockHandle {
         self.blocks.push(b);
-        self.blocks.len() - 1
+        BlockHandle(self.blocks.len() - 1)
     }
     pub fn connect(
         &mut self,
@@ -40,9 +45,14 @@ impl Graph {
     ) {
         let s = self.streams.len();
         self.streams.push(stream);
-        self.outputs.entry(b1).or_default().push((p1, s));
-        self.inputs.entry(b2).or_default().push((p2, s));
-        // TODO: sort them.
+        self.outputs
+            .entry(b1)
+            .or_default()
+            .push((p1, StreamHandle(s)));
+        self.inputs
+            .entry(b2)
+            .or_default()
+            .push((p2, StreamHandle(s)));
     }
 
     pub fn run(&mut self) -> Result<()> {
@@ -57,25 +67,25 @@ impl Graph {
         for (n, _) in self.blocks.iter().enumerate() {
             let mut is = InputStreams::new();
             let mut os = OutputStreams::new();
-            if let Some(es) = self.inputs.get(&n) {
+            if let Some(es) = self.inputs.get(&BlockHandle(n)) {
                 let mut expected = 0;
                 for (n, e) in es {
                     while expected != *n {
                         is.add_stream(StreamType::new_disconnected());
                         expected += 1;
                     }
-                    is.add_stream(self.streams[*e].clone());
+                    is.add_stream(self.streams[e.0].clone());
                     expected = *n + 1;
                 }
             }
-            if let Some(es) = self.outputs.get(&n) {
+            if let Some(es) = self.outputs.get(&BlockHandle(n)) {
                 let mut expected = 0;
                 for (n, e) in es {
                     while expected != *n {
                         os.add_stream(StreamType::new_disconnected());
                         expected += 1;
                     }
-                    os.add_stream(self.streams[*e].clone());
+                    os.add_stream(self.streams[e.0].clone());
                     expected = *n + 1;
                 }
             }
