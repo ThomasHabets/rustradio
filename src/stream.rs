@@ -110,6 +110,7 @@ pub type Streamp<T> = Rc<RefCell<Stream<T>>>;
 
 #[derive(Debug)]
 pub enum StreamType {
+    Disconnected,
     Float(Streamp<Float>),
     Complex(Streamp<Complex>),
     U32(Streamp<u32>),
@@ -136,6 +137,7 @@ impl StreamType {
     }
     pub fn available(&self) -> usize {
         match &self {
+            StreamType::Disconnected => 0,
             StreamType::Float(x) => x.borrow().available(),
             StreamType::U32(x) => x.borrow().available(),
             StreamType::U8(x) => x.borrow().available(),
@@ -146,6 +148,7 @@ impl StreamType {
 impl Clone for StreamType {
     fn clone(&self) -> Self {
         match &self {
+            Self::Disconnected => Self::Disconnected,
             Self::Float(x) => Self::Float(x.clone()),
             Self::Complex(x) => Self::Complex(x.clone()),
             Self::U32(x) => Self::U32(x.clone()),
@@ -210,6 +213,7 @@ impl OutputStreams {
     }
     pub fn capacity(&self, n: usize) -> usize {
         match &self.streams[n] {
+            StreamType::Disconnected => 0,
             StreamType::Float(x) => x.borrow().capacity(),
             StreamType::U32(x) => x.borrow().capacity(),
             StreamType::U8(x) => x.borrow().capacity(),
