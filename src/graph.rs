@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 use anyhow::Result;
 use log::debug;
@@ -98,10 +99,17 @@ impl Graph {
 
     fn run_one(&mut self, iss: &mut [InputStreams], oss: &mut [OutputStreams]) -> Result<bool> {
         let mut done = true;
+        let st_loop = Instant::now();
         for (n, b) in self.blocks.iter_mut().enumerate() {
+            let st = Instant::now();
             let is = &mut iss[n];
             let os = &mut oss[n];
             let eof = matches!(b.work(is, os)?, BlockRet::EOF);
+            debug!(
+                "work() done for {}. Took {:?}",
+                b.block_name(),
+                st.elapsed()
+            );
 
             // If source block then only done if EOF.
             if is.is_empty() && !eof {
@@ -112,9 +120,11 @@ impl Graph {
                     done = false;
                 }
             }
-            debug!("work() done for {}", b.block_name());
         }
-        debug!("done status: {done}");
+        debug!(
+            "Graph loop end. done status: {done}. Took {:?}",
+            st_loop.elapsed()
+        );
         Ok(done)
     }
 }
