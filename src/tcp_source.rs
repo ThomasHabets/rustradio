@@ -100,6 +100,9 @@ where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
     Streamp<T>: From<StreamType>,
 {
+    fn block_name(&self) -> &'static str {
+        "TcpSource<T>"
+    }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let o: Streamp<T> = get_output(w, 0);
         let size = T::size();

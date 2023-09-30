@@ -41,6 +41,9 @@ macro_rules! map_block_macro_v2 {
             T: Copy $(+$tr)*,
             Streamp<T>: From<StreamType>,
         {
+            fn block_name(&self) -> &'static str {
+                stringify!{$name}
+            }
             fn work(
                 &mut self,
                 r: &mut InputStreams,
