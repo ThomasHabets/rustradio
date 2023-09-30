@@ -118,6 +118,9 @@ pub enum StreamType {
 }
 
 impl StreamType {
+    pub fn new_disconnected() -> Self {
+        Self::Disconnected
+    }
     pub fn new_u8() -> Self {
         Self::U8(Rc::new(RefCell::new(Stream::<u8>::new())))
     }

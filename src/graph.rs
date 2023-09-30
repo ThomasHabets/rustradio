@@ -46,28 +46,52 @@ impl Graph {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        while !self.run_one()? {}
-        Ok(())
-    }
-
-    fn run_one(&mut self) -> Result<bool> {
-        let mut done = true;
-        for (n, b) in self.blocks.iter_mut().enumerate() {
+        for input in self.inputs.values_mut() {
+            input.sort();
+        }
+        for output in &mut self.outputs.values_mut() {
+            output.sort();
+        }
+        let mut iss = Vec::new();
+        let mut oss = Vec::new();
+        for (n, _) in self.blocks.iter().enumerate() {
             let mut is = InputStreams::new();
             let mut os = OutputStreams::new();
             if let Some(es) = self.inputs.get(&n) {
-                // TODO: support port gaps.
-                for (_, e) in es {
+                let mut expected = 0;
+                for (n, e) in es {
+                    while expected != *n {
+                        is.add_stream(StreamType::new_disconnected());
+                        expected += 1;
+                    }
                     is.add_stream(self.streams[*e].clone());
+                    expected = *n + 1;
                 }
             }
             if let Some(es) = self.outputs.get(&n) {
-                // TODO: support port gaps.
-                for (_, e) in es {
+                let mut expected = 0;
+                for (n, e) in es {
+                    while expected != *n {
+                        os.add_stream(StreamType::new_disconnected());
+                        expected += 1;
+                    }
                     os.add_stream(self.streams[*e].clone());
+                    expected = *n + 1;
                 }
             }
-            let eof = matches!(b.work(&mut is, &mut os)?, BlockRet::EOF);
+            iss.push(is);
+            oss.push(os);
+        }
+        while !self.run_one(&mut iss, &mut oss)? {}
+        Ok(())
+    }
+
+    fn run_one(&mut self, iss: &mut [InputStreams], oss: &mut [OutputStreams]) -> Result<bool> {
+        let mut done = true;
+        for (n, b) in self.blocks.iter_mut().enumerate() {
+            let is = &mut iss[n];
+            let os = &mut oss[n];
+            let eof = matches!(b.work(is, os)?, BlockRet::EOF);
 
             // If source block then only done if EOF.
             if is.is_empty() && !eof {
