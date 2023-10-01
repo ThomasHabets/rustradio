@@ -1,3 +1,7 @@
+use std::sync::mpsc;
+use std::sync::mpsc::{RecvError, SendError, TryRecvError};
+use std::thread;
+
 use anyhow::Result;
 use log::debug;
 
@@ -11,11 +15,28 @@ impl From<rtlsdr::RTLSDRError> for Error {
     }
 }
 
+impl From<RecvError> for Error {
+    fn from(e: RecvError) -> Self {
+        Error::new(&format!("recv error: {}", e))
+    }
+}
+impl From<TryRecvError> for Error {
+    fn from(e: TryRecvError) -> Self {
+        Error::new(&format!("recv error: {}", e))
+    }
+}
+
+impl<T> From<SendError<T>> for Error {
+    fn from(e: SendError<T>) -> Self {
+        Error::new(&format!("send error: {}", e))
+    }
+}
+
 #[cfg(test)]
 mod tests {}
 
 pub struct RtlSdrSource {
-    dev: rtlsdr::RTLSDRDevice,
+    rx: mpsc::Receiver<Vec<u8>>,
 }
 
 impl RtlSdrSource {
@@ -28,19 +49,31 @@ impl RtlSdrSource {
                 index, found
             )));
         }
-        let mut dev = rtlsdr::open(index)?;
-        debug!("Tuner type: {:?}", dev.get_tuner_type());
-        dev.set_center_freq(freq as u32)?;
-        debug!("Allowed tuner gains: {:?}", dev.get_tuner_gains()?);
-        dev.set_tuner_gain(igain)?;
-        debug!("Tuner gain: {}", dev.get_tuner_gain());
-        // dev.set_direct_sampling
-        // dev.set_tuner_if_gain(…);
-        // dev.set_tuner_gain_mode
-        // dev.set_agc_mode
-        dev.set_sample_rate(samp_rate)?;
-        dev.reset_buffer()?;
-        Ok(Self { dev })
+
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || -> Result<(), Error> {
+            let mut dev =
+                rtlsdr::open(index).map_err(|e| Error::new(&format!("RTL SDR open: {e}")))?;
+            debug!("Tuner type: {:?}", dev.get_tuner_type());
+            dev.set_center_freq(freq as u32)?;
+            debug!("Allowed tuner gains: {:?}", dev.get_tuner_gains()?);
+            dev.set_tuner_gain(igain)?;
+            debug!("Tuner gain: {}", dev.get_tuner_gain());
+            // dev.set_direct_sampling
+            // dev.set_tuner_if_gain(…);
+            // dev.set_tuner_gain_mode
+            // dev.set_agc_mode
+            dev.set_sample_rate(samp_rate)?;
+            dev.reset_buffer()?;
+            tx.send(vec![])?;
+            loop {
+                let chunk_size = 8192;
+                let buf = dev.read_sync(chunk_size)?;
+                tx.send(buf).unwrap();
+            }
+        });
+        assert_eq!(rx.recv()?, vec![]);
+        Ok(Self { rx })
     }
 }
 
@@ -49,8 +82,11 @@ impl Block for RtlSdrSource {
         "RtlSdrSource"
     }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let chunk_size = 8192;
-        let buf = self.dev.read_sync(chunk_size)?;
+        let buf = match self.rx.try_recv() {
+            Err(TryRecvError::Empty) => return Ok(BlockRet::Ok),
+            Ok(x) => x,
+            Err(other) => return Err(other.into()),
+        };
         get_output(w, 0).borrow_mut().write_slice(&buf);
         Ok(BlockRet::Ok)
     }
