@@ -100,6 +100,7 @@ impl Graph {
     fn run_one(&mut self, iss: &mut [InputStreams], oss: &mut [OutputStreams]) -> Result<bool> {
         let mut done = true;
         let st_loop = Instant::now();
+        let mut processed = 0;
         for (n, b) in self.blocks.iter_mut().enumerate() {
             let st = Instant::now();
             let os = &mut oss[n];
@@ -111,8 +112,13 @@ impl Graph {
                 continue;
             }
             let is = &mut iss[n];
+
             let insamples = is.sum_available();
+            let before_outsamples = os.sum_available();
+
             let eof = matches!(b.work(is, os)?, BlockRet::EOF);
+            processed += insamples - is.sum_available();
+            processed += os.sum_available() - before_outsamples;
             let outsamples = os.sum_available();
             debug!(
                 "work() done for {}, processing {} -> {}. Took {:?}",
@@ -136,6 +142,10 @@ impl Graph {
             "Graph loop end. done status: {done}. Took {:?}",
             st_loop.elapsed()
         );
+        if processed == 0 {
+            let ten_millis = std::time::Duration::from_millis(10);
+            std::thread::sleep(ten_millis);
+        }
         Ok(done)
     }
 }
