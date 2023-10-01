@@ -2,9 +2,8 @@ use anyhow::Result;
 
 use rustradio::block::Block;
 use rustradio::blocks::*;
-use rustradio::graph::Graph;
 use rustradio::stream::{InputStreams, OutputStreams, StreamType, Streamp};
-use rustradio::{Complex, Float};
+use rustradio::Float;
 
 fn main() -> Result<()> {
     println!("Hello, world!");
@@ -24,12 +23,17 @@ fn main() -> Result<()> {
         println!("{:?}", &res.borrow().iter().collect::<Vec<&Float>>());
     }
 
+    #[cfg(features = "rtlsdr")]
     {
+        use rustradio::graph::Graph;
+        use rustradio::Complex;
         let mut g = Graph::new();
-        let src = g.add(Box::new(TcpSource::<Complex>::new("127.0.0.1", 2000)?));
+        let src = g.add(Box::new(RtlSdrSource::new(868_000_000, 1024_000, 30)?));
+        let dec = g.add(Box::new(RtlSdrDecode::new()));
         let add = g.add(Box::new(AddConst::new(Complex::new(1.1, 2.0))));
         let sink = g.add(Box::new(NullSink::<Complex>::new()));
-        g.connect(StreamType::new_complex(), src, 0, add, 0);
+        g.connect(StreamType::new_u8(), src, 0, dec, 0);
+        g.connect(StreamType::new_complex(), dec, 0, add, 0);
         g.connect(StreamType::new_complex(), add, 0, sink, 0);
         g.run()?;
     }
