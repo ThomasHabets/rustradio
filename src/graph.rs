@@ -102,8 +102,15 @@ impl Graph {
         let st_loop = Instant::now();
         for (n, b) in self.blocks.iter_mut().enumerate() {
             let st = Instant::now();
-            let is = &mut iss[n];
             let os = &mut oss[n];
+            if os.all_outputs_full() {
+                debug!(
+                    "work() skipped for {} because all outputs are full",
+                    b.block_name()
+                );
+                continue;
+            }
+            let is = &mut iss[n];
             let insamples = is.sum_available();
             let eof = matches!(b.work(is, os)?, BlockRet::EOF);
             let outsamples = os.sum_available();

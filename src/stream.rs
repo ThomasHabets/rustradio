@@ -147,6 +147,15 @@ impl StreamType {
             StreamType::Complex(x) => x.borrow().available(),
         }
     }
+    pub fn capacity(&self) -> usize {
+        match &self {
+            StreamType::Disconnected => 0,
+            StreamType::Float(x) => x.borrow().capacity(),
+            StreamType::U32(x) => x.borrow().capacity(),
+            StreamType::U8(x) => x.borrow().capacity(),
+            StreamType::Complex(x) => x.borrow().capacity(),
+        }
+    }
 }
 impl Clone for StreamType {
     fn clone(&self) -> Self {
@@ -228,6 +237,9 @@ impl OutputStreams {
     }
     pub fn sum_available(&self) -> usize {
         self.streams.iter().map(|s| s.available()).sum()
+    }
+    pub fn all_outputs_full(&self) -> bool {
+        self.streams.iter().all(|s| s.capacity() == 0)
     }
 }
 impl Default for OutputStreams {
