@@ -104,11 +104,14 @@ impl Graph {
             let st = Instant::now();
             let is = &mut iss[n];
             let os = &mut oss[n];
+            let insamples = is.sum_available();
             let eof = matches!(b.work(is, os)?, BlockRet::EOF);
-            // TODO: log how many bytes in and out.
+            let outsamples = os.sum_available();
             debug!(
-                "work() done for {}. Took {:?}",
+                "work() done for {}, processing {} -> {}. Took {:?}",
                 b.block_name(),
+                insamples,
+                outsamples,
                 st.elapsed()
             );
 

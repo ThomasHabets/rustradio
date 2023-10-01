@@ -186,6 +186,9 @@ impl InputStreams {
     pub fn available(&self, n: usize) -> usize {
         self.streams[n].available()
     }
+    pub fn sum_available(&self) -> usize {
+        self.streams.iter().map(|s| s.available()).sum()
+    }
 }
 impl Default for InputStreams {
     fn default() -> Self {
@@ -222,6 +225,9 @@ impl OutputStreams {
             StreamType::U8(x) => x.borrow().capacity(),
             StreamType::Complex(x) => x.borrow().capacity(),
         }
+    }
+    pub fn sum_available(&self) -> usize {
+        self.streams.iter().map(|s| s.available()).sum()
     }
 }
 impl Default for OutputStreams {
