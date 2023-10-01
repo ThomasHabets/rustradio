@@ -124,6 +124,12 @@ impl StreamType {
     pub fn new_u8() -> Self {
         Self::U8(Rc::new(RefCell::new(Stream::<u8>::new())))
     }
+    pub fn new_u32() -> Self {
+        Self::U32(Rc::new(RefCell::new(Stream::<u32>::new())))
+    }
+    pub fn new_u32_from_slice(data: &[u32]) -> Self {
+        Self::U32(Rc::new(RefCell::new(Stream::<u32>::new_from_slice(data))))
+    }
     pub fn new_float() -> Self {
         Self::Float(Rc::new(RefCell::new(Stream::<Float>::new())))
     }

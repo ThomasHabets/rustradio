@@ -7,7 +7,7 @@ pub mod complex_to_mag2;
 pub mod constant_source;
 pub mod convert;
 pub mod debug_sink;
-// pub mod delay;
+pub mod delay;
 pub mod fft_filter;
 pub mod file_sink;
 pub mod file_source;

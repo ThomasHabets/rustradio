@@ -1,91 +1,89 @@
 use anyhow::Result;
+use log::debug;
 
-use crate::{Block, Sample, StreamReader, StreamWriter};
+use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::Error;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vector_sink::VectorSink;
-    use crate::vector_source::VectorSource;
-    use crate::{Sink, Source, Stream};
+    use crate::Float;
 
     #[test]
     fn delay_zero() -> Result<()> {
-        let mut src = VectorSource::new(vec![1u32, 2, 3]);
-        let mut sink: VectorSink<u32> = VectorSink::new();
-        let mut s1 = Stream::new(10);
-        let mut s2 = Stream::new(10);
-        let mut delay = Delay::new(0);
-
-        src.work(&mut s1)?;
-        delay.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
-        assert_eq!(sink.to_vec(), vec![1u32, 2, 3]);
+        let mut delay = Delay::<Float>::new(0);
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_float_from_slice(&[1.0f32, 2.0, 3.0]));
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_float());
+        delay.work(&mut is, &mut os)?;
+        let res: Streamp<Float> = os.get(0).into();
+        assert_eq!(*res.borrow().data(), vec![1.0f32, 2.0, 3.0]);
         Ok(())
     }
 
     #[test]
     fn delay_one() -> Result<()> {
-        let mut src = VectorSource::new(vec![1u32, 2, 3]);
-        let mut sink: VectorSink<u32> = VectorSink::new();
-        let mut s1 = Stream::new(10);
-        let mut s2 = Stream::new(10);
-        let mut delay = Delay::new(1);
-
-        src.work(&mut s1)?;
-        delay.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
-        assert_eq!(sink.to_vec(), vec![0u32, 1, 2, 3]);
+        let mut delay = Delay::<Float>::new(1);
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_float_from_slice(&[1.0f32, 2.0, 3.0]));
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_float());
+        delay.work(&mut is, &mut os)?;
+        let res: Streamp<Float> = os.get(0).into();
+        assert_eq!(*res.borrow().data(), vec![0.0f32, 1.0, 2.0, 3.0]);
         Ok(())
     }
 
     #[test]
     fn delay_change() -> Result<()> {
-        let mut src = VectorSource::new(vec![1u32, 2, 3, 4, 5, 6, 7]);
-        let mut sink: VectorSink<u32> = VectorSink::new();
-        let mut s1 = Stream::new(2);
-        let mut s2 = Stream::new(10);
-        let mut delay = Delay::new(1);
+        let mut delay = Delay::<u32>::new(1);
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_u32());
 
         // 1,2 => 0,1,2
-        src.work(&mut s1)?;
-        delay.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_u32_from_slice(&[1u32, 2]));
+        delay.work(&mut is, &mut os)?;
 
         // 3,4 => 0,3,4
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_u32_from_slice(&[3u32, 4]));
         delay.set_delay(2);
-        src.work(&mut s1)?;
-        delay.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
+        delay.work(&mut is, &mut os)?;
 
         // 5,6 => nothing
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_u32_from_slice(&[5u32, 6]));
         delay.set_delay(0);
-        src.work(&mut s1)?;
-        delay.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
+        delay.work(&mut is, &mut os)?;
 
         // 7 => 7
-        src.work(&mut s1)?;
-        delay.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_u32_from_slice(&[7u32]));
+        delay.work(&mut is, &mut os)?;
 
-        assert_eq!(sink.to_vec(), vec![0u32, 1, 2, 0, 3, 4, 7]);
+        let res: Streamp<u32> = os.get(0).into();
+        assert_eq!(*res.borrow().data(), vec![0u32, 1, 2, 0, 3, 4, 7]);
         Ok(())
     }
 }
 
-pub struct Delay {
+pub struct Delay<T> {
     delay: usize,
     current_delay: usize,
     skip: usize,
+    dummy: std::marker::PhantomData<T>,
 }
 
-impl Delay {
+impl<T> Delay<T> {
     pub fn new(delay: usize) -> Self {
         Self {
             delay,
             current_delay: delay,
             skip: 0,
+            dummy: std::marker::PhantomData,
         }
     }
     pub fn set_delay(&mut self, delay: usize) {
@@ -101,26 +99,32 @@ impl Delay {
     }
 }
 
-impl<T> Block<T, T> for Delay
+impl<T> Block for Delay<T>
 where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
+    T: Copy + Default,
+    Streamp<T>: From<StreamType>,
 {
-    fn work(&mut self, r: &mut dyn StreamReader<T>, w: &mut dyn StreamWriter<T>) -> Result<()> {
+    fn block_name(&self) -> &'static str {
+        "Delay"
+    }
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         if self.current_delay > 0 {
-            let n = std::cmp::min(self.current_delay, w.capacity());
-            w.write(&vec![T::default(); n])?;
+            let n = std::cmp::min(self.current_delay, w.capacity(0));
+            get_output(w, 0)
+                .borrow_mut()
+                .write_slice(&vec![T::default(); n]);
             self.current_delay -= n;
         }
         {
-            let n = std::cmp::min(r.available(), self.skip);
-            r.consume(n);
-            eprintln!("========= skipped {n}");
+            let n = std::cmp::min(r.available(0), self.skip);
+            get_input(r, 0).borrow_mut().consume(n);
+            debug!("========= skipped {n}");
             self.skip -= n;
         }
-
-        let n = std::cmp::min(r.available(), w.capacity());
-        w.write(&r.buffer()[0..n])?;
-        r.consume(n);
-        Ok(())
+        get_output(w, 0)
+            .borrow_mut()
+            .write(get_input(r, 0).borrow().iter().copied());
+        get_input(r, 0).borrow_mut().clear();
+        Ok(BlockRet::Ok)
     }
 }

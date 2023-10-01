@@ -4,7 +4,7 @@ pub use crate::complex_to_mag2::ComplexToMag2;
 pub use crate::constant_source::ConstantSource;
 pub use crate::convert::FloatToU32;
 pub use crate::debug_sink::DebugSink;
-// pub use crate::delay::Delay;
+pub use crate::delay::Delay;
 pub use crate::fft_filter::FftFilter;
 pub use crate::file_sink::FileSink;
 pub use crate::file_source::FileSource;
