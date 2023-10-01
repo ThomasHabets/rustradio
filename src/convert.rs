@@ -1,27 +1,22 @@
-use crate::{Float, StreamReader, StreamWriter};
 use anyhow::Result;
+
+use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams};
+use crate::{map_block_convert_macro, Error, Float};
 
 pub struct FloatToU32 {
     scale: Float,
 }
+
 impl FloatToU32 {
     pub fn new(scale: Float) -> Self {
         Self { scale }
     }
-    pub fn work(
-        &mut self,
-        r: &mut dyn StreamReader<Float>,
-        w: &mut dyn StreamWriter<u32>,
-    ) -> Result<()> {
-        let v: Vec<u32> = r
-            .buffer()
-            .iter()
-            .map(|e| (*e * self.scale) as u32)
-            .collect();
-        r.consume(v.len());
-        w.write(&v)
+    fn process_one(&mut self, s: Float) -> u32 {
+        (s * self.scale) as u32
     }
 }
+map_block_convert_macro![FloatToU32];
 
 /*
 struct Convert<From, To> {
