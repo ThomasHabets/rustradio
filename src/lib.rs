@@ -3,6 +3,7 @@ use anyhow::Result;
 // Blocks.
 pub mod add_const;
 pub mod binary_slicer;
+pub mod complex_to_mag2;
 pub mod fft_filter;
 pub mod file_sink;
 pub mod file_source;

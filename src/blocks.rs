@@ -1,5 +1,6 @@
 pub use crate::add_const::AddConst;
 pub use crate::binary_slicer::BinarySlicer;
+pub use crate::complex_to_mag2::ComplexToMag2;
 pub use crate::fft_filter::FftFilter;
 pub use crate::file_sink::FileSink;
 pub use crate::file_source::FileSource;
