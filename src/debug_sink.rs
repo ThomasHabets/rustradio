@@ -1,25 +1,35 @@
 use anyhow::Result;
 
-use crate::{Sample, Sink, StreamReader};
+use crate::block::{get_input, Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::Error;
 
-pub struct DebugSink;
+pub struct DebugSink<T> {
+    dummy: std::marker::PhantomData<T>,
+}
 
 #[allow(clippy::new_without_default)]
-impl DebugSink {
+impl<T> DebugSink<T> {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            dummy: std::marker::PhantomData,
+        }
     }
 }
 
-impl<T> Sink<T> for DebugSink
+impl<T> Block for DebugSink<T>
 where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
+    T: Copy + std::fmt::Debug + Default,
+    Streamp<T>: From<StreamType>,
 {
-    fn work(&mut self, r: &mut dyn StreamReader<T>) -> Result<()> {
-        for d in r.buffer().clone().iter() {
-            println!("debug: {:?}", d);
-        }
-        r.consume(r.buffer().len());
-        Ok(())
+    fn block_name(&self) -> &'static str {
+        "DebugSink"
+    }
+    fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        get_input(r, 0).borrow().iter().for_each(|s: &T| {
+            println!("debug: {:?}", s);
+        });
+        get_input(r, 0).borrow_mut().clear();
+        Ok(BlockRet::Ok)
     }
 }
