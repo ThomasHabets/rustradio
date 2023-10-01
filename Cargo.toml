@@ -18,10 +18,15 @@ log = "0.4.20"
 num = "0.4.1"
 rustfft = "6.1.0"
 tempfile = "3.8.0"
+rtlsdr = {version = "0.1.4", optional=true}
 
 [lib]
 name = "rustradio"
 path = "src/lib.rs"
+
+[features]
+# default = ["rtlsdr"]
+rtlsdr = ["dep:rtlsdr"]
 
 [[bin]]
 name = "bleh"

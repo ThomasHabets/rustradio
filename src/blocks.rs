@@ -10,3 +10,6 @@ pub use crate::rational_resampler::RationalResampler;
 pub use crate::rtlsdr::RtlSdrDecode;
 pub use crate::symbol_sync::SymbolSync;
 pub use crate::tcp_source::TcpSource;
+
+#[cfg(feature = "rtlsdr")]
+pub use crate::rtlsdr_source::RtlSdrSource;

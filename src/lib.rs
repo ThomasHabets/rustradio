@@ -14,6 +14,9 @@ pub mod rtlsdr;
 pub mod symbol_sync;
 pub mod tcp_source;
 
+#[cfg(feature = "rtlsdr")]
+pub mod rtlsdr_source;
+
 pub mod block;
 pub mod blocks;
 pub mod graph;
