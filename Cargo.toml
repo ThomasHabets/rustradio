@@ -28,10 +28,6 @@ path = "src/lib.rs"
 # default = ["rtlsdr"]
 rtlsdr = ["dep:rtlsdr"]
 
-[[bin]]
-name = "bleh"
-path = "src/bin/bleh.rs"
-
 [profile.release]
 overflow-checks = true
 #lto = true
