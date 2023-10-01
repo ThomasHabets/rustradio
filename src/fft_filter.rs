@@ -204,36 +204,40 @@ impl Block for FftFilter {
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let input = get_input(r, 0);
-
-        let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
-        self.buf.extend(input.borrow().iter().take(add));
-        input.borrow_mut().consume(add);
-        let o: Streamp<Complex> = get_output(w, 0);
-        if self.buf.len() == self.nsamples {
-            self.buf.resize(self.fftsize, Complex::default());
-            self.fft.process(&mut self.buf);
-            let mut filtered: Vec<Complex> = self
-                .buf
-                .iter()
-                .zip(self.taps_fft.iter())
-                .map(|(x, y)| x * y)
-                .collect::<Vec<Complex>>();
-            self.ifft.process(&mut filtered);
-
-            // Add overlapping tail.
-            for (i, t) in self.tail.iter().enumerate() {
-                filtered[i] += t;
+        loop {
+            let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
+            if add < self.nsamples {
+                break;
             }
+            self.buf.extend(input.borrow().iter().take(add));
+            input.borrow_mut().consume(add);
+            let o: Streamp<Complex> = get_output(w, 0);
+            if self.buf.len() == self.nsamples {
+                self.buf.resize(self.fftsize, Complex::default());
+                self.fft.process(&mut self.buf);
+                let mut filtered: Vec<Complex> = self
+                    .buf
+                    .iter()
+                    .zip(self.taps_fft.iter())
+                    .map(|(x, y)| x * y)
+                    .collect::<Vec<Complex>>();
+                self.ifft.process(&mut filtered);
 
-            // Output.
-            o.borrow_mut().write_slice(&filtered[..self.nsamples]);
+                // Add overlapping tail.
+                for (i, t) in self.tail.iter().enumerate() {
+                    filtered[i] += t;
+                }
 
-            // Stash tail.
-            for i in 0..self.tail.len() {
-                self.tail[i] = filtered[self.nsamples + i];
+                // Output.
+                o.borrow_mut().write_slice(&filtered[..self.nsamples]);
+
+                // Stash tail.
+                for i in 0..self.tail.len() {
+                    self.tail[i] = filtered[self.nsamples + i];
+                }
+
+                self.buf.clear();
             }
-
-            self.buf.clear();
         }
         Ok(BlockRet::Ok)
     }
