@@ -105,6 +105,7 @@ impl Graph {
             let is = &mut iss[n];
             let os = &mut oss[n];
             let eof = matches!(b.work(is, os)?, BlockRet::EOF);
+            // TODO: log how many bytes in and out.
             debug!(
                 "work() done for {}. Took {:?}",
                 b.block_name(),

@@ -45,6 +45,9 @@ impl RtlSdrSource {
 }
 
 impl Block for RtlSdrSource {
+    fn block_name(&self) -> &'static str {
+        "RtlSdrSource"
+    }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let chunk_size = 8192;
         let buf = self.dev.read_sync(chunk_size)?;

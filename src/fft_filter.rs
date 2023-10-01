@@ -199,6 +199,9 @@ impl FftFilter {
 }
 
 impl Block for FftFilter {
+    fn block_name(&self) -> &'static str {
+        "FftFilter"
+    }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let input = get_input(r, 0);
 

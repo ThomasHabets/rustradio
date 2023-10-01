@@ -124,6 +124,9 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
     Streamp<T>: From<StreamType>,
 {
+    fn block_name(&self) -> &'static str {
+        "FirFilter"
+    }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let input = get_input(r, 0);
         let out = get_output(w, 0);

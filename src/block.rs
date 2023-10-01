@@ -27,9 +27,7 @@ pub enum BlockRet {
 }
 
 pub trait Block {
-    fn block_name(&self) -> &'static str {
-        "unnamed"
-    }
+    fn block_name(&self) -> &'static str;
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error>;
 }
 
@@ -67,6 +65,9 @@ macro_rules! map_block_macro_v2 {
 macro_rules! map_block_convert_macro {
     ($name:path) => {
         impl Block for $name {
+            fn block_name(&self) -> &'static str {
+                stringify! {$name}
+            }
             fn work(
                 &mut self,
                 r: &mut InputStreams,

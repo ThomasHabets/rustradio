@@ -87,6 +87,9 @@ where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
     Streamp<T>: From<StreamType>,
 {
+    fn block_name(&self) -> &'static str {
+        "FileSource"
+    }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut buffer = vec![0; w.capacity(0)];
         let n = self

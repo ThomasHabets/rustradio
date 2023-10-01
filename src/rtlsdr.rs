@@ -19,6 +19,9 @@ impl Default for RtlSdrDecode {
 }
 
 impl Block for RtlSdrDecode {
+    fn block_name(&self) -> &'static str {
+        "RtlSdrDecode"
+    }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let samples: usize = r.available(0) - r.available(0) % 2;
         let input = get_input(r, 0);

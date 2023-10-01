@@ -54,6 +54,9 @@ positive error means "early", neagive error means "late"
 */
 
 impl Block for SymbolSync {
+    fn block_name(&self) -> &'static str {
+        "SymbolSync"
+    }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let input = get_input::<Float>(r, 0);
         let mut v = Vec::new();
@@ -105,6 +108,9 @@ impl ZeroCrossing {
 }
 
 impl Block for ZeroCrossing {
+    fn block_name(&self) -> &'static str {
+        "ZeroCrossing"
+    }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
         let input = get_input(r, 0);

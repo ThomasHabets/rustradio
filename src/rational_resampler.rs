@@ -75,6 +75,9 @@ impl RationalResampler {
 }
 
 impl Block for RationalResampler {
+    fn block_name(&self) -> &'static str {
+        "RationalResampler"
+    }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
         self.counter -= self.deci;
