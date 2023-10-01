@@ -39,7 +39,7 @@ impl RtlSdrSource {
         // dev.set_tuner_gain_mode
         // dev.set_agc_mode
         dev.set_sample_rate(samp_rate)?;
-
+        dev.reset_buffer()?;
         Ok(Self { dev })
     }
 }
