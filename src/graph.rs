@@ -139,11 +139,13 @@ impl Graph {
             }
         }
         debug!(
-            "Graph loop end. done status: {done}. Took {:?}",
+            "Graph loop end. done status: {done}. Processed in/out: {} Took {:?}",
+            processed,
             st_loop.elapsed()
         );
         if processed == 0 {
             let ten_millis = std::time::Duration::from_millis(10);
+            debug!("No output or consumption from any block. Sleeping a bit.");
             std::thread::sleep(ten_millis);
         }
         Ok(done)
