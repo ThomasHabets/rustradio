@@ -22,7 +22,7 @@ impl RtlSdrSource {
     pub fn new(freq: u64, samp_rate: u32, igain: i32) -> Result<Self, Error> {
         let index = 0;
         let found = rtlsdr::get_device_count();
-        if index <= found {
+        if index >= found {
             return Err(Error::new(&format!(
                 "RTL SDR index {} doesn't exist, found {}",
                 index, found
