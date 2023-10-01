@@ -4,6 +4,7 @@ use anyhow::Result;
 pub mod add_const;
 pub mod binary_slicer;
 pub mod fft_filter;
+pub mod file_sink;
 pub mod file_source;
 pub mod fir;
 pub mod multiply_const;
@@ -49,6 +50,11 @@ impl std::error::Error for Error {}
 impl From<anyhow::Error> for Error {
     fn from(e: anyhow::Error) -> Error {
         Error::new(&format!("{}", e))
+    }
+}
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::new(&format!("IO error: {}", e))
     }
 }
 

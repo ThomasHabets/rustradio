@@ -1,26 +1,31 @@
-use anyhow::Result;
-use log::debug;
 use std::io::Write;
 
-use crate::{Sample, Sink, StreamReader};
+use anyhow::Result;
+use log::debug;
+
+use crate::block::{get_input, Block, BlockRet};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::{Error, Sample};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vector_source::VectorSource;
-    use crate::{Complex, Float, Source, Stream};
+    use crate::{Complex, Float};
 
     #[test]
     fn sink_f32() -> Result<()> {
         #[allow(clippy::approx_constant)]
-        let mut src = VectorSource::new(vec![1.0 as Float, 3.0, 3.14, -3.14]);
-
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-        let mut sink = FileSink::new(&tmpfn, Mode::Create)?;
-        let mut s = Stream::new(10);
-        src.work(&mut s)?;
-        sink.work(&mut s)?;
+        let mut sink = FileSink::<Float>::new(&tmpfn, Mode::Create)?;
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_float_from_slice(&[
+            1.0 as Float,
+            3.0,
+            3.14,
+            -3.14,
+        ]));
+        sink.work(&mut is, &mut OutputStreams::new())?;
         let out = std::fs::read(tmpfn)?;
         assert_eq!(
             out,
@@ -32,15 +37,15 @@ mod tests {
     #[test]
     fn sink_c32() -> Result<()> {
         #[allow(clippy::approx_constant)]
-        let mut src = VectorSource::new(vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
-
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-        let mut sink = FileSink::new(&tmpfn, Mode::Create)?;
-        let mut s = Stream::new(10);
-        src.work(&mut s)?;
-        sink.work(&mut s)?;
-        eprintln!("tmpf: {tmpfn}");
+        let mut sink = FileSink::<Complex>::new(&tmpfn, Mode::Create)?;
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::new_complex_from_slice(&[
+            Complex::new(0.0, 0.0),
+            Complex::new(3.14, -2.7),
+        ]));
+        sink.work(&mut is, &mut OutputStreams::new())?;
         let out = std::fs::read(tmpfn)?;
         assert_eq!(
             out,
@@ -56,11 +61,12 @@ pub enum Mode {
     Append,
 }
 
-pub struct FileSink {
+pub struct FileSink<T> {
     f: std::fs::File,
+    dummy: std::marker::PhantomData<T>,
 }
 
-impl FileSink {
+impl<T> FileSink<T> {
     pub fn new(filename: &str, mode: Mode) -> Result<Self> {
         let f = match mode {
             Mode::Create => std::fs::File::options()
@@ -76,22 +82,29 @@ impl FileSink {
                 .open(filename)?,
         };
         debug!("Opening sink {filename}");
-        Ok(Self { f })
+        Ok(Self {
+            f,
+            dummy: std::marker::PhantomData,
+        })
     }
 }
 
-impl<T> Sink<T> for FileSink
+impl<T> Block for FileSink<T>
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
+    Streamp<T>: From<StreamType>,
 {
-    fn work(&mut self, r: &mut dyn StreamReader<T>) -> Result<()> {
-        let mut v = Vec::new();
-        v.reserve(T::size() * r.available());
-        for s in r.buffer() {
+    fn block_name(&self) -> &'static str {
+        "FileSink"
+    }
+    fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let n = r.available(0);
+        let mut v = Vec::with_capacity(T::size() * n);
+        get_input(r, 0).borrow().iter().for_each(|s: &T| {
             v.extend(&s.serialize());
-        }
+        });
         self.f.write_all(&v)?;
-        r.consume(r.available());
-        Ok(())
+        get_input(r, 0).borrow_mut().consume(n);
+        Ok(BlockRet::Ok)
     }
 }
