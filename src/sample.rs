@@ -1,3 +1,5 @@
+//! Sample parse and serializer functions.
+
 pub trait Sample {
     type Type;
     fn size() -> usize;

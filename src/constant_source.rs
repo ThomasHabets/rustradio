@@ -1,3 +1,4 @@
+//! Generate the same value, forever.
 use anyhow::Result;
 
 use crate::block::{get_output, Block, BlockRet};

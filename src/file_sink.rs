@@ -1,3 +1,4 @@
+//! Send stream to raw file.
 use std::io::Write;
 
 use anyhow::Result;

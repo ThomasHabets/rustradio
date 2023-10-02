@@ -1,3 +1,4 @@
+//! FFT filter. Like a FIR filter, but more efficient when there are many taps.
 use std::sync::Arc;
 
 use anyhow::Result;

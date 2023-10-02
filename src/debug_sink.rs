@@ -1,3 +1,4 @@
+//! Print values to stdout, for debugging.
 use anyhow::Result;
 
 use crate::block::{get_input, Block, BlockRet};

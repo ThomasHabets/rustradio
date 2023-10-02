@@ -1,3 +1,4 @@
+//! Turn positive Float values into binary `1u8`, and negative into `0u8`.
 use anyhow::Result;
 
 use crate::{map_block_convert_macro, Float};

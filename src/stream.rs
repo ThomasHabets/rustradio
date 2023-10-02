@@ -1,3 +1,8 @@
+/*! Streams connecting blocks.
+
+Blocks are connected with streams. A block can have zero or more input
+streams, and write to zero or more output streams.
+*/
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;

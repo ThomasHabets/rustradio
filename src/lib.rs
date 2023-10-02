@@ -29,9 +29,13 @@ pub mod blocks;
 pub mod graph;
 pub mod stream;
 
+/// Float type used. Usually f32, but not guaranteed.
 pub type Float = f32;
+
+/// Complex (I/Q) data.
 pub type Complex = num::complex::Complex<Float>;
 
+/// RustRadio error.
 #[derive(Debug, Clone)]
 pub struct Error {
     msg: String,
@@ -64,6 +68,7 @@ impl From<std::io::Error> for Error {
     }
 }
 
+/// A trait all sample types must implement.
 pub trait Sample {
     type Type;
     fn size() -> usize;
@@ -141,6 +146,7 @@ impl Sample for u32 {
 }
 
 pub mod tests {
+    //! Test helper functions.
     use super::*;
     pub fn assert_almost_equal_complex(left: &[Complex], right: &[Complex]) {
         assert_eq!(

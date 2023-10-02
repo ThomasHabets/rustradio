@@ -1,3 +1,7 @@
+/*! Finite impulse response filter.
+
+Use FftFilter if many taps are used, for better performance.
+*/
 /*
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.

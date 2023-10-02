@@ -1,3 +1,4 @@
+//! IIR filter.
 use anyhow::Result;
 
 use crate::{map_block_macro_v2, Float};

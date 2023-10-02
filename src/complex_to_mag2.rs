@@ -1,3 +1,4 @@
+//! Convert Complex numbers to square of their magnitude.
 use anyhow::Result;
 
 use crate::{map_block_convert_macro, Complex, Float};

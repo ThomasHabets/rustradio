@@ -1,3 +1,4 @@
+//! Delay stream. Good for syncing up streams.
 use anyhow::Result;
 use log::debug;
 

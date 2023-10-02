@@ -1,3 +1,4 @@
+//! Quadrature demod, the core of an FM demodulator.
 use anyhow::Result;
 
 use crate::{map_block_convert_macro, Complex, Float};

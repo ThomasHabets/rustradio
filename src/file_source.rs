@@ -1,3 +1,4 @@
+//! Read stream from raw file.
 use anyhow::Result;
 use log::{debug, warn};
 use std::io::Read;

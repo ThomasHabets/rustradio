@@ -1,3 +1,4 @@
+//! Multiply stream by a constant value.
 use crate::map_block_macro_v2;
 
 pub struct MultiplyConst<T> {

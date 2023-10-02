@@ -1,3 +1,4 @@
+//! Add a constant value to every sample.
 use crate::map_block_macro_v2;
 
 pub struct AddConst<T> {

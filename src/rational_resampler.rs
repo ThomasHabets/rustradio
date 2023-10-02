@@ -1,3 +1,4 @@
+//! Resample by a fractional amount.
 /*
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
 */

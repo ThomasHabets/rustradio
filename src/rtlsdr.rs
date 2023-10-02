@@ -1,3 +1,4 @@
+//! Read from RTL SDR dongle.
 use anyhow::Result;
 
 use crate::block::{get_input, get_output, Block, BlockRet};

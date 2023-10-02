@@ -1,3 +1,5 @@
+/*! Graphs contain blocks connected by streams, and run them.
+ */
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -7,6 +9,8 @@ use log::debug;
 use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType};
 
+/// When adding a block to a graph, this handle is handed back to be
+/// used for connecting blocks together.
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct BlockHandle(usize);
 
@@ -15,6 +19,28 @@ struct StreamHandle(usize);
 
 type Port = usize;
 
+/**
+A graph is a thing that RustRadio runs, to let blocks "talk to each
+other" via streams.
+
+# Example
+
+```
+use rustradio::graph::Graph;
+use rustradio::Complex;
+use rustradio::stream::StreamType;
+use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
+let mut g = Graph::new();
+let src = g.add(Box::new(FileSource::<u8>::new("/dev/null", false).unwrap()));
+let dec = g.add(Box::new(RtlSdrDecode::new()));
+let add = g.add(Box::new(AddConst::new(Complex::new(1.1, 2.0))));
+let sink = g.add(Box::new(NullSink::<Complex>::new()));
+g.connect(StreamType::new_u8(), src, 0, dec, 0);
+g.connect(StreamType::new_complex(), dec, 0, add, 0);
+g.connect(StreamType::new_complex(), add, 0, sink, 0);
+g.run().unwrap();
+```
+*/
 pub struct Graph {
     blocks: Vec<Box<dyn Block>>,
     streams: Vec<StreamType>,

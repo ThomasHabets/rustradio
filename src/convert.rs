@@ -1,3 +1,4 @@
+//! Blocks for converting from one type to another.
 use anyhow::Result;
 
 use crate::{map_block_convert_macro, Float};

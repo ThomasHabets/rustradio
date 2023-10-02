@@ -1,3 +1,4 @@
+//! Clock recovery implementations
 /*
 * Much evolving clock sync.
 *
@@ -29,6 +30,7 @@ impl Ted for TedDeriv {
     }
 }
 
+/// Broken, DO NOT USE.
 pub struct SymbolSync {
     _sps: Float,
     _max_deviation: Float,
@@ -84,6 +86,22 @@ impl Block for SymbolSync {
     }
 }
 
+/** Very simple clock recovery by looking at zero crossings.
+
+Every time the stream crosses 0, this is assumed to be right in the
+middle of two symbols, and the next chosen sample to use as a symbol
+will be the one `sps/2` samples later.
+
+The one after that will be after `1.5*sps` samples. And so on, until
+the next zero crossing happens, and the clock thus resets.
+
+Future work in this block will be to adjust the sps according to when
+the expected vs actual zero crossings happen, effectively phase lock
+looping.
+
+But for now it's "good enough" to get simple 2FSK decoded pretty
+reliably.
+*/
 pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,
@@ -94,6 +112,12 @@ pub struct ZeroCrossing {
 }
 
 impl ZeroCrossing {
+    /** Create new ZeroCrossing block.
+
+    # Args
+    * `sps`: Samples per symbol. IOW `samp_rate / baud`.
+    * `max_deviation`: Not currently used.
+     */
     pub fn new(sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
         Self {

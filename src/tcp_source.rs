@@ -1,3 +1,7 @@
+/*! TCP source.
+
+Currently only implements TCP client mode.
+*/
 use std::io::Read;
 
 use anyhow::Result;
@@ -107,6 +111,7 @@ where
         let o: Streamp<T> = get_output(w, 0);
         let size = T::size();
         let mut buffer = vec![0; o.borrow().capacity()];
+        // TODO: this read blocks.
         let n = self
             .stream
             .read(&mut buffer[..])
