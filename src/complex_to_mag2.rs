@@ -1,8 +1,6 @@
 use anyhow::Result;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams};
-use crate::{map_block_convert_macro, Complex, Error, Float};
+use crate::{map_block_convert_macro, Complex, Float};
 
 pub struct ComplexToMag2;
 

@@ -1,13 +1,13 @@
 use anyhow::Result;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
-use crate::{map_block_macro_v2, Error, Float};
+use crate::{map_block_macro_v2, Float};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Complex, Float};
+    use crate::block::Block;
+    use crate::stream::{InputStreams, OutputStreams, StreamType};
+    use crate::{Complex, Error, Float};
 
     #[test]
     fn iir_ff() -> Result<()> {

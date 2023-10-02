@@ -1,6 +1,4 @@
-use crate::block::{get_input, get_output, Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
-use crate::{map_block_macro_v2, Error};
+use crate::map_block_macro_v2;
 
 pub struct AddConst<T> {
     val: T,

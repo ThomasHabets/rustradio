@@ -34,28 +34,28 @@ pub trait Block {
 #[macro_export]
 macro_rules! map_block_macro_v2 {
     ($name:path, $($tr:path), *) => {
-        impl<T> Block for $name
+        impl<T> $crate::block::Block for $name
         where
             T: Copy $(+$tr)*,
-            Streamp<T>: From<StreamType>,
+            $crate::stream::Streamp<T>: From<$crate::stream::StreamType>,
         {
             fn block_name(&self) -> &'static str {
                 stringify!{$name}
             }
             fn work(
                 &mut self,
-                r: &mut InputStreams,
-                w: &mut OutputStreams,
-            ) -> Result<BlockRet, Error> {
-                let i = get_input(r, 0);
-                get_output(w, 0)
+                r: &mut $crate::stream::InputStreams,
+                w: &mut $crate::stream::OutputStreams,
+            ) -> Result<$crate::block::BlockRet, $crate::Error> {
+                let i = $crate::block::get_input(r, 0);
+                $crate::block::get_output(w, 0)
                     .borrow_mut()
                     .write(i
                            .borrow()
                            .iter()
                            .map(|x| self.process_one(x)));
                 i.borrow_mut().clear();
-                Ok(BlockRet::Ok)
+                Ok($crate::block::BlockRet::Ok)
             }
         }
     };
@@ -64,21 +64,21 @@ macro_rules! map_block_macro_v2 {
 #[macro_export]
 macro_rules! map_block_convert_macro {
     ($name:path) => {
-        impl Block for $name {
+        impl $crate::block::Block for $name {
             fn block_name(&self) -> &'static str {
                 stringify! {$name}
             }
             fn work(
                 &mut self,
-                r: &mut InputStreams,
-                w: &mut OutputStreams,
-            ) -> Result<BlockRet, Error> {
-                let i = get_input(r, 0);
-                get_output(w, 0)
+                r: &mut $crate::stream::InputStreams,
+                w: &mut $crate::stream::OutputStreams,
+            ) -> Result<$crate::block::BlockRet, $crate::Error> {
+                let i = $crate::block::get_input(r, 0);
+                $crate::block::get_output(w, 0)
                     .borrow_mut()
                     .write(i.borrow().iter().map(|x| self.process_one(*x)));
                 i.borrow_mut().clear();
-                Ok(BlockRet::Ok)
+                Ok($crate::block::BlockRet::Ok)
             }
         }
     };
