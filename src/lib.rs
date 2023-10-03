@@ -70,14 +70,20 @@ Or concretely, for [sparslog][sparslog]:
 Here's a simple example that creates a couple of blocks, connects them
 with streams, and runs the graph.
 
-<!-- Don't run this test since it never ends -->
-```no_run
+```
 use rustradio::graph::Graph;
-use rustradio::blocks::{AddConst, ConstantSource, DebugSink};
+use rustradio::blocks::{AddConst, VectorSource, DebugSink};
 use rustradio::stream::StreamType;
 use rustradio::Complex;
 let mut g = Graph::new();
-let src = g.add(Box::new(ConstantSource::new(Complex::new(10.0, 0.0))));
+let src = g.add(Box::new(VectorSource::new(
+    vec![
+        Complex::new(10.0, 0.0),
+        Complex::new(-20.0, 0.0),
+        Complex::new(100.0, -100.0),
+    ],
+    false,
+)));
 let add = g.add(Box::new(AddConst::new(Complex::new(1.1, 2.0))));
 let sink = g.add(Box::new(DebugSink::<Complex>::new()));
 g.connect(StreamType::new_complex(), src, 0, add, 0);
@@ -110,6 +116,7 @@ pub mod rtlsdr;
 pub mod single_pole_iir_filter;
 pub mod symbol_sync;
 pub mod tcp_source;
+pub mod vector_source;
 
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;

@@ -18,6 +18,7 @@ pub use crate::rtlsdr::RtlSdrDecode;
 pub use crate::single_pole_iir_filter::SinglePoleIIRFilter;
 pub use crate::symbol_sync::SymbolSync;
 pub use crate::tcp_source::TcpSource;
+pub use crate::vector_source::VectorSource;
 
 #[cfg(feature = "rtlsdr")]
 pub use crate::rtlsdr_source::RtlSdrSource;
