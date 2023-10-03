@@ -71,6 +71,7 @@ mod tests {
     }
 }
 
+/// Delay stream. Good for syncing up streams.
 pub struct Delay<T> {
     delay: usize,
     current_delay: usize,
@@ -79,6 +80,7 @@ pub struct Delay<T> {
 }
 
 impl<T> Delay<T> {
+    /// Create new Delay block.
     pub fn new(delay: usize) -> Self {
         Self {
             delay,
@@ -87,6 +89,8 @@ impl<T> Delay<T> {
             dummy: std::marker::PhantomData,
         }
     }
+
+    /// Change the delay.
     pub fn set_delay(&mut self, delay: usize) {
         if delay > self.delay {
             self.current_delay = delay - self.delay;

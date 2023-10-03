@@ -3,9 +3,11 @@ use anyhow::Result;
 
 use crate::{map_block_convert_macro, Complex, Float};
 
+/// Convert Complex numbers to square of their magnitude.
 pub struct ComplexToMag2;
 
 impl ComplexToMag2 {
+    /// Create new ComplexToMag2 block.
     pub fn new() -> Self {
         Self {}
     }

@@ -80,6 +80,7 @@ mod tests {
     }
 }
 
+/// Finite impulse response filter.
 pub struct FIR<T> {
     taps: Vec<T>,
 }
@@ -88,11 +89,14 @@ impl<T> FIR<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
+    /// Create new FIR.
     pub fn new(taps: &[T]) -> Self {
         Self {
             taps: taps.iter().copied().rev().collect(),
         }
     }
+    /// Run filter once, creating one sample from the taps and an
+    /// equal number of input samples.
     pub fn filter(&self, input: &[T]) -> T {
         input
             .iter()
@@ -100,12 +104,15 @@ where
             .enumerate()
             .fold(T::default(), |acc, (i, x)| acc + *x * self.taps[i])
     }
+
+    /// Call `filter()` multiple times, across an input range.
     pub fn filter_n(&self, input: &[T]) -> Vec<T> {
         let n = input.len() - self.taps.len() + 1;
         (0..n).map(|i| self.filter(&input[i..])).collect()
     }
 }
 
+/// Finite impulse response filter block.
 pub struct FIRFilter<T> {
     fir: FIR<T>,
     ntaps: usize,
@@ -115,6 +122,7 @@ impl<T> FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
+    /// Create FIR block given taps.
     pub fn new(taps: &[T]) -> Self {
         Self {
             ntaps: taps.len(),
@@ -145,7 +153,10 @@ where
     }
 }
 
-// TODO: this would be faster if we supported filtering a Complex by a Float.
+/// Create taps for a low pass filter.
+///
+/// TODO: this could be faster if we supported filtering a Complex by a Float.
+/// A low pass filter doesn't actually need complex taps.
 pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Complex> {
     let pi = std::f64::consts::PI as Float;
     let ntaps = {

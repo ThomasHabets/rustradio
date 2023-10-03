@@ -5,11 +5,13 @@ use crate::block::{get_output, Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
+/// Generate the same value, forever.
 pub struct ConstantSource<T> {
     val: T,
 }
 
 impl<T: Copy> ConstantSource<T> {
+    /// Create a new ConstantSource block, providing the constant value.
     pub fn new(val: T) -> Self {
         Self { val }
     }

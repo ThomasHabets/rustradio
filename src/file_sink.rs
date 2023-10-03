@@ -56,18 +56,26 @@ mod tests {
     }
 }
 
+/// File write mode.
 pub enum Mode {
+    /// Create a new file. Fail if file already exists.
     Create,
+
+    /// Overwrite existing file, or create a new file if it doesn't exist.
     Overwrite,
+
+    /// Append to existing file, or create a new file if it doesn't exist.
     Append,
 }
 
+/// Send stream to raw file.
 pub struct FileSink<T> {
     f: std::fs::File,
     dummy: std::marker::PhantomData<T>,
 }
 
 impl<T> FileSink<T> {
+    /// Create new FileSink block.
     pub fn new(filename: &str, mode: Mode) -> Result<Self> {
         let f = match mode {
             Mode::Create => std::fs::File::options()

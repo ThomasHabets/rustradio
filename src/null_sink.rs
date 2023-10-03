@@ -5,13 +5,17 @@ use crate::block::{get_input, Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
+/// Discard anything written to this block.
 pub struct NullSink<T> {
-    _t: T,
+    dummy: std::marker::PhantomData<T>,
 }
 
 impl<T: Default + Copy> NullSink<T> {
+    /// Create new NullSink block.
     pub fn new() -> Self {
-        Self { _t: T::default() }
+        Self {
+            dummy: std::marker::PhantomData,
+        }
     }
 }
 

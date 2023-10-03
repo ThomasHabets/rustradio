@@ -50,6 +50,7 @@ pub struct Graph {
 }
 
 impl Graph {
+    /// Create new empty graph.
     pub fn new() -> Self {
         Self {
             blocks: Vec::new(),
@@ -58,10 +59,17 @@ impl Graph {
             streams: Vec::new(),
         }
     }
+    /// Add a block to the graph, returning a handle to it.
     pub fn add(&mut self, b: Box<dyn Block>) -> BlockHandle {
         self.blocks.push(b);
         BlockHandle(self.blocks.len() - 1)
     }
+    /// Connect two blocks (by handle).
+    ///
+    /// Output port p1 on block b1 becomes connected to input port p2
+    /// on block b2.
+    ///
+    /// The stream needs to be provided, such as `StreamType::new_complex()`.
     pub fn connect(
         &mut self,
         stream: StreamType,
@@ -82,6 +90,7 @@ impl Graph {
             .push((p2, StreamHandle(s)));
     }
 
+    /// Run the graph, until there's no more data to process.
     pub fn run(&mut self) -> Result<()> {
         for input in self.inputs.values_mut() {
             input.sort();

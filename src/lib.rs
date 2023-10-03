@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 /*! This create provides a framework for running SDR (software defined
 radio) applications.
 
@@ -139,6 +140,7 @@ pub struct Error {
 }
 
 impl Error {
+    /// Create new error with message.
     pub fn new(msg: &str) -> Self {
         Self {
             msg: msg.to_string(),
@@ -167,9 +169,16 @@ impl From<std::io::Error> for Error {
 
 /// A trait all sample types must implement.
 pub trait Sample {
+    /// The type of the sample.
     type Type;
+
+    /// The serialized size of one sample.
     fn size() -> usize;
+
+    /// Parse one sample.
     fn parse(data: &[u8]) -> Result<Self::Type>;
+
+    /// Serialize one sample.
     fn serialize(&self) -> Vec<u8>;
 }
 
@@ -245,6 +254,10 @@ impl Sample for u32 {
 pub mod tests {
     //! Test helper functions.
     use super::*;
+
+    /// For testing, assert that two slices are almost equal.
+    ///
+    /// Floating point numbers are almost never exactly equal.
     pub fn assert_almost_equal_complex(left: &[Complex], right: &[Complex]) {
         assert_eq!(
             left.len(),
@@ -264,6 +277,10 @@ pub mod tests {
             }
         }
     }
+
+    /// For testing, assert that two slices are almost equal.
+    ///
+    /// Floating point numbers are almost never exactly equal.
     pub fn assert_almost_equal_float(left: &[Float], right: &[Float]) {
         assert_eq!(
             left.len(),

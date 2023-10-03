@@ -39,6 +39,7 @@ pub struct SymbolSync {
 }
 
 impl SymbolSync {
+    /// Broken, DO NOT USE.
     pub fn new(sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
         Self {

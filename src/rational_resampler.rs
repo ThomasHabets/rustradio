@@ -56,6 +56,7 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
     a
 }
 
+/// Resample by a fractional amount.
 pub struct RationalResampler {
     deci: i64,
     interp: i64,
@@ -63,6 +64,10 @@ pub struct RationalResampler {
 }
 
 impl RationalResampler {
+    /// Create new RationalResampler block.
+    ///
+    /// A common pattern to convert between arbitrary sample rates X
+    /// and Y is to decimate by X and interpolate by Y.
     pub fn new(mut interp: usize, mut deci: usize) -> Result<Self> {
         let g = gcd(deci, interp);
         deci /= g;

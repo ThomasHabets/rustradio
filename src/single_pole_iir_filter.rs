@@ -1,4 +1,4 @@
-//! IIR filter.
+//! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
 use crate::{map_block_macro_v2, Float};
@@ -91,6 +91,7 @@ where
     }
 }
 
+/// Infinite Impulse Response (IIR) filter.
 pub struct SinglePoleIIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
@@ -106,6 +107,7 @@ where
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>,
 {
+    /// Create new IIR filter.
     pub fn new(alpha: Float) -> Option<Self> {
         Some(Self {
             iir: SinglePoleIIR::<T>::new(alpha)?,

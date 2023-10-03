@@ -83,18 +83,20 @@ mod tests {
     }
 }
 
+/// TCP Source, connecting to a server and streaming the data.
 pub struct TcpSource<T> {
     stream: std::net::TcpStream,
     buf: Vec<u8>,
-    _t: T,
+    dummy: std::marker::PhantomData<T>,
 }
 
 impl<T: Default> TcpSource<T> {
+    /// Create new TCP source block.
     pub fn new(addr: &str, port: u16) -> Result<Self> {
         Ok(Self {
             stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
             buf: Vec::new(),
-            _t: T::default(), // TODO: remove ugly.
+            dummy: std::marker::PhantomData,
         })
     }
 }

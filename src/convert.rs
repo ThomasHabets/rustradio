@@ -3,11 +3,18 @@ use anyhow::Result;
 
 use crate::{map_block_convert_macro, Float};
 
+/// Convert floats to unsigned 32bit int, scaled if needed.
+///
+/// `u32 = Float * scale`
 pub struct FloatToU32 {
     scale: Float,
 }
 
 impl FloatToU32 {
+    /// Create new FloatToU32, scaled.
+    ///
+    /// Return value is the input multiplied by the scale. E.g. with a
+    /// scale of 100.0, the input 0.123 becomes 12.
     pub fn new(scale: Float) -> Self {
         Self { scale }
     }

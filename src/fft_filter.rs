@@ -144,6 +144,7 @@ mod tests {
     }
 }
 
+/// FFT filter. Like a FIR filter, but more efficient when there are many taps.
 pub struct FftFilter {
     buf: Vec<Complex>,
     taps_fft: Vec<Complex>,
@@ -163,6 +164,7 @@ impl FftFilter {
         2 * n
     }
 
+    /// Create new FftFilter, given filter taps.
     pub fn new(taps: &[Complex]) -> Self {
         let ntaps = taps.len();
         let mut taps_fft = taps.to_vec();

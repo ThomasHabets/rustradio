@@ -5,12 +5,14 @@ use crate::block::{get_input, Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
+/// Print values to stdout, for debugging.
 pub struct DebugSink<T> {
     dummy: std::marker::PhantomData<T>,
 }
 
 #[allow(clippy::new_without_default)]
 impl<T> DebugSink<T> {
+    /// Create new debug block.
     pub fn new() -> Self {
         Self {
             dummy: std::marker::PhantomData,

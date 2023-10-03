@@ -1,13 +1,15 @@
-//! Read from RTL SDR dongle.
+//! Decode RTL-SDR's byte based format into Complex I/Q.
 use anyhow::Result;
 
 use crate::block::{get_input, get_output, Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Complex, Error, Float};
 
+/// Decode RTL-SDR's byte based format into Complex I/Q.
 pub struct RtlSdrDecode;
 
 impl RtlSdrDecode {
+    /// Create new RTL SDR Decode block.
     pub fn new() -> Self {
         Self {}
     }

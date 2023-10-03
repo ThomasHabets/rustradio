@@ -61,6 +61,7 @@ mod tests {
     }
 }
 
+/// Read stream from raw file.
 pub struct FileSource<T> {
     filename: String,
     f: std::fs::File,
@@ -70,6 +71,7 @@ pub struct FileSource<T> {
 }
 
 impl<T: Default> FileSource<T> {
+    /// Create new FileSource block.
     pub fn new(filename: &str, repeat: bool) -> Result<Self> {
         let f = std::fs::File::open(filename)?;
         debug!("Opening source {filename}");

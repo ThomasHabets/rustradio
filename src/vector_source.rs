@@ -5,6 +5,7 @@ use crate::block::{get_output, Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
+/// Generate values from a fixed vector.
 pub struct VectorSource<T> {
     data: Vec<T>,
     repeat: bool,
@@ -12,6 +13,9 @@ pub struct VectorSource<T> {
 }
 
 impl<T: Copy + std::fmt::Debug> VectorSource<T> {
+    /// Create new Vector Source block.
+    ///
+    /// Optionally the data can repeat.
     pub fn new(data: Vec<T>, repeat: bool) -> Self {
         Self {
             data,
