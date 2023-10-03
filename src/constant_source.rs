@@ -24,9 +24,10 @@ where
         "ConstantSource"
     }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let n = w.capacity(0);
         get_output(w, 0)
             .borrow_mut()
-            .write_slice(&vec![self.val; w.capacity(0)]);
+            .write_slice(&vec![self.val; n]);
         Ok(BlockRet::Ok)
     }
 }
