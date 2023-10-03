@@ -1,3 +1,93 @@
+/*! This create provides a framework for running SDR (software defined
+radio) applications.
+
+It's heavily inspired by [GNURadio][gnuradio], except of course
+written in Rust.
+
+It currently has very few blocks, and is missing tags, and PDU
+messages.
+
+In addition to the example applications in this crate, there's also a
+[sparslog][sparslog] project using this framework, that decodes IKEA
+Sparsnäs electricity meter RF signals.
+
+# Architecture overview
+
+A RustRadio application consists of blocks that are connected by
+unidirectional streams. Each block has zero or more input streams, and
+zero or more output streams.
+
+The signal flows through the blocks from "sources" (blocks without any
+input streams) to "sinks" (blocks without any output streams.
+
+These blocks and streams are called a "graph", like the mathematical
+concept of graphs that have nodes and edges.
+
+A block does something to its input(s), and passes the result to its
+output(s).
+
+A typical graph will be something like:
+
+```text
+  [ Raw radio source ]
+           ↓
+      [ Filtering ]
+           ↓
+      [ Resampling ]
+           ↓
+     [ Demodulation ]
+           ↓
+     [ Symbol Sync ]
+           ↓
+[ Packet assembly and save ]
+```
+
+Or concretely, for [sparslog][sparslog]:
+
+```text
+     [ RtlSdrSource ]
+           ↓
+  [ RtlSdrDecode to convert from ]
+  [ own format to complex I/Q    ]
+           ↓
+     [ FftFilter ]
+           ↓
+      [ RationalResampler ]
+           ↓
+      [ QuadratureDemod ]
+           ↓
+  [ AddConst for frequency offset ]
+           ↓
+   [ ZeroCrossing symbol sync ]
+           ↓
+     [ Custom Sparsnäs decoder ]
+     [ block in the binary,    ]
+     [ not in the framework    ]
+```
+
+# Examples
+
+Here's a simple example that creates a couple of blocks, connects them
+with streams, and runs the graph.
+
+<!-- Don't run this test since it never ends -->
+```no_run
+use rustradio::graph::Graph;
+use rustradio::blocks::{AddConst, ConstantSource, DebugSink};
+use rustradio::stream::StreamType;
+use rustradio::Complex;
+let mut g = Graph::new();
+let src = g.add(Box::new(ConstantSource::new(Complex::new(10.0, 0.0))));
+let add = g.add(Box::new(AddConst::new(Complex::new(1.1, 2.0))));
+let sink = g.add(Box::new(DebugSink::<Complex>::new()));
+g.connect(StreamType::new_complex(), src, 0, add, 0);
+g.connect(StreamType::new_complex(), add, 0, sink, 0);
+g.run().unwrap();
+```
+
+[sparslog]: https://github.com/ThomasHabets/sparslog
+[gnuradio]: https://www.gnuradio.org/
+ */
 use anyhow::Result;
 
 // Blocks.
