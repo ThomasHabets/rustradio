@@ -1,4 +1,4 @@
-//! Generate the values from the vector.
+//! Generate values from a fixed vector.
 use anyhow::Result;
 
 use crate::block::{get_output, Block, BlockRet};
