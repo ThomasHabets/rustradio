@@ -1,3 +1,16 @@
+/*! RTL SDR source.
+
+RTL-SDRs are the most common type of SDR hardware. They're cheap, and
+good for up to about 2.8Msps (2.8Mhz slice of spectrum) from about
+24MHz to 1.75Ghz.
+
+They can't transmit, but are good for most beginner receiver use
+cases.
+
+The best places to get RTL SDRs are probably:
+* <https://www.rtl-sdr.com>
+* <https://www.nooelec.com/store/>
+*/
 use std::sync::mpsc;
 use std::sync::mpsc::{RecvError, SendError, TryRecvError};
 use std::thread;
@@ -35,11 +48,20 @@ impl<T> From<SendError<T>> for Error {
 #[cfg(test)]
 mod tests {}
 
+/// RTL SDR Source block.
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,
 }
 
 impl RtlSdrSource {
+    /// Create new RtlSdrSource block.
+    ///
+    /// * `freq`: Center frequency, in Hz.
+    /// * `samp_rate`: samples per second. Equivalently, the bandwidth.
+    /// * `igain`: Input gain. 20 is a good number to start with.
+    ///
+    /// If given frequency of 100Mhz, and sample rate of 1Msps, the
+    /// received spectrum is 99.5Mhz to 100.5Mhz.
     pub fn new(freq: u64, samp_rate: u32, igain: i32) -> Result<Self, Error> {
         let index = 0;
         let found = rtlsdr::get_device_count();
