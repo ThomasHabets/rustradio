@@ -6,8 +6,7 @@ use rustradio::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use rustradio::Float;
 
 fn main() -> Result<()> {
-    println!("Hello, world!");
-
+    println!("Running some block without Graph");
     {
         let s = StreamType::new_float_from_slice(&[1.0, -1.0, 3.9]);
         let mut is = InputStreams::new();
@@ -23,8 +22,9 @@ fn main() -> Result<()> {
         println!("{:?}", &res.borrow().iter().collect::<Vec<&Float>>());
     }
 
-    #[cfg(features = "rtlsdr")]
+    #[cfg(feature = "rtlsdr")]
     {
+        println!("Running rtlsdr example");
         use rustradio::graph::Graph;
         use rustradio::Complex;
         let mut g = Graph::new();
