@@ -30,15 +30,18 @@ use rustradio::graph::Graph;
 use rustradio::Complex;
 use rustradio::stream::StreamType;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
+# fn main() -> anyhow::Result<()> {
 let mut g = Graph::new();
-let src = g.add(Box::new(FileSource::<u8>::new("/dev/null", false).unwrap()));
+let src = g.add(Box::new(FileSource::<u8>::new("/dev/null", false)?));
 let dec = g.add(Box::new(RtlSdrDecode::new()));
 let add = g.add(Box::new(AddConst::new(Complex::new(1.1, 2.0))));
 let sink = g.add(Box::new(NullSink::<Complex>::new()));
 g.connect(StreamType::new_u8(), src, 0, dec, 0);
 g.connect(StreamType::new_complex(), dec, 0, add, 0);
 g.connect(StreamType::new_complex(), add, 0, sink, 0);
-g.run().unwrap();
+g.run()?;
+# Ok(())
+# }
 ```
 */
 pub struct Graph {

@@ -76,6 +76,7 @@ use rustradio::graph::Graph;
 use rustradio::blocks::{AddConst, VectorSource, DebugSink};
 use rustradio::stream::StreamType;
 use rustradio::Complex;
+# fn main() -> anyhow::Result<()> {
 let mut g = Graph::new();
 let src = g.add(Box::new(VectorSource::new(
     vec![
@@ -89,7 +90,9 @@ let add = g.add(Box::new(AddConst::new(Complex::new(1.1, 2.0))));
 let sink = g.add(Box::new(DebugSink::<Complex>::new()));
 g.connect(StreamType::new_complex(), src, 0, add, 0);
 g.connect(StreamType::new_complex(), add, 0, sink, 0);
-g.run().unwrap();
+g.run()?;
+# Ok(())
+# }
 ```
 
 [sparslog]: https://github.com/ThomasHabets/sparslog
