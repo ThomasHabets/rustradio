@@ -129,11 +129,24 @@ impl Graph {
             iss.push(is);
             oss.push(os);
         }
-        while !self.run_one(&mut iss, &mut oss)? {}
+        // TODO: this ending criteria is ugly.
+        let mut last_loop_processed = true;
+        loop {
+            let (processed, done) = self.run_one(&mut iss, &mut oss, last_loop_processed)?;
+            if done {
+                break;
+            }
+            last_loop_processed = processed > 0;
+        }
         Ok(())
     }
 
-    fn run_one(&mut self, iss: &mut [InputStreams], oss: &mut [OutputStreams]) -> Result<bool> {
+    fn run_one(
+        &mut self,
+        iss: &mut [InputStreams],
+        oss: &mut [OutputStreams],
+        last_loop_processed: bool,
+    ) -> Result<(usize, bool)> {
         let mut done = true;
         let st_loop = Instant::now();
         let mut processed = 0;
@@ -168,9 +181,11 @@ impl Graph {
             if is.is_empty() && !eof {
                 done = false;
             }
-            for n in 0..os.len() {
-                if os.get(n).available() > 0 {
-                    done = false;
+            if last_loop_processed {
+                for n in 0..os.len() {
+                    if os.get(n).available() > 0 {
+                        done = false;
+                    }
                 }
             }
         }
@@ -184,7 +199,7 @@ impl Graph {
             debug!("No output or consumption from any block. Sleeping a bit.");
             std::thread::sleep(ten_millis);
         }
-        Ok(done)
+        Ok((processed, done))
     }
 }
 

@@ -6,3 +6,5 @@
 *.f32
 keff
 *.bin
+attic/
+*.wav
