@@ -146,8 +146,9 @@ where
         if n > self.ntaps {
             // TODO: needless copy.
             let v: Vec<T> = input.borrow().data().clone().into();
-            out.borrow_mut().write_slice(&self.fir.filter_n(&v[..n]));
-            input.borrow_mut().consume(n);
+            let v = self.fir.filter_n(&v[..n]);
+            input.borrow_mut().consume(v.len());
+            out.borrow_mut().write_slice(&v);
         }
         Ok(BlockRet::Ok)
     }
