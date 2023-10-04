@@ -264,6 +264,16 @@ impl InputStreams {
     pub fn sum_available(&self) -> usize {
         self.streams.iter().map(|s| s.available()).sum()
     }
+
+    /// Check if input `n` is of type Complex.
+    pub fn is_complex(&self, n: usize) -> bool {
+        matches!(self.streams[n], StreamType::Complex(_))
+    }
+
+    /// Check if input `n` is of type Float.
+    pub fn is_float(&self, n: usize) -> bool {
+        matches!(self.streams[n], StreamType::Float(_))
+    }
 }
 
 impl Default for InputStreams {
