@@ -399,7 +399,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "anyhow",
  "log",
