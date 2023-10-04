@@ -79,12 +79,13 @@ impl RtlSdrSource {
             debug!("Tuner type: {:?}", dev.get_tuner_type());
             dev.set_center_freq(freq as u32)?;
             debug!("Allowed tuner gains: {:?}", dev.get_tuner_gains()?);
-            dev.set_tuner_gain(igain)?;
+            dev.set_tuner_gain(10 * igain)?;
             debug!("Tuner gain: {}", dev.get_tuner_gain());
             // dev.set_direct_sampling
             // dev.set_tuner_if_gain(…);
             // dev.set_tuner_gain_mode
             // dev.set_agc_mode
+            debug!("Setting sample rate {samp_rate}");
             dev.set_sample_rate(samp_rate)?;
             dev.reset_buffer()?;
             tx.send(vec![])?;
