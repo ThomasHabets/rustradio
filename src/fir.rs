@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_filter_generator() {
-        let taps = low_pass(10000.0, 1000.0, 1000.0);
+        let taps = low_pass_complex(10000.0, 1000.0, 1000.0);
         assert_eq!(taps.len(), 25);
         assert_eq!(
             taps,
@@ -153,11 +153,19 @@ where
     }
 }
 
+/// Create taps for a low pass filter as complex taps.
+pub fn low_pass_complex(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Complex> {
+    low_pass(samp_rate, cutoff, twidth)
+        .into_iter()
+        .map(|t| Complex::new(t, 0.0))
+        .collect()
+}
+
 /// Create taps for a low pass filter.
 ///
 /// TODO: this could be faster if we supported filtering a Complex by a Float.
 /// A low pass filter doesn't actually need complex taps.
-pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Complex> {
+pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
     let pi = std::f64::consts::PI as Float;
     let ntaps = {
         let a: Float = 53.0; // Hamming.
@@ -195,7 +203,5 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Complex> 
         }
         gain / fmax
     };
-    taps.into_iter()
-        .map(|t| Complex::new(t * gain, 0.0))
-        .collect()
+    taps.into_iter().map(|t| t * gain).collect()
 }

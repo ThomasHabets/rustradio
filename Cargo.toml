@@ -20,6 +20,9 @@ rustfft = "6.1.0"
 tempfile = "3.8.0"
 rtlsdr = {version = "0.1.4", optional=true}
 
+[dev-dependencies]
+structopt = "0.3.26"
+
 [lib]
 name = "rustradio"
 path = "src/lib.rs"
