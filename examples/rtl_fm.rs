@@ -21,6 +21,9 @@ struct Opt {
 
     #[structopt(short = "v", default_value = "0")]
     verbose: usize,
+
+    #[structopt(long = "no-audio-filter")]
+    no_audio_filter: bool,
 }
 
 fn main() -> Result<()> {
@@ -71,10 +74,15 @@ fn main() -> Result<()> {
     let quad = g.add(Box::new(QuadratureDemod::new(1.0)));
     g.connect(StreamType::new_complex(), resamp, 0, quad, 0);
 
-    // Audio filter.
-    let taps = rustradio::fir::low_pass(samp_rate, 44_100.0, 500.0);
-    let audio_filter = g.add(Box::new(FIRFilter::new(&taps)));
-    g.connect(StreamType::new_float(), quad, 0, audio_filter, 0);
+    let prev = if !opt.no_audio_filter {
+        // Audio filter.
+        let taps = rustradio::fir::low_pass(samp_rate, 44_100.0, 500.0);
+        let audio_filter = g.add(Box::new(FIRFilter::new(&taps)));
+        g.connect(StreamType::new_float(), quad, 0, audio_filter, 0);
+        audio_filter
+    } else {
+        quad
+    };
 
     // Resample audio.
     let new_samp_rate = 48_000.0;
@@ -83,7 +91,7 @@ fn main() -> Result<()> {
         samp_rate as usize,
     )?));
     let _samp_rate = new_samp_rate;
-    g.connect(StreamType::new_float(), audio_filter, 0, audio_resamp, 0);
+    g.connect(StreamType::new_float(), prev, 0, audio_resamp, 0);
 
     // Save to file.
     let sink = g.add(Box::new(FileSink::<Float>::new(
