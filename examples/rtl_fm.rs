@@ -18,11 +18,21 @@ struct Opt {
 
     #[structopt(long = "gain", default_value = "20")]
     gain: i32,
+
+    #[structopt(short = "v", default_value = "0")]
+    verbose: usize,
 }
 
 fn main() -> Result<()> {
     println!("rtl_fm receiver example");
     let opt = Opt::from_args();
+    stderrlog::new()
+        .module(module_path!())
+        .module("rustradio")
+        .quiet(false)
+        .verbosity(opt.verbose)
+        .timestamp(stderrlog::Timestamp::Second)
+        .init()?;
 
     let mut g = Graph::new();
     let samp_rate = 1024_000.0;

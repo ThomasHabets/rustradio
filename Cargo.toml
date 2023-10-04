@@ -22,6 +22,7 @@ rtlsdr = {version = "0.1.4", optional=true}
 
 [dev-dependencies]
 structopt = "0.3.26"
+stderrlog = "0.5.4"
 
 [lib]
 name = "rustradio"
