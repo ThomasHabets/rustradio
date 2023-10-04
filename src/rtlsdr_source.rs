@@ -85,8 +85,8 @@ impl RtlSdrSource {
             // dev.set_tuner_if_gain(…);
             // dev.set_tuner_gain_mode
             // dev.set_agc_mode
-            debug!("Setting sample rate {samp_rate}");
             dev.set_sample_rate(samp_rate)?;
+            debug!("Set sample rate {}", dev.get_sample_rate()?);
             dev.reset_buffer()?;
             tx.send(vec![])?;
             loop {
