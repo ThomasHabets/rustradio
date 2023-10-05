@@ -240,9 +240,20 @@ impl InputStreams {
         self.streams.push(s);
     }
 
-    /// Get a stream.
-    pub fn get(&self, n: usize) -> StreamType {
+    /// Get a streamtype.
+    pub fn get_streamtype(&self, n: usize) -> StreamType {
         self.streams[n].clone()
+    }
+
+    /// Get input stream `n`, cast into the requested type.
+    ///
+    /// Panics if the type is wrong.
+    pub fn get<T>(&self, n: usize) -> Streamp<T>
+    where
+        T: Copy,
+        Streamp<T>: From<StreamType>,
+    {
+        self.get_streamtype(n).into()
     }
 
     /// Get number of streams (some may be disconnected).
@@ -300,9 +311,20 @@ impl OutputStreams {
         self.streams.push(s);
     }
 
-    /// Get stream.
-    pub fn get(&self, n: usize) -> StreamType {
+    /// Get streamtype.
+    pub fn get_streamtype(&self, n: usize) -> StreamType {
         self.streams[n].clone()
+    }
+
+    /// Get output stream `n`, cast into the requested type.
+    ///
+    /// Panics if the type is wrong.
+    pub fn get<T>(&self, n: usize) -> Streamp<T>
+    where
+        T: Copy,
+        Streamp<T>: From<StreamType>,
+    {
+        self.get_streamtype(n).into()
     }
 
     /// Get number of streams (some may be disconnected).

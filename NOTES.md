@@ -8,6 +8,9 @@
 * Stream type safety is done at runtime.
 * No clean way to "just get the input"
 * Iter is nice, but should we use circular ring buffer for efficiency?
+* replace new_from_blah with `from_floats()`
+* Can Box<Rc< be simplified to just Rc<?
+* InputStreams.get() and OutputStreams.get() both return Streamp<T>. Not type safe.
 
 ### Internal
 

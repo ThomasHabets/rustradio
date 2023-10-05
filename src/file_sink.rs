@@ -4,7 +4,7 @@ use std::io::Write;
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{get_input, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Error, Sample};
 
@@ -109,11 +109,11 @@ where
     fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let n = r.available(0);
         let mut v = Vec::with_capacity(T::size() * n);
-        get_input(r, 0).borrow().iter().for_each(|s: &T| {
+        r.get(0).borrow().iter().for_each(|s: &T| {
             v.extend(&s.serialize());
         });
         self.f.write_all(&v)?;
-        get_input(r, 0).borrow_mut().consume(n);
+        r.get(0).borrow_mut().consume(n);
         Ok(BlockRet::Ok)
     }
 }

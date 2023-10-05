@@ -7,7 +7,7 @@ use std::io::Read;
 use anyhow::Result;
 use log::warn;
 
-use crate::block::{get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Error, Sample};
 
@@ -110,7 +110,7 @@ where
         "TcpSource<T>"
     }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let o: Streamp<T> = get_output(w, 0);
+        let o: Streamp<T> = w.get(0);
         let size = T::size();
         let mut buffer = vec![0; o.borrow().capacity()];
         // TODO: this read blocks.

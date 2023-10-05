@@ -1,7 +1,7 @@
 //! Decode RTL-SDR's byte based format into Complex I/Q.
 use anyhow::Result;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Complex, Error, Float};
 
@@ -27,8 +27,8 @@ impl Block for RtlSdrDecode {
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let samples: usize = r.available(0) - r.available(0) % 2;
-        let input = get_input(r, 0);
-        let out = get_output(w, 0);
+        let input = r.get(0);
+        let out = w.get(0);
 
         // TODO: needless copy.
         let buf: Vec<u8> = input.borrow().data().clone().into();

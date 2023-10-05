@@ -1,7 +1,7 @@
 //! Generate the same value, forever.
 use anyhow::Result;
 
-use crate::block::{get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
@@ -27,9 +27,7 @@ where
     }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let n = w.capacity(0);
-        get_output(w, 0)
-            .borrow_mut()
-            .write_slice(&vec![self.val; n]);
+        w.get(0).borrow_mut().write_slice(&vec![self.val; n]);
         Ok(BlockRet::Ok)
     }
 }

@@ -18,9 +18,12 @@ use std::thread;
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::Error;
+
+const CHUNK_SIZE: usize = 8192;
+const MAX_CHUNKS_IN_FLIGHT: usize = 1000;
 
 impl From<rtlsdr::RTLSDRError> for Error {
     fn from(e: rtlsdr::RTLSDRError) -> Self {
@@ -72,7 +75,7 @@ impl RtlSdrSource {
             )));
         }
 
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(MAX_CHUNKS_IN_FLIGHT);
         thread::spawn(move || -> Result<(), Error> {
             let mut dev =
                 rtlsdr::open(index).map_err(|e| Error::new(&format!("RTL SDR open: {e}")))?;
@@ -90,8 +93,7 @@ impl RtlSdrSource {
             dev.reset_buffer()?;
             tx.send(vec![])?;
             loop {
-                let chunk_size = 8192;
-                let buf = dev.read_sync(chunk_size)?;
+                let buf = dev.read_sync(CHUNK_SIZE)?;
                 tx.send(buf).unwrap();
             }
         });
@@ -105,12 +107,13 @@ impl Block for RtlSdrSource {
         "RtlSdrSource"
     }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let buf = match self.rx.try_recv() {
-            Err(TryRecvError::Empty) => return Ok(BlockRet::Ok),
-            Ok(x) => x,
-            Err(other) => return Err(other.into()),
-        };
-        get_output(w, 0).borrow_mut().write_slice(&buf);
-        Ok(BlockRet::Ok)
+        match self.rx.try_recv() {
+            Err(TryRecvError::Empty) => Ok(BlockRet::Ok),
+            Err(other) => Err(other.into()),
+            Ok(buf) => {
+                w.get(0).borrow_mut().write_slice(&buf);
+                Ok(BlockRet::Ok)
+            }
+        }
     }
 }

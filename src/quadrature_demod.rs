@@ -1,4 +1,8 @@
 //! Quadrature demod, the core of an FM demodulator.
+/*
+TODO:
+* Look into https://mazzo.li/posts/vectorized-atan2.html
+*/
 use anyhow::Result;
 
 use crate::{map_block_convert_macro, Complex, Float};

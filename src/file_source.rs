@@ -3,7 +3,7 @@ use anyhow::Result;
 use log::{debug, warn};
 use std::io::Read;
 
-use crate::block::{get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Error, Sample};
 
@@ -112,7 +112,7 @@ where
             v.push(T::parse(&self.buf[i..i + size])?);
         }
         self.buf.drain(0..(samples * size));
-        get_output(w, 0).borrow_mut().write_slice(&v);
+        w.get(0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }

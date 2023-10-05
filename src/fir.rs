@@ -6,7 +6,7 @@ Use FftFilter if many taps are used, for better performance.
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
-use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Complex, Error, Float};
 
@@ -140,8 +140,8 @@ where
         "FirFilter"
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = get_input(r, 0);
-        let out = get_output(w, 0);
+        let input = r.get(0);
+        let out = w.get(0);
         let n = std::cmp::min(input.borrow().available(), out.borrow().capacity());
         if n > self.ntaps {
             // TODO: needless copy.

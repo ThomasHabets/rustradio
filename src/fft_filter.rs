@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use rustfft::FftPlanner;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, Streamp};
 use crate::{Complex, Error, Float};
 
@@ -206,7 +206,7 @@ impl Block for FftFilter {
         "FftFilter"
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = get_input(r, 0);
+        let input = r.get(0);
         loop {
             let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
             if add < self.nsamples {
@@ -214,7 +214,7 @@ impl Block for FftFilter {
             }
             self.buf.extend(input.borrow().iter().take(add));
             input.borrow_mut().consume(add);
-            let o: Streamp<Complex> = get_output(w, 0);
+            let o: Streamp<Complex> = w.get(0);
             if self.buf.len() == self.nsamples {
                 self.buf.resize(self.fftsize, Complex::default());
                 self.fft.process(&mut self.buf);

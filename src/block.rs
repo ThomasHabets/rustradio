@@ -7,32 +7,8 @@ thing, and you connect them together with streams to process the data.
 
 use anyhow::Result;
 
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::{InputStreams, OutputStreams};
 use crate::Error;
-
-/// Get input stream `n`, cast into the requested type.
-///
-/// Panics if the type is wrong.
-pub fn get_input<T>(r: &InputStreams, n: usize) -> Streamp<T>
-where
-    T: Copy,
-    Streamp<T>: From<StreamType>,
-{
-    let ret: Streamp<T> = r.get(n).into();
-    ret
-}
-
-/// Get output stream `n`, cast into the requested type.
-///
-/// Panics if the type is wrong.
-pub fn get_output<T>(w: &mut OutputStreams, n: usize) -> Streamp<T>
-where
-    T: Copy,
-    Streamp<T>: From<StreamType>,
-{
-    let output: Streamp<T> = w.get(n).into();
-    output
-}
 
 /** Return type for all blocks.
 
@@ -130,8 +106,8 @@ macro_rules! map_block_macro_v2 {
                 r: &mut $crate::stream::InputStreams,
                 w: &mut $crate::stream::OutputStreams,
             ) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let i = $crate::block::get_input(r, 0);
-                $crate::block::get_output(w, 0)
+                let i = r.get(0);
+                w.get(0)
                     .borrow_mut()
                     .write(i
                            .borrow()
@@ -168,8 +144,8 @@ macro_rules! map_block_convert_macro {
                 r: &mut $crate::stream::InputStreams,
                 w: &mut $crate::stream::OutputStreams,
             ) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let i = $crate::block::get_input(r, 0);
-                $crate::block::get_output(w, 0)
+                let i = r.get(0);
+                w.get(0)
                     .borrow_mut()
                     .write(i.borrow().iter().map(|x| self.process_one(*x)));
                 i.borrow_mut().clear();

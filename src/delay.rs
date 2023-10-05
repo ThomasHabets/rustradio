@@ -2,7 +2,7 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
@@ -115,21 +115,19 @@ where
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         if self.current_delay > 0 {
             let n = std::cmp::min(self.current_delay, w.capacity(0));
-            get_output(w, 0)
-                .borrow_mut()
-                .write_slice(&vec![T::default(); n]);
+            w.get(0).borrow_mut().write_slice(&vec![T::default(); n]);
             self.current_delay -= n;
         }
         {
             let n = std::cmp::min(r.available(0), self.skip);
-            get_input(r, 0).borrow_mut().consume(n);
+            r.get(0).borrow_mut().consume(n);
             debug!("========= skipped {n}");
             self.skip -= n;
         }
-        get_output(w, 0)
+        w.get(0)
             .borrow_mut()
-            .write(get_input(r, 0).borrow().iter().copied());
-        get_input(r, 0).borrow_mut().clear();
+            .write(r.get(0).borrow().iter().copied());
+        r.get(0).borrow_mut().clear();
         Ok(BlockRet::Ok)
     }
 }

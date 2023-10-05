@@ -183,7 +183,7 @@ impl Graph {
             }
             if last_loop_processed {
                 for n in 0..os.len() {
-                    if os.get(n).available() > 0 {
+                    if os.get_streamtype(n).available() > 0 {
                         done = false;
                     }
                 }

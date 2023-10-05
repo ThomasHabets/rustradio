@@ -7,7 +7,7 @@
 */
 use anyhow::Result;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Error, Float};
 
@@ -61,7 +61,7 @@ impl Block for SymbolSync {
         "SymbolSync"
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = get_input::<Float>(r, 0);
+        let input = r.get::<Float>(0);
         let mut v = Vec::new();
         let n = input.borrow().available();
         let mut pos = Float::default();
@@ -82,7 +82,7 @@ impl Block for SymbolSync {
             pos += self.clock;
         }
         input.borrow_mut().clear();
-        get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
+        w.get::<Float>(0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }
@@ -138,7 +138,7 @@ impl Block for ZeroCrossing {
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
-        let input = get_input(r, 0);
+        let input = r.get(0);
         for sample in input.borrow().iter() {
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 v.push(*sample);
@@ -162,7 +162,7 @@ impl Block for ZeroCrossing {
             }
         }
         input.borrow_mut().clear();
-        get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
+        w.get::<Float>(0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }

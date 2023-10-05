@@ -1,7 +1,7 @@
 //! Generate values from a fixed vector.
 use anyhow::Result;
 
-use crate::block::{get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
@@ -35,7 +35,7 @@ where
     }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let n = std::cmp::min(w.capacity(0), self.data.len() - self.pos);
-        get_output(w, 0)
+        w.get(0)
             .borrow_mut()
             .write_slice(&self.data[self.pos..(self.pos + n)]);
         self.pos += n;

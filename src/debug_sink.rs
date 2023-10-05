@@ -1,7 +1,7 @@
 //! Print values to stdout, for debugging.
 use anyhow::Result;
 
-use crate::block::{get_input, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
@@ -29,10 +29,10 @@ where
         "DebugSink"
     }
     fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        get_input(r, 0).borrow().iter().for_each(|s: &T| {
+        r.get(0).borrow().iter().for_each(|s: &T| {
             println!("debug: {:?}", s);
         });
-        get_input(r, 0).borrow_mut().clear();
+        r.get(0).borrow_mut().clear();
         Ok(BlockRet::Ok)
     }
 }

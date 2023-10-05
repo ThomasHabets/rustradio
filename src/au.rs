@@ -10,7 +10,7 @@ It's also much simpler.
 */
 use anyhow::Result;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Error, Float};
 
@@ -84,7 +84,7 @@ impl AuEncode {
 
         Self {
             header: Some(v),
-            encoding: encoding,
+            encoding,
         }
     }
 }
@@ -94,7 +94,7 @@ impl Block for AuEncode {
         "AuEncode"
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let o = get_output(w, 0);
+        let o = w.get(0);
         if let Some(h) = &self.header {
             o.borrow_mut().write_slice(h);
             self.header = None;
@@ -105,7 +105,7 @@ impl Block for AuEncode {
         let scale = S::MAX as Float;
 
         let mut v = Vec::with_capacity(r.available(0) * std::mem::size_of::<S>());
-        let i = get_input(r, 0);
+        let i = r.get(0);
         i.borrow().iter().for_each(|x: &Float| {
             v.extend(((*x * scale) as S).to_be_bytes());
         });

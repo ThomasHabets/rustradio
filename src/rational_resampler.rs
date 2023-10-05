@@ -4,7 +4,7 @@
 */
 use anyhow::Result;
 
-use crate::block::{get_input, get_output, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Complex, Error, Float};
 
@@ -88,27 +88,27 @@ impl Block for RationalResampler {
         if r.is_complex(0) {
             let mut v = Vec::new();
             self.counter -= self.deci;
-            for s in get_input(r, 0).borrow().iter() {
+            for s in r.get(0).borrow().iter() {
                 self.counter += self.interp;
                 while self.counter >= 0 {
                     v.push(*s);
                     self.counter -= self.deci;
                 }
             }
-            get_input::<Complex>(r, 0).borrow_mut().clear();
-            get_output::<Complex>(w, 0).borrow_mut().write_slice(&v);
+            r.get::<Complex>(0).borrow_mut().clear();
+            w.get::<Complex>(0).borrow_mut().write_slice(&v);
         } else if r.is_float(0) {
             let mut v = Vec::new();
             self.counter -= self.deci;
-            for s in get_input(r, 0).borrow().iter() {
+            for s in r.get(0).borrow().iter() {
                 self.counter += self.interp;
                 while self.counter >= 0 {
                     v.push(*s);
                     self.counter -= self.deci;
                 }
             }
-            get_input::<Float>(r, 0).borrow_mut().clear();
-            get_output::<Float>(w, 0).borrow_mut().write_slice(&v);
+            r.get::<Float>(0).borrow_mut().clear();
+            w.get::<Float>(0).borrow_mut().write_slice(&v);
         } else {
             panic!("Other types not allowed");
         }

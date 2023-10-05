@@ -1,7 +1,7 @@
 //! Discard anything written to this block.
 use anyhow::Result;
 
-use crate::block::{get_input, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
@@ -34,7 +34,7 @@ where
         "NullSink"
     }
     fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        get_input::<T>(r, 0).borrow_mut().clear();
+        r.get::<T>(0).borrow_mut().clear();
         Ok(BlockRet::Ok)
     }
 }
