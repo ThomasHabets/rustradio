@@ -100,6 +100,7 @@ use anyhow::Result;
 
 // Blocks.
 pub mod add_const;
+pub mod au;
 pub mod binary_slicer;
 pub mod complex_to_mag2;
 pub mod constant_source;

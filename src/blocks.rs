@@ -1,5 +1,6 @@
 //! Convenient mod collecting all standard library blocks for import.
 pub use crate::add_const::AddConst;
+pub use crate::au::AuEncode;
 pub use crate::binary_slicer::BinarySlicer;
 pub use crate::complex_to_mag2::ComplexToMag2;
 pub use crate::constant_source::ConstantSource;
