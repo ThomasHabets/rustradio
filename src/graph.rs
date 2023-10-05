@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use anyhow::Result;
-use log::debug;
+use log::{debug, info};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType};
@@ -45,6 +45,7 @@ g.run()?;
 pub struct Graph {
     blocks: Vec<Box<dyn Block>>,
     streams: Vec<StreamType>,
+    times: Vec<std::time::Duration>,
 
     outputs: HashMap<BlockHandle, Vec<(Port, StreamHandle)>>,
     inputs: HashMap<BlockHandle, Vec<(Port, StreamHandle)>>,
@@ -58,6 +59,7 @@ impl Graph {
             outputs: HashMap::new(),
             inputs: HashMap::new(),
             streams: Vec::new(),
+            times: Vec::new(),
         }
     }
     /// Add a block to the graph, returning a handle to it.
@@ -93,6 +95,8 @@ impl Graph {
 
     /// Run the graph, until there's no more data to process.
     pub fn run(&mut self) -> Result<()> {
+        self.times
+            .resize(self.blocks.len(), std::time::Duration::default());
         for input in self.inputs.values_mut() {
             input.sort();
         }
@@ -130,6 +134,7 @@ impl Graph {
             oss.push(os);
         }
         // TODO: this ending criteria is ugly.
+        let st = Instant::now();
         let mut last_loop_processed = true;
         loop {
             let (processed, done) = self.run_one(&mut iss, &mut oss, last_loop_processed)?;
@@ -138,6 +143,38 @@ impl Graph {
             }
             last_loop_processed = processed > 0;
         }
+        let total = self
+            .times
+            .iter()
+            .cloned()
+            .sum::<std::time::Duration>()
+            .as_secs_f64();
+        let elapsed = st.elapsed().as_secs_f64();
+        // unwrap: can only fail if block list is empty.
+        let ml = self
+            .blocks
+            .iter()
+            .map(|b| b.block_name().len())
+            .max()
+            .unwrap();
+        info!("{:width$}   Seconds  Percent", "Block name", width = ml);
+        info!("-----------------------------------------");
+        for (n, b) in self.blocks.iter().enumerate() {
+            info!(
+                "{:<width$} {:9.3} {:>7.2}%",
+                b.block_name(),
+                self.times[n].as_secs_f32(),
+                100.0 * self.times[n].as_secs_f64() / total,
+                width = ml,
+            );
+        }
+        info!(
+            "Overhead          {:9.3} {:>7.2}%",
+            elapsed - total,
+            (elapsed - total) / total
+        );
+        info!("-----------------------------------------");
+        info!("Total seconds:    {:9.3}", elapsed);
         Ok(())
     }
 
@@ -166,6 +203,7 @@ impl Graph {
             let before_outsamples = os.sum_available();
 
             let eof = matches!(b.work(is, os)?, BlockRet::EOF);
+            self.times[n] += st.elapsed();
             processed += insamples - is.sum_available();
             processed += os.sum_available() - before_outsamples;
             let outsamples = os.sum_available();
