@@ -1,3 +1,6 @@
+/*!
+Example broadcast FM receiver, sending output to an Au file.
+ */
 use anyhow::Result;
 use structopt::StructOpt;
 
@@ -16,9 +19,13 @@ struct Opt {
     #[structopt(short = "o")]
     output: String,
 
+    // Unused if rtlsdr feature not enabled.
+    #[allow(dead_code)]
     #[structopt(long = "freq", default_value = "100000000")]
     freq: u64,
 
+    // Unused if rtlsdr feature not enabled.
+    #[allow(dead_code)]
     #[structopt(long = "gain", default_value = "20")]
     gain: i32,
 
@@ -46,15 +53,24 @@ fn main() -> Result<()> {
     let prev = if let Some(filename) = opt.filename {
         g.add(Box::new(FileSource::<Complex>::new(&filename, false)?))
     } else {
-        // RTL SDR source.
-        let src = g.add(Box::new(RtlSdrSource::new(
-            opt.freq,
-            samp_rate as u32,
-            opt.gain,
-        )?));
-        let dec = g.add(Box::new(RtlSdrDecode::new()));
-        g.connect(StreamType::new_u8(), src, 0, dec, 0);
-        dec
+        if !cfg!(feature = "rtlsdr") {
+            panic!("RTL SDR feature not enabled")
+        } else {
+            // RTL SDR source.
+            #[cfg(feature = "rtlsdr")]
+            {
+                let src = g.add(Box::new(RtlSdrSource::new(
+                    opt.freq,
+                    samp_rate as u32,
+                    opt.gain,
+                )?));
+                let dec = g.add(Box::new(RtlSdrDecode::new()));
+                g.connect(StreamType::new_u8(), src, 0, dec, 0);
+                dec
+            }
+            #[cfg(not(feature = "rtlsdr"))]
+            panic!("can't happen")
+        }
     };
 
     // Filter.
