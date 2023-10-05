@@ -8,7 +8,7 @@ use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
 use rustradio::stream::StreamType;
-use rustradio::Complex;
+use rustradio::{Complex, Float};
 
 #[derive(StructOpt, Debug)]
 #[structopt()]
@@ -34,6 +34,9 @@ struct Opt {
 
     #[structopt(long = "no-audio-filter")]
     no_audio_filter: bool,
+
+    #[structopt(long = "volume", default_value = "1.0")]
+    volume: Float,
 }
 
 fn main() -> Result<()> {
@@ -112,13 +115,17 @@ fn main() -> Result<()> {
     let _samp_rate = new_samp_rate;
     g.connect(StreamType::new_float(), prev, 0, audio_resamp, 0);
 
+    // Change volume.
+    let volume = g.add(Box::new(MultiplyConst::new(opt.volume)));
+    g.connect(StreamType::new_float(), audio_resamp, 0, volume, 0);
+
     // Convert to .au.
     let au = g.add(Box::new(AuEncode::new(
         rustradio::au::Encoding::PCM16,
         48000,
         1,
     )));
-    g.connect(StreamType::new_float(), audio_resamp, 0, au, 0);
+    g.connect(StreamType::new_float(), volume, 0, au, 0);
 
     // Save to file.
     let sink = g.add(Box::new(FileSink::<u8>::new(&opt.output, Mode::Overwrite)?));
