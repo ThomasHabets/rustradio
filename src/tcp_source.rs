@@ -11,6 +11,65 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Error, Sample};
 
+/// TCP Source, connecting to a server and streaming the data.
+pub struct TcpSource<T> {
+    stream: std::net::TcpStream,
+    buf: Vec<u8>,
+    dummy: std::marker::PhantomData<T>,
+}
+
+impl<T: Default> TcpSource<T> {
+    /// Create new TCP source block.
+    pub fn new(addr: &str, port: u16) -> Result<Self> {
+        Ok(Self {
+            stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
+            buf: Vec::new(),
+            dummy: std::marker::PhantomData,
+        })
+    }
+}
+
+impl<T> Block for TcpSource<T>
+where
+    T: Sample<Type = T> + Copy + std::fmt::Debug,
+    Streamp<T>: From<StreamType>,
+{
+    fn block_name(&self) -> &'static str {
+        "TcpSource<T>"
+    }
+    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let o: Streamp<T> = w.get(0);
+        let size = T::size();
+        let mut buffer = vec![0; o.borrow().capacity()];
+        // TODO: this read blocks.
+        let n = self
+            .stream
+            .read(&mut buffer[..])
+            .map_err(|e| -> anyhow::Error { e.into() })?;
+        if n == 0 {
+            warn!("TCP connection closed?");
+            return Ok(BlockRet::EOF);
+        }
+        let mut v = Vec::new();
+        v.reserve(n / size + 1);
+
+        let mut steal = 0;
+        if !self.buf.is_empty() {
+            steal = size - self.buf.len();
+            self.buf.extend(&buffer[0..steal]);
+            v.push(T::parse(&self.buf)?);
+            self.buf.clear();
+        }
+        let remaining = (n - steal) % size;
+        for pos in (steal..(n - remaining)).step_by(size) {
+            v.push(T::parse(&buffer[pos..pos + size])?);
+        }
+        self.buf.extend(&buffer[n - remaining..n]);
+        o.borrow_mut().write(v.into_iter());
+        Ok(BlockRet::Ok)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,64 +139,5 @@ mod tests {
         );
 
         Ok(())
-    }
-}
-
-/// TCP Source, connecting to a server and streaming the data.
-pub struct TcpSource<T> {
-    stream: std::net::TcpStream,
-    buf: Vec<u8>,
-    dummy: std::marker::PhantomData<T>,
-}
-
-impl<T: Default> TcpSource<T> {
-    /// Create new TCP source block.
-    pub fn new(addr: &str, port: u16) -> Result<Self> {
-        Ok(Self {
-            stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
-            buf: Vec::new(),
-            dummy: std::marker::PhantomData,
-        })
-    }
-}
-
-impl<T> Block for TcpSource<T>
-where
-    T: Sample<Type = T> + Copy + std::fmt::Debug,
-    Streamp<T>: From<StreamType>,
-{
-    fn block_name(&self) -> &'static str {
-        "TcpSource<T>"
-    }
-    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let o: Streamp<T> = w.get(0);
-        let size = T::size();
-        let mut buffer = vec![0; o.borrow().capacity()];
-        // TODO: this read blocks.
-        let n = self
-            .stream
-            .read(&mut buffer[..])
-            .map_err(|e| -> anyhow::Error { e.into() })?;
-        if n == 0 {
-            warn!("TCP connection closed?");
-            return Ok(BlockRet::EOF);
-        }
-        let mut v = Vec::new();
-        v.reserve(n / size + 1);
-
-        let mut steal = 0;
-        if !self.buf.is_empty() {
-            steal = size - self.buf.len();
-            self.buf.extend(&buffer[0..steal]);
-            v.push(T::parse(&self.buf)?);
-            self.buf.clear();
-        }
-        let remaining = (n - steal) % size;
-        for pos in (steal..(n - remaining)).step_by(size) {
-            v.push(T::parse(&buffer[pos..pos + size])?);
-        }
-        self.buf.extend(&buffer[n - remaining..n]);
-        o.borrow_mut().write(v.into_iter());
-        Ok(BlockRet::Ok)
     }
 }

@@ -6,6 +6,67 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::Error;
 
+/// Delay stream. Good for syncing up streams.
+pub struct Delay<T> {
+    delay: usize,
+    current_delay: usize,
+    skip: usize,
+    dummy: std::marker::PhantomData<T>,
+}
+
+impl<T> Delay<T> {
+    /// Create new Delay block.
+    pub fn new(delay: usize) -> Self {
+        Self {
+            delay,
+            current_delay: delay,
+            skip: 0,
+            dummy: std::marker::PhantomData,
+        }
+    }
+
+    /// Change the delay.
+    pub fn set_delay(&mut self, delay: usize) {
+        if delay > self.delay {
+            self.current_delay = delay - self.delay;
+        } else {
+            let cdskip = std::cmp::min(self.current_delay, delay);
+            self.current_delay -= cdskip;
+            self.skip = (self.delay - delay) - cdskip;
+            eprintln!("cdskip {cdskip} for {delay}");
+        }
+        self.delay = delay;
+    }
+}
+
+impl<T> Block for Delay<T>
+where
+    T: Copy + Default,
+    Streamp<T>: From<StreamType>,
+{
+    fn block_name(&self) -> &'static str {
+        "Delay"
+    }
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        if self.current_delay > 0 {
+            let n = std::cmp::min(self.current_delay, w.capacity(0));
+            w.get(0).borrow_mut().write_slice(&vec![T::default(); n]);
+            self.current_delay -= n;
+        }
+        {
+            let n = std::cmp::min(r.available(0), self.skip);
+            r.get(0).borrow_mut().consume(n);
+            debug!("========= skipped {n}");
+            self.skip -= n;
+        }
+        w.get(0)
+            .borrow_mut()
+            .write(r.get(0).borrow().iter().copied());
+        r.get(0).borrow_mut().clear();
+        Ok(BlockRet::Ok)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,66 +129,5 @@ mod tests {
         let res: Streamp<u32> = os.get(0).into();
         assert_eq!(*res.borrow().data(), vec![0u32, 1, 2, 0, 3, 4, 7]);
         Ok(())
-    }
-}
-
-/// Delay stream. Good for syncing up streams.
-pub struct Delay<T> {
-    delay: usize,
-    current_delay: usize,
-    skip: usize,
-    dummy: std::marker::PhantomData<T>,
-}
-
-impl<T> Delay<T> {
-    /// Create new Delay block.
-    pub fn new(delay: usize) -> Self {
-        Self {
-            delay,
-            current_delay: delay,
-            skip: 0,
-            dummy: std::marker::PhantomData,
-        }
-    }
-
-    /// Change the delay.
-    pub fn set_delay(&mut self, delay: usize) {
-        if delay > self.delay {
-            self.current_delay = delay - self.delay;
-        } else {
-            let cdskip = std::cmp::min(self.current_delay, delay);
-            self.current_delay -= cdskip;
-            self.skip = (self.delay - delay) - cdskip;
-            eprintln!("cdskip {cdskip} for {delay}");
-        }
-        self.delay = delay;
-    }
-}
-
-impl<T> Block for Delay<T>
-where
-    T: Copy + Default,
-    Streamp<T>: From<StreamType>,
-{
-    fn block_name(&self) -> &'static str {
-        "Delay"
-    }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        if self.current_delay > 0 {
-            let n = std::cmp::min(self.current_delay, w.capacity(0));
-            w.get(0).borrow_mut().write_slice(&vec![T::default(); n]);
-            self.current_delay -= n;
-        }
-        {
-            let n = std::cmp::min(r.available(0), self.skip);
-            r.get(0).borrow_mut().consume(n);
-            debug!("========= skipped {n}");
-            self.skip -= n;
-        }
-        w.get(0)
-            .borrow_mut()
-            .write(r.get(0).borrow().iter().copied());
-        r.get(0).borrow_mut().clear();
-        Ok(BlockRet::Ok)
     }
 }

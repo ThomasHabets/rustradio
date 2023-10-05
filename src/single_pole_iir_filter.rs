@@ -3,57 +3,6 @@ use anyhow::Result;
 
 use crate::{map_block_macro_v2, Float};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::block::Block;
-    use crate::stream::{InputStreams, OutputStreams, StreamType};
-    use crate::{Complex, Error, Float};
-
-    #[test]
-    fn iir_ff() -> Result<()> {
-        // TODO: create an actual test.
-        let mut iir =
-            SinglePoleIIRFilter::<Float>::new(0.2).ok_or(Error::new("alpha out of range"))?;
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_float(&[0.1, 0.2]));
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_float());
-        iir.work(&mut is, &mut os)?;
-        Ok(())
-    }
-
-    #[test]
-    fn iir_cc() -> Result<()> {
-        // TODO: create an actual test.
-        let mut iir =
-            SinglePoleIIRFilter::<Complex>::new(0.2).ok_or(Error::new("alpha out of range"))?;
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_complex(&[
-            Complex::new(1.0, 0.1),
-            Complex::default(),
-        ]));
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_complex());
-        iir.work(&mut is, &mut os)?;
-        Ok(())
-    }
-
-    #[test]
-    fn reject_bad_alpha() -> Result<()> {
-        SinglePoleIIRFilter::<Float>::new(0.0).ok_or(Error::new("should accept 0.0"))?;
-        SinglePoleIIRFilter::<Float>::new(0.1).ok_or(Error::new("should accept 0.1"))?;
-        SinglePoleIIRFilter::<Float>::new(1.0).ok_or(Error::new("should accept 1.0"))?;
-        if SinglePoleIIRFilter::<Float>::new(-0.1).is_some() {
-            return Err(Error::new("should not accept -0.1").into());
-        }
-        if SinglePoleIIRFilter::<Float>::new(1.1).is_some() {
-            return Err(Error::new("should not accept 1.1").into());
-        }
-        Ok(())
-    }
-}
-
 struct SinglePoleIIR<Tout> {
     alpha: Float, // TODO: GNURadio uses double
     one_minus_alpha: Float,
@@ -126,3 +75,54 @@ map_block_macro_v2![
     std::ops::Mul<Float, Output = T>,
     std::ops::Add<T, Output = T>
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+    use crate::stream::{InputStreams, OutputStreams, StreamType};
+    use crate::{Complex, Error, Float};
+
+    #[test]
+    fn iir_ff() -> Result<()> {
+        // TODO: create an actual test.
+        let mut iir =
+            SinglePoleIIRFilter::<Float>::new(0.2).ok_or(Error::new("alpha out of range"))?;
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::from_float(&[0.1, 0.2]));
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_float());
+        iir.work(&mut is, &mut os)?;
+        Ok(())
+    }
+
+    #[test]
+    fn iir_cc() -> Result<()> {
+        // TODO: create an actual test.
+        let mut iir =
+            SinglePoleIIRFilter::<Complex>::new(0.2).ok_or(Error::new("alpha out of range"))?;
+        let mut is = InputStreams::new();
+        is.add_stream(StreamType::from_complex(&[
+            Complex::new(1.0, 0.1),
+            Complex::default(),
+        ]));
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_complex());
+        iir.work(&mut is, &mut os)?;
+        Ok(())
+    }
+
+    #[test]
+    fn reject_bad_alpha() -> Result<()> {
+        SinglePoleIIRFilter::<Float>::new(0.0).ok_or(Error::new("should accept 0.0"))?;
+        SinglePoleIIRFilter::<Float>::new(0.1).ok_or(Error::new("should accept 0.1"))?;
+        SinglePoleIIRFilter::<Float>::new(1.0).ok_or(Error::new("should accept 1.0"))?;
+        if SinglePoleIIRFilter::<Float>::new(-0.1).is_some() {
+            return Err(Error::new("should not accept -0.1").into());
+        }
+        if SinglePoleIIRFilter::<Float>::new(1.1).is_some() {
+            return Err(Error::new("should not accept 1.1").into());
+        }
+        Ok(())
+    }
+}

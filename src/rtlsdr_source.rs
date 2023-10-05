@@ -48,9 +48,6 @@ impl<T> From<SendError<T>> for Error {
     }
 }
 
-#[cfg(test)]
-mod tests {}
-
 /// RTL SDR Source block.
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,

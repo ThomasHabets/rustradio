@@ -10,76 +10,6 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Complex, Error, Float};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::tests::assert_almost_equal_complex;
-    use crate::Complex;
-
-    #[test]
-    fn test_complex() {
-        let input = vec![
-            Complex::new(1.0, 0.0),
-            Complex::new(2.0, 0.0),
-            Complex::new(3.0, 0.2),
-            Complex::new(4.1, 0.0),
-            Complex::new(5.0, 0.0),
-            Complex::new(6.0, 0.2),
-        ];
-        let taps = vec![
-            Complex::new(0.1, 0.0),
-            Complex::new(1.0, 0.0),
-            Complex::new(0.0, 0.2),
-        ];
-        let filter = FIR::new(&taps);
-        assert_almost_equal_complex(
-            &filter.filter_n(&input),
-            &[
-                Complex::new(2.3, 0.22),
-                Complex::new(3.41, 0.6),
-                Complex::new(4.56, 0.6),
-                Complex::new(5.6, 0.84),
-            ],
-        );
-    }
-
-    #[test]
-    fn test_filter_generator() {
-        let taps = low_pass_complex(10000.0, 1000.0, 1000.0);
-        assert_eq!(taps.len(), 25);
-        assert_eq!(
-            taps,
-            &[
-                Complex::new(0.002010403, 0.0),
-                Complex::new(0.0016210203, 0.0),
-                Complex::new(7.851862e-10, 0.0),
-                Complex::new(-0.0044467063, 0.0),
-                Complex::new(-0.011685465, 0.0),
-                Complex::new(-0.018134259, 0.0),
-                Complex::new(-0.016773716, 0.0),
-                Complex::new(-3.6538055e-9, 0.0),
-                Complex::new(0.0358771, 0.0),
-                Complex::new(0.08697697, 0.0),
-                Complex::new(0.14148787, 0.0),
-                Complex::new(0.18345332, 0.0),
-                Complex::new(0.19922684, 0.0),
-                Complex::new(0.1834533, 0.0),
-                Complex::new(0.14148785, 0.0),
-                Complex::new(0.08697697, 0.0),
-                Complex::new(0.035877097, 0.0),
-                Complex::new(-3.6538053e-9, 0.0),
-                Complex::new(-0.016773716, 0.0),
-                Complex::new(-0.018134257, 0.0),
-                Complex::new(-0.011685458, 0.0),
-                Complex::new(-0.0044467044, 0.0),
-                Complex::new(7.851859e-10, 0.0),
-                Complex::new(0.0016210207, 0.0),
-                Complex::new(0.002010403, 0.0)
-            ]
-        );
-    }
-}
-
 /// Finite impulse response filter.
 pub struct FIR<T> {
     taps: Vec<T>,
@@ -205,4 +135,74 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
         gain / fmax
     };
     taps.into_iter().map(|t| t * gain).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::assert_almost_equal_complex;
+    use crate::Complex;
+
+    #[test]
+    fn test_complex() {
+        let input = vec![
+            Complex::new(1.0, 0.0),
+            Complex::new(2.0, 0.0),
+            Complex::new(3.0, 0.2),
+            Complex::new(4.1, 0.0),
+            Complex::new(5.0, 0.0),
+            Complex::new(6.0, 0.2),
+        ];
+        let taps = vec![
+            Complex::new(0.1, 0.0),
+            Complex::new(1.0, 0.0),
+            Complex::new(0.0, 0.2),
+        ];
+        let filter = FIR::new(&taps);
+        assert_almost_equal_complex(
+            &filter.filter_n(&input),
+            &[
+                Complex::new(2.3, 0.22),
+                Complex::new(3.41, 0.6),
+                Complex::new(4.56, 0.6),
+                Complex::new(5.6, 0.84),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_filter_generator() {
+        let taps = low_pass_complex(10000.0, 1000.0, 1000.0);
+        assert_eq!(taps.len(), 25);
+        assert_eq!(
+            taps,
+            &[
+                Complex::new(0.002010403, 0.0),
+                Complex::new(0.0016210203, 0.0),
+                Complex::new(7.851862e-10, 0.0),
+                Complex::new(-0.0044467063, 0.0),
+                Complex::new(-0.011685465, 0.0),
+                Complex::new(-0.018134259, 0.0),
+                Complex::new(-0.016773716, 0.0),
+                Complex::new(-3.6538055e-9, 0.0),
+                Complex::new(0.0358771, 0.0),
+                Complex::new(0.08697697, 0.0),
+                Complex::new(0.14148787, 0.0),
+                Complex::new(0.18345332, 0.0),
+                Complex::new(0.19922684, 0.0),
+                Complex::new(0.1834533, 0.0),
+                Complex::new(0.14148785, 0.0),
+                Complex::new(0.08697697, 0.0),
+                Complex::new(0.035877097, 0.0),
+                Complex::new(-3.6538053e-9, 0.0),
+                Complex::new(-0.016773716, 0.0),
+                Complex::new(-0.018134257, 0.0),
+                Complex::new(-0.011685458, 0.0),
+                Complex::new(-0.0044467044, 0.0),
+                Complex::new(7.851859e-10, 0.0),
+                Complex::new(0.0016210207, 0.0),
+                Complex::new(0.002010403, 0.0)
+            ]
+        );
+    }
 }

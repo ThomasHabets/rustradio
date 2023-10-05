@@ -8,45 +8,6 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Complex, Error, Float};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::stream::{StreamType, Streamp};
-    use crate::Float;
-
-    fn runtest(inputsize: usize, interp: usize, deci: usize, finalcount: usize) -> Result<()> {
-        let input: Vec<_> = (0..inputsize)
-            .map(|i| Complex::new(i as Float, 0.0))
-            .collect();
-        let mut is = InputStreams::new();
-        let mut os = OutputStreams::new();
-        is.add_stream(StreamType::from_complex(&input));
-        os.add_stream(StreamType::new_complex());
-        let mut resamp = RationalResampler::new(interp, deci)?;
-        resamp.work(&mut is, &mut os)?;
-        let res: Streamp<Complex> = os.get(0).into();
-        assert_eq!(
-            finalcount,
-            res.borrow().available(),
-            "{:?}",
-            res.borrow().data()
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn foo() -> Result<()> {
-        runtest(10, 1, 1, 10)?;
-        runtest(10, 1, 2, 5)?;
-        runtest(10, 2, 1, 20)?;
-        runtest(100, 2, 3, 66)?;
-        runtest(100, 3, 2, 150)?;
-        runtest(100, 300, 200, 150)?;
-        runtest(100, 200000, 1024000, 19)?;
-        Ok(())
-    }
-}
-
 fn gcd(mut a: usize, mut b: usize) -> usize {
     while b != 0 {
         let temp = b;
@@ -113,5 +74,44 @@ impl Block for RationalResampler {
             panic!("Other types not allowed");
         }
         Ok(BlockRet::Ok)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stream::{StreamType, Streamp};
+    use crate::Float;
+
+    fn runtest(inputsize: usize, interp: usize, deci: usize, finalcount: usize) -> Result<()> {
+        let input: Vec<_> = (0..inputsize)
+            .map(|i| Complex::new(i as Float, 0.0))
+            .collect();
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        is.add_stream(StreamType::from_complex(&input));
+        os.add_stream(StreamType::new_complex());
+        let mut resamp = RationalResampler::new(interp, deci)?;
+        resamp.work(&mut is, &mut os)?;
+        let res: Streamp<Complex> = os.get(0).into();
+        assert_eq!(
+            finalcount,
+            res.borrow().available(),
+            "{:?}",
+            res.borrow().data()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn foo() -> Result<()> {
+        runtest(10, 1, 1, 10)?;
+        runtest(10, 1, 2, 5)?;
+        runtest(10, 2, 1, 20)?;
+        runtest(100, 2, 3, 66)?;
+        runtest(100, 3, 2, 150)?;
+        runtest(100, 300, 200, 150)?;
+        runtest(100, 200000, 1024000, 19)?;
+        Ok(())
     }
 }

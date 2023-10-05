@@ -7,60 +7,6 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Error, Sample};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{Complex, Float};
-
-    #[test]
-    fn source_f32() -> Result<()> {
-        let tmpd = tempfile::tempdir()?;
-        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-
-        std::fs::write(
-            &tmpfn,
-            vec![
-                0, 0, 128, 63, 0, 0, 64, 64, 195, 245, 72, 64, 195, 245, 72, 192,
-            ],
-        )?;
-
-        let mut src = FileSource::<Float>::new(&tmpfn, false)?;
-        let mut is = InputStreams::new();
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_float());
-        src.work(&mut is, &mut os)?;
-
-        let res: Streamp<Float> = os.get(0).into();
-        #[allow(clippy::approx_constant)]
-        let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
-        assert_eq!(*res.borrow().data(), correct);
-        Ok(())
-    }
-
-    #[test]
-    fn source_c32() -> Result<()> {
-        let tmpd = tempfile::tempdir()?;
-        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-
-        std::fs::write(
-            &tmpfn,
-            vec![0, 0, 0, 0, 0, 0, 0, 0, 195, 245, 72, 64, 205, 204, 44, 192],
-        )?;
-
-        let mut src = FileSource::<Complex>::new(&tmpfn, false)?;
-        let mut is = InputStreams::new();
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_complex());
-        src.work(&mut is, &mut os)?;
-
-        let res: Streamp<Complex> = os.get(0).into();
-        #[allow(clippy::approx_constant)]
-        let correct = vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)];
-        assert_eq!(*res.borrow().data(), correct);
-        Ok(())
-    }
-}
-
 /// Read stream from raw file.
 pub struct FileSource<T> {
     filename: String,
@@ -114,5 +60,59 @@ where
         self.buf.drain(0..(samples * size));
         w.get(0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Complex, Float};
+
+    #[test]
+    fn source_f32() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+
+        std::fs::write(
+            &tmpfn,
+            vec![
+                0, 0, 128, 63, 0, 0, 64, 64, 195, 245, 72, 64, 195, 245, 72, 192,
+            ],
+        )?;
+
+        let mut src = FileSource::<Float>::new(&tmpfn, false)?;
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_float());
+        src.work(&mut is, &mut os)?;
+
+        let res: Streamp<Float> = os.get(0).into();
+        #[allow(clippy::approx_constant)]
+        let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
+        assert_eq!(*res.borrow().data(), correct);
+        Ok(())
+    }
+
+    #[test]
+    fn source_c32() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+
+        std::fs::write(
+            &tmpfn,
+            vec![0, 0, 0, 0, 0, 0, 0, 0, 195, 245, 72, 64, 205, 204, 44, 192],
+        )?;
+
+        let mut src = FileSource::<Complex>::new(&tmpfn, false)?;
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        os.add_stream(StreamType::new_complex());
+        src.work(&mut is, &mut os)?;
+
+        let res: Streamp<Complex> = os.get(0).into();
+        #[allow(clippy::approx_constant)]
+        let correct = vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)];
+        assert_eq!(*res.borrow().data(), correct);
+        Ok(())
     }
 }

@@ -8,6 +8,108 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, Streamp};
 use crate::{Complex, Error, Float};
 
+/// FFT filter. Like a FIR filter, but more efficient when there are many taps.
+pub struct FftFilter {
+    buf: Vec<Complex>,
+    taps_fft: Vec<Complex>,
+    nsamples: usize,
+    fftsize: usize,
+    tail: Vec<Complex>,
+    fft: Arc<dyn rustfft::Fft<Float>>,
+    ifft: Arc<dyn rustfft::Fft<Float>>,
+}
+
+impl FftFilter {
+    fn calc_fftsize(from: usize) -> usize {
+        let mut n = 1;
+        while n < from {
+            n <<= 1;
+        }
+        2 * n
+    }
+
+    /// Create new FftFilter, given filter taps.
+    pub fn new(taps: &[Complex]) -> Self {
+        let ntaps = taps.len();
+        let mut taps_fft = taps.to_vec();
+        let fftsize = Self::calc_fftsize(ntaps);
+        let nsamples = fftsize - taps_fft.len();
+        taps_fft.resize(fftsize, Complex::default());
+
+        let mut tail = Vec::new();
+        tail.resize(ntaps, Complex::default());
+
+        let mut planner = FftPlanner::new();
+        let fft = planner.plan_fft_forward(fftsize);
+        let ifft = planner.plan_fft_inverse(fftsize);
+
+        fft.process(&mut taps_fft);
+
+        // Normalization is actually the square root of this
+        // expression, but since we'll do two FFTs we can just skip
+        // the square root here and do it just once.
+        let f = 1.0 / taps_fft.len() as Float;
+        taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
+
+        let mut buf = Vec::new();
+        buf.reserve(fftsize);
+        Self {
+            fftsize,
+            taps_fft,
+            tail,
+            fft,
+            ifft,
+            buf,
+            nsamples,
+        }
+    }
+}
+
+impl Block for FftFilter {
+    fn block_name(&self) -> &'static str {
+        "FftFilter"
+    }
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let input = r.get(0);
+        loop {
+            let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
+            if add < self.nsamples {
+                break;
+            }
+            self.buf.extend(input.borrow().iter().take(add));
+            input.borrow_mut().consume(add);
+            let o: Streamp<Complex> = w.get(0);
+            if self.buf.len() == self.nsamples {
+                self.buf.resize(self.fftsize, Complex::default());
+                self.fft.process(&mut self.buf);
+                let mut filtered: Vec<Complex> = self
+                    .buf
+                    .iter()
+                    .zip(self.taps_fft.iter())
+                    .map(|(x, y)| x * y)
+                    .collect::<Vec<Complex>>();
+                self.ifft.process(&mut filtered);
+
+                // Add overlapping tail.
+                for (i, t) in self.tail.iter().enumerate() {
+                    filtered[i] += t;
+                }
+
+                // Output.
+                o.borrow_mut().write_slice(&filtered[..self.nsamples]);
+
+                // Stash tail.
+                for i in 0..self.tail.len() {
+                    self.tail[i] = filtered[self.nsamples + i];
+                }
+
+                self.buf.clear();
+            }
+        }
+        Ok(BlockRet::Ok)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,107 +243,5 @@ mod tests {
         }
         assert_eq!(buf.len(), buf_fft.len());
         assert_almost_equal_complex(&buf_fft, &buf);
-    }
-}
-
-/// FFT filter. Like a FIR filter, but more efficient when there are many taps.
-pub struct FftFilter {
-    buf: Vec<Complex>,
-    taps_fft: Vec<Complex>,
-    nsamples: usize,
-    fftsize: usize,
-    tail: Vec<Complex>,
-    fft: Arc<dyn rustfft::Fft<Float>>,
-    ifft: Arc<dyn rustfft::Fft<Float>>,
-}
-
-impl FftFilter {
-    fn calc_fftsize(from: usize) -> usize {
-        let mut n = 1;
-        while n < from {
-            n <<= 1;
-        }
-        2 * n
-    }
-
-    /// Create new FftFilter, given filter taps.
-    pub fn new(taps: &[Complex]) -> Self {
-        let ntaps = taps.len();
-        let mut taps_fft = taps.to_vec();
-        let fftsize = Self::calc_fftsize(ntaps);
-        let nsamples = fftsize - taps_fft.len();
-        taps_fft.resize(fftsize, Complex::default());
-
-        let mut tail = Vec::new();
-        tail.resize(ntaps, Complex::default());
-
-        let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(fftsize);
-        let ifft = planner.plan_fft_inverse(fftsize);
-
-        fft.process(&mut taps_fft);
-
-        // Normalization is actually the square root of this
-        // expression, but since we'll do two FFTs we can just skip
-        // the square root here and do it just once.
-        let f = 1.0 / taps_fft.len() as Float;
-        taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
-
-        let mut buf = Vec::new();
-        buf.reserve(fftsize);
-        Self {
-            fftsize,
-            taps_fft,
-            tail,
-            fft,
-            ifft,
-            buf,
-            nsamples,
-        }
-    }
-}
-
-impl Block for FftFilter {
-    fn block_name(&self) -> &'static str {
-        "FftFilter"
-    }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = r.get(0);
-        loop {
-            let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
-            if add < self.nsamples {
-                break;
-            }
-            self.buf.extend(input.borrow().iter().take(add));
-            input.borrow_mut().consume(add);
-            let o: Streamp<Complex> = w.get(0);
-            if self.buf.len() == self.nsamples {
-                self.buf.resize(self.fftsize, Complex::default());
-                self.fft.process(&mut self.buf);
-                let mut filtered: Vec<Complex> = self
-                    .buf
-                    .iter()
-                    .zip(self.taps_fft.iter())
-                    .map(|(x, y)| x * y)
-                    .collect::<Vec<Complex>>();
-                self.ifft.process(&mut filtered);
-
-                // Add overlapping tail.
-                for (i, t) in self.tail.iter().enumerate() {
-                    filtered[i] += t;
-                }
-
-                // Output.
-                o.borrow_mut().write_slice(&filtered[..self.nsamples]);
-
-                // Stash tail.
-                for i in 0..self.tail.len() {
-                    self.tail[i] = filtered[self.nsamples + i];
-                }
-
-                self.buf.clear();
-            }
-        }
-        Ok(BlockRet::Ok)
     }
 }

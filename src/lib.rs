@@ -253,6 +253,7 @@ impl Sample for u32 {
     }
 }
 
+#[cfg(test)]
 pub mod tests {
     //! Test helper functions.
     use super::*;
