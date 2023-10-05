@@ -8,3 +8,4 @@ keff
 *.bin
 attic/
 *.wav
+*.au
