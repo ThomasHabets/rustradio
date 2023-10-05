@@ -33,7 +33,7 @@ where
         }
     }
     /// Create a new stream with initial data in it.
-    pub fn new_from_slice(data: &[T]) -> Self {
+    pub fn from_slice(data: &[T]) -> Self {
         Self {
             data: VecDeque::from(data.to_vec()),
             max_size: 1048576,
@@ -160,31 +160,32 @@ impl StreamType {
     pub fn new_u8() -> Self {
         Self::U8(Rc::new(RefCell::new(Stream::<u8>::new())))
     }
+
     /// Create new stream of u32.
     pub fn new_u32() -> Self {
         Self::U32(Rc::new(RefCell::new(Stream::<u32>::new())))
     }
     /// Create new stream of u32 with prepopulated data.
-    pub fn new_u32_from_slice(data: &[u32]) -> Self {
-        Self::U32(Rc::new(RefCell::new(Stream::<u32>::new_from_slice(data))))
+    pub fn from_u32(data: &[u32]) -> Self {
+        Self::U32(Rc::new(RefCell::new(Stream::<u32>::from_slice(data))))
     }
+
     /// Create new stream of floats.
     pub fn new_float() -> Self {
         Self::Float(Rc::new(RefCell::new(Stream::<Float>::new())))
     }
     /// Create new stream of floats with prepopulated data.
-    pub fn new_float_from_slice(data: &[Float]) -> Self {
-        Self::Float(Rc::new(RefCell::new(Stream::<Float>::new_from_slice(data))))
+    pub fn from_float(data: &[Float]) -> Self {
+        Self::Float(Rc::new(RefCell::new(Stream::<Float>::from_slice(data))))
     }
+
     /// Create new stream of complex I/Q.
     pub fn new_complex() -> Self {
         Self::Complex(Rc::new(RefCell::new(Stream::<Complex>::new())))
     }
     /// Create new stream of complex I/Q with prepopulated data.
-    pub fn new_complex_from_slice(data: &[Complex]) -> Self {
-        Self::Complex(Rc::new(RefCell::new(Stream::<Complex>::new_from_slice(
-            data,
-        ))))
+    pub fn from_complex(data: &[Complex]) -> Self {
+        Self::Complex(Rc::new(RefCell::new(Stream::<Complex>::from_slice(data))))
     }
 
     /// Return amount of data in stream.

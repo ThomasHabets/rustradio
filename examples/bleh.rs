@@ -8,7 +8,7 @@ use rustradio::Float;
 fn main() -> Result<()> {
     println!("Running some block without Graph");
     {
-        let s = StreamType::new_float_from_slice(&[1.0, -1.0, 3.9]);
+        let s = StreamType::from_float(&[1.0, -1.0, 3.9]);
         let mut is = InputStreams::new();
         is.add_stream(s);
         let mut add = AddConst::new(1.1);

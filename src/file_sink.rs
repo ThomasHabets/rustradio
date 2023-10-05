@@ -20,12 +20,7 @@ mod tests {
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
         let mut sink = FileSink::<Float>::new(&tmpfn, Mode::Create)?;
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_float_from_slice(&[
-            1.0 as Float,
-            3.0,
-            3.14,
-            -3.14,
-        ]));
+        is.add_stream(StreamType::from_float(&[1.0 as Float, 3.0, 3.14, -3.14]));
         sink.work(&mut is, &mut OutputStreams::new())?;
         let out = std::fs::read(tmpfn)?;
         assert_eq!(
@@ -42,7 +37,7 @@ mod tests {
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
         let mut sink = FileSink::<Complex>::new(&tmpfn, Mode::Create)?;
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_complex_from_slice(&[
+        is.add_stream(StreamType::from_complex(&[
             Complex::new(0.0, 0.0),
             Complex::new(3.14, -2.7),
         ]));

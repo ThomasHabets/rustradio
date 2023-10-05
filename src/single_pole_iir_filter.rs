@@ -16,7 +16,7 @@ mod tests {
         let mut iir =
             SinglePoleIIRFilter::<Float>::new(0.2).ok_or(Error::new("alpha out of range"))?;
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_float_from_slice(&[0.1, 0.2]));
+        is.add_stream(StreamType::from_float(&[0.1, 0.2]));
         let mut os = OutputStreams::new();
         os.add_stream(StreamType::new_float());
         iir.work(&mut is, &mut os)?;
@@ -29,7 +29,7 @@ mod tests {
         let mut iir =
             SinglePoleIIRFilter::<Complex>::new(0.2).ok_or(Error::new("alpha out of range"))?;
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_complex_from_slice(&[
+        is.add_stream(StreamType::from_complex(&[
             Complex::new(1.0, 0.1),
             Complex::default(),
         ]));

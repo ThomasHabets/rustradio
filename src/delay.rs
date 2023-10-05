@@ -15,7 +15,7 @@ mod tests {
     fn delay_zero() -> Result<()> {
         let mut delay = Delay::<Float>::new(0);
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_float_from_slice(&[1.0f32, 2.0, 3.0]));
+        is.add_stream(StreamType::from_float(&[1.0f32, 2.0, 3.0]));
         let mut os = OutputStreams::new();
         os.add_stream(StreamType::new_float());
         delay.work(&mut is, &mut os)?;
@@ -28,7 +28,7 @@ mod tests {
     fn delay_one() -> Result<()> {
         let mut delay = Delay::<Float>::new(1);
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_float_from_slice(&[1.0f32, 2.0, 3.0]));
+        is.add_stream(StreamType::from_float(&[1.0f32, 2.0, 3.0]));
         let mut os = OutputStreams::new();
         os.add_stream(StreamType::new_float());
         delay.work(&mut is, &mut os)?;
@@ -45,24 +45,24 @@ mod tests {
 
         // 1,2 => 0,1,2
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_u32_from_slice(&[1u32, 2]));
+        is.add_stream(StreamType::from_u32(&[1u32, 2]));
         delay.work(&mut is, &mut os)?;
 
         // 3,4 => 0,3,4
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_u32_from_slice(&[3u32, 4]));
+        is.add_stream(StreamType::from_u32(&[3u32, 4]));
         delay.set_delay(2);
         delay.work(&mut is, &mut os)?;
 
         // 5,6 => nothing
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_u32_from_slice(&[5u32, 6]));
+        is.add_stream(StreamType::from_u32(&[5u32, 6]));
         delay.set_delay(0);
         delay.work(&mut is, &mut os)?;
 
         // 7 => 7
         let mut is = InputStreams::new();
-        is.add_stream(StreamType::new_u32_from_slice(&[7u32]));
+        is.add_stream(StreamType::from_u32(&[7u32]));
         delay.work(&mut is, &mut os)?;
 
         let res: Streamp<u32> = os.get(0).into();

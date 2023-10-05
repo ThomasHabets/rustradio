@@ -20,7 +20,7 @@ mod tests {
             .collect();
         let mut is = InputStreams::new();
         let mut os = OutputStreams::new();
-        is.add_stream(StreamType::new_complex_from_slice(&input));
+        is.add_stream(StreamType::from_complex(&input));
         os.add_stream(StreamType::new_complex());
         let mut resamp = RationalResampler::new(interp, deci)?;
         resamp.work(&mut is, &mut os)?;
