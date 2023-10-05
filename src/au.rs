@@ -15,15 +15,10 @@ use crate::stream::{InputStreams, OutputStreams};
 use crate::{Error, Float};
 
 /// Au support several encodings. This code currently only one.
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Encoding {
     /// 16 bit linear PCM.
-    PCM16,
-}
-
-fn mode_num(e: Encoding) -> u32 {
-    match e {
-        Encoding::PCM16 => 3,
-    }
+    PCM16 = 3,
 }
 
 /** Au encoder block.
@@ -53,6 +48,7 @@ g.run()?;
 */
 pub struct AuEncode {
     header: Option<Vec<u8>>,
+    encoding: Encoding,
 }
 
 impl AuEncode {
@@ -75,7 +71,7 @@ impl AuEncode {
         v.extend(0xffffffffu32.to_be_bytes());
 
         // Mode.
-        v.extend(mode_num(encoding).to_be_bytes());
+        v.extend((encoding as u32).to_be_bytes());
 
         // Bitrate.
         v.extend(bitrate.to_be_bytes());
@@ -86,7 +82,10 @@ impl AuEncode {
         // Minimum annotation field.
         v.extend(&[0, 0, 0, 0]);
 
-        Self { header: Some(v) }
+        Self {
+            header: Some(v),
+            encoding: encoding,
+        }
     }
 }
 
@@ -100,10 +99,15 @@ impl Block for AuEncode {
             o.borrow_mut().write_slice(h);
             self.header = None;
         }
-        let mut v = Vec::with_capacity(r.available(0) * 2); // sizeof(i16)
+
+        assert_eq!(self.encoding, Encoding::PCM16);
+        type S = i16;
+        let scale = S::MAX as Float;
+
+        let mut v = Vec::with_capacity(r.available(0) * std::mem::size_of::<S>());
         let i = get_input(r, 0);
         i.borrow().iter().for_each(|x: &Float| {
-            v.extend(((*x * 32767.0) as i16).to_be_bytes());
+            v.extend(((*x * scale) as S).to_be_bytes());
         });
         o.borrow_mut().write_slice(&v);
         i.borrow_mut().clear();
