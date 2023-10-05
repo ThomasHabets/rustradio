@@ -100,7 +100,7 @@ impl Block for AuEncode {
             o.borrow_mut().write_slice(h);
             self.header = None;
         }
-        let mut v = Vec::new();
+        let mut v = Vec::with_capacity(r.available(0) * 2); // sizeof(i16)
         let i = get_input(r, 0);
         i.borrow().iter().for_each(|x: &Float| {
             v.extend(((*x * 32767.0) as i16).to_be_bytes());
