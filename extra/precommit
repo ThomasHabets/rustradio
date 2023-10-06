@@ -8,6 +8,10 @@ cargo test -F rtlsdr || {
     echo "Tests fail" >&2
     exit 1
 }
+cargo +nightly bench --no-run -F rtlsdr || {
+    echo "Benchmark builds fail" >&2
+    exit 1
+}
 
 # TODO: maybe add --alltargets
 cargo clippy -- -D warnings || {

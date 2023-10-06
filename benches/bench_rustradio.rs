@@ -11,7 +11,7 @@ use test::Bencher;
 
 #[bench]
 fn bench_fft_filter(b: &mut Bencher) {
-    let taps = rustradio::fir::low_pass(1024000.0, 50000.0, 10000.0);
+    let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0);
     let input = {
         let mut a = taps.clone();
         a.resize(a.len() * 2, Complex::default());
@@ -40,7 +40,7 @@ fn bench_fft_filter(b: &mut Bencher) {
 
 #[bench]
 fn bench_fir(b: &mut Bencher) {
-    let taps = rustradio::fir::low_pass(1024000.0, 50000.0, 10000.0);
+    let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0);
     let input = {
         let mut a = taps.clone();
         a.resize(a.len() * 2, Complex::default());
