@@ -46,6 +46,7 @@ pub struct Graph {
     blocks: Vec<Box<dyn Block>>,
     streams: Vec<StreamType>,
     times: Vec<std::time::Duration>,
+    cancel_token: CancellationToken,
 
     outputs: HashMap<BlockHandle, Vec<(Port, StreamHandle)>>,
     inputs: HashMap<BlockHandle, Vec<(Port, StreamHandle)>>,
@@ -60,6 +61,7 @@ impl Graph {
             inputs: HashMap::new(),
             streams: Vec::new(),
             times: Vec::new(),
+            cancel_token: CancellationToken::new(),
         }
     }
     /// Add a block to the graph, returning a handle to it.
@@ -91,6 +93,69 @@ impl Graph {
             .entry(b2)
             .or_default()
             .push((p2, StreamHandle(s)));
+    }
+
+    /// Return a cancellation token, for asynchronously stopping the
+    /// graph, for example if the user presses Ctrl-C.
+    ///
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// let mut g = rustradio::graph::Graph::new();
+    /// let cancel = g.cancel_token();
+    /// ctrlc::set_handler(move || {
+    ///     cancel.cancel();
+    /// }).expect("failed to set Ctrl-C handler");
+    /// g.run()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.clone()
+    }
+
+    /// Return a string with stats about where time went.
+    pub fn generate_stats(&self, elapsed: std::time::Duration) -> String {
+        let total = self
+            .times
+            .iter()
+            .cloned()
+            .sum::<std::time::Duration>()
+            .as_secs_f64();
+        let ml = self
+            .blocks
+            .iter()
+            .map(|b| b.block_name().len())
+            .max()
+            .unwrap(); // unwrap: can only fail if block list is empty.
+        let elapsed = elapsed.as_secs_f64();
+        let mut s: String = format!("{:width$}    Seconds  Percent\n", "Block name", width = ml);
+        s.push_str("-----------------------------------------\n");
+        for (n, b) in self.blocks.iter().enumerate() {
+            s.push_str(&format!(
+                "{:<width$} {:10.3} {:>7.2}%\n",
+                b.block_name(),
+                self.times[n].as_secs_f32(),
+                100.0 * self.times[n].as_secs_f64() / total,
+                width = ml,
+            ));
+        }
+        s.push_str("-----------------------------------------\n");
+        s.push_str(&format!(
+            "All blocks        {:10.3} {:>7.2}%\n",
+            total,
+            100.0 * total / elapsed
+        ));
+        s.push_str(&format!(
+            "Non-block time    {:10.3} {:>7.2}%\n",
+            elapsed - total,
+            100.0 * (elapsed - total) / elapsed
+        ));
+        s.push_str(&format!(
+            "Elapsed seconds   {:10.3} {:>7.2}%\n",
+            elapsed, 100.0
+        ));
+        s
     }
 
     /// Run the graph, until there's no more data to process.
@@ -136,45 +201,20 @@ impl Graph {
         // TODO: this ending criteria is ugly.
         let st = Instant::now();
         let mut last_loop_processed = true;
-        loop {
+        while !self.cancel_token.is_canceled() {
             let (processed, done) = self.run_one(&mut iss, &mut oss, last_loop_processed)?;
             if done {
                 break;
             }
             last_loop_processed = processed > 0;
         }
-        let total = self
-            .times
-            .iter()
-            .cloned()
-            .sum::<std::time::Duration>()
-            .as_secs_f64();
-        let elapsed = st.elapsed().as_secs_f64();
-        // unwrap: can only fail if block list is empty.
-        let ml = self
-            .blocks
-            .iter()
-            .map(|b| b.block_name().len())
-            .max()
-            .unwrap();
-        info!("{:width$}   Seconds  Percent", "Block name", width = ml);
-        info!("-----------------------------------------");
-        for (n, b) in self.blocks.iter().enumerate() {
-            info!(
-                "{:<width$} {:9.3} {:>7.2}%",
-                b.block_name(),
-                self.times[n].as_secs_f32(),
-                100.0 * self.times[n].as_secs_f64() / total,
-                width = ml,
-            );
+
+        for line in self.generate_stats(st.elapsed()).split('\n') {
+            if !line.is_empty() {
+                info!("{}", line);
+            }
         }
-        info!(
-            "Overhead/idle     {:9.3} {:>7.2}%",
-            elapsed - total,
-            (elapsed - total) / total
-        );
-        info!("-----------------------------------------");
-        info!("Total seconds:    {:9.3}", elapsed);
+
         Ok(())
     }
 
@@ -242,6 +282,61 @@ impl Graph {
 }
 
 impl Default for Graph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/** A handle to be able to stop the Graph. For example when the user
+presses Ctrl-C.
+
+```
+use rustradio::graph::CancellationToken;
+use std::thread;
+
+// Token normally extracted from graph.cancel_token().
+let token = CancellationToken::new();
+
+// Confirm it defaults to not cancelled.
+assert!(!token.is_canceled());
+
+// Start a thread that will cancel the token.
+let tt = token.clone();
+assert!(!token.is_canceled());
+assert!(!tt.is_canceled());
+thread::spawn(move || {
+   tt.cancel();
+});
+
+// This would normally be graph.run();
+while !token.is_canceled() {}
+```
+*/
+#[derive(Clone)]
+pub struct CancellationToken {
+    inner: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl CancellationToken {
+    /// Create new cancellation token.
+    pub fn new() -> Self {
+        CancellationToken {
+            inner: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    /// Mark the token cancelled.
+    pub fn cancel(&self) {
+        self.inner.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Check if the token is cancelled.
+    pub fn is_canceled(&self) -> bool {
+        self.inner.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Default for CancellationToken {
     fn default() -> Self {
         Self::new()
     }

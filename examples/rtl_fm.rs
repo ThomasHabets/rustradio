@@ -2,6 +2,7 @@
 Example broadcast FM receiver, sending output to an Au file.
  */
 use anyhow::Result;
+use log::warn;
 use structopt::StructOpt;
 
 use rustradio::blocks::*;
@@ -132,5 +133,14 @@ fn main() -> Result<()> {
     let sink = g.add(Box::new(FileSink::<u8>::new(&opt.output, Mode::Overwrite)?));
     g.connect(StreamType::new_u8(), au, 0, sink, 0);
 
-    g.run()
+    let cancel = g.cancel_token();
+    ctrlc::set_handler(move || {
+        warn!("Got Ctrl-C");
+        cancel.cancel();
+    })
+    .expect("failed to set Ctrl-C handler");
+    let st = std::time::Instant::now();
+    g.run()?;
+    eprintln!("{}", g.generate_stats(st.elapsed()));
+    Ok(())
 }
