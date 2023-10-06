@@ -5,7 +5,7 @@ use anyhow::Result;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, Streamp};
+use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -107,6 +107,51 @@ impl Block for FftFilter {
             }
         }
         Ok(BlockRet::Ok)
+    }
+}
+
+/// FFT filter for float values.
+pub struct FftFilterFloat {
+    complex: FftFilter,
+}
+
+impl FftFilterFloat {
+    /// Create a new FftFilterFloat block.
+    pub fn new(taps: &[Float]) -> Self {
+        let ctaps: Vec<Complex> = taps.iter().copied().map(|f| Complex::new(f, 0.0)).collect();
+        Self {
+            complex: FftFilter::new(&ctaps),
+        }
+    }
+}
+
+impl Block for FftFilterFloat {
+    fn block_name(&self) -> &'static str {
+        "FftFilterFloat"
+    }
+    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        let input: Vec<Complex> = r
+            .get(0)
+            .borrow()
+            .iter()
+            .copied()
+            .map(|f| Complex::new(f, 0.0))
+            .collect();
+        let mut is = InputStreams::new();
+        let mut os = OutputStreams::new();
+        is.add_stream(StreamType::from_complex(&input));
+        os.add_stream(StreamType::new_complex());
+        let ret = self.complex.work(&mut is, &mut os)?;
+        r.get_streamtype(0).consume(input.len() - is.available(0));
+        let out: Vec<Float> = os
+            .get(0)
+            .borrow()
+            .iter()
+            .copied()
+            .map(|c: Complex| c.re)
+            .collect();
+        w.get(0).borrow_mut().write_slice(&out);
+        Ok(ret)
     }
 }
 

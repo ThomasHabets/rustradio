@@ -99,7 +99,8 @@ fn main() -> Result<()> {
     let prev = if !opt.no_audio_filter {
         // Audio filter.
         let taps = rustradio::fir::low_pass(samp_rate, 44_100.0, 500.0);
-        let audio_filter = g.add(Box::new(FIRFilter::new(&taps)));
+        //let audio_filter = g.add(Box::new(FIRFilter::new(&taps)));
+        let audio_filter = g.add(Box::new(FftFilterFloat::new(&taps)));
         g.connect(StreamType::new_float(), quad, 0, audio_filter, 0);
         audio_filter
     } else {

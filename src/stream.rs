@@ -199,6 +199,17 @@ impl StreamType {
         }
     }
 
+    /// Consume input samples.
+    pub fn consume(&self, n: usize) {
+        match &self {
+            StreamType::Disconnected => panic!("consuming from disconnected"),
+            StreamType::Float(x) => x.borrow_mut().consume(n),
+            StreamType::U32(x) => x.borrow_mut().consume(n),
+            StreamType::U8(x) => x.borrow_mut().consume(n),
+            StreamType::Complex(x) => x.borrow_mut().consume(n),
+        }
+    }
+
     /// Return amount of available space until full.
     pub fn capacity(&self) -> usize {
         match &self {
