@@ -19,7 +19,6 @@ num = "0.4.1"
 rustfft = "6.1.0"
 tempfile = "3.8.0"
 rtlsdr = {version = "0.1.4", optional=true}
-# libc = {version = "0.2", optional=true}
 
 [dev-dependencies]
 structopt = "0.3.26"
@@ -31,9 +30,7 @@ name = "rustradio"
 path = "src/lib.rs"
 
 [features]
-# default = ["rtlsdr"]
 rtlsdr = ["dep:rtlsdr"]
-# volk  = ["dep:libc"]
 
 [profile.release]
 overflow-checks = true
