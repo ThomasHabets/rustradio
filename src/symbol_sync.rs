@@ -1,7 +1,5 @@
 //! Clock recovery implementations
 /*
-* Much evolving clock sync.
-*
 * Study material:
 * https://youtu.be/jag3btxSsig
 */
@@ -10,82 +8,6 @@ use anyhow::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams};
 use crate::{Error, Float};
-
-trait Ted {
-    fn error(&self, input: &[Float]) -> Float;
-}
-
-struct TedDeriv {}
-
-impl TedDeriv {
-    fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Ted for TedDeriv {
-    fn error(&self, input: &[Float]) -> Float {
-        let sign = if input[0] > 0.0 { 1.0 } else { -1.0 };
-        sign * input[input.len() - 1] - input[0]
-    }
-}
-
-/// Broken, DO NOT USE.
-pub struct SymbolSync {
-    _sps: Float,
-    _max_deviation: Float,
-    clock: Float,
-    ted: Box<dyn Ted>,
-}
-
-impl SymbolSync {
-    /// Broken, DO NOT USE.
-    pub fn new(sps: Float, max_deviation: Float) -> Self {
-        assert!(sps > 1.0);
-        Self {
-            _sps: sps,
-            _max_deviation: max_deviation,
-            clock: sps,
-            ted: Box::new(TedDeriv::new()),
-        }
-    }
-}
-
-/*
-error = sign(x) * deriv(x)
-positive error means "early", neagive error means "late"
-*/
-
-impl Block for SymbolSync {
-    fn block_name(&self) -> &'static str {
-        "SymbolSync"
-    }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = r.get::<Float>(0);
-        let mut v = Vec::new();
-        let n = input.borrow().available();
-        let mut pos = Float::default();
-        loop {
-            let i = pos as usize;
-            if i + 1 >= n {
-                break;
-            }
-            // TODO: needless copy.
-            let t: Vec<Float> = input.borrow().data().clone().into();
-            let error = self.ted.error(&t);
-            if error > 0.0 {
-                pos += 0.3;
-            } else {
-                pos -= 0.3;
-            }
-            v.push(input.borrow().data()[i]);
-            pos += self.clock;
-        }
-        input.borrow_mut().clear();
-        w.get::<Float>(0).borrow_mut().write_slice(&v);
-        Ok(BlockRet::Ok)
-    }
-}
 
 /** Very simple clock recovery by looking at zero crossings.
 
