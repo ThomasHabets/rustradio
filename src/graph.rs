@@ -169,7 +169,7 @@ impl Graph {
             );
         }
         info!(
-            "Overhead          {:9.3} {:>7.2}%",
+            "Overhead/idle     {:9.3} {:>7.2}%",
             elapsed - total,
             (elapsed - total) / total
         );
