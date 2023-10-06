@@ -129,31 +129,36 @@ impl Graph {
             .max()
             .unwrap(); // unwrap: can only fail if block list is empty.
         let elapsed = elapsed.as_secs_f64();
-        let mut s: String = format!("{:width$}    Seconds  Percent\n", "Block name", width = ml);
-        s.push_str("-----------------------------------------\n");
+
+        let blockwidth = ml;
+        let dashes = "-".repeat(ml + 20) + "\n";
+        let (secw, secd) = (10, 3);
+        let (pw, pd) = (7, 2);
+
+        let mut s: String = format!("{:blockwidth$}    Seconds  Percent\n", "Block name");
+        s.push_str(&dashes);
         for (n, b) in self.blocks.iter().enumerate() {
             s.push_str(&format!(
-                "{:<width$} {:10.3} {:>7.2}%\n",
+                "{:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
                 b.block_name(),
                 self.times[n].as_secs_f32(),
                 100.0 * self.times[n].as_secs_f64() / total,
                 width = ml,
             ));
         }
-        s.push_str("-----------------------------------------\n");
+        s.push_str(&dashes);
         s.push_str(&format!(
-            "All blocks        {:10.3} {:>7.2}%\n",
-            total,
+            "All blocks        {total:secw$.secd$} {:>pw$.pd$}%\n",
             100.0 * total / elapsed
         ));
         s.push_str(&format!(
-            "Non-block time    {:10.3} {:>7.2}%\n",
+            "Non-block time    {:secw$.secd$} {:>pw$.pd$}%\n",
             elapsed - total,
             100.0 * (elapsed - total) / elapsed
         ));
         s.push_str(&format!(
-            "Elapsed seconds   {:10.3} {:>7.2}%\n",
-            elapsed, 100.0
+            "Elapsed seconds   {elapsed:secw$.secd$} {:>pw$.pd$}%\n",
+            100.0
         ));
         s
     }

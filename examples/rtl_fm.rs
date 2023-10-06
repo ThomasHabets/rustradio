@@ -136,6 +136,7 @@ fn main() -> Result<()> {
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
         warn!("Got Ctrl-C");
+        eprintln!("\n");
         cancel.cancel();
     })
     .expect("failed to set Ctrl-C handler");
