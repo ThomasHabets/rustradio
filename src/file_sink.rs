@@ -1,4 +1,5 @@
 //! Send stream to raw file.
+use std::io::BufWriter;
 use std::io::Write;
 
 use anyhow::Result;
@@ -22,14 +23,15 @@ pub enum Mode {
 
 /// Send stream to raw file.
 pub struct FileSink<T> {
-    f: std::fs::File,
+    f: BufWriter<std::fs::File>,
     dummy: std::marker::PhantomData<T>,
 }
 
 impl<T> FileSink<T> {
     /// Create new FileSink block.
     pub fn new(filename: &str, mode: Mode) -> Result<Self> {
-        let f = match mode {
+        debug!("Opening sink {filename}");
+        let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
                 .read(false)
                 .write(true)
@@ -41,12 +43,16 @@ impl<T> FileSink<T> {
                 .write(true)
                 .append(true)
                 .open(filename)?,
-        };
-        debug!("Opening sink {filename}");
+        });
         Ok(Self {
             f,
             dummy: std::marker::PhantomData,
         })
+    }
+
+    /// Flush the write buffer.
+    pub fn flush(&mut self) -> Result<()> {
+        Ok(self.f.flush()?)
     }
 }
 
@@ -77,13 +83,15 @@ mod tests {
 
     #[test]
     fn sink_f32() -> Result<()> {
-        #[allow(clippy::approx_constant)]
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-        let mut sink = FileSink::<Float>::new(&tmpfn, Mode::Create)?;
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_float(&[1.0 as Float, 3.0, 3.14, -3.14]));
-        sink.work(&mut is, &mut OutputStreams::new())?;
+        {
+            let mut sink = FileSink::<Float>::new(&tmpfn, Mode::Create)?;
+            let mut is = InputStreams::new();
+            is.add_stream(StreamType::from_float(&[1.0 as Float, 3.0, 3.14, -3.14]));
+            sink.work(&mut is, &mut OutputStreams::new())?;
+            sink.flush()?;
+        }
         let out = std::fs::read(tmpfn)?;
         assert_eq!(
             out,
@@ -94,16 +102,18 @@ mod tests {
 
     #[test]
     fn sink_c32() -> Result<()> {
-        #[allow(clippy::approx_constant)]
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
-        let mut sink = FileSink::<Complex>::new(&tmpfn, Mode::Create)?;
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_complex(&[
-            Complex::new(0.0, 0.0),
-            Complex::new(3.14, -2.7),
-        ]));
-        sink.work(&mut is, &mut OutputStreams::new())?;
+        {
+            let mut sink = FileSink::<Complex>::new(&tmpfn, Mode::Create)?;
+            let mut is = InputStreams::new();
+            is.add_stream(StreamType::from_complex(&[
+                Complex::new(0.0, 0.0),
+                Complex::new(3.14, -2.7),
+            ]));
+            sink.work(&mut is, &mut OutputStreams::new())?;
+            sink.flush()?;
+        }
         let out = std::fs::read(tmpfn)?;
         assert_eq!(
             out,

@@ -1,7 +1,9 @@
 //! Read stream from raw file.
+use std::io::BufReader;
+use std::io::Read;
+
 use anyhow::Result;
 use log::{debug, warn};
-use std::io::Read;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
@@ -10,23 +12,23 @@ use crate::{Error, Sample};
 /// Read stream from raw file.
 pub struct FileSource<T> {
     filename: String,
-    f: std::fs::File,
+    f: BufReader<std::fs::File>,
     repeat: bool,
     buf: Vec<u8>,
-    _t: T,
+    dummy: std::marker::PhantomData<T>,
 }
 
 impl<T: Default> FileSource<T> {
     /// Create new FileSource block.
     pub fn new(filename: &str, repeat: bool) -> Result<Self> {
-        let f = std::fs::File::open(filename)?;
+        let f = BufReader::new(std::fs::File::open(filename)?);
         debug!("Opening source {filename}");
         Ok(Self {
             filename: filename.to_string(),
             f,
             repeat,
             buf: Vec::new(),
-            _t: T::default(),
+            dummy: std::marker::PhantomData,
         })
     }
 }
