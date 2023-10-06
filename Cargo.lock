@@ -424,6 +424,7 @@ version = "0.2.22"
 dependencies = [
  "anyhow",
  "ctrlc",
+ "libc",
  "log",
  "num",
  "rtlsdr",

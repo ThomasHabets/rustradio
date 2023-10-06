@@ -124,6 +124,9 @@ pub mod vector_source;
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;
 
+#[cfg(feature = "volk")]
+pub mod volk;
+
 pub mod block;
 pub mod blocks;
 pub mod graph;
