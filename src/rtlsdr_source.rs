@@ -73,27 +73,30 @@ impl RtlSdrSource {
         }
 
         let (tx, rx) = mpsc::sync_channel(MAX_CHUNKS_IN_FLIGHT);
-        thread::spawn(move || -> Result<(), Error> {
-            let mut dev =
-                rtlsdr::open(index).map_err(|e| Error::new(&format!("RTL SDR open: {e}")))?;
-            debug!("Tuner type: {:?}", dev.get_tuner_type());
-            dev.set_center_freq(freq as u32)?;
-            debug!("Allowed tuner gains: {:?}", dev.get_tuner_gains()?);
-            dev.set_tuner_gain(10 * igain)?;
-            debug!("Tuner gain: {}", dev.get_tuner_gain());
-            // dev.set_direct_sampling
-            // dev.set_tuner_if_gain(…);
-            // dev.set_tuner_gain_mode
-            // dev.set_agc_mode
-            dev.set_sample_rate(samp_rate)?;
-            debug!("Set sample rate {}", dev.get_sample_rate()?);
-            dev.reset_buffer()?;
-            tx.send(vec![])?;
-            loop {
-                let buf = dev.read_sync(CHUNK_SIZE)?;
-                tx.send(buf).unwrap();
-            }
-        });
+        thread::Builder::new()
+            .name("RtlSdrSource-reader".to_string())
+            .spawn(move || -> Result<(), Error> {
+                let mut dev =
+                    rtlsdr::open(index).map_err(|e| Error::new(&format!("RTL SDR open: {e}")))?;
+                debug!("Tuner type: {:?}", dev.get_tuner_type());
+                dev.set_center_freq(freq as u32)?;
+                debug!("Allowed tuner gains: {:?}", dev.get_tuner_gains()?);
+                dev.set_tuner_gain(10 * igain)?;
+                debug!("Tuner gain: {}", dev.get_tuner_gain());
+                // dev.set_direct_sampling
+                // dev.set_tuner_if_gain(…);
+                // dev.set_tuner_gain_mode
+                // dev.set_agc_mode
+                dev.set_sample_rate(samp_rate)?;
+                debug!("Set sample rate {}", dev.get_sample_rate()?);
+                dev.reset_buffer()?;
+                tx.send(vec![])?;
+                loop {
+                    let buf = dev.read_sync(CHUNK_SIZE)?;
+                    tx.send(buf)
+                        .expect("Failed to send message from RTL-SDR read thread to the block");
+                }
+            })?;
         assert_eq!(rx.recv()?, vec![]);
         Ok(Self { rx })
     }
