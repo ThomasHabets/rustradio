@@ -19,6 +19,7 @@ num = "0.4.1"
 rustfft = "6.1.0"
 tempfile = "3.8.0"
 rtlsdr = {version = "0.1.4", optional=true}
+fast-math = {version = "0.1.1", optional=true}
 
 [dev-dependencies]
 structopt = "0.3.26"
@@ -31,6 +32,7 @@ path = "src/lib.rs"
 
 [features]
 rtlsdr = ["dep:rtlsdr"]
+fast-math = ["dep:fast-math"]
 
 [profile.release]
 overflow-checks = true
