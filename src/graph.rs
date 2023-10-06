@@ -232,7 +232,7 @@ impl Graph {
             processed,
             st_loop.elapsed()
         );
-        if processed == 0 {
+        if processed == 0 && !done {
             let ten_millis = std::time::Duration::from_millis(10);
             debug!("No output or consumption from any block. Sleeping a bit.");
             std::thread::sleep(ten_millis);
