@@ -83,16 +83,10 @@ impl Graph {
         b2: BlockHandle,
         p2: Port,
     ) {
-        let s = self.streams.len();
+        let s = StreamHandle(self.streams.len());
         self.streams.push(stream);
-        self.outputs
-            .entry(b1)
-            .or_default()
-            .push((p1, StreamHandle(s)));
-        self.inputs
-            .entry(b2)
-            .or_default()
-            .push((p2, StreamHandle(s)));
+        self.outputs.entry(b1).or_default().push((p1, s));
+        self.inputs.entry(b2).or_default().push((p2, s));
     }
 
     /// Return a cancellation token, for asynchronously stopping the
@@ -223,6 +217,7 @@ impl Graph {
         Ok(())
     }
 
+    // Runs all the blocks in the graph once.
     fn run_one(
         &mut self,
         iss: &mut [InputStreams],

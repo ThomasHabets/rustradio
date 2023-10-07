@@ -33,7 +33,6 @@ impl<T> Delay<T> {
             let cdskip = std::cmp::min(self.current_delay, delay);
             self.current_delay -= cdskip;
             self.skip = (self.delay - delay) - cdskip;
-            eprintln!("cdskip {cdskip} for {delay}");
         }
         self.delay = delay;
     }
