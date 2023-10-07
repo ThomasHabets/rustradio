@@ -13,14 +13,14 @@ pub struct FftFilter {
     buf: Vec<Complex>,
     taps_fft: Vec<Complex>,
     nsamples: usize,
-    fftsize: usize,
+    fft_size: usize,
     tail: Vec<Complex>,
     fft: Arc<dyn rustfft::Fft<Float>>,
     ifft: Arc<dyn rustfft::Fft<Float>>,
 }
 
 impl FftFilter {
-    fn calc_fftsize(from: usize) -> usize {
+    fn calc_fft_size(from: usize) -> usize {
         let mut n = 1;
         while n < from {
             n <<= 1;
@@ -30,36 +30,35 @@ impl FftFilter {
 
     /// Create new FftFilter, given filter taps.
     pub fn new(taps: &[Complex]) -> Self {
-        let ntaps = taps.len();
-        let mut taps_fft = taps.to_vec();
-        let fftsize = Self::calc_fftsize(ntaps);
-        let nsamples = fftsize - taps_fft.len();
-        taps_fft.resize(fftsize, Complex::default());
+        // Set up FFT / batch size.
+        let fft_size = Self::calc_fft_size(taps.len());
+        let nsamples = fft_size - taps.len();
 
-        let mut tail = Vec::new();
-        tail.resize(ntaps, Complex::default());
-
+        // Create FFT planners.
         let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(fftsize);
-        let ifft = planner.plan_fft_inverse(fftsize);
+        let fft = planner.plan_fft_forward(fft_size);
+        let ifft = planner.plan_fft_inverse(fft_size);
 
+        // Pre-FFT the taps.
+        let mut taps_fft = taps.to_vec();
+        taps_fft.resize(fft_size, Complex::default());
         fft.process(&mut taps_fft);
 
         // Normalization is actually the square root of this
         // expression, but since we'll do two FFTs we can just skip
-        // the square root here and do it just once.
-        let f = 1.0 / taps_fft.len() as Float;
-        taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
+        // the square root here and do it just once here in setup.
+        {
+            let f = 1.0 / taps_fft.len() as Float;
+            taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
+        }
 
-        let mut buf = Vec::new();
-        buf.reserve(fftsize);
         Self {
-            fftsize,
+            fft_size,
             taps_fft,
-            tail,
+            tail: vec![Complex::default(); taps.len()],
             fft,
             ifft,
-            buf,
+            buf: Vec::with_capacity(fft_size),
             nsamples,
         }
     }
@@ -80,7 +79,7 @@ impl Block for FftFilter {
             input.borrow_mut().consume(add);
             let o: Streamp<Complex> = w.get(0);
             if self.buf.len() == self.nsamples {
-                self.buf.resize(self.fftsize, Complex::default());
+                self.buf.resize(self.fft_size, Complex::default());
                 self.fft.process(&mut self.buf);
                 let mut filtered: Vec<Complex> = self
                     .buf
