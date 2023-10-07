@@ -1,4 +1,29 @@
-//! FFT filter. Like a FIR filter, but more efficient when there are many taps.
+/*! FFT filter. Like a FIR filter, but more efficient when there are many taps.
+
+```
+use rustradio::{Complex, Float};
+use rustradio::graph::Graph;
+use rustradio::stream::StreamType;
+use rustradio::fir::low_pass_complex;
+use rustradio::blocks::{ConstantSource, FftFilter, NullSink};
+
+let mut graph = Graph::new();
+
+// Create taps for a 100kHz low pass filter with 1kHz transition
+// width.
+let samp_rate: Float = 1_000_000.0;
+let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0);
+
+// Set up dummy source and sink.
+let src = graph.add(Box::new(ConstantSource::new(Complex::new(0.0,0.0))));
+let sink = graph.add(Box::new(NullSink::<Complex>::new()));
+
+// Create and connect fft.
+let fft = graph.add(Box::new(FftFilter::new(&taps)));
+graph.connect(StreamType::new_complex(), src, 0, fft, 0);
+graph.connect(StreamType::new_complex(), fft, 0, sink, 0);
+```
+*/
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -70,46 +95,77 @@ impl Block for FftFilter {
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
         let input = r.get(0);
+        let o: Streamp<Complex> = w.get(0);
         loop {
+            // Read so that self.buf contains exactly self.nsamples samples.
+            //
+            // Yes, this part is weird. It evolved into this, but any
+            // cleanup I do to the next few lines just made it slower,
+            // even though I removed needless logic.
+            //
+            // E.g.:
+            // * self.buf.len() is *always* empty here, so that's a
+            //   needless subtraction.
+            // * We break if input available less than nsamples, so
+            //   why not just compare that?
+            // * Why do we even have self.buf? It's cleared on every round.
+            //   (well, that means no heap allocation, sure)
+            //
+            // Why are these things not fixed: Because then it's
+            // slower, for some reason. At least as of 2023-10-07, on
+            // amd64, with Rust 1.7.1.
             let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
             if add < self.nsamples {
                 break;
             }
             self.buf.extend(input.borrow().iter().take(add));
             input.borrow_mut().consume(add);
-            let o: Streamp<Complex> = w.get(0);
-            if self.buf.len() == self.nsamples {
-                self.buf.resize(self.fft_size, Complex::default());
-                self.fft.process(&mut self.buf);
-                let mut filtered: Vec<Complex> = self
-                    .buf
-                    .iter()
-                    .zip(self.taps_fft.iter())
-                    .map(|(x, y)| x * y)
-                    .collect::<Vec<Complex>>();
-                self.ifft.process(&mut filtered);
 
-                // Add overlapping tail.
-                for (i, t) in self.tail.iter().enumerate() {
-                    filtered[i] += t;
-                }
+            // Run FFT.
+            self.buf.resize(self.fft_size, Complex::default());
+            self.fft.process(&mut self.buf);
 
-                // Output.
-                o.borrow_mut().write_slice(&filtered[..self.nsamples]);
+            // Filter by array multiplication.
+            //
+            // TODO: check if this can be done faster by using volk.
+            let mut filtered: Vec<Complex> = self
+                .buf
+                .iter()
+                .zip(self.taps_fft.iter())
+                .map(|(x, y)| x * y)
+                .collect::<Vec<Complex>>();
 
-                // Stash tail.
-                for i in 0..self.tail.len() {
-                    self.tail[i] = filtered[self.nsamples + i];
-                }
+            // IFFT back to the time domain.
+            self.ifft.process(&mut filtered);
 
-                self.buf.clear();
+            // Add overlapping tail.
+            for (i, t) in self.tail.iter().enumerate() {
+                filtered[i] += t;
             }
+
+            // Output.
+            o.borrow_mut().write_slice(&filtered[..self.nsamples]);
+
+            // Stash tail.
+            for i in 0..self.tail.len() {
+                self.tail[i] = filtered[self.nsamples + i];
+            }
+
+            // Clear buffer. Per above performance comment.
+            self.buf.clear();
         }
         Ok(BlockRet::Ok)
     }
 }
 
 /// FFT filter for float values.
+///
+/// Works just like [FftFilter], but for Float input, output, and taps.
+///
+/// In fact, the current implementation of FftFilterFloat is just
+/// FftFilter hiding under a trenchcoat. Counter intuitively
+/// therefore, this Float version of the FftFilter has a little worse
+/// performance than the Complex filter.
 pub struct FftFilterFloat {
     complex: FftFilter,
 }
@@ -129,6 +185,7 @@ impl Block for FftFilterFloat {
         "FftFilterFloat"
     }
     fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+        // Convert input to Complex.
         let input: Vec<Complex> = r
             .get(0)
             .borrow()
@@ -136,12 +193,24 @@ impl Block for FftFilterFloat {
             .copied()
             .map(|f| Complex::new(f, 0.0))
             .collect();
+
+        // Set up input and output streams.
         let mut is = InputStreams::new();
         let mut os = OutputStreams::new();
         is.add_stream(StreamType::from_complex(&input));
         os.add_stream(StreamType::new_complex());
+
+        // Run Complex FftFilter.
         let ret = self.complex.work(&mut is, &mut os)?;
+
+        // Replicate stream consume on the Float streams.
         r.get_streamtype(0).consume(input.len() - is.available(0));
+
+        // Replicate stream write.
+        //
+        // You'd think calling .write() with the iterator coming out
+        // of .map would be faster, but you'd be wrong.
+        // (as of 2023-10-07, Rust 1.71.1, amd64)
         let out: Vec<Float> = os
             .get(0)
             .borrow()
