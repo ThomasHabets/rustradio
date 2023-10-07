@@ -42,24 +42,31 @@ where
         "FileSource"
     }
     fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let mut buffer = vec![0; w.capacity(0)];
-        let n = self
-            .f
-            .read(&mut buffer[..])
-            .map_err(|e| -> anyhow::Error { e.into() })?;
-        if n == 0 {
-            warn!("EOF on {}. Repeat: {}", self.filename, self.repeat);
-            return Ok(BlockRet::EOF);
-        }
-        self.buf.extend(&buffer[..n]);
+        let sample_size = T::size();
+        let have = self.buf.len() / sample_size;
+        let want = w.capacity(0);
 
-        let size = T::size();
-        let samples = self.buf.len() / size;
-        let mut v = Vec::new();
-        for i in (0..(samples * size)).step_by(size) {
-            v.push(T::parse(&self.buf[i..i + size])?);
+        if have < want {
+            let get = want - have;
+            let mut buffer = vec![0; get * sample_size];
+            let n = self
+                .f
+                .read(&mut buffer[..])
+                .map_err(|e| -> anyhow::Error { e.into() })?;
+            if n == 0 {
+                warn!("EOF on {}. Repeat: {}", self.filename, self.repeat);
+                return Ok(BlockRet::EOF);
+            }
+            self.buf.extend(&buffer[..n]);
         }
-        self.buf.drain(0..(samples * size));
+
+        let have = self.buf.len() / sample_size;
+
+        let mut v = Vec::with_capacity(have);
+        for i in (0..(have * sample_size)).step_by(sample_size) {
+            v.push(T::parse(&self.buf[i..i + sample_size])?);
+        }
+        self.buf.drain(0..(have * sample_size));
         w.get(0).borrow_mut().write_slice(&v);
         Ok(BlockRet::Ok)
     }
