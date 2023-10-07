@@ -17,6 +17,7 @@ pub use crate::null_sink::NullSink;
 pub use crate::quadrature_demod::QuadratureDemod;
 pub use crate::rational_resampler::RationalResampler;
 pub use crate::rtlsdr::RtlSdrDecode;
+pub use crate::signal_source::SignalSourceComplex;
 pub use crate::single_pole_iir_filter::SinglePoleIIRFilter;
 pub use crate::symbol_sync::ZeroCrossing;
 pub use crate::tcp_source::TcpSource;

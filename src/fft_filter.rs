@@ -226,135 +226,87 @@ impl Block for FftFilterFloat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::*;
+    use crate::blocks::SignalSourceComplex;
+    use crate::fir::low_pass_complex;
 
     #[test]
-    fn fft_then_ifft() {
-        let buf = vec![
-            Complex {
-                re: -0.045228414,
-                im: 0.05276649,
-            },
-            Complex {
-                re: 0.045228407,
-                im: 0.0075380574,
-            },
-            Complex {
-                re: 0.015076124,
-                im: 0.06030453,
-            },
-            Complex {
-                re: -0.015076143,
-                im: -0.03769034,
-            },
-            Complex {
-                re: -0.045228403,
-                im: 0.105532974,
-            },
-            Complex {
-                re: -0.05276649,
-                im: 0.17337555,
-            },
-            Complex {
-                re: -0.06784265,
-                im: 0.007538076,
-            },
-            Complex {
-                re: -0.075380675,
-                im: 0.08291874,
-            },
-            Complex {
-                re: 5.3462292e-9,
-                im: -0.03015228,
-            },
-            Complex {
-                re: -0.015076158,
-                im: 0.060304545,
-            },
-            Complex {
-                re: -0.015076132,
-                im: 0.10553298,
-            },
-            Complex {
-                re: -0.045228425,
-                im: 0.045228384,
-            },
-            Complex {
-                re: 0.07538068,
-                im: -0.0150761455,
-            },
-            Complex {
-                re: 0.067842625,
-                im: 0.01507613,
-            },
-            Complex {
-                re: 0.0301523,
-                im: 0.07538069,
-            },
-            Complex {
-                re: -0.015076129,
-                im: 0.067842595,
-            },
-            Complex {
-                re: -0.015076145,
-                im: -0.052766465,
-            },
-            Complex {
-                re: -0.052766472,
-                im: 0.022614188,
-            },
-            Complex {
-                re: -0.09799488,
-                im: 0.10553297,
-            },
-            Complex {
-                re: -0.015076136,
-                im: 0.0075380704,
-            },
-            Complex {
-                re: -0.015076153,
-                im: -4.566649e-9,
-            },
-            Complex {
-                re: 0.06784262,
-                im: -0.05276648,
-            },
-            Complex {
-                re: 0.03015228,
-                im: 0.022614205,
-            },
-            Complex {
-                re: 0.09045683,
-                im: -0.07538069,
-            },
-            Complex {
-                re: 0.0075380807,
-                im: -0.12814716,
-            },
-            Complex {
-                re: 0.015076138,
-                im: 0.06784261,
-            },
-            Complex {
-                re: 0.075380705,
-                im: -0.0150761455,
-            },
-            Complex {
-                re: -0.060304567,
-                im: -0.007538066,
-            },
-        ];
-        let mut buf_fft = buf.clone();
+    fn filter_a_signal() -> Result<()> {
+        // Set up parameters.
+        let samp_rate = 8_000.0;
+        let signal = 3000.0;
+        let amplitude = 1.0;
+        let cutoff = 1000.0;
+        let twidth = 100.0;
 
-        let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(buf.len());
-        let ifft = planner.plan_fft_inverse(buf.len());
-        fft.process(&mut buf_fft);
-        ifft.process(&mut buf_fft);
-        for i in 0..buf.len() {
-            buf_fft[i] *= 1.0 / buf.len() as Float;
+        // Create blocks.
+        let mut src = SignalSourceComplex::new(samp_rate, signal, amplitude);
+        let taps = low_pass_complex(samp_rate, cutoff, twidth);
+        let mut fft = FftFilter::new(&taps);
+
+        // Generate a bunch of samples from signal generator.
+        let out;
+        {
+            let mut is = InputStreams::new();
+            let mut os = OutputStreams::new();
+            is.add_stream(StreamType::new_disconnected());
+            os.add_stream(StreamType::new_complex());
+            src.work(&mut is, &mut os)?;
+            out = os.get(0).borrow().iter().copied().collect::<Vec<Complex>>();
+            // write_vec("bleh.txt", &out)?;
+            let m = out
+                .iter()
+                .map(|x| x.norm_sqr().sqrt())
+                .max_by(|a, b| a.total_cmp(b))
+                .unwrap();
+            assert!((0.999..1.001).contains(&m));
         }
-        assert_eq!(buf.len(), buf_fft.len());
-        assert_almost_equal_complex(&buf_fft, &buf);
+
+        // Filter the stream.
+        {
+            let mut is = InputStreams::new();
+            is.add_stream(StreamType::from_complex(&out));
+
+            let mut os = OutputStreams::new();
+            os.add_stream(StreamType::new_complex());
+
+            fft.work(&mut is, &mut os)?;
+            let out = os
+                .get(0)
+                .borrow()
+                .iter()
+                .skip(taps.len())
+                .copied()
+                .collect::<Vec<Complex>>();
+            assert!(
+                out.len() > samp_rate as usize,
+                "need at least 1s of data for real test. Got {}",
+                out.len()
+            );
+            // write_vec("bleh.txt", &out)?;
+
+            let m = out
+                .iter()
+                .map(|x| x.norm_sqr().sqrt())
+                .max_by(|a, b| a.total_cmp(b))
+                .unwrap();
+            assert!(
+                (0.0..0.0002).contains(&m),
+                "Signal insufficiently suppressed. Got magnitude {}",
+                m
+            );
+        }
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    fn write_vec(filename: &str, v: &[Complex]) -> Result<()> {
+        use std::io::BufWriter;
+        use std::io::Write;
+        let mut f = BufWriter::new(std::fs::File::create(filename)?);
+        for s in v {
+            f.write_all(&format!("{} {}\n", s.re, s.im).as_bytes())?;
+        }
+        Ok(())
     }
 }

@@ -116,6 +116,7 @@ pub mod null_sink;
 pub mod quadrature_demod;
 pub mod rational_resampler;
 pub mod rtlsdr;
+pub mod signal_source;
 pub mod single_pole_iir_filter;
 pub mod symbol_sync;
 pub mod tcp_source;
