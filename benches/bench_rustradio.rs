@@ -32,8 +32,14 @@ fn bench_fft_filter(b: &mut Bencher) {
         if let StreamType::Complex(x) = &stream_out {
             x.borrow_mut().clear();
         }
-        while is.available(0) > 0 {
+        let mut last = is.available(0);
+        loop {
             filter.work(&mut is, &mut os).unwrap();
+            let nxt = is.available(0);
+            if last == nxt {
+                break;
+            }
+            last = nxt;
         }
     });
 }
