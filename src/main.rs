@@ -1,112 +1,173 @@
 use anyhow::Result;
-type Complex = num::complex::Complex<f32>;
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::rc::Rc;
 
-struct StreamWriter<T> {
-    max_samples: usize,
-    data: Vec<T>,
-}
-
-impl<T: Copy> StreamWriter<T> {
-    fn new(max_samples: usize) -> Self {
-        Self{
-            max_samples,
-            data: Vec::new(),
-        }
-    }
-    fn write(&mut self, data: &[T]) -> Result<()> {
-        println!("Writing {} samples", data.len());
-        self.data.extend_from_slice(data);
-        Ok(())
-    }
-    fn available(&self) -> usize {
-        self.max_samples - self.data.len()
-    }
-    fn consume(&mut self, n: usize) {
-        self.data.drain(0..n);
-    }
-}
-
-trait Sample {
-    type Type;
-    fn size() -> usize;
-    fn parse(data: &[u8]) -> Result<Self::Type>;
-}
-
-impl Sample for Complex {
-    type Type = Complex;
-    fn size() -> usize {8}
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
-    }
-}
-
-impl Sample for f32 {
-    type Type = f32;
-    fn size() -> usize {4}
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        todo!();
-    }
-}
+pub type Float = f32;
+pub type Complex = num_complex::Complex<Float>;
 
 struct ConstantSource<T> {
     val: T,
 }
 
-impl<T: Copy + Sample<Type=T> + std::fmt::Debug> ConstantSource<T> {
+impl<T> ConstantSource<T>
+where
+    T: Copy,
+{
     fn new(val: T) -> Self {
-        Self{val}
-    }
-    fn work(&mut self, w: &mut StreamWriter<T>) -> Result<()> {
-        w.write(&vec![self.val; w.available()])
+        Self { val }
     }
 }
 
-struct DebugSink {}
-impl DebugSink {
-    fn new() -> Self {
-        Self{}
-    }
-    fn work<T: Copy + Sample<Type=T> + std::fmt::Debug>(&mut self, w: &mut StreamWriter<T>) -> Result<()> {
-        for d in w.data.clone().into_iter() {
-            println!("debug: {:?}", d);
-        }
-        w.consume(w.data.len());
-        Ok(())
+impl<T> Iterator for ConstantSource<T>
+where
+    T: Copy,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        Some(self.val)
     }
 }
-struct MultiplyConst<T> {
+
+struct AddConst<'a, T> {
+    src: &'a mut dyn Iterator<Item = T>,
     val: T,
 }
 
-impl<T> MultiplyConst<T>
-    where T: Copy + Sample<Type=T> + std::fmt::Debug + std::ops::Mul<Output=T>
+impl<'a, T> AddConst<'a, T>
+where
+    T: Copy,
 {
-    fn new(val: T) -> Self {
-        Self{val}
+    fn new(src: &'a mut dyn Iterator<Item = T>, val: T) -> Self {
+        Self { src, val }
     }
-    fn work(&mut self, r: &mut StreamWriter<T>, w: &mut StreamWriter<T>) -> Result<()> {
-        let mut v: Vec<T> = Vec::new();
-        for d in r.data.clone().into_iter() {
-            v.push(d * self.val);
+}
+
+impl<'a, T> Iterator for AddConst<'a, T>
+where
+    T: Copy + std::ops::Add<Output = T>,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        self.src.next().map(|v| v + self.val)
+    }
+}
+
+struct FloatToComplex<'a> {
+    src1: &'a mut dyn Iterator<Item = Float>,
+    src2: &'a mut dyn Iterator<Item = Float>,
+}
+
+impl<'a> FloatToComplex<'a> {
+    fn new(
+        src1: &'a mut dyn Iterator<Item = Float>,
+        src2: &'a mut dyn Iterator<Item = Float>,
+    ) -> Self {
+        Self { src1, src2 }
+    }
+}
+
+impl<'a> Iterator for FloatToComplex<'a> {
+    type Item = Complex;
+    fn next(&mut self) -> Option<Complex> {
+        let a = self.src1.next()?;
+        let b = self.src2.next()?;
+        Some(Complex::new(a, b))
+    }
+}
+
+struct Tee<'a, T> {
+    pub src: &'a mut dyn Iterator<Item = T>,
+    for_left: VecDeque<T>,
+    for_right: VecDeque<T>,
+}
+
+struct TeePipe<'a, T> {
+    left: bool,
+    parent: Rc<RefCell<Tee<'a, T>>>,
+}
+
+impl<'a, T> Tee<'a, T> {
+    fn new(src: &'a mut dyn Iterator<Item = T>) -> (TeePipe<'a, T>, TeePipe<'a, T>) {
+        let t = Rc::new(RefCell::new(Self {
+            src,
+            for_left: VecDeque::new(),
+            for_right: VecDeque::new(),
+        }));
+        (
+            TeePipe::<T> {
+                parent: t.clone(),
+                left: true,
+            },
+            TeePipe::<T> {
+                parent: t.clone(),
+                left: false,
+            },
+        )
+    }
+}
+
+impl<'a, T> Iterator for TeePipe<'a, T>
+where
+    T: Copy,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.left {
+            let mut m = self.parent.borrow_mut();
+            if !m.for_left.is_empty() {
+                return m.for_left.pop_front();
+            }
+            let ret = m.src.next()?;
+            m.for_right.push_back(ret);
+            Some(ret)
+        } else {
+            let mut m = self.parent.borrow_mut();
+            if !m.for_right.is_empty() {
+                return m.for_right.pop_front();
+            }
+            let ret = m.src.next()?;
+            m.for_left.push_back(ret);
+            Some(ret)
         }
-        w.write(v.as_slice());
-        r.consume(v.len());
-        Ok(())
+    }
+}
+
+struct DebugSink<'a, T> {
+    src: &'a mut dyn Iterator<Item = T>,
+    dummy: std::marker::PhantomData<T>,
+}
+
+impl<'a, T> DebugSink<'a, T> {
+    fn new(src: &'a mut dyn Iterator<Item = T>) -> Self {
+        Self {
+            src,
+            dummy: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, T> Iterator for DebugSink<'a, T>
+where
+    T: std::fmt::Debug,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        for v in &mut *self.src {
+            println!("debug> {:?}", v)
+        }
+        None
     }
 }
 
 fn main() -> Result<()> {
-    println!("Hello, world!");
-    let mut src = ConstantSource::new(1f32);
-    let mut sink = DebugSink::new();
-    let mut mul = MultiplyConst::new(2.0);
-    let mut s1 = StreamWriter::new(10);
-    let mut s2 = StreamWriter::new(10);
-    loop {
-        src.work(&mut s1)?;
-        mul.work(&mut s1, &mut s2)?;
-        sink.work(&mut s2)?;
-        break;
+    let mut src = ConstantSource::new(1.0);
+    let (mut tee1, mut tee2) = Tee::new(&mut src);
+    let mut add = AddConst::new(&mut tee1, 0.5);
+    let mut convert = FloatToComplex::new(&mut add, &mut tee2);
+    let sink = DebugSink::new(&mut convert);
+    for _ in sink {
+        panic!("debugsink should never produc");
     }
     Ok(())
 }

@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-num = "0.4.1"
+num-complex = "0.4.4"
