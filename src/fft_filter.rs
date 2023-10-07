@@ -274,7 +274,7 @@ mod tests {
                 .get(0)
                 .borrow()
                 .iter()
-                .skip(taps.len())
+                .skip(taps.len()) // I get garbage in the beginning.
                 .copied()
                 .collect::<Vec<Complex>>();
             assert!(
