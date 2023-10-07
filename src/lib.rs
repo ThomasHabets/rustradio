@@ -133,7 +133,7 @@ pub mod stream;
 pub type Float = f32;
 
 /// Complex (I/Q) data.
-pub type Complex = num::complex::Complex<Float>;
+pub type Complex = num_complex::Complex<Float>;
 
 /// RustRadio error.
 #[derive(Debug, Clone)]
