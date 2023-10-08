@@ -327,7 +327,8 @@ impl<'a> Iterator for QuadDemod<'a> {
         let s = self.src.next()?;
         let t = s * self.last.conj();
         self.last = s;
-        Some(self.gain * t.im.atan2(t.re))
+        //Some(self.gain * t.im.atan2(t.re))
+        Some(self.gain * fast_math::atan2(t.im, t.re))
     }
 }
 
