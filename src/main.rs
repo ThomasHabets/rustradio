@@ -425,6 +425,23 @@ impl<'a> Iterator for FloatToComplex<'a> {
     }
 }
 
+struct ComplexToReal<'a> {
+    src: &'a mut dyn Iterator<Item = Complex>,
+}
+
+impl<'a> ComplexToReal<'a> {
+    fn new(src: &'a mut dyn Iterator<Item = Complex>) -> Self {
+        Self { src }
+    }
+}
+
+impl<'a> Iterator for ComplexToReal<'a> {
+    type Item = Float;
+    fn next(&mut self) -> Option<Float> {
+        Some(self.src.next()?.re)
+    }
+}
+
 struct AuEncode<'a> {
     obuf: VecDeque<u8>,
     src: &'a mut dyn Iterator<Item = Float>,
@@ -574,6 +591,13 @@ fn main() -> Result<()> {
 
         // Quad Demod.
         let mut block = QuadDemod::new(&mut block, 1.0);
+
+        // Filter audio.
+        let taps = low_pass_complex(200_000.0, 44_100.0, 500.0);
+        let mut zeroes = ConstantSource::new(0.0);
+        let mut f2c = FloatToComplex::new(&mut block, &mut zeroes);
+        let mut filter = FftFilter::new(&mut f2c, &taps);
+        let mut block = ComplexToReal::new(&mut filter);
 
         // Resample audio.
         let mut block = RationalResampler::new(&mut block, 48_000, 200_000)?;
