@@ -1,4 +1,3 @@
-use anyhow::Result;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::BufReader;
@@ -7,6 +6,8 @@ use std::io::Read;
 use std::io::Write;
 use std::rc::Rc;
 use std::sync::Arc;
+
+use anyhow::Result;
 
 pub type Float = f32;
 pub type Complex = num_complex::Complex<Float>;
@@ -57,7 +58,6 @@ where
     type Item = T;
     fn next(&mut self) -> Option<T> {
         if self.obuf.is_empty() {
-            //self.counter -= self.deci;
             while self.obuf.is_empty() {
                 let s = self.src.next()?;
                 self.counter += self.interp;
@@ -436,7 +436,7 @@ impl<'a> AuEncode<'a> {
         header.extend(0x2e736e64u32.to_be_bytes());
         header.extend(28u32.to_be_bytes());
         header.extend(0xffffffffu32.to_be_bytes());
-        header.extend((3 as u32).to_be_bytes());
+        header.extend(3u32.to_be_bytes());
         header.extend(bitrate.to_be_bytes());
         header.extend(channels.to_be_bytes());
         header.extend(&[0, 0, 0, 0]);
@@ -479,7 +479,7 @@ impl<'a, T> Tee<'a, T>
 where
     T: Copy + Serial,
 {
-    fn new(src: &'a mut dyn Iterator<Item = T>) -> (TeePipe<'a, T>, TeePipe<'a, T>) {
+    fn tee(src: &'a mut dyn Iterator<Item = T>) -> (TeePipe<'a, T>, TeePipe<'a, T>) {
         let t = Rc::new(RefCell::new(Self {
             src,
             for_left: VecDeque::new(),
@@ -526,7 +526,6 @@ where
 
 struct DebugSink<'a, T> {
     src: &'a mut dyn Iterator<Item = T>,
-    dummy: std::marker::PhantomData<T>,
 }
 
 impl<'a, T> DebugSink<'a, T>
@@ -534,10 +533,7 @@ where
     T: Copy + Serial,
 {
     fn new(src: &'a mut dyn Iterator<Item = T>) -> Self {
-        Self {
-            src,
-            dummy: std::marker::PhantomData,
-        }
+        Self { src }
     }
 }
 
@@ -557,7 +553,7 @@ where
 fn main() -> Result<()> {
     if false {
         let mut src = ConstantSource::new(1.0);
-        let (mut tee1, mut tee2) = Tee::new(&mut src);
+        let (mut tee1, mut tee2) = Tee::tee(&mut src);
         let mut add = AddConst::new(&mut tee1, 0.5);
         let mut convert = FloatToComplex::new(&mut add, &mut tee2);
         let sink = DebugSink::new(&mut convert);
@@ -591,6 +587,7 @@ fn main() -> Result<()> {
         // Write file.
         let mut block = FileSink::new(&mut block, "test.au")?;
 
+        // Run flowgraph.
         if let Some(v) = block.next() {
             panic!("sink should never produce {:?}", v);
         }
