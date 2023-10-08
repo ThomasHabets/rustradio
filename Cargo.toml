@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 num-complex = "0.4.4"
+rustfft = "6.1.0"
