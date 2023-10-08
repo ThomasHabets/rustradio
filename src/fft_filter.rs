@@ -23,6 +23,10 @@ let fft = graph.add(Box::new(FftFilter::new(&taps)));
 graph.connect(StreamType::new_complex(), src, 0, fft, 0);
 graph.connect(StreamType::new_complex(), fft, 0, sink, 0);
 ```
+
+## Further reading:
+* <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
+* <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
 */
 use std::sync::Arc;
 
