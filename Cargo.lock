@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio"
-version = "0.2.23"
+version = "0.2.24"
 dependencies = [
  "anyhow",
  "ctrlc",
