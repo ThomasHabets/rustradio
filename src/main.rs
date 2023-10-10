@@ -1,17 +1,19 @@
-use std::cell::RefCell;
-use std::collections::VecDeque;
+//use std::cell::RefCell;
+//use std::collections::VecDeque;
 use std::io::BufReader;
-use std::io::BufWriter;
+//use std::io::BufWriter;
 use std::io::Read;
-use std::io::Write;
-use std::rc::Rc;
-use std::sync::Arc;
+//use std::io::Write;
+//use std::rc::Rc;
+//use std::sync::Arc;
+use futures_util::StreamExt;
 
 use anyhow::Result;
 
 pub type Float = f32;
 pub type Complex = num_complex::Complex<Float>;
 
+/*
 struct RationalResampler<'a, T> {
     src: &'a mut dyn Iterator<Item = T>,
     obuf: VecDeque<T>,
@@ -223,7 +225,7 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
     };
     taps.into_iter().map(|t| t * gain).collect()
 }
-
+*/
 struct FileSource {
     f: BufReader<std::fs::File>,
 }
@@ -236,23 +238,26 @@ impl FileSource {
     }
 }
 
-impl Iterator for FileSource {
+use futures_util::stream::Stream;
+impl Stream for FileSource {
     type Item = Complex;
-    fn next(&mut self) -> Option<Complex> {
+    fn poll_next(mut self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>)
+                 -> std::task::Poll<Option<Self::Item>> {
+        eprintln!("FileSource::poll_next");
         let mut buf = vec![0u8; 8];
-        let n = self.f.read(&mut buf[..]).ok()?;
+        let n = self.f.read(&mut buf[..]).expect("failed to read");
         if n == 0 {
-            None
+            std::task::Poll::Ready(None)
         } else {
             assert_eq!(n, 8);
-            Some(Complex::new(
-                Float::from_le_bytes(buf[0..4].try_into().ok()?),
-                Float::from_le_bytes(buf[4..8].try_into().ok()?),
-            ))
+            let c = Complex::new(
+                Float::from_le_bytes(buf[0..4].try_into().expect("failed to parse")),
+                Float::from_le_bytes(buf[4..8].try_into().expect("failed to parse")));
+            std::task::Poll::Ready(Some(c))
         }
     }
 }
-
+/*
 struct FileSink<'a, T> {
     src: &'a mut dyn Iterator<Item = T>,
     f: BufWriter<std::fs::File>,
@@ -282,7 +287,7 @@ where
         None
     }
 }
-
+*/
 trait Serial {
     fn serial(&self) -> Vec<u8>;
 }
@@ -304,7 +309,7 @@ impl Serial for u8 {
         vec![*self]
     }
 }
-
+/*
 struct QuadDemod<'a> {
     src: &'a mut dyn Iterator<Item = Complex>,
     last: Complex,
@@ -331,7 +336,7 @@ impl<'a> Iterator for QuadDemod<'a> {
         Some(self.gain * fast_math::atan2(t.im, t.re))
     }
 }
-
+*/
 struct ConstantSource<T> {
     val: T,
 }
@@ -345,40 +350,49 @@ where
     }
 }
 
-impl<T> Iterator for ConstantSource<T>
+impl<T> Stream for ConstantSource<T>
 where
     T: Copy,
 {
     type Item = T;
-    fn next(&mut self) -> Option<T> {
-        Some(self.val)
-    }
+    fn poll_next(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>)
+                 -> std::task::Poll<Option<Self::Item>> {
+        std::task::Poll::Ready(Some(self.val))
+    }    
 }
 
-struct AddConst<'a, T> {
-    src: &'a mut dyn Iterator<Item = T>,
+
+struct AddConst<T> {
+    src: Pin<Box<dyn Stream<Item = T>>>,
     val: T,
 }
 
-impl<'a, T> AddConst<'a, T>
+impl<T> AddConst<T>
 where
     T: Copy + Serial,
 {
-    fn new(src: &'a mut dyn Iterator<Item = T>, val: T) -> Self {
-        Self { src, val }
-    }
+    fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self { Self { src,val } }
+//    fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self { Self { src } }
 }
 
-impl<'a, T> Iterator for AddConst<'a, T>
+impl<T> Stream for AddConst<T>
 where
     T: Copy + std::ops::Add<Output = T> + Serial,
 {
     type Item = T;
-    fn next(&mut self) -> Option<T> {
-        self.src.next().map(|v| v + self.val)
+    fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>)
+                 -> Poll<Option<Self::Item>> {
+        //match Pin::new(&mut self.src).as_mut().poll_next(cx) {
+        match self.src.as_mut().poll_next(cx) {
+            std::task::Poll::Ready(Some(v)) => {
+                std::task::Poll::Ready(Some(v))
+            },
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        } 
     }
 }
-
+/*
 struct MulConst<'a, T> {
     src: &'a mut dyn Iterator<Item = T>,
     val: T,
@@ -541,48 +555,61 @@ where
         }
     }
 }
+ */
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
-struct DebugSink<'a, T> {
-    src: &'a mut dyn Iterator<Item = T>,
+struct DebugSink<T> {
+    src: Pin<Box<dyn Stream<Item = T>>>,
 }
 
-impl<'a, T> DebugSink<'a, T>
+impl<T> DebugSink<T>
 where
     T: Copy + Serial,
 {
-    fn new(src: &'a mut dyn Iterator<Item = T>) -> Self {
-        Self { src }
-    }
+    fn new(src: Pin<Box<dyn Stream<Item = T>>>) -> Self {        Self { src }    }
 }
 
-impl<'a, T> Iterator for DebugSink<'a, T>
+impl<T> Stream for DebugSink<T>
 where
     T: std::fmt::Debug + Serial + Copy,
 {
-    type Item = T;
-    fn next(&mut self) -> Option<T> {
-        for v in &mut *self.src {
-            println!("debug> {:?}", v)
+    type Item = ();
+    fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>)
+                 -> std::task::Poll<Option<Self::Item>> {
+        match self.src.as_mut().poll_next(cx) {
+            std::task::Poll::Ready(Some(v)) => {
+                eprintln!("Got item: {v:?}");
+                std::task::Poll::Ready(Some(()))
+            },
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
         }
-        None
     }
 }
 
-fn main() -> Result<()> {
-    if false {
-        let mut src = ConstantSource::new(1.0);
-        let (mut tee1, mut tee2) = Tee::tee(&mut src);
-        let mut add = AddConst::new(&mut tee1, 0.5);
-        let mut convert = FloatToComplex::new(&mut add, &mut tee2);
-        let sink = DebugSink::new(&mut convert);
-        for _ in sink {
-            panic!("debugsink should never produc");
-        }
-    }
-    if true {
-        // Source.
-        let mut src = FileSource::new("raw-1024k.c32")?;
+#[tokio::main]
+async fn main() -> Result<()> {
 
+    if true {
+        let src = ConstantSource::new(1.0);
+
+        //let (mut tee1, mut tee2) = Tee::tee(&mut src);
+        let mut sink = AddConst::new(Box::pin(src), 0.5);
+        //let mut convert = FloatToComplex::new(&mut add, &mut tee2);
+        //let mut sink = DebugSink::new(Box::pin(add));
+        while let Some(_) = sink.next().await {}
+    }
+
+    if false {
+        // Source.
+        let src = FileSource::new("raw-1024k.c32")?;
+        let mut debug = DebugSink::new(Box::pin(src));
+        while let Some(_) = debug.next().await {
+            
+        }
+        eprintln!("stream done");
+/*
         // Filter
         let taps = low_pass_complex(1024000.0, 100_000.0, 1000.0);
         let mut block = FftFilter::new(&mut src, &taps);
@@ -616,6 +643,7 @@ fn main() -> Result<()> {
         if let Some(v) = block.next() {
             panic!("sink should never produce {:?}", v);
         }
+*/
     }
     Ok(())
 }
