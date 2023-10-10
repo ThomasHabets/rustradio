@@ -364,15 +364,14 @@ where
 
 struct AddConst<T> {
     src: Pin<Box<dyn Stream<Item = T>>>,
-    val: T,
+    val: Pin<Box<T>>,
 }
 
 impl<T> AddConst<T>
 where
     T: Copy + Serial,
 {
-    fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self { Self { src,val } }
-//    fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self { Self { src } }
+    fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self { Self { src,val: Box::pin(val) } }
 }
 
 impl<T> Stream for AddConst<T>
@@ -382,10 +381,9 @@ where
     type Item = T;
     fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>)
                  -> Poll<Option<Self::Item>> {
-        //match Pin::new(&mut self.src).as_mut().poll_next(cx) {
         match self.src.as_mut().poll_next(cx) {
             std::task::Poll::Ready(Some(v)) => {
-                std::task::Poll::Ready(Some(v))
+                std::task::Poll::Ready(Some(v + *self.val))
             },
             std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
             std::task::Poll::Pending => std::task::Poll::Pending,
@@ -595,9 +593,9 @@ async fn main() -> Result<()> {
         let src = ConstantSource::new(1.0);
 
         //let (mut tee1, mut tee2) = Tee::tee(&mut src);
-        let mut sink = AddConst::new(Box::pin(src), 0.5);
+        let mut add = AddConst::new(Box::pin(src), 0.5);
         //let mut convert = FloatToComplex::new(&mut add, &mut tee2);
-        //let mut sink = DebugSink::new(Box::pin(add));
+        let mut sink = DebugSink::new(Box::pin(add));
         while let Some(_) = sink.next().await {}
     }
 
