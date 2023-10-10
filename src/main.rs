@@ -241,8 +241,10 @@ impl FileSource {
 use futures_util::stream::Stream;
 impl Stream for FileSource {
     type Item = Complex;
-    fn poll_next(mut self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>)
-                 -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
         eprintln!("FileSource::poll_next");
         let mut buf = vec![0u8; 8];
         let n = self.f.read(&mut buf[..]).expect("failed to read");
@@ -252,7 +254,8 @@ impl Stream for FileSource {
             assert_eq!(n, 8);
             let c = Complex::new(
                 Float::from_le_bytes(buf[0..4].try_into().expect("failed to parse")),
-                Float::from_le_bytes(buf[4..8].try_into().expect("failed to parse")));
+                Float::from_le_bytes(buf[4..8].try_into().expect("failed to parse")),
+            );
             std::task::Poll::Ready(Some(c))
         }
     }
@@ -355,39 +358,45 @@ where
     T: Copy,
 {
     type Item = T;
-    fn poll_next(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>)
-                 -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
         std::task::Poll::Ready(Some(self.val))
-    }    
+    }
 }
-
 
 struct AddConst<T> {
     src: Pin<Box<dyn Stream<Item = T>>>,
-    val: Pin<Box<T>>,
+    val: T,
 }
 
 impl<T> AddConst<T>
 where
     T: Copy + Serial,
 {
-    fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self { Self { src,val: Box::pin(val) } }
+    fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self {
+        Self {
+            src,
+            val: val,
+        }
+    }
 }
+impl<T> Unpin for AddConst<T> {}
 
 impl<T> Stream for AddConst<T>
 where
     T: Copy + std::ops::Add<Output = T> + Serial,
 {
     type Item = T;
-    fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>)
-                 -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         match self.src.as_mut().poll_next(cx) {
-            std::task::Poll::Ready(Some(v)) => {
-                std::task::Poll::Ready(Some(v + *self.val))
-            },
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        } 
+            std::task::Poll::Ready(Some(v)) => std::task::Poll::Ready(Some(v + self.val)),
+            x => x,
+        }
     }
 }
 /*
@@ -565,7 +574,9 @@ impl<T> DebugSink<T>
 where
     T: Copy + Serial,
 {
-    fn new(src: Pin<Box<dyn Stream<Item = T>>>) -> Self {        Self { src }    }
+    fn new(src: Pin<Box<dyn Stream<Item = T>>>) -> Self {
+        Self { src }
+    }
 }
 
 impl<T> Stream for DebugSink<T>
@@ -573,13 +584,15 @@ where
     T: std::fmt::Debug + Serial + Copy,
 {
     type Item = ();
-    fn poll_next(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>)
-                 -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
         match self.src.as_mut().poll_next(cx) {
             std::task::Poll::Ready(Some(v)) => {
                 eprintln!("Got item: {v:?}");
                 std::task::Poll::Ready(Some(()))
-            },
+            }
             std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
             std::task::Poll::Pending => std::task::Poll::Pending,
         }
@@ -588,7 +601,6 @@ where
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
     if true {
         let src = ConstantSource::new(1.0);
 
@@ -603,45 +615,43 @@ async fn main() -> Result<()> {
         // Source.
         let src = FileSource::new("raw-1024k.c32")?;
         let mut debug = DebugSink::new(Box::pin(src));
-        while let Some(_) = debug.next().await {
-            
-        }
+        while let Some(_) = debug.next().await {}
         eprintln!("stream done");
-/*
-        // Filter
-        let taps = low_pass_complex(1024000.0, 100_000.0, 1000.0);
-        let mut block = FftFilter::new(&mut src, &taps);
+        /*
+                // Filter
+                let taps = low_pass_complex(1024000.0, 100_000.0, 1000.0);
+                let mut block = FftFilter::new(&mut src, &taps);
 
-        // Resample RF.
-        let mut block = RationalResampler::new(&mut block, 200_000, 1_024_000)?;
+                // Resample RF.
+                let mut block = RationalResampler::new(&mut block, 200_000, 1_024_000)?;
 
-        // Quad Demod.
-        let mut block = QuadDemod::new(&mut block, 1.0);
+                // Quad Demod.
+                let mut block = QuadDemod::new(&mut block, 1.0);
 
-        // Filter audio.
-        let taps = low_pass_complex(200_000.0, 44_100.0, 500.0);
-        let mut zeroes = ConstantSource::new(0.0);
-        let mut f2c = FloatToComplex::new(&mut block, &mut zeroes);
-        let mut filter = FftFilter::new(&mut f2c, &taps);
-        let mut block = ComplexToReal::new(&mut filter);
+                // Filter audio.
+                let taps = low_pass_complex(200_000.0, 44_100.0, 500.0);
+                let mut zeroes = ConstantSource::new(0.0);
+                let mut f2c = FloatToComplex::new(&mut block, &mut zeroes);
+                let mut filter = FftFilter::new(&mut f2c, &taps);
+                let mut block = ComplexToReal::new(&mut filter);
 
-        // Resample audio.
-        let mut block = RationalResampler::new(&mut block, 48_000, 200_000)?;
+                // Resample audio.
+                let mut block = RationalResampler::new(&mut block, 48_000, 200_000)?;
 
-        // Change volume.
-        let mut block = MulConst::new(&mut block, 0.2);
+                // Change volume.
+                let mut block = MulConst::new(&mut block, 0.2);
 
-        // Convert to .au.
-        let mut block = AuEncode::new(&mut block, 48_000, 1);
+                // Convert to .au.
+                let mut block = AuEncode::new(&mut block, 48_000, 1);
 
-        // Write file.
-        let mut block = FileSink::new(&mut block, "test.au")?;
+                // Write file.
+                let mut block = FileSink::new(&mut block, "test.au")?;
 
-        // Run flowgraph.
-        if let Some(v) = block.next() {
-            panic!("sink should never produce {:?}", v);
-        }
-*/
+                // Run flowgraph.
+                if let Some(v) = block.next() {
+                    panic!("sink should never produce {:?}", v);
+                }
+        */
     }
     Ok(())
 }
