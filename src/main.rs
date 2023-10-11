@@ -376,10 +376,7 @@ where
     T: Copy + Serial,
 {
     fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self {
-        Self {
-            src,
-            val: val,
-        }
+        Self { src, val: val }
     }
 }
 impl<T> Unpin for AddConst<T> {}
@@ -588,13 +585,14 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        match self.src.as_mut().poll_next(cx) {
-            std::task::Poll::Ready(Some(v)) => {
-                eprintln!("Got item: {v:?}");
-                std::task::Poll::Ready(Some(()))
-            }
-            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
-            std::task::Poll::Pending => std::task::Poll::Pending,
+        loop {
+            match self.src.as_mut().poll_next(cx) {
+                std::task::Poll::Ready(Some(v)) => {
+                    eprintln!("Got item: {v:?}");
+                }
+                std::task::Poll::Ready(None) => return std::task::Poll::Ready(None),
+                std::task::Poll::Pending => return std::task::Poll::Pending,
+            };
         }
     }
 }
@@ -605,17 +603,21 @@ async fn main() -> Result<()> {
         let src = ConstantSource::new(1.0);
 
         //let (mut tee1, mut tee2) = Tee::tee(&mut src);
-        let mut add = AddConst::new(Box::pin(src), 0.5);
+        let add = AddConst::new(Box::pin(src), 0.5);
         //let mut convert = FloatToComplex::new(&mut add, &mut tee2);
         let mut sink = DebugSink::new(Box::pin(add));
-        while let Some(_) = sink.next().await {}
+        while let Some(_) = sink.next().await {
+            panic!("sink is not supposed to output anything");
+        }
     }
 
     if false {
         // Source.
         let src = FileSource::new("raw-1024k.c32")?;
         let mut debug = DebugSink::new(Box::pin(src));
-        while let Some(_) = debug.next().await {}
+        while let Some(_) = debug.next().await {
+            panic!("sink is not supposed to output anything");
+        }
         eprintln!("stream done");
         /*
                 // Filter
