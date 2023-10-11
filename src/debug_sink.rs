@@ -1,22 +1,28 @@
 //! Print values to stdout, for debugging.
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::{Stream, StreamType, Streamp};
 use crate::Error;
 
 /// Print values to stdout, for debugging.
-pub struct DebugSink<T> {
-    dummy: std::marker::PhantomData<T>,
+pub struct DebugSink<T>
+where
+    T: Copy,
+{
+    src: Arc<Mutex<Stream<T>>>,
 }
 
 #[allow(clippy::new_without_default)]
-impl<T> DebugSink<T> {
+impl<T> DebugSink<T>
+where
+    T: Copy,
+{
     /// Create new debug block.
-    pub fn new() -> Self {
-        Self {
-            dummy: std::marker::PhantomData,
-        }
+    pub fn new(src: Arc<Mutex<Stream<T>>>) -> Self {
+        Self { src }
     }
 }
 
@@ -28,11 +34,12 @@ where
     fn block_name(&self) -> &'static str {
         "DebugSink"
     }
-    fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        r.get(0).borrow().iter().for_each(|s: &T| {
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut i = self.src.lock().unwrap();
+        i.iter().for_each(|s: &T| {
             println!("debug: {:?}", s);
         });
-        r.get(0).borrow_mut().clear();
+        i.clear();
         Ok(BlockRet::Ok)
     }
 }

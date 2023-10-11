@@ -11,15 +11,15 @@ The best places to get RTL SDRs are probably:
 * <https://www.rtl-sdr.com>
 * <https://www.nooelec.com/store/>
 */
-use std::sync::mpsc;
 use std::sync::mpsc::{RecvError, SendError, TryRecvError};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams};
+use crate::stream::Stream;
 use crate::Error;
 
 const CHUNK_SIZE: usize = 8192;
@@ -51,6 +51,7 @@ impl<T> From<SendError<T>> for Error {
 /// RTL SDR Source block.
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,
+    dst: Arc<Mutex<Stream<u8>>>,
 }
 
 impl RtlSdrSource {
@@ -98,7 +99,13 @@ impl RtlSdrSource {
                 }
             })?;
         assert_eq!(rx.recv()?, vec![]);
-        Ok(Self { rx })
+        Ok(Self {
+            rx,
+            dst: Arc::new(Mutex::new(Stream::new())),
+        })
+    }
+    pub fn out(&self) -> Arc<Mutex<Stream<u8>>> {
+        self.dst.clone()
     }
 }
 
@@ -106,12 +113,12 @@ impl Block for RtlSdrSource {
     fn block_name(&self) -> &'static str {
         "RtlSdrSource"
     }
-    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet, Error> {
         match self.rx.try_recv() {
             Err(TryRecvError::Empty) => Ok(BlockRet::Ok),
             Err(other) => Err(other.into()),
             Ok(buf) => {
-                w.get(0).borrow_mut().write_slice(&buf);
+                self.dst.lock().unwrap().write_slice(&buf);
                 Ok(BlockRet::Ok)
             }
         }

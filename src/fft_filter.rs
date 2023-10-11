@@ -28,13 +28,13 @@ graph.connect(StreamType::new_complex(), fft, 0, sink, 0);
 * <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
 * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
 */
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::Stream;
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -46,6 +46,8 @@ pub struct FftFilter {
     tail: Vec<Complex>,
     fft: Arc<dyn rustfft::Fft<Float>>,
     ifft: Arc<dyn rustfft::Fft<Float>>,
+    src: Arc<Mutex<Stream<Complex>>>,
+    dst: Arc<Mutex<Stream<Complex>>>,
 }
 
 impl FftFilter {
@@ -58,7 +60,7 @@ impl FftFilter {
     }
 
     /// Create new FftFilter, given filter taps.
-    pub fn new(taps: &[Complex]) -> Self {
+    pub fn new(src: Arc<Mutex<Stream<Complex>>>, taps: &[Complex]) -> Self {
         // Set up FFT / batch size.
         let fft_size = Self::calc_fft_size(taps.len());
         let nsamples = fft_size - taps.len();
@@ -82,6 +84,8 @@ impl FftFilter {
         }
 
         Self {
+            src,
+            dst: Arc::new(Mutex::new(Stream::new())),
             fft_size,
             taps_fft,
             tail: vec![Complex::default(); taps.len()],
@@ -91,15 +95,18 @@ impl FftFilter {
             nsamples,
         }
     }
+    pub fn out(&self) -> Arc<Mutex<Stream<Complex>>> {
+        self.dst.clone()
+    }
 }
 
 impl Block for FftFilter {
     fn block_name(&self) -> &'static str {
         "FftFilter"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = r.get(0);
-        let o: Streamp<Complex> = w.get(0);
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut input = self.src.lock().unwrap();
+        let mut o = self.dst.lock().unwrap();
         loop {
             // Read so that self.buf contains exactly self.nsamples samples.
             //
@@ -118,12 +125,12 @@ impl Block for FftFilter {
             // Why are these things not fixed: Because then it's
             // slower, for some reason. At least as of 2023-10-07, on
             // amd64, with Rust 1.7.1.
-            let add = std::cmp::min(input.borrow().available(), self.nsamples - self.buf.len());
+            let add = std::cmp::min(input.available(), self.nsamples - self.buf.len());
             if add < self.nsamples {
                 break;
             }
-            self.buf.extend(input.borrow().iter().take(add));
-            input.borrow_mut().consume(add);
+            self.buf.extend(input.iter().take(add).copied());
+            input.consume(add);
 
             // Run FFT.
             self.buf.resize(self.fft_size, Complex::default());
@@ -148,7 +155,7 @@ impl Block for FftFilter {
             }
 
             // Output.
-            o.borrow_mut().write_slice(&filtered[..self.nsamples]);
+            o.write_slice(&filtered[..self.nsamples]);
 
             // Stash tail.
             for i in 0..self.tail.len() {
@@ -161,7 +168,7 @@ impl Block for FftFilter {
         Ok(BlockRet::Ok)
     }
 }
-
+/*
 /// FFT filter for float values.
 ///
 /// Works just like [FftFilter], but for Float input, output, and taps.
@@ -314,3 +321,4 @@ mod tests {
         Ok(())
     }
 }
+*/

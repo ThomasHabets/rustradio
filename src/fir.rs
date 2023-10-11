@@ -6,12 +6,14 @@ Use FftFilter if many taps are used, for better performance.
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
+use std::sync::{Arc, Mutex};
+
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::Stream;
 use crate::{Complex, Error, Float};
 
 /// Finite impulse response filter.
-pub struct FIR<T> {
+pub struct FIR<T: Copy> {
     taps: Vec<T>,
 }
 
@@ -43,18 +45,22 @@ where
 }
 
 /// Finite impulse response filter block.
-pub struct FIRFilter<T> {
+pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,
+    src: Arc<Mutex<Stream<T>>>,
+    dst: Arc<Mutex<Stream<T>>>,
 }
 
-impl<T> FIRFilter<T>
+impl<T: Copy> FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create FIR block given taps.
-    pub fn new(taps: &[T]) -> Self {
+    pub fn new(src: Arc<Mutex<Stream<T>>>, taps: &[T]) -> Self {
         Self {
+            src,
+            dst: Arc::new(Mutex::new(Stream::new())),
             ntaps: taps.len(),
             fir: FIR::new(taps),
         }
@@ -64,21 +70,20 @@ where
 impl<T> Block for FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "FirFilter"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let input = r.get(0);
-        let out = w.get(0);
-        let n = std::cmp::min(input.borrow().available(), out.borrow().capacity());
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut input = self.src.lock().unwrap();
+        let mut out = self.dst.lock().unwrap();
+        let n = std::cmp::min(input.available(), out.capacity());
         if n > self.ntaps {
             // TODO: needless copy.
-            let v: Vec<T> = input.borrow().data().clone().into();
+            let v: Vec<T> = input.data().clone().into();
             let v = self.fir.filter_n(&v[..n]);
-            input.borrow_mut().consume(v.len());
-            out.borrow_mut().write_slice(&v);
+            input.consume(v.len());
+            out.write_slice(&v);
         }
         Ok(BlockRet::Ok)
     }

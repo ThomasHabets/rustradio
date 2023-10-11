@@ -23,15 +23,19 @@ Enabling the `fast-math` feature (dependency) speeds up
 QuadratureDemod by about 4x.
 
 [vectorized]: https://mazzo.li/posts/vectorized-atan2.html
-*/
+ */
 use anyhow::Result;
+use std::sync::{Arc, Mutex};
 
+use crate::stream::Stream;
 use crate::{map_block_convert_macro, Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
 pub struct QuadratureDemod {
     gain: Float,
     last: Complex,
+    src: Arc<Mutex<Stream<Complex>>>,
+    dst: Arc<Mutex<Stream<Float>>>,
 }
 
 impl QuadratureDemod {
@@ -39,11 +43,16 @@ impl QuadratureDemod {
     ///
     /// Gain is just used to scale the value, and can be set to 1.0 if
     /// you don't care about the scale.
-    pub fn new(gain: Float) -> Self {
+    pub fn new(src: Arc<Mutex<Stream<Complex>>>, gain: Float) -> Self {
         Self {
+            src,
+            dst: Arc::new(Mutex::new(Stream::new())),
             gain,
             last: Complex::default(),
         }
+    }
+    pub fn out(&self) -> Arc<Mutex<Stream<Float>>> {
+        self.dst.clone()
     }
     fn process_one(&mut self, s: Complex) -> Float {
         let t = s * self.last.conj();

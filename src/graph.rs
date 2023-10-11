@@ -242,7 +242,7 @@ impl Graph {
             let insamples = is.sum_available();
             let before_outsamples = os.sum_available();
 
-            let eof = matches!(b.work(is, os)?, BlockRet::EOF);
+            let eof = matches!(b.work()?, BlockRet::EOF);
             self.times[n] += st.elapsed();
             processed += insamples - is.sum_available();
             processed += os.sum_available() - before_outsamples;

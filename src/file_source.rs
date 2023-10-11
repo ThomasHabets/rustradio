@@ -1,24 +1,25 @@
 //! Read stream from raw file.
 use std::io::BufReader;
 use std::io::Read;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use log::{debug, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::Stream;
 use crate::{Error, Sample};
 
 /// Read stream from raw file.
-pub struct FileSource<T> {
+pub struct FileSource<T: Copy> {
     filename: String,
     f: BufReader<std::fs::File>,
     repeat: bool,
     buf: Vec<u8>,
-    dummy: std::marker::PhantomData<T>,
+    dst: Arc<Mutex<Stream<T>>>,
 }
 
-impl<T: Default> FileSource<T> {
+impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
     pub fn new(filename: &str, repeat: bool) -> Result<Self> {
         let f = BufReader::new(std::fs::File::open(filename)?);
@@ -28,23 +29,25 @@ impl<T: Default> FileSource<T> {
             f,
             repeat,
             buf: Vec::new(),
-            dummy: std::marker::PhantomData,
+            dst: Arc::new(Mutex::new(Stream::<T>::new())),
         })
+    }
+    pub fn out(&self) -> Arc<Mutex<Stream<T>>> {
+        self.dst.clone()
     }
 }
 
 impl<T> Block for FileSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "FileSource"
     }
-    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet, Error> {
         let sample_size = T::size();
         let have = self.buf.len() / sample_size;
-        let want = w.capacity(0);
+        let want = self.dst.lock().unwrap().capacity();
 
         if have < want {
             let get = want - have;
@@ -67,7 +70,7 @@ where
             v.push(T::parse(&self.buf[i..i + sample_size])?);
         }
         self.buf.drain(0..(have * sample_size));
-        w.get(0).borrow_mut().write_slice(&v);
+        self.dst.lock().unwrap().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }

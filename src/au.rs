@@ -8,10 +8,12 @@ without seeking back to the file header to update data sizes.
 
 It's also much simpler.
 */
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams};
+use crate::stream::Stream;
 use crate::{Error, Float};
 
 /// Au support several encodings. This code currently only one.
@@ -49,6 +51,8 @@ g.run()?;
 pub struct AuEncode {
     header: Option<Vec<u8>>,
     encoding: Encoding,
+    src: Arc<Mutex<Stream<Float>>>,
+    dst: Arc<Mutex<Stream<u8>>>,
 }
 
 impl AuEncode {
@@ -57,7 +61,12 @@ impl AuEncode {
     /// * `encoding`: currently only `Encoding::PCM16` is implemented.
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
-    pub fn new(encoding: Encoding, bitrate: u32, channels: u32) -> Self {
+    pub fn new(
+        src: Arc<Mutex<Stream<Float>>>,
+        encoding: Encoding,
+        bitrate: u32,
+        channels: u32,
+    ) -> Self {
         assert_eq!(channels, 1, "only mono supported at the moment");
         let mut v = Vec::with_capacity(28);
 
@@ -85,7 +94,12 @@ impl AuEncode {
         Self {
             header: Some(v),
             encoding,
+            src,
+            dst: Arc::new(Mutex::new(Stream::<u8>::new())),
         }
+    }
+    pub fn out(&self) -> Arc<Mutex<Stream<u8>>> {
+        self.dst.clone()
     }
 }
 
@@ -93,10 +107,10 @@ impl Block for AuEncode {
     fn block_name(&self) -> &'static str {
         "AuEncode"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let o = w.get(0);
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut o = self.dst.lock().unwrap();
         if let Some(h) = &self.header {
-            o.borrow_mut().write_slice(h);
+            o.write_slice(h);
             self.header = None;
         }
 
@@ -104,13 +118,13 @@ impl Block for AuEncode {
         type S = i16;
         let scale = S::MAX as Float;
 
-        let mut v = Vec::with_capacity(r.available(0) * std::mem::size_of::<S>());
-        let i = r.get(0);
-        i.borrow().iter().for_each(|x: &Float| {
+        let mut i = self.src.lock().unwrap();
+        let mut v = Vec::with_capacity(i.available() * std::mem::size_of::<S>());
+        i.iter().for_each(|x: &Float| {
             v.extend(((*x * scale) as S).to_be_bytes());
         });
-        o.borrow_mut().write_slice(&v);
-        i.borrow_mut().clear();
+        o.write_slice(&v);
+        i.clear();
         Ok(BlockRet::Ok)
     }
 }

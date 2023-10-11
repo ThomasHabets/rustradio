@@ -7,7 +7,6 @@ thing, and you connect them together with streams to process the data.
 
 use anyhow::Result;
 
-use crate::stream::{InputStreams, OutputStreams};
 use crate::Error;
 
 /** Return type for all blocks.
@@ -59,7 +58,7 @@ pub trait Block {
     Writing data to streams in `w` only involves calling `.write()` on
     the stream.
      */
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error>;
+    fn work(&mut self) -> Result<BlockRet, Error>;
 }
 
 /** Macro to make it easier to write one-for-one blocks.
@@ -93,7 +92,7 @@ rustradio::map_block_macro_v2![Noop<T>, std::ops::Add<Output = T>];
 #[macro_export]
 macro_rules! map_block_macro_v2 {
     ($name:path, $($tr:path), *) => {
-        impl<T> $crate::block::Block for $name
+        impl<'a, T> $crate::block::Block for $name
         where
             T: Copy $(+$tr)*,
             $crate::stream::Streamp<T>: From<$crate::stream::StreamType>,
@@ -101,19 +100,13 @@ macro_rules! map_block_macro_v2 {
             fn block_name(&self) -> &'static str {
                 stringify!{$name}
             }
-            fn work(
-                &mut self,
-                r: &mut $crate::stream::InputStreams,
-                w: &mut $crate::stream::OutputStreams,
-            ) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let i = r.get(0);
-                w.get(0)
-                    .borrow_mut()
+            fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
+                let mut i = self.src.lock().unwrap();
+                self.dst.lock().unwrap()
                     .write(i
-                           .borrow()
                            .iter()
                            .map(|x| self.process_one(x)));
-                i.borrow_mut().clear();
+                i.clear();
                 Ok($crate::block::BlockRet::Ok)
             }
         }
@@ -139,16 +132,14 @@ macro_rules! map_block_convert_macro {
             fn block_name(&self) -> &'static str {
                 stringify! {$name}
             }
-            fn work(
-                &mut self,
-                r: &mut $crate::stream::InputStreams,
-                w: &mut $crate::stream::OutputStreams,
-            ) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let i = r.get(0);
-                w.get(0)
-                    .borrow_mut()
-                    .write(i.borrow().iter().map(|x| self.process_one(*x)));
-                i.borrow_mut().clear();
+            fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
+                let v = {
+                    let c = self.src.clone();
+                    let i = c.lock().unwrap();
+                    i.iter().map(|x| self.process_one(*x)).collect::<Vec<_>>()
+                };
+                self.dst.lock().unwrap().write_slice(&v);
+                self.src.lock().unwrap().clear();
                 Ok($crate::block::BlockRet::Ok)
             }
         }

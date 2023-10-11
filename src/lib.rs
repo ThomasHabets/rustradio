@@ -101,12 +101,7 @@ use anyhow::Result;
 // Blocks.
 pub mod add_const;
 pub mod au;
-pub mod binary_slicer;
-pub mod complex_to_mag2;
-pub mod constant_source;
-pub mod convert;
 pub mod debug_sink;
-pub mod delay;
 pub mod fft_filter;
 pub mod file_sink;
 pub mod file_source;
@@ -117,10 +112,17 @@ pub mod quadrature_demod;
 pub mod rational_resampler;
 pub mod rtlsdr;
 pub mod signal_source;
+pub mod vector_source;
+/*
+pub mod binary_slicer;
+pub mod complex_to_mag2;
+pub mod constant_source;
+pub mod convert;
+pub mod delay;
 pub mod single_pole_iir_filter;
 pub mod symbol_sync;
 pub mod tcp_source;
-pub mod vector_source;
+ */
 
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;

@@ -1,23 +1,28 @@
 //! Decode RTL-SDR's byte based format into Complex I/Q.
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams};
+use crate::stream::Stream;
 use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
-pub struct RtlSdrDecode;
+pub struct RtlSdrDecode {
+    src: Arc<Mutex<Stream<u8>>>,
+    dst: Arc<Mutex<Stream<Complex>>>,
+}
 
 impl RtlSdrDecode {
     /// Create new RTL SDR Decode block.
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(src: Arc<Mutex<Stream<u8>>>) -> Self {
+        Self {
+            src,
+            dst: Arc::new(Mutex::new(Stream::new())),
+        }
     }
-}
-
-impl Default for RtlSdrDecode {
-    fn default() -> Self {
-        Self::new()
+    pub fn out(&self) -> Arc<Mutex<Stream<Complex>>> {
+        self.dst.clone()
     }
 }
 
@@ -25,15 +30,15 @@ impl Block for RtlSdrDecode {
     fn block_name(&self) -> &'static str {
         "RtlSdrDecode"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let samples: usize = r.available(0) - r.available(0) % 2;
-        let input = r.get(0);
-        let out = w.get(0);
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut input = self.src.lock().unwrap();
+        let samples: usize = input.available() - input.available() % 2;
+        let mut out = self.dst.lock().unwrap();
 
         // TODO: needless copy.
-        let buf: Vec<u8> = input.borrow().data().clone().into();
+        let buf: Vec<u8> = input.data().clone().into();
         let buf = &buf[..samples];
-        out.borrow_mut().write_slice(
+        out.write_slice(
             (0..samples)
                 .step_by(2)
                 .map(|e| {
@@ -45,7 +50,7 @@ impl Block for RtlSdrDecode {
                 .collect::<Vec<Complex>>()
                 .as_slice(),
         );
-        input.borrow_mut().consume(samples);
+        input.consume(samples);
         Ok(BlockRet::Ok)
     }
 }

@@ -1,12 +1,13 @@
 //! Send stream to raw file.
 use std::io::BufWriter;
 use std::io::Write;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::Stream;
 use crate::{Error, Sample};
 
 /// File write mode.
@@ -22,14 +23,14 @@ pub enum Mode {
 }
 
 /// Send stream to raw file.
-pub struct FileSink<T> {
+pub struct FileSink<T: Copy> {
     f: BufWriter<std::fs::File>,
-    dummy: std::marker::PhantomData<T>,
+    src: Arc<Mutex<Stream<T>>>,
 }
 
-impl<T> FileSink<T> {
+impl<T: Copy> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new(filename: &str, mode: Mode) -> Result<Self> {
+    pub fn new(src: Arc<Mutex<Stream<T>>>, filename: &str, mode: Mode) -> Result<Self> {
         debug!("Opening sink {filename}");
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
@@ -44,10 +45,7 @@ impl<T> FileSink<T> {
                 .append(true)
                 .open(filename)?,
         });
-        Ok(Self {
-            f,
-            dummy: std::marker::PhantomData,
-        })
+        Ok(Self { f, src })
     }
 
     /// Flush the write buffer.
@@ -59,19 +57,19 @@ impl<T> FileSink<T> {
 impl<T> Block for FileSink<T>
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "FileSink"
     }
-    fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let n = r.available(0);
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut i = self.src.lock().unwrap();
+        let n = i.available();
         let mut v = Vec::with_capacity(T::size() * n);
-        r.get(0).borrow().iter().for_each(|s: &T| {
+        i.iter().for_each(|s: &T| {
             v.extend(&s.serialize());
         });
         self.f.write_all(&v)?;
-        r.get(0).borrow_mut().consume(n);
+        i.consume(n);
         Ok(BlockRet::Ok)
     }
 }

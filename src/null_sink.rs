@@ -1,40 +1,36 @@
 //! Discard anything written to this block.
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::Stream;
 use crate::Error;
 
 /// Discard anything written to this block.
-pub struct NullSink<T> {
-    dummy: std::marker::PhantomData<T>,
+pub struct NullSink<T>
+where
+    T: Copy,
+{
+    src: Arc<Mutex<Stream<T>>>,
 }
 
 impl<T: Default + Copy> NullSink<T> {
     /// Create new NullSink block.
-    pub fn new() -> Self {
-        Self {
-            dummy: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<T: Default + Copy> Default for NullSink<T> {
-    fn default() -> Self {
-        Self::new()
+    pub fn new(src: Arc<Mutex<Stream<T>>>) -> Self {
+        Self { src }
     }
 }
 
 impl<T> Block for NullSink<T>
 where
     T: Copy,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "NullSink"
     }
-    fn work(&mut self, r: &mut InputStreams, _w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        r.get::<T>(0).borrow_mut().clear();
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        self.src.lock().unwrap().clear();
         Ok(BlockRet::Ok)
     }
 }

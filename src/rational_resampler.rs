@@ -1,12 +1,13 @@
 //! Resample by a fractional amount.
 /*
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
-*/
+ */
 use anyhow::Result;
+use std::sync::{Arc, Mutex};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams};
-use crate::{Complex, Error, Float};
+use crate::stream::Stream;
+use crate::Error;
 
 fn gcd(mut a: usize, mut b: usize) -> usize {
     while b != 0 {
@@ -18,18 +19,20 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 }
 
 /// Resample by a fractional amount.
-pub struct RationalResampler {
+pub struct RationalResampler<T: Copy> {
     deci: i64,
     interp: i64,
     counter: i64,
+    src: Arc<Mutex<Stream<T>>>,
+    dst: Arc<Mutex<Stream<T>>>,
 }
 
-impl RationalResampler {
+impl<T: Copy> RationalResampler<T> {
     /// Create new RationalResampler block.
     ///
     /// A common pattern to convert between arbitrary sample rates X
     /// and Y is to decimate by X and interpolate by Y.
-    pub fn new(mut interp: usize, mut deci: usize) -> Result<Self> {
+    pub fn new(src: Arc<Mutex<Stream<T>>>, mut interp: usize, mut deci: usize) -> Result<Self> {
         let g = gcd(deci, interp);
         deci /= g;
         interp /= g;
@@ -37,42 +40,32 @@ impl RationalResampler {
             interp: i64::try_from(interp)?,
             deci: i64::try_from(deci)?,
             counter: 0,
+            src,
+            dst: Arc::new(Mutex::new(Stream::new())),
         })
+    }
+    pub fn out(&self) -> Arc<Mutex<Stream<T>>> {
+        self.dst.clone()
     }
 }
 
-impl Block for RationalResampler {
+impl<T: Copy> Block for RationalResampler<T> {
     fn block_name(&self) -> &'static str {
         "RationalResampler"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        if r.is_complex(0) {
-            let mut v = Vec::new();
-            self.counter -= self.deci;
-            for s in r.get(0).borrow().iter() {
-                self.counter += self.interp;
-                while self.counter >= 0 {
-                    v.push(*s);
-                    self.counter -= self.deci;
-                }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut i = self.src.lock().unwrap();
+        let mut v = Vec::new();
+        self.counter -= self.deci;
+        for s in i.iter() {
+            self.counter += self.interp;
+            while self.counter >= 0 {
+                v.push(*s);
+                self.counter -= self.deci;
             }
-            r.get::<Complex>(0).borrow_mut().clear();
-            w.get::<Complex>(0).borrow_mut().write_slice(&v);
-        } else if r.is_float(0) {
-            let mut v = Vec::new();
-            self.counter -= self.deci;
-            for s in r.get(0).borrow().iter() {
-                self.counter += self.interp;
-                while self.counter >= 0 {
-                    v.push(*s);
-                    self.counter -= self.deci;
-                }
-            }
-            r.get::<Float>(0).borrow_mut().clear();
-            w.get::<Float>(0).borrow_mut().write_slice(&v);
-        } else {
-            panic!("Other types not allowed");
         }
+        i.clear();
+        self.dst.lock().unwrap().write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }
