@@ -4,7 +4,7 @@ extern crate rustradio;
 extern crate test;
 use rustradio::block::Block;
 use rustradio::blocks::*;
-use rustradio::stream::{new_streamp, Streamp};
+use rustradio::stream::new_streamp;
 use rustradio::Complex;
 
 use test::Bencher;

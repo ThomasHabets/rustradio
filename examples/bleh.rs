@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     #[cfg(feature = "rtlsdr")]
     {
         println!("Running rtlsdr example");
-        use rustradio::graph::Graph;
+        //use rustradio::graph::Graph;
         use rustradio::Complex;
         //let mut g = Graph::new();
         let mut src = RtlSdrSource::new(868_000_000, 1024_000, 30)?;
@@ -39,6 +39,6 @@ fn main() -> Result<()> {
             }
         }
     }
-
+    #[allow(unreachable_code)]
     Ok(())
 }
