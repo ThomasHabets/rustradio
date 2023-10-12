@@ -11,15 +11,15 @@ The best places to get RTL SDRs are probably:
 * <https://www.rtl-sdr.com>
 * <https://www.nooelec.com/store/>
 */
+use std::sync::mpsc;
 use std::sync::mpsc::{RecvError, SendError, TryRecvError};
-use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::Error;
 
 const CHUNK_SIZE: usize = 8192;
@@ -51,7 +51,7 @@ impl<T> From<SendError<T>> for Error {
 /// RTL SDR Source block.
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,
-    dst: Arc<Mutex<Stream<u8>>>,
+    dst: Streamp<u8>,
 }
 
 impl RtlSdrSource {
@@ -101,10 +101,11 @@ impl RtlSdrSource {
         assert_eq!(rx.recv()?, vec![]);
         Ok(Self {
             rx,
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
         })
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<u8>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<u8> {
         self.dst.clone()
     }
 }

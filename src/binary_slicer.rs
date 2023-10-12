@@ -1,15 +1,22 @@
 //! Turn positive Float values into binary `1u8`, and negative into `0u8`.
 use anyhow::Result;
 
+use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_convert_macro, Float};
 
 /// Turn positive Float values into binary `1u8`, and negative into `0u8`.
-pub struct BinarySlicer;
+pub struct BinarySlicer {
+    src: Streamp<Float>,
+    dst: Streamp<u8>,
+}
 
 impl BinarySlicer {
     /// Create new binary slicer.
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(src: Streamp<Float>) -> Self {
+        Self {
+            src,
+            dst: new_streamp(),
+        }
     }
 
     fn process_one(&self, a: Float) -> u8 {
@@ -18,12 +25,6 @@ impl BinarySlicer {
         } else {
             0
         }
-    }
-}
-
-impl Default for BinarySlicer {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

@@ -1,10 +1,9 @@
 //! Print values to stdout, for debugging.
-use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, StreamType, Streamp};
+use crate::stream::Streamp;
 use crate::Error;
 
 /// Print values to stdout, for debugging.
@@ -12,7 +11,7 @@ pub struct DebugSink<T>
 where
     T: Copy,
 {
-    src: Arc<Mutex<Stream<T>>>,
+    src: Streamp<T>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -21,7 +20,7 @@ where
     T: Copy,
 {
     /// Create new debug block.
-    pub fn new(src: Arc<Mutex<Stream<T>>>) -> Self {
+    pub fn new(src: Streamp<T>) -> Self {
         Self { src }
     }
 }
@@ -29,7 +28,6 @@ where
 impl<T> Block for DebugSink<T>
 where
     T: Copy + std::fmt::Debug + Default,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "DebugSink"
@@ -40,6 +38,6 @@ where
             println!("debug: {:?}", s);
         });
         i.clear();
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Noop)
     }
 }

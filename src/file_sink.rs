@@ -1,13 +1,12 @@
 //! Send stream to raw file.
 use std::io::BufWriter;
 use std::io::Write;
-use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::Streamp;
 use crate::{Error, Sample};
 
 /// File write mode.
@@ -25,12 +24,12 @@ pub enum Mode {
 /// Send stream to raw file.
 pub struct FileSink<T: Copy> {
     f: BufWriter<std::fs::File>,
-    src: Arc<Mutex<Stream<T>>>,
+    src: Streamp<T>,
 }
 
 impl<T: Copy> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new(src: Arc<Mutex<Stream<T>>>, filename: &str, mode: Mode) -> Result<Self> {
+    pub fn new(src: Streamp<T>, filename: &str, mode: Mode) -> Result<Self> {
         debug!("Opening sink {filename}");
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
@@ -70,13 +69,14 @@ where
         });
         self.f.write_all(&v)?;
         i.consume(n);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Noop)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stream::streamp_from_slice;
     use crate::{Complex, Float};
 
     #[test]
@@ -84,10 +84,9 @@ mod tests {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
         {
-            let mut sink = FileSink::<Float>::new(&tmpfn, Mode::Create)?;
-            let mut is = InputStreams::new();
-            is.add_stream(StreamType::from_float(&[1.0 as Float, 3.0, 3.14, -3.14]));
-            sink.work(&mut is, &mut OutputStreams::new())?;
+            let ssrc = streamp_from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
+            let mut sink = FileSink::<Float>::new(ssrc, &tmpfn, Mode::Create)?;
+            sink.work()?;
             sink.flush()?;
         }
         let out = std::fs::read(tmpfn)?;
@@ -103,13 +102,9 @@ mod tests {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
         {
-            let mut sink = FileSink::<Complex>::new(&tmpfn, Mode::Create)?;
-            let mut is = InputStreams::new();
-            is.add_stream(StreamType::from_complex(&[
-                Complex::new(0.0, 0.0),
-                Complex::new(3.14, -2.7),
-            ]));
-            sink.work(&mut is, &mut OutputStreams::new())?;
+            let ssrc = streamp_from_slice(&[Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
+            let mut sink = FileSink::<Complex>::new(ssrc, &tmpfn, Mode::Create)?;
+            sink.work()?;
             sink.flush()?;
         }
         let out = std::fs::read(tmpfn)?;

@@ -25,17 +25,16 @@ QuadratureDemod by about 4x.
 [vectorized]: https://mazzo.li/posts/vectorized-atan2.html
  */
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
 
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_convert_macro, Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
 pub struct QuadratureDemod {
     gain: Float,
     last: Complex,
-    src: Arc<Mutex<Stream<Complex>>>,
-    dst: Arc<Mutex<Stream<Float>>>,
+    src: Streamp<Complex>,
+    dst: Streamp<Float>,
 }
 
 impl QuadratureDemod {
@@ -43,15 +42,16 @@ impl QuadratureDemod {
     ///
     /// Gain is just used to scale the value, and can be set to 1.0 if
     /// you don't care about the scale.
-    pub fn new(src: Arc<Mutex<Stream<Complex>>>, gain: Float) -> Self {
+    pub fn new(src: Streamp<Complex>, gain: Float) -> Self {
         Self {
             src,
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
             gain,
             last: Complex::default(),
         }
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<Float>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Float> {
         self.dst.clone()
     }
     fn process_one(&mut self, s: Complex) -> Float {

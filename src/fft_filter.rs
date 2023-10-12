@@ -3,7 +3,6 @@
 ```
 use rustradio::{Complex, Float};
 use rustradio::graph::Graph;
-use rustradio::stream::StreamType;
 use rustradio::fir::low_pass_complex;
 use rustradio::blocks::{ConstantSource, FftFilter, NullSink};
 
@@ -15,26 +14,26 @@ let samp_rate: Float = 1_000_000.0;
 let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0);
 
 // Set up dummy source and sink.
-let src = graph.add(Box::new(ConstantSource::new(Complex::new(0.0,0.0))));
-let sink = graph.add(Box::new(NullSink::<Complex>::new()));
+let src = Box::new(ConstantSource::new(Complex::new(0.0,0.0)));
 
 // Create and connect fft.
-let fft = graph.add(Box::new(FftFilter::new(&taps)));
-graph.connect(StreamType::new_complex(), src, 0, fft, 0);
-graph.connect(StreamType::new_complex(), fft, 0, sink, 0);
+let fft = Box::new(FftFilter::new(src.out(), &taps));
+
+// Set up dummy sink.
+let sink = Box::new(NullSink::new(fft.out()));
 ```
 
 ## Further reading:
 * <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
 * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
 */
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -46,8 +45,8 @@ pub struct FftFilter {
     tail: Vec<Complex>,
     fft: Arc<dyn rustfft::Fft<Float>>,
     ifft: Arc<dyn rustfft::Fft<Float>>,
-    src: Arc<Mutex<Stream<Complex>>>,
-    dst: Arc<Mutex<Stream<Complex>>>,
+    src: Streamp<Complex>,
+    dst: Streamp<Complex>,
 }
 
 impl FftFilter {
@@ -60,7 +59,7 @@ impl FftFilter {
     }
 
     /// Create new FftFilter, given filter taps.
-    pub fn new(src: Arc<Mutex<Stream<Complex>>>, taps: &[Complex]) -> Self {
+    pub fn new(src: Streamp<Complex>, taps: &[Complex]) -> Self {
         // Set up FFT / batch size.
         let fft_size = Self::calc_fft_size(taps.len());
         let nsamples = fft_size - taps.len();
@@ -85,7 +84,7 @@ impl FftFilter {
 
         Self {
             src,
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
             fft_size,
             taps_fft,
             tail: vec![Complex::default(); taps.len()],
@@ -95,7 +94,8 @@ impl FftFilter {
             nsamples,
         }
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<Complex>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Complex> {
         self.dst.clone()
     }
 }
@@ -105,8 +105,9 @@ impl Block for FftFilter {
         "FftFilter"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock().unwrap();
-        let mut o = self.dst.lock().unwrap();
+        let mut input = self.src.lock()?;
+        let mut o = self.dst.lock()?;
+        let mut produced = false;
         loop {
             // Read so that self.buf contains exactly self.nsamples samples.
             //
@@ -156,6 +157,7 @@ impl Block for FftFilter {
 
             // Output.
             o.write_slice(&filtered[..self.nsamples]);
+            produced = true;
 
             // Stash tail.
             for i in 0..self.tail.len() {
@@ -165,10 +167,14 @@ impl Block for FftFilter {
             // Clear buffer. Per above performance comment.
             self.buf.clear();
         }
-        Ok(BlockRet::Ok)
+        if produced {
+            Ok(BlockRet::Ok)
+        } else {
+            Ok(BlockRet::Noop)
+        }
     }
 }
-/*
+
 /// FFT filter for float values.
 ///
 /// Works just like [FftFilter], but for Float input, output, and taps.
@@ -179,15 +185,30 @@ impl Block for FftFilter {
 /// performance than the Complex filter.
 pub struct FftFilterFloat {
     complex: FftFilter,
+    src: Streamp<Float>,
+    dst: Streamp<Float>,
+    inner_in: Streamp<Complex>,
+    inner_out: Streamp<Complex>,
 }
 
 impl FftFilterFloat {
     /// Create a new FftFilterFloat block.
-    pub fn new(taps: &[Float]) -> Self {
+    pub fn new(src: Streamp<Float>, taps: &[Float]) -> Self {
         let ctaps: Vec<Complex> = taps.iter().copied().map(|f| Complex::new(f, 0.0)).collect();
+        let inner_in = new_streamp();
+        let complex = FftFilter::new(inner_in.clone(), &ctaps);
+        let inner_out = complex.out();
         Self {
-            complex: FftFilter::new(&ctaps),
+            src,
+            dst: new_streamp(),
+            complex,
+            inner_in,
+            inner_out,
         }
+    }
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Float> {
+        self.dst.clone()
     }
 }
 
@@ -195,41 +216,38 @@ impl Block for FftFilterFloat {
     fn block_name(&self) -> &'static str {
         "FftFilterFloat"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet, Error> {
         // Convert input to Complex.
-        let input: Vec<Complex> = r
-            .get(0)
-            .borrow()
+        let input: Vec<Complex> = self
+            .src
+            .lock()?
             .iter()
             .copied()
             .map(|f| Complex::new(f, 0.0))
             .collect();
-
+        self.inner_in.lock()?.write_slice(&input);
         // Set up input and output streams.
-        let mut is = InputStreams::new();
-        let mut os = OutputStreams::new();
-        is.add_stream(StreamType::from_complex(&input));
-        os.add_stream(StreamType::new_complex());
 
         // Run Complex FftFilter.
-        let ret = self.complex.work(&mut is, &mut os)?;
+        let ret = self.complex.work()?;
 
         // Replicate stream consume on the Float streams.
-        r.get_streamtype(0).consume(input.len() - is.available(0));
+        self.src.lock()?.clear();
 
         // Replicate stream write.
         //
         // You'd think calling .write() with the iterator coming out
         // of .map would be faster, but you'd be wrong.
         // (as of 2023-10-07, Rust 1.71.1, amd64)
-        let out: Vec<Float> = os
-            .get(0)
-            .borrow()
+        let out: Vec<Float> = self
+            .inner_out
+            .lock()?
             .iter()
             .copied()
             .map(|c: Complex| c.re)
             .collect();
-        w.get(0).borrow_mut().write_slice(&out);
+        self.dst.lock()?.write_slice(&out);
+        self.inner_out.lock()?.clear();
         Ok(ret)
     }
 }
@@ -252,17 +270,19 @@ mod tests {
         // Create blocks.
         let mut src = SignalSourceComplex::new(samp_rate, signal, amplitude);
         let taps = low_pass_complex(samp_rate, cutoff, twidth);
-        let mut fft = FftFilter::new(&taps);
+        let mut fft = FftFilter::new(src.out(), &taps);
 
         // Generate a bunch of samples from signal generator.
         let out;
         {
-            let mut is = InputStreams::new();
-            let mut os = OutputStreams::new();
-            is.add_stream(StreamType::new_disconnected());
-            os.add_stream(StreamType::new_complex());
-            src.work(&mut is, &mut os)?;
-            out = os.get(0).borrow().iter().copied().collect::<Vec<Complex>>();
+            src.work()?;
+            out = src
+                .out()
+                .lock()
+                .unwrap()
+                .iter()
+                .copied()
+                .collect::<Vec<Complex>>();
             // write_vec("bleh.txt", &out)?;
             let m = out
                 .iter()
@@ -270,20 +290,16 @@ mod tests {
                 .max_by(|a, b| a.total_cmp(b))
                 .unwrap();
             assert!((0.999..1.001).contains(&m));
+            eprintln!("{}", out.len());
         }
 
         // Filter the stream.
         {
-            let mut is = InputStreams::new();
-            is.add_stream(StreamType::from_complex(&out));
-
-            let mut os = OutputStreams::new();
-            os.add_stream(StreamType::new_complex());
-
-            fft.work(&mut is, &mut os)?;
-            let out = os
-                .get(0)
-                .borrow()
+            fft.work()?;
+            let out = fft
+                .out()
+                .lock()
+                .unwrap()
                 .iter()
                 .skip(taps.len()) // I get garbage in the beginning.
                 .copied()
@@ -321,4 +337,3 @@ mod tests {
         Ok(())
     }
 }
-*/

@@ -7,7 +7,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams};
+use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Float};
 
 /** Very simple clock recovery by looking at zero crossings.
@@ -33,6 +33,8 @@ pub struct ZeroCrossing {
     last_sign: bool,
     last_cross: f32,
     counter: u64,
+    src: Streamp<Float>,
+    dst: Streamp<Float>,
 }
 
 impl ZeroCrossing {
@@ -42,9 +44,11 @@ impl ZeroCrossing {
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
     * `max_deviation`: Not currently used.
      */
-    pub fn new(sps: Float, max_deviation: Float) -> Self {
+    pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
         Self {
+            src,
+            dst: new_streamp(),
             sps,
             clock: sps,
             max_deviation,
@@ -59,10 +63,10 @@ impl Block for ZeroCrossing {
     fn block_name(&self) -> &'static str {
         "ZeroCrossing"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
-        let input = r.get(0);
-        for sample in input.borrow().iter() {
+        let mut input = self.src.lock()?;
+        for sample in input.iter() {
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 v.push(*sample);
                 self.last_cross += self.clock;
@@ -84,8 +88,8 @@ impl Block for ZeroCrossing {
                 self.last_cross -= step_back as f32;
             }
         }
-        input.borrow_mut().clear();
-        w.get::<Float>(0).borrow_mut().write_slice(&v);
+        input.clear();
+        self.dst.lock()?.write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }

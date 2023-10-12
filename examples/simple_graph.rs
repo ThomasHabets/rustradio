@@ -1,12 +1,12 @@
 use anyhow::Result;
 
-use rustradio::blocks::{AddConst, DebugSink, VectorSource};
+//use rustradio::blocks::{AddConst, DebugSink, VectorSource};
 use rustradio::graph::Graph;
-use rustradio::stream::StreamType;
-use rustradio::Complex;
+//use rustradio::Complex;
 
 fn main() -> Result<()> {
     let mut g = Graph::new();
+    /*
     let src = g.add(Box::new(VectorSource::new(
         vec![
             Complex::new(10.0, 0.0),
@@ -19,5 +19,6 @@ fn main() -> Result<()> {
     let sink = g.add(Box::new(DebugSink::<Complex>::new()));
     g.connect(StreamType::new_complex(), src, 0, add, 0);
     g.connect(StreamType::new_complex(), add, 0, sink, 0);
+     */
     g.run()
 }

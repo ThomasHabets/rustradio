@@ -2,32 +2,39 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::{new_streamp, Streamp};
 use crate::Error;
 
 /// Generate the same value, forever.
-pub struct ConstantSource<T> {
+pub struct ConstantSource<T: Copy> {
+    dst: Streamp<T>,
     val: T,
 }
 
 impl<T: Copy> ConstantSource<T> {
     /// Create a new ConstantSource block, providing the constant value.
     pub fn new(val: T) -> Self {
-        Self { val }
+        Self {
+            val,
+            dst: new_streamp(),
+        }
+    }
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
+        self.dst.clone()
     }
 }
 
 impl<T> Block for ConstantSource<T>
 where
     T: Copy,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "ConstantSource"
     }
-    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let n = w.capacity(0);
-        w.get(0).borrow_mut().write_slice(&vec![self.val; n]);
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let n = self.dst.lock()?.capacity();
+        self.dst.lock()?.write_slice(&vec![self.val; n]);
         Ok(BlockRet::Ok)
     }
 }

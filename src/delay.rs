@@ -3,26 +3,33 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::{new_streamp, Streamp};
 use crate::Error;
 
 /// Delay stream. Good for syncing up streams.
-pub struct Delay<T> {
+pub struct Delay<T: Copy> {
     delay: usize,
     current_delay: usize,
     skip: usize,
-    dummy: std::marker::PhantomData<T>,
+    src: Streamp<T>,
+    dst: Streamp<T>,
 }
 
-impl<T> Delay<T> {
+impl<T: Copy> Delay<T> {
     /// Create new Delay block.
-    pub fn new(delay: usize) -> Self {
+    pub fn new(src: Streamp<T>, delay: usize) -> Self {
         Self {
+            src,
+            dst: new_streamp(),
             delay,
             current_delay: delay,
             skip: 0,
-            dummy: std::marker::PhantomData,
         }
+    }
+
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
+        self.dst.clone()
     }
 
     /// Change the delay.
@@ -41,27 +48,24 @@ impl<T> Delay<T> {
 impl<T> Block for Delay<T>
 where
     T: Copy + Default,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "Delay"
     }
-    fn work(&mut self, r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet, Error> {
         if self.current_delay > 0 {
-            let n = std::cmp::min(self.current_delay, w.capacity(0));
-            w.get(0).borrow_mut().write_slice(&vec![T::default(); n]);
+            let n = std::cmp::min(self.current_delay, self.dst.lock()?.capacity());
+            self.dst.lock()?.write_slice(&vec![T::default(); n]);
             self.current_delay -= n;
         }
         {
-            let n = std::cmp::min(r.available(0), self.skip);
-            r.get(0).borrow_mut().consume(n);
+            let n = std::cmp::min(self.src.lock()?.available(), self.skip);
+            self.src.lock()?.consume(n);
             debug!("========= skipped {n}");
             self.skip -= n;
         }
-        w.get(0)
-            .borrow_mut()
-            .write(r.get(0).borrow().iter().copied());
-        r.get(0).borrow_mut().clear();
+        self.dst.lock()?.write(self.src.lock()?.iter().copied());
+        self.src.lock()?.clear();
         Ok(BlockRet::Ok)
     }
 }
@@ -69,64 +73,73 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Float;
+    use crate::stream::streamp_from_slice;
 
     #[test]
     fn delay_zero() -> Result<()> {
-        let mut delay = Delay::<Float>::new(0);
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_float(&[1.0f32, 2.0, 3.0]));
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_float());
-        delay.work(&mut is, &mut os)?;
-        let res: Streamp<Float> = os.get(0).into();
-        assert_eq!(*res.borrow().data(), vec![1.0f32, 2.0, 3.0]);
+        let s = streamp_from_slice(&[1.0f32, 2.0, 3.0]);
+        let mut delay = Delay::new(s, 0);
+
+        delay.work()?;
+        let o = delay.out();
+        let res = o.lock().unwrap();
+        assert_eq!(*res.data(), vec![1.0f32, 2.0, 3.0]);
         Ok(())
     }
 
     #[test]
     fn delay_one() -> Result<()> {
-        let mut delay = Delay::<Float>::new(1);
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_float(&[1.0f32, 2.0, 3.0]));
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_float());
-        delay.work(&mut is, &mut os)?;
-        let res: Streamp<Float> = os.get(0).into();
-        assert_eq!(*res.borrow().data(), vec![0.0f32, 1.0, 2.0, 3.0]);
+        let s = streamp_from_slice(&[1.0f32, 2.0, 3.0]);
+        let mut delay = Delay::new(s, 1);
+
+        delay.work()?;
+        let o = delay.out();
+        let res = o.lock().unwrap();
+        assert_eq!(*res.data(), vec![0.0f32, 1.0, 2.0, 3.0]);
         Ok(())
     }
 
     #[test]
     fn delay_change() -> Result<()> {
-        let mut delay = Delay::<u32>::new(1);
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_u32());
+        let s = streamp_from_slice(&[1u32, 2]);
+        let mut delay = Delay::new(s.clone(), 1);
 
-        // 1,2 => 0,1,2
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_u32(&[1u32, 2]));
-        delay.work(&mut is, &mut os)?;
+        delay.work()?;
+        {
+            let o = delay.out();
+            let res = o.lock().unwrap();
+            assert_eq!(*res.data(), vec![0, 1, 2]);
+        }
 
         // 3,4 => 0,3,4
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_u32(&[3u32, 4]));
+        s.lock().unwrap().write([3, 4]);
         delay.set_delay(2);
-        delay.work(&mut is, &mut os)?;
+        delay.work()?;
+        {
+            let o = delay.out();
+            let res = o.lock().unwrap();
+            assert_eq!(*res.data(), vec![0, 1, 2, 0, 3, 4]);
+        }
 
-        // 5,6 => nothing
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_u32(&[5u32, 6]));
+        // 5,6 => 0,3,4
+        s.lock().unwrap().write([5, 6]);
         delay.set_delay(0);
-        delay.work(&mut is, &mut os)?;
+        delay.work()?;
+        {
+            let o = delay.out();
+            let res = o.lock().unwrap();
+            assert_eq!(*res.data(), vec![0, 1, 2, 0, 3, 4]);
+        }
 
         // 7 => 7
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_u32(&[7u32]));
-        delay.work(&mut is, &mut os)?;
-
-        let res: Streamp<u32> = os.get(0).into();
-        assert_eq!(*res.borrow().data(), vec![0u32, 1, 2, 0, 3, 4, 7]);
+        s.lock().unwrap().write([7]);
+        delay.set_delay(0);
+        delay.work()?;
+        {
+            let o = delay.out();
+            let res = o.lock().unwrap();
+            assert_eq!(*res.data(), vec![0, 1, 2, 0, 3, 4, 7]);
+        }
         Ok(())
     }
 }

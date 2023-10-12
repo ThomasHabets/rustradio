@@ -1,6 +1,7 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
+use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_macro_v2, Float};
 
 struct SinglePoleIIR<Tout> {
@@ -46,6 +47,8 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     iir: SinglePoleIIR<T>,
+    src: Streamp<T>,
+    dst: Streamp<T>,
 }
 
 impl<T> SinglePoleIIRFilter<T>
@@ -57,8 +60,10 @@ where
         + std::ops::Add<T, Output = T>,
 {
     /// Create new IIR filter.
-    pub fn new(alpha: Float) -> Option<Self> {
+    pub fn new(src: Streamp<T>, alpha: Float) -> Option<Self> {
         Some(Self {
+            src,
+            dst: new_streamp(),
             iir: SinglePoleIIR::<T>::new(alpha)?,
         })
     }
@@ -69,8 +74,8 @@ where
 
 map_block_macro_v2![
     SinglePoleIIRFilter<T>,
-    std::ops::Add<Output = T>,
     Default,
+    std::ops::Add<Output = T>,
     std::ops::Mul<T, Output = T>,
     std::ops::Mul<Float, Output = T>,
     std::ops::Add<T, Output = T>
@@ -80,47 +85,37 @@ map_block_macro_v2![
 mod tests {
     use super::*;
     use crate::block::Block;
-    use crate::stream::{InputStreams, OutputStreams, StreamType};
-    use crate::{Complex, Error, Float};
+    use crate::stream::streamp_from_slice;
+    use crate::{Complex, Error};
 
     #[test]
     fn iir_ff() -> Result<()> {
         // TODO: create an actual test.
-        let mut iir =
-            SinglePoleIIRFilter::<Float>::new(0.2).ok_or(Error::new("alpha out of range"))?;
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_float(&[0.1, 0.2]));
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_float());
-        iir.work(&mut is, &mut os)?;
+        let src = streamp_from_slice(&[0.1, 0.2]);
+        let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+        iir.work()?;
         Ok(())
     }
 
     #[test]
     fn iir_cc() -> Result<()> {
         // TODO: create an actual test.
-        let mut iir =
-            SinglePoleIIRFilter::<Complex>::new(0.2).ok_or(Error::new("alpha out of range"))?;
-        let mut is = InputStreams::new();
-        is.add_stream(StreamType::from_complex(&[
-            Complex::new(1.0, 0.1),
-            Complex::default(),
-        ]));
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_complex());
-        iir.work(&mut is, &mut os)?;
+        let src = streamp_from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
+        let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+        iir.work()?;
         Ok(())
     }
 
     #[test]
     fn reject_bad_alpha() -> Result<()> {
-        SinglePoleIIRFilter::<Float>::new(0.0).ok_or(Error::new("should accept 0.0"))?;
-        SinglePoleIIRFilter::<Float>::new(0.1).ok_or(Error::new("should accept 0.1"))?;
-        SinglePoleIIRFilter::<Float>::new(1.0).ok_or(Error::new("should accept 1.0"))?;
-        if SinglePoleIIRFilter::<Float>::new(-0.1).is_some() {
+        let src = streamp_from_slice(&[0.1, 0.2]);
+        SinglePoleIIRFilter::new(src.clone(), 0.0).ok_or(Error::new("should accept 0.0"))?;
+        SinglePoleIIRFilter::new(src.clone(), 0.1).ok_or(Error::new("should accept 0.1"))?;
+        SinglePoleIIRFilter::new(src.clone(), 1.0).ok_or(Error::new("should accept 1.0"))?;
+        if SinglePoleIIRFilter::new(src.clone(), -0.1).is_some() {
             return Err(Error::new("should not accept -0.1").into());
         }
-        if SinglePoleIIRFilter::<Float>::new(1.1).is_some() {
+        if SinglePoleIIRFilter::new(src, 1.1).is_some() {
             return Err(Error::new("should not accept 1.1").into());
         }
         Ok(())

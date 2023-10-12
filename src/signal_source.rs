@@ -1,15 +1,13 @@
 //! Generate a pure signal.
-use std::sync::{Arc, Mutex};
-
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Generate a pure complex sine wave.
 pub struct SignalSourceComplex {
-    dst: Arc<Mutex<Stream<Complex>>>,
+    dst: Streamp<Complex>,
 
     amplitude: Float,
     rad_per_sample: f64,
@@ -21,13 +19,14 @@ impl SignalSourceComplex {
     /// Create new SignalSourceComplex block.
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> Self {
         Self {
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
             current: 0.0,
             amplitude,
             rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
         }
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<Complex>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Complex> {
         self.dst.clone()
     }
 }
@@ -51,9 +50,9 @@ impl Block for SignalSourceComplex {
         "SignalSourceComplex"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let n = 1000; // TODO
+        let n = self.dst.lock()?.capacity();
         let v: Vec<Complex> = self.take(n).collect();
-        self.dst.lock().unwrap().write_slice(&v);
+        self.dst.lock()?.write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }

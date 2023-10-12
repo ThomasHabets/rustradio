@@ -1,10 +1,9 @@
 //! Discard anything written to this block.
-use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::Streamp;
 use crate::Error;
 
 /// Discard anything written to this block.
@@ -12,12 +11,12 @@ pub struct NullSink<T>
 where
     T: Copy,
 {
-    src: Arc<Mutex<Stream<T>>>,
+    src: Streamp<T>,
 }
 
 impl<T: Default + Copy> NullSink<T> {
     /// Create new NullSink block.
-    pub fn new(src: Arc<Mutex<Stream<T>>>) -> Self {
+    pub fn new(src: Streamp<T>) -> Self {
         Self { src }
     }
 }
@@ -31,6 +30,6 @@ where
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         self.src.lock().unwrap().clear();
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Noop)
     }
 }

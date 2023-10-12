@@ -1,14 +1,12 @@
 //! Multiply stream by a constant value.
-use std::sync::{Arc, Mutex};
-
 use crate::map_block_macro_v2;
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 
 /// Multiply stream by a constant value.
 pub struct MultiplyConst<T: Copy> {
     val: T,
-    src: Arc<Mutex<Stream<T>>>,
-    dst: Arc<Mutex<Stream<T>>>,
+    src: Streamp<T>,
+    dst: Streamp<T>,
 }
 
 impl<T> MultiplyConst<T>
@@ -16,16 +14,14 @@ where
     T: Copy + std::ops::Mul<Output = T>,
 {
     /// Create new MultiplyConst block.
-    pub fn new(src: Arc<Mutex<Stream<T>>>, val: T) -> Self {
+    pub fn new(src: Streamp<T>, val: T) -> Self {
         Self {
             val,
             src,
-            dst: Arc::new(Mutex::new(Stream::<T>::new())),
+            dst: new_streamp(),
         }
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<T>>> {
-        self.dst.clone()
-    }
+
     fn process_one(&self, x: &T) -> T {
         *x * self.val
     }

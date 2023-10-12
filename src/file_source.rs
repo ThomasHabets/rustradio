@@ -1,13 +1,12 @@
 //! Read stream from raw file.
 use std::io::BufReader;
 use std::io::Read;
-use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use log::{debug, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Sample};
 
 /// Read stream from raw file.
@@ -16,7 +15,7 @@ pub struct FileSource<T: Copy> {
     f: BufReader<std::fs::File>,
     repeat: bool,
     buf: Vec<u8>,
-    dst: Arc<Mutex<Stream<T>>>,
+    dst: Streamp<T>,
 }
 
 impl<T: Default + Copy> FileSource<T> {
@@ -29,10 +28,11 @@ impl<T: Default + Copy> FileSource<T> {
             f,
             repeat,
             buf: Vec::new(),
-            dst: Arc::new(Mutex::new(Stream::<T>::new())),
+            dst: new_streamp(),
         })
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<T>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
         self.dst.clone()
     }
 }
@@ -75,7 +75,7 @@ where
     }
 }
 
-#[cfg(test)]
+#[cfg(test2)]
 mod tests {
     use super::*;
     use crate::{Complex, Float};

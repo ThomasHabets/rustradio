@@ -2,21 +2,18 @@ use anyhow::Result;
 
 use rustradio::block::Block;
 use rustradio::blocks::*;
-use rustradio::stream::Stream;
-use rustradio::Float;
-use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
     println!("Running some block without Graph");
-    {
-        let mut v: Vec<&mut dyn Block> = Vec::new();
-        let mut src = VectorSource::new(vec![1.0, -1.0, 3.21], true);
-        let mut add = AddConst::new(src.out(), 1.1);
-        v.push(&mut src);
+    if false {
+        let mut v: Vec<Box<dyn Block>> = Vec::new();
+        let src = VectorSource::new(vec![1.0, -1.0, 3.21], true);
+        let add = AddConst::new(src.out(), 1.1);
+        v.push(Box::new(src));
 
-        let mut debug = DebugSink::new(add.out());
-        v.push(&mut add);
-        v.push(&mut debug);
+        let debug = DebugSink::new(add.out());
+        v.push(Box::new(add));
+        v.push(Box::new(debug));
 
         loop {
             for b in &mut v {

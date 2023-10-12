@@ -1,27 +1,26 @@
 //! Decode RTL-SDR's byte based format into Complex I/Q.
-use std::sync::{Arc, Mutex};
-
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
 pub struct RtlSdrDecode {
-    src: Arc<Mutex<Stream<u8>>>,
-    dst: Arc<Mutex<Stream<Complex>>>,
+    src: Streamp<u8>,
+    dst: Streamp<Complex>,
 }
 
 impl RtlSdrDecode {
     /// Create new RTL SDR Decode block.
-    pub fn new(src: Arc<Mutex<Stream<u8>>>) -> Self {
+    pub fn new(src: Streamp<u8>) -> Self {
         Self {
             src,
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
         }
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<Complex>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Complex> {
         self.dst.clone()
     }
 }
@@ -32,7 +31,10 @@ impl Block for RtlSdrDecode {
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut input = self.src.lock().unwrap();
-        let samples: usize = input.available() - input.available() % 2;
+        let samples = input.available() - input.available() % 2;
+        if samples == 0 {
+            return Ok(BlockRet::Noop);
+        }
         let mut out = self.dst.lock().unwrap();
 
         // TODO: needless copy.

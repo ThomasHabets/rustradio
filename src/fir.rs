@@ -6,10 +6,8 @@ Use FftFilter if many taps are used, for better performance.
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
-use std::sync::{Arc, Mutex};
-
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Finite impulse response filter.
@@ -48,8 +46,8 @@ where
 pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,
-    src: Arc<Mutex<Stream<T>>>,
-    dst: Arc<Mutex<Stream<T>>>,
+    src: Streamp<T>,
+    dst: Streamp<T>,
 }
 
 impl<T: Copy> FIRFilter<T>
@@ -57,13 +55,17 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create FIR block given taps.
-    pub fn new(src: Arc<Mutex<Stream<T>>>, taps: &[T]) -> Self {
+    pub fn new(src: Streamp<T>, taps: &[T]) -> Self {
         Self {
             src,
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
             ntaps: taps.len(),
             fir: FIR::new(taps),
         }
+    }
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
+        self.dst.clone()
     }
 }
 

@@ -8,39 +8,43 @@ use anyhow::Result;
 use log::warn;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{InputStreams, OutputStreams, StreamType, Streamp};
+use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Sample};
 
 /// TCP Source, connecting to a server and streaming the data.
-pub struct TcpSource<T> {
+pub struct TcpSource<T: Copy> {
     stream: std::net::TcpStream,
     buf: Vec<u8>,
-    dummy: std::marker::PhantomData<T>,
+    dst: Streamp<T>,
 }
 
-impl<T: Default> TcpSource<T> {
+impl<T: Copy + Default> TcpSource<T> {
     /// Create new TCP source block.
     pub fn new(addr: &str, port: u16) -> Result<Self> {
         Ok(Self {
             stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
             buf: Vec::new(),
-            dummy: std::marker::PhantomData,
+            dst: new_streamp(),
         })
+    }
+
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
+        self.dst.clone()
     }
 }
 
 impl<T> Block for TcpSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
-    Streamp<T>: From<StreamType>,
 {
     fn block_name(&self) -> &'static str {
         "TcpSource<T>"
     }
-    fn work(&mut self, _r: &mut InputStreams, w: &mut OutputStreams) -> Result<BlockRet, Error> {
-        let o: Streamp<T> = w.get(0);
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut o = self.dst.lock()?;
         let size = T::size();
-        let mut buffer = vec![0; o.borrow().capacity()];
+        let mut buffer = vec![0; o.capacity()];
         // TODO: this read blocks.
         let n = self
             .stream
@@ -65,7 +69,7 @@ where
             v.push(T::parse(&buffer[pos..pos + size])?);
         }
         self.buf.extend(&buffer[n - remaining..n]);
-        o.borrow_mut().write(v.into_iter());
+        o.write(v.into_iter());
         Ok(BlockRet::Ok)
     }
 }
@@ -111,32 +115,40 @@ mod tests {
                 TcpSource::new("[::1]", a.port())?
             }
         };
-        let mut is = InputStreams::new();
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_float());
-        src.work(&mut is, &mut os)?;
-        let res: Streamp<Float> = os.get(0).into();
-        let want: VecDeque<Float> = [12345678.91817].into();
-        assert_eq!(*res.borrow().data(), want, "first failed");
+        src.work()?;
+        {
+            let o = src.out();
+            let res = o.lock().unwrap();
+            let want: VecDeque<Float> = [12345678.91817].into();
+            assert_eq!(*res.data(), want, "first failed");
+        }
 
-        src.work(&mut is, &mut os)?;
-        assert_eq!(
-            *res.borrow().data(),
-            vec![12345678.91817, 91817.12345678],
-            "second failed"
-        );
+        src.work()?;
+        {
+            let o = src.out();
+            let res = o.lock().unwrap();
+            assert_eq!(
+                *res.data(),
+                vec![12345678.91817, 91817.12345678],
+                "second failed"
+            );
+        }
 
-        src.work(&mut is, &mut os)?;
-        assert_eq!(
-            *res.borrow().data(),
-            vec![
-                12345678.91817,
-                91817.12345678,
-                7589234.4712893,
-                4712893.7589234
-            ],
-            "third failed"
-        );
+        src.work()?;
+        {
+            let o = src.out();
+            let res = o.lock().unwrap();
+            assert_eq!(
+                *res.data(),
+                vec![
+                    12345678.91817,
+                    91817.12345678,
+                    7589234.4712893,
+                    4712893.7589234
+                ],
+                "third failed"
+            );
+        }
 
         Ok(())
     }

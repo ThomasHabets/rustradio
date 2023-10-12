@@ -1,6 +1,7 @@
 //! Blocks for converting from one type to another.
 use anyhow::Result;
 
+use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_convert_macro, Float};
 
 /// Convert floats to unsigned 32bit int, scaled if needed.
@@ -8,6 +9,8 @@ use crate::{map_block_convert_macro, Float};
 /// `u32 = Float * scale`
 pub struct FloatToU32 {
     scale: Float,
+    src: Streamp<Float>,
+    dst: Streamp<u32>,
 }
 
 impl FloatToU32 {
@@ -15,8 +18,12 @@ impl FloatToU32 {
     ///
     /// Return value is the input multiplied by the scale. E.g. with a
     /// scale of 100.0, the input 0.123 becomes 12.
-    pub fn new(scale: Float) -> Self {
-        Self { scale }
+    pub fn new(src: Streamp<Float>, scale: Float) -> Self {
+        Self {
+            scale,
+            src,
+            dst: new_streamp(),
+        }
     }
     fn process_one(&mut self, s: Float) -> u32 {
         (s * self.scale) as u32

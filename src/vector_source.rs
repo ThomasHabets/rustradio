@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Generate values from a fixed vector.
@@ -12,7 +12,7 @@ pub struct VectorSource<T>
 where
     T: Copy,
 {
-    dst: Arc<Mutex<Stream<T>>>,
+    dst: Streamp<T>,
     data: Vec<T>,
     repeat: bool,
     pos: usize,
@@ -30,7 +30,8 @@ impl<T: Copy + std::fmt::Debug> VectorSource<T> {
             pos: 0,
         }
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<T>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
         self.dst.clone()
     }
 }

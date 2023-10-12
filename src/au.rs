@@ -8,12 +8,11 @@ without seeking back to the file header to update data sizes.
 
 It's also much simpler.
 */
-use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Float};
 
 /// Au support several encodings. This code currently only one.
@@ -33,17 +32,19 @@ use rustradio::graph::Graph;
 use rustradio::blocks::{AuEncode, VectorSource, FileSink};
 use rustradio::au::Encoding;
 use rustradio::file_sink::Mode;
-use rustradio::stream::StreamType;
 use rustradio::Complex;
-let mut g = Graph::new();
-let src = g.add(Box::new(VectorSource::new(
+let src = VectorSource::new(
     vec![10.0, 0.0, -20.0, 0.0, 100.0, -100.0],
     false,
-)));
-let au = g.add(Box::new(AuEncode::new(Encoding::PCM16, 48000, 1)));;
-let sink = g.add(Box::new(FileSink::<u8>::new("/dev/null", Mode::Overwrite)?));
-g.connect(StreamType::new_float(), src, 0, au, 0);
-g.connect(StreamType::new_u8(), au, 0, sink, 0);
+);
+let src_out = src.out();
+let au = AuEncode::new(src_out, Encoding::PCM16, 48000, 1);
+let au_out = au.out();
+let sink = FileSink::new(au_out, "/dev/null", Mode::Overwrite)?;
+let mut g = Graph::new();
+g.add(Box::new(src));
+g.add(Box::new(au));
+g.add(Box::new(sink));
 g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
@@ -51,8 +52,8 @@ g.run()?;
 pub struct AuEncode {
     header: Option<Vec<u8>>,
     encoding: Encoding,
-    src: Arc<Mutex<Stream<Float>>>,
-    dst: Arc<Mutex<Stream<u8>>>,
+    src: Streamp<Float>,
+    dst: Streamp<u8>,
 }
 
 impl AuEncode {
@@ -61,12 +62,7 @@ impl AuEncode {
     /// * `encoding`: currently only `Encoding::PCM16` is implemented.
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
-    pub fn new(
-        src: Arc<Mutex<Stream<Float>>>,
-        encoding: Encoding,
-        bitrate: u32,
-        channels: u32,
-    ) -> Self {
+    pub fn new(src: Streamp<Float>, encoding: Encoding, bitrate: u32, channels: u32) -> Self {
         assert_eq!(channels, 1, "only mono supported at the moment");
         let mut v = Vec::with_capacity(28);
 
@@ -95,10 +91,11 @@ impl AuEncode {
             header: Some(v),
             encoding,
             src,
-            dst: Arc::new(Mutex::new(Stream::<u8>::new())),
+            dst: new_streamp(),
         }
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<u8>>> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<u8> {
         self.dst.clone()
     }
 }
@@ -123,8 +120,12 @@ impl Block for AuEncode {
         i.iter().for_each(|x: &Float| {
             v.extend(((*x * scale) as S).to_be_bytes());
         });
-        o.write_slice(&v);
         i.clear();
-        Ok(BlockRet::Ok)
+        if v.is_empty() {
+            Ok(BlockRet::Noop)
+        } else {
+            o.write_slice(&v);
+            Ok(BlockRet::Ok)
+        }
     }
 }

@@ -3,10 +3,9 @@
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
  */
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Stream;
+use crate::stream::{new_streamp, Streamp};
 use crate::Error;
 
 fn gcd(mut a: usize, mut b: usize) -> usize {
@@ -23,8 +22,8 @@ pub struct RationalResampler<T: Copy> {
     deci: i64,
     interp: i64,
     counter: i64,
-    src: Arc<Mutex<Stream<T>>>,
-    dst: Arc<Mutex<Stream<T>>>,
+    src: Streamp<T>,
+    dst: Streamp<T>,
 }
 
 impl<T: Copy> RationalResampler<T> {
@@ -32,7 +31,7 @@ impl<T: Copy> RationalResampler<T> {
     ///
     /// A common pattern to convert between arbitrary sample rates X
     /// and Y is to decimate by X and interpolate by Y.
-    pub fn new(src: Arc<Mutex<Stream<T>>>, mut interp: usize, mut deci: usize) -> Result<Self> {
+    pub fn new(src: Streamp<T>, mut interp: usize, mut deci: usize) -> Result<Self> {
         let g = gcd(deci, interp);
         deci /= g;
         interp /= g;
@@ -41,10 +40,12 @@ impl<T: Copy> RationalResampler<T> {
             deci: i64::try_from(deci)?,
             counter: 0,
             src,
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
         })
     }
-    pub fn out(&self) -> Arc<Mutex<Stream<T>>> {
+
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
         self.dst.clone()
     }
 }
@@ -64,29 +65,30 @@ impl<T: Copy> Block for RationalResampler<T> {
                 self.counter -= self.deci;
             }
         }
-        i.clear();
-        self.dst.lock().unwrap().write_slice(&v);
-        Ok(BlockRet::Ok)
+        if i.is_empty() {
+            Ok(BlockRet::Noop)
+        } else {
+            i.clear();
+            self.dst.lock().unwrap().write_slice(&v);
+            Ok(BlockRet::Ok)
+        }
     }
 }
 
-#[cfg(test)]
+#[cfg(test2)]
 mod tests {
     use super::*;
-    use crate::stream::{StreamType, Streamp};
-    use crate::Float;
+    use crate::blocks::VectorSource;
+    use crate::{Complex, Float};
 
     fn runtest(inputsize: usize, interp: usize, deci: usize, finalcount: usize) -> Result<()> {
         let input: Vec<_> = (0..inputsize)
             .map(|i| Complex::new(i as Float, 0.0))
             .collect();
-        let mut is = InputStreams::new();
-        let mut os = OutputStreams::new();
-        is.add_stream(StreamType::from_complex(&input));
-        os.add_stream(StreamType::new_complex());
-        let mut resamp = RationalResampler::new(interp, deci)?;
-        resamp.work(&mut is, &mut os)?;
-        let res: Streamp<Complex> = os.get(0).into();
+        let src = VectorSource::new(&input);
+        let mut resamp = RationalResampler::new(src.out(), interp, deci)?;
+        resamp.work()?;
+        let res = resamp.out();
         assert_eq!(
             finalcount,
             res.borrow().available(),

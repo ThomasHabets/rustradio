@@ -17,9 +17,16 @@ it should just never bother calling it again.
 TODO: Add state for "don't call me unless there's more input".
 */
 pub enum BlockRet {
-    /// The normal return. More data may or not be coming.
+    /// The normal return. More data may be produced only if more data
+    /// comes in.
     Ok,
 
+    /// Produced nothing.
+    Noop,
+
+    // More data may be produced even if no more data comes in.
+    // Currently not used.
+    // Background,
     /// Block indicates that it will never produce more input.
     ///
     /// Examples:
@@ -79,8 +86,18 @@ E.g.:
 
 ```
 use rustradio::block::Block;
-struct Noop<T>{t: T};
+use rustradio::stream::{Streamp, new_streamp};
+struct Noop<T: Copy>{
+  src: Streamp<T>,
+  dst: Streamp<T>,
+};
 impl<T: Copy> Noop<T> {
+  fn new(src: Streamp<T>) -> Self {
+    Self {
+      src,
+      dst: new_streamp(),
+    }
+  }
   fn process_one(&self, a: &T) -> T { *a }
 }
 rustradio::map_block_macro_v2![Noop<T>, std::ops::Add<Output = T>];
@@ -92,17 +109,27 @@ rustradio::map_block_macro_v2![Noop<T>, std::ops::Add<Output = T>];
 #[macro_export]
 macro_rules! map_block_macro_v2 {
     ($name:path, $($tr:path), *) => {
-        impl<'a, T> $crate::block::Block for $name
+        impl<T: Copy $(+$tr)*> $name {
+            /// Return the output stream.
+            pub fn out(&self) -> Streamp<T> {
+                self.dst.clone()
+            }
+        }
+        impl<T> $crate::block::Block for $name
         where
             T: Copy $(+$tr)*,
-            $crate::stream::Streamp<T>: From<$crate::stream::StreamType>,
         {
             fn block_name(&self) -> &'static str {
                 stringify!{$name}
             }
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let mut i = self.src.lock().unwrap();
-                self.dst.lock().unwrap()
+                let cs = self.src.clone();
+                let mut i = cs.lock().unwrap();
+                if i.is_empty() {
+                    return Ok($crate::block::BlockRet::Noop);
+                }
+                let cd = self.dst.clone();
+                cd.lock()?
                     .write(i
                            .iter()
                            .map(|x| self.process_one(x)));
@@ -136,6 +163,9 @@ macro_rules! map_block_convert_macro {
                 let v = {
                     let c = self.src.clone();
                     let i = c.lock().unwrap();
+                    if i.is_empty() {
+                        return Ok($crate::block::BlockRet::Noop);
+                    }
                     i.iter().map(|x| self.process_one(*x)).collect::<Vec<_>>()
                 };
                 self.dst.lock().unwrap().write_slice(&v);
