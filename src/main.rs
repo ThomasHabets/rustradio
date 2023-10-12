@@ -376,7 +376,7 @@ where
     T: Copy + Serial,
 {
     fn new(src: Pin<Box<dyn Stream<Item = T>>>, val: T) -> Self {
-        Self { src, val: val }
+        Self { src, val }
     }
 }
 impl<T> Unpin for AddConst<T> {}
@@ -606,7 +606,7 @@ async fn main() -> Result<()> {
         let add = AddConst::new(Box::pin(src), 0.5);
         //let mut convert = FloatToComplex::new(&mut add, &mut tee2);
         let mut sink = DebugSink::new(Box::pin(add));
-        while let Some(_) = sink.next().await {
+        while (sink.next().await).is_some() {
             panic!("sink is not supposed to output anything");
         }
     }
@@ -615,7 +615,7 @@ async fn main() -> Result<()> {
         // Source.
         let src = FileSource::new("raw-1024k.c32")?;
         let mut debug = DebugSink::new(Box::pin(src));
-        while let Some(_) = debug.next().await {
+        while (debug.next().await).is_some() {
             panic!("sink is not supposed to output anything");
         }
         eprintln!("stream done");
