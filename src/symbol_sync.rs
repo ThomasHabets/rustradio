@@ -57,6 +57,11 @@ impl ZeroCrossing {
             counter: 0,
         }
     }
+
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Float> {
+        self.dst.clone()
+    }
 }
 
 impl Block for ZeroCrossing {
