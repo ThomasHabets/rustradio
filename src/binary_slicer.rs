@@ -19,6 +19,11 @@ impl BinarySlicer {
         }
     }
 
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<u8> {
+        self.dst.clone()
+    }
+
     fn process_one(&self, a: Float) -> u8 {
         if a > 0.0 {
             1
