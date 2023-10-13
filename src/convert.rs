@@ -29,7 +29,7 @@ impl FloatToU32 {
         (s * self.scale) as u32
     }
 }
-map_block_convert_macro![FloatToU32];
+map_block_convert_macro![FloatToU32, u32];
 
 /*
 struct Convert<From, To> {

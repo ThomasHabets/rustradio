@@ -50,10 +50,6 @@ impl QuadratureDemod {
             last: Complex::default(),
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Float> {
-        self.dst.clone()
-    }
     fn process_one(&mut self, s: Complex) -> Float {
         let t = s * self.last.conj();
         self.last = s;
@@ -65,4 +61,4 @@ impl QuadratureDemod {
         return self.gain * t.im.atan2(t.re);
     }
 }
-map_block_convert_macro![QuadratureDemod];
+map_block_convert_macro![QuadratureDemod, Float];

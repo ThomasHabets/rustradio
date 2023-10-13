@@ -154,7 +154,14 @@ Example block using this: `FloatToU32`.
 */
 #[macro_export]
 macro_rules! map_block_convert_macro {
-    ($name:path) => {
+    ($name:path, $out:ident) => {
+        impl $name {
+            /// Return the output stream.
+            pub fn out(&self) -> Streamp<$out> {
+                self.dst.clone()
+            }
+        }
+
         impl $crate::block::Block for $name {
             fn block_name(&self) -> &'static str {
                 stringify! {$name}

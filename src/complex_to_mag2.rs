@@ -23,4 +23,4 @@ impl ComplexToMag2 {
     }
 }
 
-map_block_convert_macro![ComplexToMag2];
+map_block_convert_macro![ComplexToMag2, Float];
