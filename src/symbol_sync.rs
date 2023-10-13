@@ -71,6 +71,9 @@ impl Block for ZeroCrossing {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut v = Vec::new();
         let mut input = self.src.lock()?;
+        if input.is_empty() {
+            return Ok(BlockRet::Noop);
+        }
         for sample in input.iter() {
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 v.push(*sample);
