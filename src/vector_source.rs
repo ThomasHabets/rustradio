@@ -46,7 +46,16 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut out = self.dst.lock().unwrap();
         let n = std::cmp::min(out.capacity(), self.data.len() - self.pos);
-        out.write_slice(&self.data[self.pos..(self.pos + n)]);
+        let tags = if self.pos == 0 {
+            vec![crate::stream::Tag::new(
+                0,
+                "VectorSource::start".to_string(),
+                "true".to_string(),
+            )]
+        } else {
+            vec![]
+        };
+        out.write_tags(self.data[self.pos..(self.pos + n)].iter().copied(), &tags);
         self.pos += n;
         if self.pos == self.data.len() {
             if !self.repeat {

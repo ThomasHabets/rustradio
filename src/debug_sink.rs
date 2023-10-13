@@ -1,9 +1,10 @@
 //! Print values to stdout, for debugging.
+use std::collections::HashMap;
 
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::{Streamp, Tag, TagPos};
 use crate::Error;
 
 /// Print values to stdout, for debugging.
@@ -33,9 +34,14 @@ where
         "DebugSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock().unwrap();
-        i.iter().for_each(|s: &T| {
-            println!("debug: {:?}", s);
+        let mut i = self.src.lock()?;
+        let tags = i
+            .tags()
+            .into_iter()
+            .map(|t| (t.pos(), t))
+            .collect::<HashMap<TagPos, Tag>>();
+        i.iter().enumerate().for_each(|(n, s)| {
+            println!("debug: {:?} {:?}", s, tags.get(&(n as TagPos)));
         });
         i.clear();
         Ok(BlockRet::Noop)

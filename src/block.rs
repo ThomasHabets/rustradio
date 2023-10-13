@@ -128,11 +128,12 @@ macro_rules! map_block_macro_v2 {
                 if i.is_empty() {
                     return Ok($crate::block::BlockRet::Noop);
                 }
+                let tags = i.tags();
                 let cd = self.dst.clone();
                 cd.lock()?
-                    .write(i
+                    .write_tags(i
                            .iter()
-                           .map(|x| self.process_one(x)));
+                           .map(|x| self.process_one(x)), &tags);
                 i.clear();
                 Ok($crate::block::BlockRet::Ok)
             }
@@ -167,15 +168,20 @@ macro_rules! map_block_convert_macro {
                 stringify! {$name}
             }
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let v = {
+                let (v, tags) = {
                     let c = self.src.clone();
                     let i = c.lock().unwrap();
                     if i.is_empty() {
                         return Ok($crate::block::BlockRet::Noop);
                     }
-                    i.iter().map(|x| self.process_one(*x)).collect::<Vec<_>>()
+                    let v = i.iter().map(|x| self.process_one(*x)).collect::<Vec<_>>();
+                    let tags = i.tags();
+                    (v, tags)
                 };
-                self.dst.lock().unwrap().write_slice(&v);
+                self.dst
+                    .lock()
+                    .unwrap()
+                    .write_tags(v.iter().copied(), &tags);
                 self.src.lock().unwrap().clear();
                 Ok($crate::block::BlockRet::Ok)
             }

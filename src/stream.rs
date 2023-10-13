@@ -8,13 +8,43 @@ use std::sync::{Arc, Mutex};
 
 use log::debug;
 
+/// Tag position in the current stream.
+// TODO: is this a good idea? Just use u32? Or assert that u64 is at
+// least usize?
+pub type TagPos = u64;
+
+/// Tags associated with a stream.
+#[derive(Debug)]
+pub struct Tag {
+    pos: TagPos,
+    key: String,
+    val: String,
+}
+
+impl Tag {
+    /// Create new tag.
+    pub fn new(pos: TagPos, key: String, val: String) -> Self {
+        Self { pos, key, val }
+    }
+
+    /// Get pos
+    pub fn pos(&self) -> TagPos {
+        self.pos
+    }
+}
+
 /// A stream between blocks.
 #[derive(Debug)]
 pub struct Stream<T>
 where
     T: Copy,
 {
+    // Position of first element in `data`. If `tags` is empty then it
+    // has no meaning, and can be set to an arbitrary value.
+    pos: TagPos,
+
     data: VecDeque<T>,
+    tags: VecDeque<Tag>,
     max_size: usize,
 }
 
@@ -34,11 +64,14 @@ pub fn streamp_from_slice<T: Copy>(data: &[T]) -> Streamp<T> {
 impl<T> Stream<T>
 where
     T: Copy,
+    //VecDeque<T>: Extend,
 {
     /// Create a new stream.
     pub fn new() -> Self {
         Self {
+            pos: 0,
             data: VecDeque::new(),
+            tags: VecDeque::new(),
             max_size: 1048576,
         }
     }
@@ -46,6 +79,8 @@ where
     /// Create a new stream with initial data in it.
     pub fn from_slice(data: &[T]) -> Self {
         Self {
+            pos: 0,
+            tags: VecDeque::new(),
             data: VecDeque::from(data.to_vec()),
             max_size: 1048576,
         }
@@ -62,9 +97,33 @@ where
         self.data.extend(data);
     }
 
+    /// Write to stream from iterator.
+    pub fn write_tags<I: IntoIterator<Item = T>>(&mut self, data: I, tags: &[Tag]) {
+        // TODO: debug_assert!(tags.is_sorted());
+        let ofs = self.pos + self.data.len() as TagPos;
+        self.data.extend(data);
+        self.tags.extend(tags.iter().map(|t| Tag {
+            pos: t.pos + ofs,
+            key: t.key.clone(),
+            val: t.val.clone(),
+        }));
+    }
+
     /// Get iterator for reading.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.data.iter()
+    }
+
+    /// Get tags in window.
+    pub fn tags(&self) -> Vec<Tag> {
+        self.tags
+            .iter()
+            .map(|t| Tag {
+                pos: t.pos - self.pos,
+                key: t.key.clone(),
+                val: t.val.clone(),
+            })
+            .collect()
     }
 
     /// Get raw data.
@@ -75,11 +134,24 @@ where
     /// Empty stream.
     pub fn clear(&mut self) {
         self.data.clear();
+        self.tags.clear();
+        self.pos = 0;
     }
 
     /// Remove samples from the beginning.
     pub fn consume(&mut self, n: usize) {
         self.data.drain(0..n);
+        self.pos += n as TagPos;
+        let mut d = 0;
+        for t in &self.tags {
+            if t.pos < n as TagPos {
+                d += 1;
+            }
+        }
+        self.tags.drain(0..d);
+        if self.tags.is_empty() {
+            self.pos = 0;
+        }
     }
 
     /// Return the amount of data present.
