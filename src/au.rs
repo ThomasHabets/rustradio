@@ -107,7 +107,7 @@ impl Block for AuEncode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.lock().unwrap();
         if let Some(h) = &self.header {
-            o.write_slice(h);
+            o.write(h.iter().copied());
             self.header = None;
         }
 
