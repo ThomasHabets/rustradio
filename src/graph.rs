@@ -58,6 +58,7 @@ impl Graph {
             .resize(self.blocks.len(), std::time::Duration::default());
         loop {
             let mut done = true;
+            let mut all_idle = true;
             if self.cancel_token.is_canceled() {
                 break;
             }
@@ -68,7 +69,11 @@ impl Graph {
                 match ret {
                     BlockRet::Ok => {
                         // Block did something.
-                        debug!("… {} was not starved", b.block_name());
+                        //debug!("… {} was not starved", b.block_name());
+                        done = false;
+                        all_idle = false;
+                    }
+                    BlockRet::Pending => {
                         done = false;
                     }
                     BlockRet::Noop => {}
@@ -77,6 +82,11 @@ impl Graph {
             }
             if done {
                 break;
+            }
+            if all_idle {
+                let idle_sleep = std::time::Duration::from_millis(10);
+                debug!("No output or consumption from any block. Sleeping a bit.");
+                std::thread::sleep(idle_sleep);
             }
         }
         for line in self.generate_stats(st.elapsed()).split('\n') {

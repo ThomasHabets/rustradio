@@ -116,7 +116,7 @@ impl Block for RtlSdrSource {
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         match self.rx.try_recv() {
-            Err(TryRecvError::Empty) => Ok(BlockRet::Ok),
+            Err(TryRecvError::Empty) => Ok(BlockRet::Pending),
             Err(other) => Err(other.into()),
             Ok(buf) => {
                 self.dst.lock().unwrap().write_slice(&buf);

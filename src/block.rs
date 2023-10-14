@@ -21,7 +21,11 @@ pub enum BlockRet {
     /// comes in.
     Ok,
 
-    /// Produced nothing.
+    /// Block didn't produce anything this time, but has a background
+    /// process that may suddenly produce.
+    Pending,
+
+    /// Produced nothing, because not enough input.
     Noop,
 
     // More data may be produced even if no more data comes in.
