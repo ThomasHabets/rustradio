@@ -35,7 +35,7 @@ impl<T: Copy> Block for Tee<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut i = self.src.lock()?;
         let mut o1 = self.dst1.lock()?;
-        let mut o2 = self.dst1.lock()?;
+        let mut o2 = self.dst2.lock()?;
         if i.available() == 0 {
             return Ok(BlockRet::Noop);
         }
