@@ -21,6 +21,7 @@ pub use crate::signal_source::SignalSourceComplex;
 pub use crate::single_pole_iir_filter::SinglePoleIIRFilter;
 pub use crate::symbol_sync::ZeroCrossing;
 pub use crate::tcp_source::TcpSource;
+pub use crate::tee::Tee;
 pub use crate::vector_source::VectorSource;
 
 #[cfg(feature = "rtlsdr")]

@@ -121,6 +121,7 @@ pub mod signal_source;
 pub mod single_pole_iir_filter;
 pub mod symbol_sync;
 pub mod tcp_source;
+pub mod tee;
 pub mod vector_source;
 
 #[cfg(feature = "rtlsdr")]
