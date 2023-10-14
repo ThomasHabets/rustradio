@@ -57,7 +57,7 @@ impl<T: Copy> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut i = self.src.lock().unwrap();
         let mut v = Vec::new();
-        self.counter -= self.deci;
+        //self.counter -= self.deci;
         for s in i.iter() {
             self.counter += self.interp;
             while self.counter >= 0 {

@@ -68,7 +68,7 @@ impl Graph {
                 match ret {
                     BlockRet::Ok => {
                         // Block did something.
-                        debug!("… {} still has data", b.block_name());
+                        debug!("… {} was not starved", b.block_name());
                         done = false;
                     }
                     BlockRet::Noop => {}
