@@ -100,6 +100,7 @@ use anyhow::Result;
 use stream::Stream;
 
 // Blocks.
+pub mod add;
 pub mod add_const;
 pub mod au;
 pub mod binary_slicer;
@@ -123,6 +124,7 @@ pub mod symbol_sync;
 pub mod tcp_source;
 pub mod tee;
 pub mod vector_source;
+pub mod xor;
 
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;
