@@ -69,7 +69,7 @@ impl Graph {
                 match ret {
                     BlockRet::Ok => {
                         // Block did something.
-                        //debug!("… {} was not starved", b.block_name());
+                        debug!("… {} was not starved", b.block_name());
                         done = false;
                         all_idle = false;
                     }
