@@ -68,6 +68,7 @@ where
             v.extend(&s.serialize());
         });
         self.f.write_all(&v)?;
+        self.f.flush()?;
         i.consume(n);
         Ok(BlockRet::Noop)
     }
