@@ -1,8 +1,10 @@
 //! Blocks for converting from one type to another.
 use anyhow::Result;
 
+use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp};
-use crate::{map_block_convert_macro, Float};
+use crate::Error;
+use crate::{map_block_convert_macro, Complex, Float};
 
 /// Convert floats to unsigned 32bit int, scaled if needed.
 ///
@@ -30,6 +32,53 @@ impl FloatToU32 {
     }
 }
 map_block_convert_macro![FloatToU32, u32];
+
+/// Convert floats to complex.
+pub struct FloatToComplex {
+    re: Streamp<Float>,
+    im: Streamp<Float>,
+    dst: Streamp<Complex>,
+}
+
+impl FloatToComplex {
+    /// Create new block.
+    pub fn new(re: Streamp<Float>, im: Streamp<Float>) -> Self {
+        Self {
+            re,
+            im,
+            dst: new_streamp(),
+        }
+    }
+
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Complex> {
+        self.dst.clone()
+    }
+}
+
+impl Block for FloatToComplex {
+    fn block_name(&self) -> &'static str {
+        "FloatToComplex"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut a = self.re.lock()?;
+        let mut b = self.im.lock()?;
+        let n = std::cmp::min(a.available(), b.available());
+        if n == 0 {
+            return Ok(BlockRet::Noop);
+        }
+        let mut o = self.dst.lock()?;
+        o.write(
+            a.iter()
+                .zip(b.iter())
+                .take(n)
+                .map(|(x, y)| Complex::new(*x, *y)),
+        );
+        a.consume(n);
+        b.consume(n);
+        Ok(BlockRet::Ok)
+    }
+}
 
 /*
 struct Convert<From, To> {

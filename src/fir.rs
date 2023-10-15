@@ -144,6 +144,7 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
     taps.into_iter().map(|t| t * gain).collect()
 }
 
+/// Generate hilbert transformer filter.
 pub fn hilbert(ntaps: usize) -> Vec<Float> {
     let window: Vec<Float> = {
         let pi = std::f64::consts::PI as Float;
