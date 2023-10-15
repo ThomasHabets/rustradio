@@ -55,11 +55,18 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         if self.current_delay > 0 {
             let n = std::cmp::min(self.current_delay, self.dst.lock()?.capacity());
+            if n == 0 {
+                return Ok(BlockRet::Noop);
+            }
             self.dst.lock()?.write_slice(&vec![T::default(); n]);
             self.current_delay -= n;
         }
         {
-            let n = std::cmp::min(self.src.lock()?.available(), self.skip);
+            let a = self.src.lock()?.available();
+            let n = std::cmp::min(a, self.skip);
+            if n == 0 && a == 0 {
+                return Ok(BlockRet::Noop);
+            }
             self.src.lock()?.consume(n);
             debug!("========= skipped {n}");
             self.skip -= n;
