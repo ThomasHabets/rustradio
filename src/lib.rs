@@ -113,6 +113,7 @@ pub mod fft_filter;
 pub mod file_sink;
 pub mod file_source;
 pub mod fir;
+pub mod hilbert;
 pub mod multiply_const;
 pub mod null_sink;
 pub mod quadrature_demod;

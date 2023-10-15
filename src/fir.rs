@@ -144,6 +144,33 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
     taps.into_iter().map(|t| t * gain).collect()
 }
 
+pub fn hilbert(ntaps: usize) -> Vec<Float> {
+    let window: Vec<Float> = {
+        let pi = std::f64::consts::PI as Float;
+        // Hamming
+        let m = (ntaps - 1) as Float;
+        (0..ntaps)
+            .map(|n| 0.54 - 0.46 * (2.0 * pi * (n as Float) / m).cos())
+            .collect()
+    };
+    let mid = (ntaps - 1) / 2;
+    let mut gain = 0.0;
+    let mut taps = vec![0.0; ntaps];
+    for i in 1..=mid {
+        if i & 1 == 1 {
+            let x = 1.0 / (i as Float);
+            taps[mid + i] = x * window[mid + i];
+            taps[mid - i] = -x * window[mid - i];
+            gain = taps[mid + i] - gain;
+        } else {
+            taps[mid + i] = 0.0;
+            taps[mid - i] = 0.0;
+        }
+    }
+    let gain = 1.0 / (2.0 * gain.abs());
+    taps.iter().map(|e| gain * *e).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
