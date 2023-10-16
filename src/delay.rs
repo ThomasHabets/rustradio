@@ -68,7 +68,7 @@ where
                 return Ok(BlockRet::Noop);
             }
             self.src.lock()?.consume(n);
-            debug!("========= skipped {n}");
+            debug!("Delay: skipped {n}");
             self.skip -= n;
         }
         self.dst.lock()?.write(self.src.lock()?.iter().copied());
