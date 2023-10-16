@@ -1,8 +1,11 @@
+//!
+//! Super ugly test code for capturing AX.25 frames.
 use std::collections::VecDeque;
 use std::io::Write;
+use std::time::SystemTime;
 
 use anyhow::Result;
-//use log::warn;
+use log::{debug, warn};
 use structopt::StructOpt;
 
 use rustradio::block::{Block, BlockRet};
@@ -49,12 +52,26 @@ impl HdlcDeframer {
     }
 }
 
+fn range_compare(a: &[u8], b: impl Iterator<Item = u8>) -> bool {
+    a.iter().zip(b).map(|(a, b)| *a == b).all(|x| x)
+}
+
+fn find_pattern(needle: &[u8], haystack: &[u8]) -> Option<usize> {
+    for i in 0..(haystack.len() - needle.len()) {
+        if range_compare(needle, haystack.iter().skip(i).take(needle.len()).copied()) {
+            return Some(i);
+        }
+    }
+    None
+}
+
 impl Block for HdlcDeframer {
     fn block_name(&self) -> &'static str {
         "HDLC Deframer"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let cac = str2bits("01111110011111100111111001111110");
+        let cac1 = str2bits("01111110");
         {
             let mut input = self.src.lock()?;
             if input.is_empty() {
@@ -66,48 +83,83 @@ impl Block for HdlcDeframer {
 
         let max_bytes = 400;
         let max_len = cac.len() + max_bytes;
-        let size = self.history.len();
-        if size < max_len {
-            return Ok(BlockRet::Ok);
-        }
-
-        for i in 0..(size - max_len) {
-            let equal = cac
-                .iter()
-                .zip(self.history.range(i..(i + cac.len())))
-                .map(|(a, b)| a == b)
-                .all(|x| x);
-            if !equal {
+        debug!("looking through {}", self.history.len());
+        while self.history.len() > max_len {
+            if !range_compare(&cac, self.history.iter().copied().take(cac.len())) {
+                self.history.drain(0..1);
                 continue;
             }
-            println!("Found packet!");
+            while range_compare(&cac1, self.history.iter().copied().skip(8).take(cac.len())) {
+                self.history.drain(0..8);
+            }
+            debug!("Found CAC! {}", self.history.len());
 
-            let start = i + cac.len();
-            let mut bytes = Vec::new();
-            for j in (start..(start + max_len)).step_by(8) {
-                let t = self.history.iter().skip(j).take(8);
-                bytes.push(bits2byte(&t.copied().collect::<Vec<_>>()));
+            // Find end marker.
+            let bits;
+            if let Some(i) = find_pattern(
+                &str2bits("01111110"),
+                &self
+                    .history
+                    .iter()
+                    .skip(cac1.len())
+                    .copied()
+                    .collect::<Vec<_>>(),
+            ) {
+                debug!("Found end marker at {}", i);
+                bits = self
+                    .history
+                    .iter()
+                    .skip(8)
+                    .take(i)
+                    .copied()
+                    .collect::<Vec<_>>();
+                self.history.drain(0..i); // Drains the first CAC, the content, but not the supposedly ending CAC.
+            } else {
+                return Ok(BlockRet::Ok);
             }
-            let mut r = 0;
-            while bytes[r] == 0x7e {
-                r += 1;
-            }
-            let bytes = &bytes[r..];
-            let mut fin = Vec::new();
-            for b in bytes {
-                if *b == 0x7e {
-                    break;
+
+            // Unstuff.
+            let mut ones = 0;
+            let mut unstuffed = Vec::new();
+            for bit in &bits {
+                if *bit == 1 {
+                    if ones == 5 {
+                        warn!("Too many ones {} {:?}, packet bad", ones, bits);
+                        return Ok(BlockRet::Ok);
+                    }
+                    ones += 1;
+                    unstuffed.push(1);
+                } else {
+                    if ones != 5 {
+                        unstuffed.push(0);
+                    }
+                    ones = 0;
                 }
-                fin.push(*b);
             }
-            //if bytes[0] != 0x7f {
-            if bytes[0] != 0xfe {
-                let mut f = std::fs::File::create(format!("packets/p"))?;
-                f.write_all(&fin)?;
-                println!("{:.0x?}", fin);
+            if unstuffed.len() % 8 > 0 {
+                warn!(
+                    "Packet not multiple of 8 bits: {} % 8 = {}",
+                    unstuffed.len(),
+                    unstuffed.len() % 8
+                );
+                return Ok(BlockRet::Ok);
             }
+            debug!("Unstuffed len: {} -> {}", bits.len(), unstuffed.len());
+            let mut bytes = Vec::new();
+            for i in (0..unstuffed.len()).step_by(8) {
+                bytes.push(bits2byte(&unstuffed[i..i + 8]));
+            }
+            let mut f = std::fs::File::create(format!(
+                "packets/{}",
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_micros()
+            ))?;
+            f.write_all(&bytes)?;
+            debug!("Captured packet: {:0>2x?}", bytes);
+            return Ok(BlockRet::Ok);
         }
-        self.history.drain(0..(size - max_len));
         Ok(BlockRet::Ok)
     }
 }
