@@ -17,14 +17,14 @@ use rustradio::{Complex, Error};
 #[derive(StructOpt, Debug)]
 #[structopt()]
 struct Opt {
-    // Unused if rtlsdr feature not enabled.
+    #[cfg(feature = "rtlsdr")]
     #[structopt(long = "freq", default_value = "100000000")]
     freq: u64,
 
     #[structopt(short = "v", default_value = "0")]
     verbose: usize,
 
-    // Unused if rtlsdr feature not enabled.
+    #[cfg(feature = "rtlsdr")]
     #[structopt(long = "gain", default_value = "20")]
     gain: i32,
 }
@@ -199,10 +199,15 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     let (prev, samp_rate) = if false {
-        let samp_rate = 300_000.0;
-        let prev = add_block![g, RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?];
-        let prev = add_block![g, RtlSdrDecode::new(prev)];
-        (prev, samp_rate)
+        #[cfg(feature = "rtlsdr")]
+        {
+            let samp_rate = 300_000.0;
+            let prev = add_block![g, RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?];
+            let prev = add_block![g, RtlSdrDecode::new(prev)];
+            (prev, samp_rate)
+        }
+        #[cfg(not(feature = "rtlsdr"))]
+        panic!("rtlsdr feature not enabled")
     } else {
         let samp_rate = 50_000.0;
         let prev = add_block![g, FileSource::<Complex>::new("aprs-50k.c32", false)?];

@@ -4,8 +4,12 @@ cargo fmt -- --check || {
     echo "Run: cargo fmt" >&2
     exit 1
 }
+cargo test || {
+    echo "Tests fail without rtlsdr" >&2
+    exit 1
+}
 cargo test -F rtlsdr || {
-    echo "Tests fail" >&2
+    echo "Tests fail with rtlsdr" >&2
     exit 1
 }
 cargo +nightly bench --no-run -F rtlsdr || {
