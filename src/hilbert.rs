@@ -112,6 +112,9 @@ impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet, Error> {
         assert_eq!(self.ntaps, self.history.len());
         let mut i = self.src.lock()?;
+        if i.available() == 0 {
+            return Ok(BlockRet::Noop);
+        }
         let mut stack = StackedVec::new();
         stack.vecs.push(&self.history);
         stack.vecs.push(i.data());
