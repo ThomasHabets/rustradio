@@ -126,6 +126,7 @@ pub mod tcp_source;
 pub mod tee;
 pub mod vector_source;
 pub mod xor;
+pub mod xor_const;
 
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;

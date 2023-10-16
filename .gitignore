@@ -9,3 +9,4 @@ keff
 attic/
 *.wav
 *.au
+/packets
