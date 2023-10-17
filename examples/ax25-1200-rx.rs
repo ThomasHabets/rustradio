@@ -267,7 +267,24 @@ fn main() -> Result<()> {
 
     let taps = rustradio::fir::low_pass(samp_rate, 2400.0, 100.0);
     let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
-    let prev = add_block![g, AddConst::new(prev, -(0.15 + (0.28 - 0.15) / 2.0))];
+
+    let freq1 = 1200.0;
+    let freq2 = 2200.0;
+    let center_freq = freq1 + (freq2 - freq1) / 2.0;
+    let prev = add_block![
+        g,
+        AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)
+    ];
+
+    /*
+    // Save floats to file.
+    let (a, prev) = add_block![g, Tee::new(prev)];
+    g.add(Box::new(FileSink::new(
+        a,
+        "test.f32",
+        rustradio::file_sink::Mode::Overwrite,
+    )?));
+     */
 
     let baud = 1200.0;
     let prev = add_block![g, ZeroCrossing::new(prev, samp_rate / baud, 0.1)];
