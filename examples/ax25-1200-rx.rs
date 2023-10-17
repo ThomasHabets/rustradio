@@ -5,7 +5,7 @@ use std::io::Write;
 use std::time::SystemTime;
 
 use anyhow::Result;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use structopt::StructOpt;
 
 use rustradio::block::{Block, BlockRet};
@@ -18,7 +18,7 @@ use rustradio::{Complex, Error};
 #[structopt()]
 struct Opt {
     #[cfg(feature = "rtlsdr")]
-    #[structopt(long = "freq", default_value = "100000000")]
+    #[structopt(long = "freq", default_value = "144800000")]
     freq: u64,
 
     #[structopt(short = "v", default_value = "0")]
@@ -70,19 +70,38 @@ impl Block for HdlcDeframer {
         "HDLC Deframer"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let cac = str2bits("01111110011111100111111001111110");
+        // TODO: Problems with this code:
+        // * Since start and end marker are the same, you can miss the
+        //   real marker if it's mistaken for and end marker.
+        // * The history drain logic is all wrong, likely missing
+        //   packets.
+        // * Likely to trigger false positives because it's currently
+        //   only checking for one sync ("flag") byte.
+        // * Doesn't check CRC at all.
+        // * Latency is way too high, as we collect too many bits
+        //   before even looking.
+        //
+        // This is basically proof of concept at this point.
+
+        //let cac = str2bits("01111110011111100111111001111110");
+        let cac = str2bits("01111110");
         let cac1 = str2bits("01111110");
+        let min_bytes = 400;
+        let max_bytes = 1500;
         {
             let mut input = self.src.lock()?;
             if input.is_empty() {
                 return Ok(BlockRet::Noop);
             }
             self.history.extend(input.iter());
+            if self.history.len() > max_bytes * 8 {
+                self.history
+                    .drain(0..(self.history.len() - (max_bytes * 8)));
+            }
             input.clear();
         }
 
-        let max_bytes = 400;
-        let max_len = cac.len() + max_bytes;
+        let max_len = cac.len() + min_bytes * 8;
         debug!("looking through {}", self.history.len());
         while self.history.len() > max_len {
             if !range_compare(&cac, self.history.iter().copied().take(cac.len())) {
@@ -115,6 +134,7 @@ impl Block for HdlcDeframer {
                     .collect::<Vec<_>>();
                 self.history.drain(0..i); // Drains the first CAC, the content, but not the supposedly ending CAC.
             } else {
+                debug!("No end marker");
                 return Ok(BlockRet::Ok);
             }
 
@@ -124,7 +144,7 @@ impl Block for HdlcDeframer {
             for bit in &bits {
                 if *bit == 1 {
                     if ones == 5 {
-                        warn!("Too many ones {} {:?}, packet bad", ones, bits);
+                        debug!("Too many ones {} {:?}, packet bad", ones, bits);
                         return Ok(BlockRet::Ok);
                     }
                     ones += 1;
@@ -157,7 +177,7 @@ impl Block for HdlcDeframer {
                     .as_micros()
             ))?;
             f.write_all(&bytes)?;
-            debug!("Captured packet: {:0>2x?}", bytes);
+            info!("Captured packet: {:0>2x?}", bytes);
             return Ok(BlockRet::Ok);
         }
         Ok(BlockRet::Ok)
@@ -198,21 +218,47 @@ fn main() -> Result<()> {
 
     let mut g = Graph::new();
 
-    let (prev, samp_rate) = if false {
+    let (prev, samp_rate) = if true {
         #[cfg(feature = "rtlsdr")]
         {
+            // Source.
             let samp_rate = 300_000.0;
             let prev = add_block![g, RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?];
+
+            // Decode.
             let prev = add_block![g, RtlSdrDecode::new(prev)];
+
+            // Filter.
+            let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
+            let prev = add_block![g, FftFilter::new(prev, &taps)];
+
+            // Resample.
+            let new_samp_rate = 50_000.0;
+            let prev = add_block![
+                g,
+                RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+            ];
+            let samp_rate = new_samp_rate;
             (prev, samp_rate)
         }
         #[cfg(not(feature = "rtlsdr"))]
         panic!("rtlsdr feature not enabled")
     } else {
         let samp_rate = 50_000.0;
-        let prev = add_block![g, FileSource::<Complex>::new("aprs-50k.c32", false)?];
+        //let prev = add_block![g, FileSource::<Complex>::new("aprs-50k.c32", false)?];
+        let prev = add_block![g, FileSource::<Complex>::new("test-50k.c32", false)?];
         (prev, samp_rate)
     };
+
+    // Save I/Q to file.
+    /*
+    let (prev, b) = add_block![g, Tee::new(prev)];
+    g.add(Box::new(FileSink::new(
+        b,
+        "test.c32",
+        rustradio::file_sink::Mode::Overwrite,
+    )?));
+     */
 
     // TODO: AGC step?
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
@@ -234,13 +280,17 @@ fn main() -> Result<()> {
 
     let prev = add_block![g, XorConst::new(prev, 1u8)];
 
-    let (a, b) = add_block![g, Tee::new(prev)];
+    // Save bits to file.
+    /*
+    let (a, prev) = add_block![g, Tee::new(prev)];
     g.add(Box::new(FileSink::new(
         a,
         "test.u8",
         rustradio::file_sink::Mode::Overwrite,
     )?));
-    g.add(Box::new(HdlcDeframer::new(b)));
+     */
+
+    g.add(Box::new(HdlcDeframer::new(prev)));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
