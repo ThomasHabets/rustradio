@@ -1,11 +1,10 @@
 //!
 //! Super ugly test code for capturing AX.25 frames.
-use std::collections::VecDeque;
 use std::io::Write;
 use std::time::SystemTime;
 
 use anyhow::Result;
-use log::{debug, info, warn};
+use log::{debug, info};
 use structopt::StructOpt;
 
 use rustradio::block::{Block, BlockRet};
@@ -38,148 +37,113 @@ macro_rules! add_block {
     }};
 }
 
+enum State {
+    Unsynced(u8),
+    Synced((u8, Vec<u8>)),
+    FinalCheck(Vec<u8>),
+}
+
 struct HdlcDeframer {
     src: Streamp<u8>,
-    history: VecDeque<u8>,
+    state: State,
+    min_size: usize,
+    max_size: usize,
 }
 
 impl HdlcDeframer {
-    fn new(src: Streamp<u8>) -> Self {
+    /// Create new HdlcDeframer.
+    pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
-            history: VecDeque::new(),
+            min_size,
+            max_size,
+            state: State::Unsynced(0xff),
         }
     }
-}
 
-fn range_compare(a: &[u8], b: impl Iterator<Item = u8>) -> bool {
-    a.iter().zip(b).map(|(a, b)| *a == b).all(|x| x)
-}
+    fn update_state(state: &mut State, min_size: usize, max_size: usize, bit: u8) -> Result<State> {
+        Ok(match state {
+            State::Unsynced(v) => {
+                let n = (*v >> 1) | (bit << 7);
+                if n == 0x7e {
+                    debug!("HdlcDeframer: Found flag!");
+                    State::Synced((0, Vec::with_capacity(max_size)))
+                } else {
+                    State::Unsynced(n)
+                }
+            }
+            State::Synced((ones, inbits)) => {
+                let mut bits: Vec<u8> = Vec::new();
+                std::mem::swap(&mut bits, inbits);
+                if inbits.len() > max_size * 8 {
+                    return Ok(State::Unsynced(0xff));
+                }
+                if bit > 0 {
+                    bits.push(1);
+                    if *ones == 5 {
+                        State::FinalCheck(bits)
+                    } else {
+                        State::Synced((*ones + 1, bits))
+                    }
+                } else {
+                    if *ones == 5 {
+                        State::Synced((0, bits))
+                    } else {
+                        bits.push(0);
+                        State::Synced((0, bits))
+                    }
+                }
+            }
+            State::FinalCheck(inbits) => {
+                let mut bits: Vec<u8> = Vec::new();
+                std::mem::swap(&mut bits, inbits);
+                if bit == 1 {
+                    return Ok(State::Unsynced(0xff));
+                }
 
-fn find_pattern(needle: &[u8], haystack: &[u8]) -> Option<usize> {
-    for i in 0..(haystack.len() - needle.len()) {
-        if range_compare(needle, haystack.iter().skip(i).take(needle.len()).copied()) {
-            return Some(i);
-        }
+                bits.push(0);
+                bits.truncate(bits.len() - 8);
+                if !bits.is_empty() {
+                    if bits.len() % 8 != 0 {
+                        debug!("HdlcDeframer: Packet len not multiple of 8: {}", bits.len());
+                    } else if bits.len() < min_size * 8 {
+                        debug!("Packet too short: {} < {}", bits.len() / 8, min_size);
+                    } else {
+                        let bytes: Vec<u8> = (0..bits.len())
+                            .step_by(8)
+                            .map(|i| bits2byte(&bits[i..i + 8]))
+                            .collect();
+                        let mut f = std::fs::File::create(format!(
+                            "packets/{}",
+                            SystemTime::now()
+                                .duration_since(SystemTime::UNIX_EPOCH)
+                                .expect("Time went backwards")
+                                .as_micros()
+                        ))?;
+                        f.write_all(&bytes)?;
+                        info!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
+                    }
+                }
+                State::Synced((0, Vec::with_capacity(max_size)))
+            }
+        })
     }
-    None
 }
 
 impl Block for HdlcDeframer {
     fn block_name(&self) -> &'static str {
         "HDLC Deframer"
     }
+
     fn work(&mut self) -> Result<BlockRet, Error> {
-        // TODO: Problems with this code:
-        // * Since start and end marker are the same, you can miss the
-        //   real marker if it's mistaken for and end marker.
-        // * The history drain logic is all wrong, likely missing
-        //   packets.
-        // * Likely to trigger false positives because it's currently
-        //   only checking for one sync ("flag") byte.
-        // * Doesn't check CRC at all.
-        // * Latency is way too high, as we collect too many bits
-        //   before even looking.
-        //
-        // This is basically proof of concept at this point.
-
-        //let cac = str2bits("01111110011111100111111001111110");
-        let cac = str2bits("01111110");
-        let cac1 = str2bits("01111110");
-        let min_bytes = 400;
-        let max_bytes = 1500;
-        {
-            let mut input = self.src.lock()?;
-            if input.is_empty() {
-                return Ok(BlockRet::Noop);
-            }
-            self.history.extend(input.iter());
-            if self.history.len() > max_bytes * 8 {
-                self.history
-                    .drain(0..(self.history.len() - (max_bytes * 8)));
-            }
-            input.clear();
+        let mut input = self.src.lock()?;
+        if input.is_empty() {
+            return Ok(BlockRet::Noop);
         }
-
-        let max_len = cac.len() + min_bytes * 8;
-        debug!("looking through {}", self.history.len());
-        while self.history.len() > max_len {
-            if !range_compare(&cac, self.history.iter().copied().take(cac.len())) {
-                self.history.drain(0..1);
-                continue;
-            }
-            while range_compare(&cac1, self.history.iter().copied().skip(8).take(cac.len())) {
-                self.history.drain(0..8);
-            }
-            debug!("Found CAC! {}", self.history.len());
-
-            // Find end marker.
-            let bits;
-            if let Some(i) = find_pattern(
-                &str2bits("01111110"),
-                &self
-                    .history
-                    .iter()
-                    .skip(cac1.len())
-                    .copied()
-                    .collect::<Vec<_>>(),
-            ) {
-                debug!("Found end marker at {}", i);
-                bits = self
-                    .history
-                    .iter()
-                    .skip(8)
-                    .take(i)
-                    .copied()
-                    .collect::<Vec<_>>();
-                self.history.drain(0..i); // Drains the first CAC, the content, but not the supposedly ending CAC.
-            } else {
-                debug!("No end marker");
-                return Ok(BlockRet::Ok);
-            }
-
-            // Unstuff.
-            let mut ones = 0;
-            let mut unstuffed = Vec::new();
-            for bit in &bits {
-                if *bit == 1 {
-                    if ones == 5 {
-                        debug!("Too many ones {} {:?}, packet bad", ones, bits);
-                        return Ok(BlockRet::Ok);
-                    }
-                    ones += 1;
-                    unstuffed.push(1);
-                } else {
-                    if ones != 5 {
-                        unstuffed.push(0);
-                    }
-                    ones = 0;
-                }
-            }
-            if unstuffed.len() % 8 > 0 {
-                warn!(
-                    "Packet not multiple of 8 bits: {} % 8 = {}",
-                    unstuffed.len(),
-                    unstuffed.len() % 8
-                );
-                return Ok(BlockRet::Ok);
-            }
-            debug!("Unstuffed len: {} -> {}", bits.len(), unstuffed.len());
-            let mut bytes = Vec::new();
-            for i in (0..unstuffed.len()).step_by(8) {
-                bytes.push(bits2byte(&unstuffed[i..i + 8]));
-            }
-            let mut f = std::fs::File::create(format!(
-                "packets/{}",
-                SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_micros()
-            ))?;
-            f.write_all(&bytes)?;
-            info!("Captured packet: {:0>2x?}", bytes);
-            return Ok(BlockRet::Ok);
+        for bit in input.iter().copied() {
+            self.state = Self::update_state(&mut self.state, self.min_size, self.max_size, bit)?;
         }
+        input.clear();
         Ok(BlockRet::Ok)
     }
 }
@@ -194,16 +158,6 @@ fn bits2byte(data: &[u8]) -> u8 {
         | data[2] << 2
         | data[1] << 1
         | data[0]
-}
-
-fn str2bits(s: &str) -> Vec<u8> {
-    s.chars()
-        .map(|ch| match ch {
-            '1' => 1,
-            '0' => 0,
-            _ => panic!("invalid bitstring: {}", s),
-        })
-        .collect::<Vec<_>>()
 }
 
 fn main() -> Result<()> {
@@ -245,8 +199,8 @@ fn main() -> Result<()> {
         panic!("rtlsdr feature not enabled")
     } else {
         let samp_rate = 50_000.0;
-        //let prev = add_block![g, FileSource::<Complex>::new("aprs-50k.c32", false)?];
-        let prev = add_block![g, FileSource::<Complex>::new("test-50k.c32", false)?];
+        let prev = add_block![g, FileSource::<Complex>::new("aprs-50k.c32", false)?];
+        //let prev = add_block![g, FileSource::<Complex>::new("test-50k.c32", false)?];
         (prev, samp_rate)
     };
 
@@ -307,7 +261,7 @@ fn main() -> Result<()> {
     )?));
      */
 
-    g.add(Box::new(HdlcDeframer::new(prev)));
+    g.add(Box::new(HdlcDeframer::new(prev, 10, 1500)));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
