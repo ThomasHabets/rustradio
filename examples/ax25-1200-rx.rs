@@ -60,13 +60,18 @@ macro_rules! add_block {
     }};
 }
 
-struct PduWriter {
+/** PDU writer
+
+This block takes PDUs (as Vec<u8>), and writes them to an output
+directory, named as microseconds since epoch.
+*/
+pub struct PduWriter {
     src: Streamp<Vec<u8>>,
     dir: String,
 }
 
 impl PduWriter {
-    /// Create new PduWriter.
+    /// Create new PduWriter that'll write to `dir`.
     pub fn new(src: Streamp<Vec<u8>>, dir: String) -> Self {
         Self { src, dir }
     }
@@ -74,7 +79,7 @@ impl PduWriter {
 
 impl Block for PduWriter {
     fn block_name(&self) -> &'static str {
-        "PduWriter"
+        "PDU Writer"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut input = self.src.lock()?;
@@ -82,7 +87,6 @@ impl Block for PduWriter {
             return Ok(BlockRet::Noop);
         }
         for packet in input.iter() {
-            //let bytes = Vec::new();
             let mut f = std::fs::File::create(format!(
                 "{}/{}",
                 self.dir,
@@ -90,9 +94,8 @@ impl Block for PduWriter {
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .expect("Time went backwards")
                     .as_micros()
-            ))
-            .unwrap();
-            f.write_all(packet).unwrap();
+            ))?;
+            f.write_all(packet)?;
         }
         input.clear();
         Ok(BlockRet::Ok)
@@ -100,12 +103,25 @@ impl Block for PduWriter {
 }
 
 enum State {
+    /// Looking for flag pattern.
     Unsynced(u8),
+
+    /// Flag pattern seen. Accumulating bits for packet.
     Synced((u8, Vec<u8>)),
+
+    /// Six ones in a row seen. Check the final bit for a 0, and emit
+    /// packet if so.
     FinalCheck(Vec<u8>),
 }
 
-struct HdlcDeframer {
+/** HDLC Deframer.
+
+This block takes a stream of bits (as u8), and outputs any HDLC frames
+found as Vec<u8>.
+
+TODO: Check checksum, and only output packets that pass.
+*/
+pub struct HdlcDeframer {
     src: Streamp<u8>,
     dst: Streamp<Vec<u8>>,
     state: State,
@@ -115,6 +131,8 @@ struct HdlcDeframer {
 
 impl HdlcDeframer {
     /// Create new HdlcDeframer.
+    ///
+    /// min_size and max_size is size in bytes.
     pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
@@ -147,6 +165,8 @@ impl HdlcDeframer {
             }
             State::Synced((ones, inbits)) => {
                 let mut bits: Vec<u8> = Vec::new();
+                // We can't move from `bits`, since it's only borrowed,
+                // but we can swap its contents.
                 std::mem::swap(&mut bits, inbits);
                 if inbits.len() > max_size * 8 {
                     return Ok(State::Unsynced(0xff));
@@ -169,32 +189,43 @@ impl HdlcDeframer {
             }
             State::FinalCheck(inbits) => {
                 let mut bits: Vec<u8> = Vec::new();
+                // We can't move from `bits`, since it's only borrowed,
+                // but we can swap its contents.
                 std::mem::swap(&mut bits, inbits);
                 if bit == 1 {
+                    // 7 ones in a row is invalid. Discard what we've collected.
+                    return Ok(State::Unsynced(0xff));
+                }
+                if bits.len() < 7 {
+                    // Too short, not even zero bytes.
                     return Ok(State::Unsynced(0xff));
                 }
 
-                bits.push(0);
-                bits.truncate(bits.len() - 8);
-                if !bits.is_empty() {
-                    if bits.len() % 8 != 0 {
-                        debug!("HdlcDeframer: Packet len not multiple of 8: {}", bits.len());
-                    } else if bits.len() < min_size * 8 {
-                        debug!("Packet too short: {} < {}", bits.len() / 8, min_size);
-                    } else {
-                        let bytes: Vec<u8> = (0..bits.len())
-                            .step_by(8)
-                            .map(|i| bits2byte(&bits[i..i + 8]))
-                            .collect();
-                        info!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
+                // Remove partial flag.
+                bits.truncate(bits.len() - 7);
 
-                        // TODO: why do I need to map this? Why do I get a BS compile error when I do:
-                        // dst.lock()?.push(bytes);
-                        dst.lock()
-                            .map_err(|e| Error::new(&format!("bleh: {:?}", e)))?
-                            .push(bytes);
-                    }
+                if bits.len() % 8 != 0 {
+                    debug!("HdlcDeframer: Packet len not multiple of 8: {}", bits.len());
+                } else if bits.len() / 8 < min_size {
+                    debug!("Packet too short: {} < {}", bits.len() / 8, min_size);
+                } else {
+                    let bytes: Vec<u8> = (0..bits.len())
+                        .step_by(8)
+                        .map(|i| bits2byte(&bits[i..i + 8]))
+                        .collect();
+                    info!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
+
+                    // TODO: why do I need to map this? Why do I get a
+                    // BS compile error when I do:
+                    //
+                    // dst.lock()?.push(bytes);
+                    dst.lock()
+                        .map_err(|e| Error::new(&format!("not possible?: {:?}", e)))?
+                        .push(bytes);
                 }
+
+                // We may or may not have seen a valid packet, but we
+                // did see a valid flag. So back to synced.
                 State::Synced((0, Vec::with_capacity(max_size)))
             }
         })
@@ -225,6 +256,7 @@ impl Block for HdlcDeframer {
     }
 }
 
+// Turn 8 bits in LSB order into a byte.
 fn bits2byte(data: &[u8]) -> u8 {
     assert!(data.len() == 8);
     data[7] << 7
@@ -268,11 +300,11 @@ fn main() -> Result<()> {
         panic!("Need to provide either --rtlsdr or -r")
     };
 
-    // Filter.
+    // Filter RF.
     let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
     let prev = add_block![g, FftFilter::new(prev, &taps)];
 
-    // Resample.
+    // Resample RF.
     let new_samp_rate = 50_000.0;
     let prev = add_block![
         g,
