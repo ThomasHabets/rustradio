@@ -165,7 +165,7 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl<T: Copy> From<std::sync::PoisonError<std::sync::MutexGuard<'_, Stream<T>>>> for Error {
+impl<T> From<std::sync::PoisonError<std::sync::MutexGuard<'_, Stream<T>>>> for Error {
     fn from(e: std::sync::PoisonError<std::sync::MutexGuard<'_, Stream<T>>>) -> Error {
         Error::new(&format!("{}", e))
     }

@@ -35,10 +35,7 @@ impl Tag {
 
 /// A stream between blocks.
 #[derive(Debug)]
-pub struct Stream<T>
-where
-    T: Copy,
-{
+pub struct Stream<T> {
     // Position of first element in `data`. If `tags` is empty then it
     // has no meaning, and can be set to an arbitrary value.
     pos: TagPos,
@@ -52,7 +49,7 @@ where
 pub type Streamp<T> = Arc<Mutex<Stream<T>>>;
 
 /// Create a new Streamp.
-pub fn new_streamp<T: Copy>() -> Streamp<T> {
+pub fn new_streamp<T>() -> Streamp<T> {
     Arc::new(Mutex::new(Stream::new()))
 }
 
@@ -61,11 +58,7 @@ pub fn streamp_from_slice<T: Copy>(data: &[T]) -> Streamp<T> {
     Arc::new(Mutex::new(Stream::from_slice(data)))
 }
 
-impl<T> Stream<T>
-where
-    T: Copy,
-    //VecDeque<T>: Extend,
-{
+impl<T> Stream<T> {
     /// Create a new stream.
     pub fn new() -> Self {
         Self {
@@ -76,37 +69,9 @@ where
         }
     }
 
-    /// Create a new stream with initial data in it.
-    pub fn from_slice(data: &[T]) -> Self {
-        Self {
-            pos: 0,
-            tags: VecDeque::new(),
-            data: VecDeque::from(data.to_vec()),
-            max_size: 1048576,
-        }
-    }
-
-    // TODO: why can't a slice be turned into a suitable iterator?
-    /// Write to stream from slice.
-    pub fn write_slice(&mut self, data: &[T]) {
-        self.data.extend(data);
-    }
-
-    /// Write to stream from iterator.
-    pub fn write<I: IntoIterator<Item = T>>(&mut self, data: I) {
-        self.data.extend(data);
-    }
-
-    /// Write to stream from iterator.
-    pub fn write_tags<I: IntoIterator<Item = T>>(&mut self, data: I, tags: &[Tag]) {
-        // TODO: debug_assert!(tags.is_sorted());
-        let ofs = self.pos + self.data.len() as TagPos;
-        self.data.extend(data);
-        self.tags.extend(tags.iter().map(|t| Tag {
-            pos: t.pos + ofs,
-            key: t.key.clone(),
-            val: t.val.clone(),
-        }));
+    /// Push one sample, handing off ownership.
+    pub fn push(&mut self, val: T) {
+        self.data.push_back(val);
     }
 
     /// Get iterator for reading.
@@ -125,7 +90,6 @@ where
             })
             .collect()
     }
-
     /// Get raw data.
     pub fn data(&self) -> &VecDeque<T> {
         &self.data
@@ -175,7 +139,42 @@ where
         }
     }
 }
-impl<T: Copy> Default for Stream<T> {
+
+impl<T: Copy> Stream<T> {
+    /// Create a new stream with initial data in it.
+    pub fn from_slice(data: &[T]) -> Self {
+        Self {
+            pos: 0,
+            tags: VecDeque::new(),
+            data: VecDeque::from(data.to_vec()),
+            max_size: 1048576,
+        }
+    }
+
+    // TODO: why can't a slice be turned into a suitable iterator?
+    /// Write to stream from slice.
+    pub fn write_slice(&mut self, data: &[T]) {
+        self.data.extend(data);
+    }
+
+    /// Write to stream from iterator.
+    pub fn write<I: IntoIterator<Item = T>>(&mut self, data: I) {
+        self.data.extend(data);
+    }
+
+    /// Write to stream from iterator.
+    pub fn write_tags<I: IntoIterator<Item = T>>(&mut self, data: I, tags: &[Tag]) {
+        // TODO: debug_assert!(tags.is_sorted());
+        let ofs = self.pos + self.data.len() as TagPos;
+        self.data.extend(data);
+        self.tags.extend(tags.iter().map(|t| Tag {
+            pos: t.pos + ofs,
+            key: t.key.clone(),
+            val: t.val.clone(),
+        }));
+    }
+}
+impl<T> Default for Stream<T> {
     fn default() -> Self {
         Self::new()
     }

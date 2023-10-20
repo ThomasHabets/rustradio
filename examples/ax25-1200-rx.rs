@@ -10,7 +10,7 @@ use structopt::StructOpt;
 use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::stream::Streamp;
+use rustradio::stream::{new_streamp, Streamp};
 use rustradio::{Complex, Error};
 
 #[derive(StructOpt, Debug)]
@@ -37,6 +37,45 @@ macro_rules! add_block {
     }};
 }
 
+struct PduWriter {
+    src: Streamp<Vec<u8>>,
+    dir: String,
+}
+
+impl PduWriter {
+    /// Create new PduWriter.
+    pub fn new(src: Streamp<Vec<u8>>, dir: String) -> Self {
+        Self { src, dir }
+    }
+}
+
+impl Block for PduWriter {
+    fn block_name(&self) -> &'static str {
+        "PduWriter"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut input = self.src.lock()?;
+        if input.is_empty() {
+            return Ok(BlockRet::Noop);
+        }
+        for packet in input.iter() {
+            //let bytes = Vec::new();
+            let mut f = std::fs::File::create(format!(
+                "{}/{}",
+                self.dir,
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_micros()
+            ))
+            .unwrap();
+            f.write_all(packet).unwrap();
+        }
+        input.clear();
+        Ok(BlockRet::Ok)
+    }
+}
+
 enum State {
     Unsynced(u8),
     Synced((u8, Vec<u8>)),
@@ -45,6 +84,7 @@ enum State {
 
 struct HdlcDeframer {
     src: Streamp<u8>,
+    dst: Streamp<Vec<u8>>,
     state: State,
     min_size: usize,
     max_size: usize,
@@ -55,13 +95,23 @@ impl HdlcDeframer {
     pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
+            dst: new_streamp(),
             min_size,
             max_size,
             state: State::Unsynced(0xff),
         }
     }
+    pub fn out(&self) -> Streamp<Vec<u8>> {
+        self.dst.clone()
+    }
 
-    fn update_state(state: &mut State, min_size: usize, max_size: usize, bit: u8) -> Result<State> {
+    fn update_state(
+        dst: Streamp<Vec<u8>>,
+        state: &mut State,
+        min_size: usize,
+        max_size: usize,
+        bit: u8,
+    ) -> Result<State> {
         Ok(match state {
             State::Unsynced(v) => {
                 let n = (*v >> 1) | (bit << 7);
@@ -113,15 +163,13 @@ impl HdlcDeframer {
                             .step_by(8)
                             .map(|i| bits2byte(&bits[i..i + 8]))
                             .collect();
-                        let mut f = std::fs::File::create(format!(
-                            "packets/{}",
-                            SystemTime::now()
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .expect("Time went backwards")
-                                .as_micros()
-                        ))?;
-                        f.write_all(&bytes)?;
                         info!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
+
+                        // TODO: why do I need to map this? Why do I get a BS compile error when I do:
+                        // dst.lock()?.push(bytes);
+                        dst.lock()
+                            .map_err(|e| Error::new(&format!("bleh: {:?}", e)))?
+                            .push(bytes);
                     }
                 }
                 State::Synced((0, Vec::with_capacity(max_size)))
@@ -141,7 +189,13 @@ impl Block for HdlcDeframer {
             return Ok(BlockRet::Noop);
         }
         for bit in input.iter().copied() {
-            self.state = Self::update_state(&mut self.state, self.min_size, self.max_size, bit)?;
+            self.state = Self::update_state(
+                self.dst.clone(),
+                &mut self.state,
+                self.min_size,
+                self.max_size,
+                bit,
+            )?;
         }
         input.clear();
         Ok(BlockRet::Ok)
@@ -172,7 +226,7 @@ fn main() -> Result<()> {
 
     let mut g = Graph::new();
 
-    let (prev, samp_rate) = if true {
+    let (prev, samp_rate) = if false {
         #[cfg(feature = "rtlsdr")]
         {
             // Source.
@@ -261,7 +315,8 @@ fn main() -> Result<()> {
     )?));
      */
 
-    g.add(Box::new(HdlcDeframer::new(prev, 10, 1500)));
+    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
+    g.add(Box::new(PduWriter::new(prev, "packets".to_string())));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
