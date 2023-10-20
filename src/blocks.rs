@@ -13,6 +13,7 @@ pub use crate::fft_filter::FftFilterFloat;
 pub use crate::file_sink::FileSink;
 pub use crate::file_source::FileSource;
 pub use crate::fir::FIRFilter;
+pub use crate::hdlc_deframer::HdlcDeframer;
 pub use crate::hilbert::Hilbert;
 pub use crate::multiply_const::MultiplyConst;
 pub use crate::null_sink::NullSink;
