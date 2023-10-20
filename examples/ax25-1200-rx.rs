@@ -1,5 +1,16 @@
-//!
-//! Super ugly test code for capturing AX.25 frames.
+/*! AX.25 1200bps Bell 202 receiver.
+
+Can be used to receive APRS over the air with RTL-SDR or from
+complex I/Q saved to a file.
+
+```no_run
+$ mkdir captured
+$ ./ax25-1200-rx -r captured.c32 --samp_rate 50000 -o captured
+[…]
+$ ./ax25-1200-rx --rtlsdr -o captured -v 2
+[…]
+```
+*/
 use std::io::Write;
 use std::time::SystemTime;
 
@@ -11,17 +22,29 @@ use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::stream::{new_streamp, Streamp};
-use rustradio::{Complex, Error};
+use rustradio::{Complex, Error, Float};
 
 #[derive(StructOpt, Debug)]
 #[structopt()]
 struct Opt {
+    #[structopt(long = "out", short = "o")]
+    output: String,
+
     #[cfg(feature = "rtlsdr")]
     #[structopt(long = "freq", default_value = "144800000")]
     freq: u64,
 
     #[structopt(short = "v", default_value = "0")]
     verbose: usize,
+
+    #[structopt(long = "rtlsdr")]
+    rtlsdr: bool,
+
+    #[structopt(long = "samp_rate", default_value = "300000")]
+    samp_rate: u32,
+
+    #[structopt(short = "r")]
+    read: Option<String>,
 
     #[cfg(feature = "rtlsdr")]
     #[structopt(long = "gain", default_value = "20")]
@@ -226,37 +249,36 @@ fn main() -> Result<()> {
 
     let mut g = Graph::new();
 
-    let (prev, samp_rate) = if false {
+    let (prev, samp_rate) = if let Some(read) = opt.read {
+        let prev = add_block![g, FileSource::<Complex>::new(&read, false)?];
+        (prev, opt.samp_rate as Float)
+    } else if opt.rtlsdr {
         #[cfg(feature = "rtlsdr")]
         {
             // Source.
-            let samp_rate = 300_000.0;
-            let prev = add_block![g, RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?];
+            let prev = add_block![g, RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?];
 
             // Decode.
             let prev = add_block![g, RtlSdrDecode::new(prev)];
-
-            // Filter.
-            let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
-            let prev = add_block![g, FftFilter::new(prev, &taps)];
-
-            // Resample.
-            let new_samp_rate = 50_000.0;
-            let prev = add_block![
-                g,
-                RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
-            ];
-            let samp_rate = new_samp_rate;
-            (prev, samp_rate)
+            (prev, opt.samp_rate as Float)
         }
         #[cfg(not(feature = "rtlsdr"))]
         panic!("rtlsdr feature not enabled")
     } else {
-        let samp_rate = 50_000.0;
-        let prev = add_block![g, FileSource::<Complex>::new("aprs-50k.c32", false)?];
-        //let prev = add_block![g, FileSource::<Complex>::new("test-50k.c32", false)?];
-        (prev, samp_rate)
+        panic!("Need to provide either --rtlsdr or -r")
     };
+
+    // Filter.
+    let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
+    let prev = add_block![g, FftFilter::new(prev, &taps)];
+
+    // Resample.
+    let new_samp_rate = 50_000.0;
+    let prev = add_block![
+        g,
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+    ];
+    let samp_rate = new_samp_rate;
 
     // Save I/Q to file.
     /*
@@ -316,7 +338,7 @@ fn main() -> Result<()> {
      */
 
     let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
-    g.add(Box::new(PduWriter::new(prev, "packets".to_string())));
+    g.add(Box::new(PduWriter::new(prev, opt.output)));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
