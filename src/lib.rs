@@ -117,6 +117,7 @@ pub mod hdlc_deframer;
 pub mod hilbert;
 pub mod multiply_const;
 pub mod null_sink;
+pub mod pdu_writer;
 pub mod quadrature_demod;
 pub mod rational_resampler;
 pub mod rtlsdr_decode;
