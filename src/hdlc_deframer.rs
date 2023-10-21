@@ -61,20 +61,13 @@ impl HdlcDeframer {
         self.dst.clone()
     }
 
-    fn update_state(
-        dst: Streamp<Vec<u8>>,
-        strip_checksum: bool,
-        state: &mut State,
-        min_size: usize,
-        max_size: usize,
-        bit: u8,
-    ) -> Result<State> {
-        Ok(match state {
+    fn update_state(&mut self, bit: u8) -> Result<State> {
+        Ok(match &mut self.state {
             State::Unsynced(v) => {
                 let n = (*v >> 1) | (bit << 7);
                 if n == 0x7e {
                     debug!("HdlcDeframer: Found flag!");
-                    State::Synced((0, Vec::with_capacity(max_size)))
+                    State::Synced((0, Vec::with_capacity(self.max_size)))
                 } else {
                     State::Unsynced(n)
                 }
@@ -84,7 +77,7 @@ impl HdlcDeframer {
                 // We can't move from `bits`, since it's only borrowed,
                 // but we can swap its contents.
                 std::mem::swap(&mut bits, inbits);
-                if inbits.len() > max_size * 8 {
+                if inbits.len() > self.max_size * 8 {
                     return Ok(State::Unsynced(0xff));
                 }
                 if bit > 0 {
@@ -120,8 +113,8 @@ impl HdlcDeframer {
 
                 if bits.len() % 8 != 0 {
                     debug!("HdlcDeframer: Packet len not multiple of 8: {}", bits.len());
-                } else if bits.len() / 8 < min_size {
-                    debug!("Packet too short: {} < {}", bits.len() / 8, min_size);
+                } else if bits.len() / 8 < self.min_size {
+                    debug!("Packet too short: {} < {}", bits.len() / 8, self.min_size);
                 } else {
                     let bytes: Vec<u8> = (0..bits.len())
                         .step_by(8)
@@ -139,12 +132,14 @@ impl HdlcDeframer {
                     // BS compile error when I do:
                     //
                     // dst.lock()?.push(bytes);
-                    if strip_checksum {
-                        dst.lock()
+                    if self.strip_checksum {
+                        self.dst
+                            .lock()
                             .map_err(|e| Error::new(&format!("not possible?: {:?}", e)))?
                             .push(data.to_vec());
                     } else {
-                        dst.lock()
+                        self.dst
+                            .lock()
                             .map_err(|e| Error::new(&format!("not possible?: {:?}", e)))?
                             .push(bytes);
                     }
@@ -152,7 +147,7 @@ impl HdlcDeframer {
 
                 // We may or may not have seen a valid packet, but we
                 // did see a valid flag. So back to synced.
-                State::Synced((0, Vec::with_capacity(max_size)))
+                State::Synced((0, Vec::with_capacity(self.max_size)))
             }
         })
     }
@@ -164,19 +159,15 @@ impl Block for HdlcDeframer {
     }
 
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock()?;
+        let ti = self.src.clone();
+        let mut input = ti.lock()?;
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
         for bit in input.iter().copied() {
-            self.state = Self::update_state(
-                self.dst.clone(),
-                self.strip_checksum,
-                &mut self.state,
-                self.min_size,
-                self.max_size,
-                bit,
-            )?;
+            // This is a bit ugly in that it destructively creates the
+            // new state. The old state is moved from.
+            self.state = self.update_state(bit)?;
         }
         input.clear();
         Ok(BlockRet::Ok)
