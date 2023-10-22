@@ -93,6 +93,12 @@ g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
+## Links
+
+* Main repo: <https://github.com/ThomasHabets/rustradio>
+* crates.io: <https://crates.io/crates/rustradio>
+* This documentation: <https://docs.rs/rustradio/latest/rustradio/>
+
 [sparslog]: https://github.com/ThomasHabets/sparslog
 [gnuradio]: https://www.gnuradio.org/
  */
