@@ -14,26 +14,29 @@ use std::time::SystemTime;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::Streamp;
-use crate::Error;
+use crate::{Error, Sample};
 
 /** PDU writer
 
 This block takes PDUs (as Vec<u8>), and writes them to an output
 directory, named as microseconds since epoch.
 */
-pub struct PduWriter {
-    src: Streamp<Vec<u8>>,
+pub struct PduWriter<T> {
+    src: Streamp<Vec<T>>,
     dir: PathBuf,
 }
 
-impl PduWriter {
+impl<T> PduWriter<T> {
     /// Create new PduWriter that'll write to `dir`.
-    pub fn new(src: Streamp<Vec<u8>>, dir: PathBuf) -> Self {
+    pub fn new(src: Streamp<Vec<T>>, dir: PathBuf) -> Self {
         Self { src, dir }
     }
 }
 
-impl Block for PduWriter {
+impl<T> Block for PduWriter<T>
+where
+    T: Sample,
+{
     fn block_name(&self) -> &'static str {
         "PDU Writer"
     }
@@ -51,7 +54,11 @@ impl Block for PduWriter {
             let full = Path::new(&self.dir).join(name);
             debug!("Saving PDU to {:?}", full);
             let mut f = std::fs::File::create(full)?;
-            f.write_all(packet)?;
+            let mut v = Vec::with_capacity(T::size() * packet.len());
+            packet.iter().for_each(|s: &T| {
+                v.extend(&s.serialize());
+            });
+            f.write_all(&v)?;
         }
         input.clear();
         Ok(BlockRet::Ok)
