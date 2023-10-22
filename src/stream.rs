@@ -27,9 +27,19 @@ impl Tag {
         Self { pos, key, val }
     }
 
-    /// Get pos
+    /// Get pos.
     pub fn pos(&self) -> TagPos {
         self.pos
+    }
+
+    /// Get tag key.
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    /// Get tag value.
+    pub fn val(&self) -> &str {
+        &self.val
     }
 }
 
