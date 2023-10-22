@@ -29,8 +29,6 @@ enum State {
 
 This block takes a stream of bits (as u8), and outputs any HDLC frames
 found as Vec<u8>.
-
-TODO: Check checksum, and only output packets that pass.
 */
 pub struct HdlcDeframer {
     src: Streamp<u8>,
