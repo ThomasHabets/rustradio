@@ -1,19 +1,84 @@
 /*! Test program for whole packet clock recovery.
 
-Just a test, for now. Will be turned into a block.
-
-* <https://youtu.be/rQkBDMeODHc>
+This is the same as ax25-1200-rx.rs, except it has fewer options
+(e.g. only supports reading from a file), and uses WPCR instead of
+ZeroCrossing symbol sync.
 */
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 
 use anyhow::Result;
-use rustfft::FftPlanner;
+use structopt::StructOpt;
 
-use rustradio::{Complex, Error, Float};
+use rustradio::block::{Block, BlockRet};
+use rustradio::blocks::*;
+use rustradio::graph::Graph;
+use rustradio::stream::{new_streamp, Streamp};
+use rustradio::{Error, Float};
 
-fn load() -> Result<Vec<f32>> {
-    let mut file = File::open("burst.f32")?;
+#[derive(StructOpt, Debug)]
+#[structopt()]
+struct Opt {
+    #[structopt(short = "r")]
+    read: String,
+
+    #[structopt(long = "sample_rate", default_value = "50000")]
+    sample_rate: Float,
+
+    #[structopt(short = "o")]
+    output: PathBuf,
+
+    #[structopt(short = "v", default_value = "0")]
+    verbose: usize,
+}
+
+pub struct VecToStream<T> {
+    src: Streamp<Vec<T>>,
+    dst: Streamp<T>,
+}
+
+impl<T> VecToStream<T> {
+    pub fn new(src: Streamp<Vec<T>>) -> Self {
+        Self {
+            src,
+            dst: new_streamp(),
+        }
+    }
+    pub fn out(&self) -> Streamp<T> {
+        self.dst.clone()
+    }
+}
+
+impl<T: Copy> Block for VecToStream<T> {
+    fn block_name(&self) -> &'static str {
+        "VecToStream"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut i = self.src.lock()?;
+        if i.available() == 0 {
+            return Ok(BlockRet::Noop);
+        }
+        let mut o = self.dst.lock()?;
+        for v in i.iter() {
+            o.write_slice(v);
+        }
+        i.clear();
+        Ok(BlockRet::Ok)
+    }
+}
+
+macro_rules! add_block {
+    ($g:ident, $cons:expr) => {{
+        let block = Box::new($cons);
+        let prev = block.out();
+        $g.add(block);
+        prev
+    }};
+}
+
+fn load(filename: &str) -> Result<Vec<f32>> {
+    let mut file = File::open(filename)?;
 
     let mut v = Vec::new();
     let mut buffer = [0u8; 4];
@@ -27,88 +92,45 @@ fn load() -> Result<Vec<f32>> {
     Ok(v)
 }
 
-fn find_best_bin(data: &[Complex]) -> Option<usize> {
-    // Never select the first two buckets.
-    let skip = 2;
-
-    // Convert to magnitude.
-    let mag = data.iter().map(|x| x.norm_sqr().sqrt()).collect::<Vec<_>>();
-
-    // We want a value above 80% of max.
-    let thresh = mag
-        .iter()
-        .take(data.len())
-        .skip(skip)
-        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .unwrap()
-        * 0.8;
-
-    // Pick the first value that's above 80% of max and not still heading upwards.
-    for (n, (v, nxt)) in mag.iter().zip(mag.iter().skip(1)).enumerate().skip(skip) {
-        if *v > thresh && *v > *nxt {
-            return Some(n);
-        }
-    }
-    None
-}
-
-fn wpcr(samples: &[f32]) -> Option<Vec<u8>> {
-    if samples.len() < 4 {
-        return None;
-    }
-
-    let mid = 0.0;
-    let sliced = samples.iter().map(|v| if *v > mid { 1.0 } else { 0.0 });
-    let sliced_delayed = sliced.clone().skip(1);
-    let mut d = sliced
-        .zip(sliced_delayed)
-        .map(|(a, b)| {
-            let x = a - b;
-            Complex::new(x * x, 0.0)
-        })
-        .collect::<Vec<_>>();
-
-    let mut planner = FftPlanner::new();
-    let fft = planner.plan_fft_forward(d.len());
-
-    fft.process(&mut d);
-    d.truncate(d.len() / 2);
-
-    let bin = match find_best_bin(&d) {
-        Some(bin) => bin,
-        None => {
-            eprintln!("No best bin");
-            return None;
-        }
-    };
-    let cycles_per_sample = bin as Float / samples.len() as Float;
-    let mut clock_phase = {
-        let t = 0.5 + d[bin].arg() / (std::f64::consts::PI * 2.0) as Float;
-        if t > 0.5 {
-            t
-        } else {
-            t + 1.0
-        }
-    };
-    let samp_rate = 50000.0;
-    let frequency = cycles_per_sample * samp_rate;
-    let mut syms = Vec::with_capacity((samples.len() as Float / cycles_per_sample) as usize + 10);
-    for i in 0..samples.len() {
-        if clock_phase >= 1.0 {
-            clock_phase -= 1.0;
-            syms.push(if samples[i] > 0.0 { 1 } else { 0 });
-        }
-        clock_phase += cycles_per_sample;
-    }
-    eprintln!("Frequency: {} Hz", frequency);
-    eprintln!("Phase: {} rad", d[bin].arg());
-    Some(syms)
-}
-
 fn main() -> Result<()> {
-    let samples = load()?;
-    for d in wpcr(&samples).ok_or(Error::new("bleh"))? {
-        println!("{d}");
-    }
+    let opt = Opt::from_args();
+    stderrlog::new()
+        .module(module_path!())
+        .module("rustradio")
+        .quiet(false)
+        .verbosity(opt.verbose)
+        .timestamp(stderrlog::Timestamp::Second)
+        .init()
+        .unwrap();
+
+    let samples = load(&opt.read)?;
+
+    let src = rustradio::stream::new_streamp();
+    src.lock().unwrap().push(samples);
+
+    let mut g = Graph::new();
+
+    // TODO: read I/Q from file, quad demod, etc.
+
+    // Symbol sync.
+    let prev = add_block![g, WpcrBuilder::new(src).samp_rate(opt.sample_rate).build()];
+    let prev = add_block![g, VecToStream::new(prev)];
+
+    // Delay xor.
+    let (a, b) = add_block![g, Tee::new(prev)];
+    let delay = add_block![g, Delay::new(a, 1)];
+    let prev = add_block![g, Xor::new(delay, b)];
+    let prev = add_block![g, XorConst::new(prev, 1u8)];
+
+    // Decode.
+    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
+
+    // Save.
+    g.add(Box::new(PduWriter::new(prev, opt.output)));
+
+    // Run.
+    let st = std::time::Instant::now();
+    g.run()?;
+    eprintln!("{}", g.generate_stats(st.elapsed()));
     Ok(())
 }

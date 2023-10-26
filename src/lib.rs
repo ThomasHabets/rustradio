@@ -133,6 +133,7 @@ pub mod symbol_sync;
 pub mod tcp_source;
 pub mod tee;
 pub mod vector_source;
+pub mod wpcr;
 pub mod xor;
 pub mod xor_const;
 

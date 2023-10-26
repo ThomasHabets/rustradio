@@ -27,6 +27,7 @@ pub use crate::symbol_sync::ZeroCrossing;
 pub use crate::tcp_source::TcpSource;
 pub use crate::tee::Tee;
 pub use crate::vector_source::VectorSource;
+pub use crate::wpcr::{Wpcr, WpcrBuilder};
 pub use crate::xor::Xor;
 pub use crate::xor_const::XorConst;
 
