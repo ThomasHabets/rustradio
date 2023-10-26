@@ -4,8 +4,6 @@ This is the same as ax25-1200-rx.rs, except it has fewer options
 (e.g. only supports reading from a file), and uses WPCR instead of
 ZeroCrossing symbol sync.
 */
-use std::fs::File;
-use std::io::Read;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -31,6 +29,12 @@ struct Opt {
 
     #[structopt(short = "v", default_value = "0")]
     verbose: usize,
+
+    #[structopt(long = "threshold", default_value = "0.0001")]
+    threshold: Float,
+
+    #[structopt(long = "iir_alpha", default_value = "0.01")]
+    iir_alpha: Float,
 }
 
 pub struct VecToStream<T> {
@@ -77,21 +81,6 @@ macro_rules! add_block {
     }};
 }
 
-fn load(filename: &str) -> Result<Vec<f32>> {
-    let mut file = File::open(filename)?;
-
-    let mut v = Vec::new();
-    let mut buffer = [0u8; 4];
-    while let Ok(bytes_read) = file.read(&mut buffer) {
-        if bytes_read == 0 {
-            break;
-        }
-        let float_value = f32::from_le_bytes(buffer);
-        v.push(float_value);
-    }
-    Ok(v)
-}
-
 fn main() -> Result<()> {
     let opt = Opt::from_args();
     stderrlog::new()
@@ -103,17 +92,70 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let samples = load(&opt.read)?;
-
-    let src = rustradio::stream::new_streamp();
-    src.lock().unwrap().push(samples);
-
+    let samp_rate = opt.sample_rate;
     let mut g = Graph::new();
 
-    // TODO: read I/Q from file, quad demod, etc.
+    // Read file.
+    let prev = add_block![g, FileSource::new(&opt.read, false)?];
+
+    // Filter.
+    let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
+    let prev = add_block![g, FftFilter::new(prev, &taps)];
+
+    // Resample RF.
+    let new_samp_rate = 50_000.0;
+    let prev = add_block![
+        g,
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+    ];
+    let samp_rate = new_samp_rate;
+
+    // Tee out signal strength.
+    let (prev, burst_tee) = add_block![g, Tee::new(prev)];
+    let burst_tee = add_block![g, ComplexToMag2::new(burst_tee)];
+    let burst_tee = add_block![
+        g,
+        SinglePoleIIRFilter::new(burst_tee, opt.iir_alpha)
+            .ok_or(Error::new("bad IIR parameters"))?
+    ];
+
+    // Save burst stream
+    /*
+    let (a, burst_tee) = add_block![g, Tee::new(burst_tee)];
+    g.add(Box::new(FileSink::new(a, "test.f32", rustradio::file_sink::Mode::Overwrite)?));
+     */
+
+    // Demod.
+    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
+    let prev = add_block![g, Hilbert::new(prev, 65)];
+    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
+
+    // Filter.
+    let taps = rustradio::fir::low_pass(samp_rate, 2400.0, 100.0);
+    let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
+
+    // Center midpoint.
+    let freq1 = 1200.0;
+    let freq2 = 2200.0;
+    let center_freq = freq1 + (freq2 - freq1) / 2.0;
+    let prev = add_block![
+        g,
+        AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)
+    ];
+
+    // Tag.
+    let prev = add_block![
+        g,
+        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())
+    ];
+
+    let prev = add_block![
+        g,
+        StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50)
+    ];
 
     // Symbol sync.
-    let prev = add_block![g, WpcrBuilder::new(src).samp_rate(opt.sample_rate).build()];
+    let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(opt.sample_rate).build()];
     let prev = add_block![g, VecToStream::new(prev)];
 
     // Delay xor.

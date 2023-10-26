@@ -3,18 +3,14 @@
 Listen for power bursts, and save them as separate files in an output
 directory.
 */
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use log::info;
 use structopt::StructOpt;
 
-use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::stream::{new_streamp, Streamp, Tag, TagPos, TagValue};
-use rustradio::{Complex, Error, Float, Sample};
+use rustradio::{Complex, Error, Float};
 
 #[derive(StructOpt, Debug)]
 #[structopt()]
@@ -62,164 +58,6 @@ macro_rules! add_block {
         $g.add(block);
         prev
     }};
-}
-
-struct StreamToPdu<T> {
-    src: Streamp<T>,
-    dst: Streamp<Vec<T>>,
-    tag: String,
-    buf: Vec<T>,
-    endcounter: Option<usize>,
-    max_size: usize,
-    tail: usize,
-}
-
-impl<T> StreamToPdu<T> {
-    fn new(src: Streamp<T>, tag: String, max_size: usize, tail: usize) -> Self {
-        Self {
-            src,
-            tag,
-            dst: new_streamp(),
-            buf: Vec::new(),
-            endcounter: None,
-            max_size,
-            tail,
-        }
-    }
-    fn out(&self) -> Streamp<Vec<T>> {
-        self.dst.clone()
-    }
-}
-
-fn get_tag_val_bool(tags: &HashMap<(TagPos, String), Tag>, pos: TagPos, key: &str) -> Option<bool> {
-    if let Some(tag) = tags.get(&(pos, key.to_string())) {
-        match tag.val() {
-            TagValue::Bool(b) => Some(*b),
-            _ => None,
-        }
-    } else {
-        None
-    }
-}
-
-impl<T> Block for StreamToPdu<T>
-where
-    T: Copy + Sample,
-{
-    fn block_name(&self) -> &'static str {
-        "StreamToPdu"
-    }
-    fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock()?;
-        if input.available() == 0 {
-            return Ok(BlockRet::Noop);
-        }
-        // TODO: we actually only care about one single tag,
-        // and I think we should drop the rest no matter what.
-        let tags = input
-            .tags()
-            .into_iter()
-            .map(|t| ((t.pos(), t.key().to_string()), t))
-            .collect::<HashMap<(TagPos, String), Tag>>();
-        for (i, sample) in input.iter().enumerate() {
-            if let Some(0) = self.endcounter {
-                let mut delme = Vec::new();
-                std::mem::swap(&mut delme, &mut self.buf);
-                info!(
-                    "Wrote burst of size {} samples, {} bytes",
-                    delme.len(),
-                    delme.len() * T::size()
-                );
-                self.dst.lock()?.push(delme);
-                self.endcounter = None;
-            }
-            if let Some(c) = self.endcounter {
-                self.buf.push(*sample);
-                self.endcounter = Some(c - 1);
-            } else {
-                if let Some(tv) = get_tag_val_bool(&tags, i as TagPos, &self.tag) {
-                    if !tv {
-                        self.endcounter = Some(self.tail);
-                    } else if !self.buf.is_empty() {
-                        self.buf.push(*sample);
-                    }
-                } else if !self.buf.is_empty() {
-                    self.buf.push(*sample);
-                }
-            }
-            if self.buf.len() > self.max_size {
-                self.buf.clear();
-                self.endcounter = None;
-            }
-        }
-        input.clear();
-        Ok(BlockRet::Ok)
-    }
-}
-
-struct BurstTagger<T> {
-    src: Streamp<T>,
-    threshold: Float,
-    trigger: Streamp<Float>,
-    dst: Streamp<T>,
-    tag: String,
-    last: bool,
-}
-
-impl<T> BurstTagger<T> {
-    fn new(src: Streamp<T>, trigger: Streamp<Float>, threshold: Float, tag: String) -> Self {
-        Self {
-            src,
-            trigger,
-            threshold,
-            tag,
-            dst: new_streamp(),
-            last: false,
-        }
-    }
-    fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
-}
-
-impl<T> Block for BurstTagger<T>
-where
-    T: Copy,
-{
-    fn block_name(&self) -> &'static str {
-        "Burst Tagger"
-    }
-
-    fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock()?;
-        let mut trigger = self.trigger.lock()?;
-        let n = std::cmp::min(input.available(), trigger.available());
-        if n == 0 {
-            return Ok(BlockRet::Noop);
-        }
-        let mut v = Vec::with_capacity(input.available());
-        let mut tags = Vec::new();
-        for (i, (s, tv)) in input.iter().zip(trigger.iter()).enumerate().take(n) {
-            let cur = *tv > self.threshold;
-            if cur != self.last {
-                tags.push(Tag::new(
-                    i as u64,
-                    self.tag.clone(),
-                    if cur {
-                        TagValue::Bool(true)
-                    } else {
-                        TagValue::Bool(false)
-                    },
-                ));
-            }
-            self.last = cur;
-            v.push(*s);
-        }
-        self.dst.lock()?.write_tags(v.iter().copied(), &tags);
-        input.consume(n);
-        trigger.consume(n);
-        Ok(BlockRet::Ok)
-    }
 }
 
 fn main() -> Result<()> {
