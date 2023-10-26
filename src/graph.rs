@@ -111,14 +111,14 @@ impl Graph {
             .map(|b| b.block_name().len())
             .max()
             .unwrap(); // unwrap: can only fail if block list is empty.
+        let ml = std::cmp::max(ml, "Elapsed seconds".len());
         let elapsed = elapsed.as_secs_f64();
 
-        let blockwidth = ml;
         let dashes = "-".repeat(ml + 20) + "\n";
         let (secw, secd) = (10, 3);
         let (pw, pd) = (7, 2);
 
-        let mut s: String = format!("{:blockwidth$}    Seconds  Percent\n", "Block name");
+        let mut s: String = format!("{:<width$}    Seconds  Percent\n", "Block name", width = ml);
         s.push_str(&dashes);
         for (n, b) in self.blocks.iter().enumerate() {
             s.push_str(&format!(
@@ -131,17 +131,23 @@ impl Graph {
         }
         s.push_str(&dashes);
         s.push_str(&format!(
-            "All blocks        {total:secw$.secd$} {:>pw$.pd$}%\n",
-            100.0 * total / elapsed
+            "{:<width$} {total:secw$.secd$} {:>pw$.pd$}%\n",
+            "All blocks",
+            100.0 * total / elapsed,
+            width = ml,
         ));
         s.push_str(&format!(
-            "Non-block time    {:secw$.secd$} {:>pw$.pd$}%\n",
+            "{:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
+            "Non-block time",
             elapsed - total,
-            100.0 * (elapsed - total) / elapsed
+            100.0 * (elapsed - total) / elapsed,
+            width = ml,
         ));
         s.push_str(&format!(
-            "Elapsed seconds   {elapsed:secw$.secd$} {:>pw$.pd$}%\n",
-            100.0
+            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}%\n",
+            "Elapsed seconds",
+            100.0,
+            width = ml,
         ));
         s
     }
