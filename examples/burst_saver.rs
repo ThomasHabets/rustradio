@@ -13,7 +13,7 @@ use structopt::StructOpt;
 use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::stream::{new_streamp, Streamp, Tag, TagPos};
+use rustradio::stream::{new_streamp, Streamp, Tag, TagPos, TagValue};
 use rustradio::{Complex, Error, Float, Sample};
 
 #[derive(StructOpt, Debug)]
@@ -91,6 +91,17 @@ impl<T> StreamToPdu<T> {
     }
 }
 
+fn get_tag_val_bool(tags: &HashMap<(TagPos, String), Tag>, pos: TagPos, key: &str) -> Option<bool> {
+    if let Some(tag) = tags.get(&(pos, key.to_string())) {
+        match tag.val() {
+            TagValue::Bool(b) => Some(*b),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
 impl<T> Block for StreamToPdu<T>
 where
     T: Copy + Sample,
@@ -103,11 +114,13 @@ where
         if input.available() == 0 {
             return Ok(BlockRet::Noop);
         }
+        // TODO: we actually only care about one single tag,
+        // and I think we should drop the rest no matter what.
         let tags = input
             .tags()
             .into_iter()
-            .map(|t| (t.pos(), t))
-            .collect::<HashMap<TagPos, Tag>>();
+            .map(|t| ((t.pos(), t.key().to_string()), t))
+            .collect::<HashMap<(TagPos, String), Tag>>();
         for (i, sample) in input.iter().enumerate() {
             if let Some(0) = self.endcounter {
                 let mut delme = Vec::new();
@@ -124,10 +137,10 @@ where
                 self.buf.push(*sample);
                 self.endcounter = Some(c - 1);
             } else {
-                if let Some(tag) = tags.get(&(i as TagPos)) {
-                    if tag.key() == self.tag && tag.val() == "false" {
+                if let Some(tv) = get_tag_val_bool(&tags, i as TagPos, &self.tag) {
+                    if !tv {
                         self.endcounter = Some(self.tail);
-                    } else if tag.key() == self.tag && tag.val() == "true" || !self.buf.is_empty() {
+                    } else if !self.buf.is_empty() {
                         self.buf.push(*sample);
                     }
                 } else if !self.buf.is_empty() {
@@ -193,9 +206,9 @@ where
                     i as u64,
                     self.tag.clone(),
                     if cur {
-                        "true".to_string()
+                        TagValue::Bool(true)
                     } else {
-                        "false".to_string()
+                        TagValue::Bool(false)
                     },
                 ));
             }

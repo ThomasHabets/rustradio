@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{Stream, Streamp, TagValue};
 use crate::Error;
 
 /// Generate values from a fixed vector.
@@ -50,7 +50,7 @@ where
             vec![crate::stream::Tag::new(
                 0,
                 "VectorSource::start".to_string(),
-                "true".to_string(),
+                TagValue::Bool(true),
             )]
         } else {
             vec![]

@@ -8,22 +8,37 @@ use std::sync::{Arc, Mutex};
 
 use log::debug;
 
+use crate::Float;
+
 /// Tag position in the current stream.
 // TODO: is this a good idea? Just use u32? Or assert that u64 is at
 // least usize?
 pub type TagPos = u64;
+
+/// Enum of tag values.
+#[derive(Clone, Debug)]
+pub enum TagValue {
+    /// String value.
+    String(String),
+
+    /// Float value.
+    Float(Float),
+
+    /// Float value.
+    Bool(bool),
+}
 
 /// Tags associated with a stream.
 #[derive(Debug)]
 pub struct Tag {
     pos: TagPos,
     key: String,
-    val: String,
+    val: TagValue,
 }
 
 impl Tag {
     /// Create new tag.
-    pub fn new(pos: TagPos, key: String, val: String) -> Self {
+    pub fn new(pos: TagPos, key: String, val: TagValue) -> Self {
         Self { pos, key, val }
     }
 
@@ -38,7 +53,7 @@ impl Tag {
     }
 
     /// Get tag value.
-    pub fn val(&self) -> &str {
+    pub fn val(&self) -> &TagValue {
         &self.val
     }
 }
@@ -81,6 +96,17 @@ impl<T> Stream<T> {
 
     /// Push one sample, handing off ownership.
     pub fn push(&mut self, val: T) {
+        self.data.push_back(val);
+    }
+
+    /// Push one sample, with tags.
+    pub fn push_tags(&mut self, val: T, tags: &[Tag]) {
+        let ofs = self.pos + self.data.len() as TagPos;
+        self.tags.extend(tags.iter().map(|t| Tag {
+            pos: ofs,
+            key: t.key.clone(),
+            val: t.val.clone(),
+        }));
         self.data.push_back(val);
     }
 
