@@ -9,10 +9,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use structopt::StructOpt;
 
-use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::stream::{new_streamp, Streamp};
 use rustradio::{Error, Float};
 
 #[derive(StructOpt, Debug)]
@@ -35,41 +33,6 @@ struct Opt {
 
     #[structopt(long = "iir_alpha", default_value = "0.01")]
     iir_alpha: Float,
-}
-
-pub struct VecToStream<T> {
-    src: Streamp<Vec<T>>,
-    dst: Streamp<T>,
-}
-
-impl<T> VecToStream<T> {
-    pub fn new(src: Streamp<Vec<T>>) -> Self {
-        Self {
-            src,
-            dst: new_streamp(),
-        }
-    }
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
-}
-
-impl<T: Copy> Block for VecToStream<T> {
-    fn block_name(&self) -> &'static str {
-        "VecToStream"
-    }
-    fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock()?;
-        if i.available() == 0 {
-            return Ok(BlockRet::Noop);
-        }
-        let mut o = self.dst.lock()?;
-        for v in i.iter() {
-            o.write_slice(v);
-        }
-        i.clear();
-        Ok(BlockRet::Ok)
-    }
 }
 
 macro_rules! add_block {

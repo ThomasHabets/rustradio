@@ -134,6 +134,7 @@ pub mod stream_to_pdu;
 pub mod symbol_sync;
 pub mod tcp_source;
 pub mod tee;
+pub mod vec_to_stream;
 pub mod vector_source;
 pub mod wpcr;
 pub mod xor;
