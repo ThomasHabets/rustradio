@@ -97,15 +97,6 @@ fn main() -> Result<()> {
     let taps = rustradio::fir::low_pass(samp_rate, 2400.0, 100.0);
     let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
-    // Center midpoint.
-    let freq1 = 1200.0;
-    let freq2 = 2200.0;
-    let center_freq = freq1 + (freq2 - freq1) / 2.0;
-    let prev = add_block![
-        g,
-        AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)
-    ];
-
     // Tag.
     let prev = add_block![
         g,
@@ -118,6 +109,7 @@ fn main() -> Result<()> {
     ];
 
     // Symbol sync.
+    let prev = add_block![g, Midpointer::new(prev)];
     let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(opt.sample_rate).build()];
     let prev = add_block![g, VecToStream::new(prev)];
 

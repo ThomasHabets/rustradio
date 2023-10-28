@@ -35,11 +35,59 @@ Drawbacks of this method:
 [nrz]: https://en.wikipedia.org/wiki/Non-return-to-zero
 [video]: https://youtu.be/rQkBDMeODHc
  */
-use log::debug;
+use log::{debug, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp, Tag, TagValue};
 use crate::{Complex, Error, Float};
+
+/// Midpointer is a block re-center a NRZ burst around 0.
+pub struct Midpointer {
+    src: Streamp<Vec<Float>>,
+    dst: Streamp<Vec<Float>>,
+}
+impl Midpointer {
+    /// Create new midpointer.
+    pub fn new(src: Streamp<Vec<Float>>) -> Self {
+        Self {
+            src,
+            dst: new_streamp(),
+        }
+    }
+    /// Get output stream.
+    pub fn out(&self) -> Streamp<Vec<Float>> {
+        self.dst.clone()
+    }
+}
+impl Block for Midpointer {
+    fn block_name(&self) -> &'static str {
+        "Midpointer"
+    }
+
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut i = self.src.lock()?;
+        if i.available() == 0 {
+            return Ok(BlockRet::Noop);
+        }
+        let mut o = self.dst.lock()?;
+        for v in i.iter() {
+            let mean: Float = v.iter().sum::<Float>() / v.len() as Float;
+            if mean.is_nan() {
+                warn!("Midpointer got NaN");
+            } else {
+                let (mut a, mut b): (Vec<Float>, Vec<Float>) = v.iter().partition(|&t| *t > mean);
+                a.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                b.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let high = a[a.len() / 2];
+                let low = b[b.len() / 2];
+                let offset = low + (high - low) / 2.0;
+                o.push(v.iter().map(|t| t - offset).collect::<Vec<_>>());
+            }
+        }
+        i.clear();
+        Ok(BlockRet::Ok)
+    }
+}
 
 /// Builder for Wpcr blocks.
 pub struct WpcrBuilder {
