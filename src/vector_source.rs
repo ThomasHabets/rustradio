@@ -1,10 +1,8 @@
 //! Generate values from a fixed vector.
-use std::sync::{Arc, Mutex};
-
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp, Tag, TagValue};
+use crate::stream::{new_streamp, Streamp, Tag, TagValue};
 use crate::Error;
 
 /// Repeat or counts.
@@ -62,7 +60,7 @@ impl<T: Copy> VectorSource<T> {
     /// Optionally the data can repeat.
     pub fn new(data: Vec<T>) -> Self {
         Self {
-            dst: Arc::new(Mutex::new(Stream::new())),
+            dst: new_streamp(),
             data,
             repeat: Repeat::Finite(1),
             pos: 0,
