@@ -35,7 +35,6 @@ use rustradio::file_sink::Mode;
 use rustradio::Complex;
 let src = VectorSource::new(
     vec![10.0, 0.0, -20.0, 0.0, 100.0, -100.0],
-    false,
 );
 let src_out = src.out();
 let au = AuEncode::new(src_out, Encoding::PCM16, 48000, 1);

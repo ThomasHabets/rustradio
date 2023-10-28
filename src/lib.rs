@@ -81,7 +81,6 @@ let src = Box::new(VectorSource::new(
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),
     ],
-    false,
 ));
 let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
 let sink = Box::new(DebugSink::new(add.out()));

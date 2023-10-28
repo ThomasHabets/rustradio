@@ -24,8 +24,11 @@ pub enum TagValue {
     /// Float value.
     Float(Float),
 
-    /// Float value.
+    /// Bool value.
     Bool(bool),
+
+    /// U64 value.
+    U64(u64),
 }
 
 /// Tags associated with a stream.
