@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, Tag, TagPos};
+use crate::stream::{Streamp, TagPos};
 use crate::Error;
 
 /// Print values to stdout, for debugging.
@@ -35,13 +35,24 @@ where
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut i = self.src.lock()?;
-        let tags = i
-            .tags()
-            .into_iter()
-            .map(|t| (t.pos(), t))
-            .collect::<HashMap<TagPos, Tag>>();
+        let tags = i.tags().into_iter().map(|t| (t.pos(), t)).fold(
+            HashMap::new(),
+            |mut acc, (pos, tag)| {
+                acc.entry(pos).or_insert_with(Vec::new).push(tag);
+                acc
+            },
+        );
         i.iter().enumerate().for_each(|(n, s)| {
-            println!("debug: {:?} {:?}", s, tags.get(&(n as TagPos)));
+            let ts = tags
+                .get(&(n as TagPos))
+                .map(|ts| {
+                    ts.iter()
+                        .map(|t| format!("{} => {:?}", t.key(), t.val()))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .unwrap_or("".to_string());
+            println!("debug: {:?} {}", s, ts);
         });
         i.clear();
         Ok(BlockRet::Noop)

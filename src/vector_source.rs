@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp, TagValue};
+use crate::stream::{Stream, Streamp, Tag, TagValue};
 use crate::Error;
 
 /// Generate values from a fixed vector.
@@ -16,6 +16,7 @@ where
     data: Vec<T>,
     repeat: bool,
     pos: usize,
+    first: bool,
 }
 
 impl<T: Copy + std::fmt::Debug> VectorSource<T> {
@@ -28,6 +29,7 @@ impl<T: Copy + std::fmt::Debug> VectorSource<T> {
             data,
             repeat,
             pos: 0,
+            first: true,
         }
     }
     /// Return the output stream.
@@ -46,8 +48,8 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut out = self.dst.lock().unwrap();
         let n = std::cmp::min(out.capacity(), self.data.len() - self.pos);
-        let tags = if self.pos == 0 {
-            vec![crate::stream::Tag::new(
+        let mut tags = if self.pos == 0 {
+            vec![Tag::new(
                 0,
                 "VectorSource::start".to_string(),
                 TagValue::Bool(true),
@@ -55,6 +57,14 @@ where
         } else {
             vec![]
         };
+        if self.first {
+            tags.push(Tag::new(
+                0,
+                "VectorSource::first".to_string(),
+                TagValue::Bool(true),
+            ));
+            self.first = false;
+        }
         out.write_tags(self.data[self.pos..(self.pos + n)].iter().copied(), &tags);
         self.pos += n;
         if self.pos == self.data.len() {
