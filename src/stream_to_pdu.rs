@@ -53,7 +53,7 @@ impl<T> StreamToPdu<T> {
             src,
             tag,
             dst: new_streamp(),
-            buf: Vec::new(),
+            buf: Vec::with_capacity(max_size),
             endcounter: None,
             max_size,
             tail,
@@ -98,7 +98,7 @@ where
         trace!("StreamToPdu: tags: {:?}", tags);
         for (i, sample) in input.iter().enumerate() {
             if let Some(0) = self.endcounter {
-                let mut delme = Vec::new();
+                let mut delme = Vec::with_capacity(self.max_size);
                 std::mem::swap(&mut delme, &mut self.buf);
                 info!(
                     "StreamToPdu> got burst of size {} samples, {} bytes",
