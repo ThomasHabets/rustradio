@@ -19,10 +19,10 @@ struct Opt {
     #[structopt(short = "r")]
     read: String,
 
-    #[structopt(long = "sample_rate", default_value = "50000")]
+    #[structopt(long = "samp_rate", default_value = "50000")]
     sample_rate: Float,
 
-    #[structopt(short = "o")]
+    #[structopt(short = "o", long = "out")]
     output: PathBuf,
 
     #[structopt(short = "v", default_value = "0")]
