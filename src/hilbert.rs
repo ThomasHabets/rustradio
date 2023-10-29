@@ -1,4 +1,16 @@
-//! Hilbert transform.
+/*! Hilbert transform.
+
+[Wikipedia][wiki] has a bunch of math, but one use case for it is to
+convert floating point values (think audio waveform) into upper
+sideband.
+
+Then again I guess you can do the same with a FloatToComplex plus
+FftFilter.
+
+This implementation is a pretty inefficient.
+
+[wiki]: https://en.wikipedia.org/wiki/Hilbert_transform
+*/
 
 use std::collections::VecDeque;
 
@@ -9,16 +21,23 @@ use crate::{Complex, Error, Float};
 
 trait IndexLen: std::ops::Index<usize, Output = Float> {
     fn len(&self) -> usize;
+    fn extend_into(&self, v: &mut Vec<Float>);
 }
 
 impl IndexLen for Vec<Float> {
     fn len(&self) -> usize {
         Vec::<Float>::len(self)
     }
+    fn extend_into(&self, v: &mut Vec<Float>) {
+        v.extend(self);
+    }
 }
 impl IndexLen for VecDeque<Float> {
     fn len(&self) -> usize {
         VecDeque::<Float>::len(self)
+    }
+    fn extend_into(&self, v: &mut Vec<Float>) {
+        v.extend(self);
     }
 }
 
@@ -33,23 +52,14 @@ impl<'a> StackedVec<'a> {
     fn len(&self) -> usize {
         self.vecs.iter().map(|x| x.len()).sum()
     }
-}
-/*
-use std::ops::Range;
-impl<'a> std::ops::Index<Range<usize>> for StackedVec<'a> {
-    type Output = Float;
-    fn index(&self, n: Range<usize>) -> &Float {
-        let mut n = n;
-        for cont in &self.vecs {
-            if n < cont.len() {
-                return &cont[n];
-            }
-            n -= cont.len();
+    fn collect(&self) -> Vec<Float> {
+        let mut t = Vec::new();
+        for v in &self.vecs {
+            v.extend_into(&mut t);
         }
-        panic!("Failed to index into stacked");
+        t
     }
 }
- */
 
 #[cfg(test)]
 mod tests {
@@ -121,15 +131,13 @@ impl Block for Hilbert {
 
         let len = stack.len();
         let mut v = Vec::with_capacity(len);
+
+        // TODO: remove copy.
+        let iv = stack.collect();
+
         for i in 0..(len - self.ntaps) {
-            // TODO: remove copy.
-            let t = (i..(i + self.ntaps))
-                .map(|j| stack[j])
-                .collect::<Vec<Float>>();
-            v.push(Complex::new(
-                stack[i + self.ntaps / 2],
-                self.filter.filter(&t),
-            ));
+            let t = &iv[i..(i + self.ntaps)];
+            v.push(Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t)));
         }
         self.dst.lock()?.write(v.iter().copied());
 
