@@ -17,6 +17,7 @@ pub use crate::fir::FIRFilter;
 pub use crate::hdlc_deframer::HdlcDeframer;
 pub use crate::hilbert::Hilbert;
 pub use crate::multiply_const::MultiplyConst;
+pub use crate::nrzi::NrziDecode;
 pub use crate::null_sink::NullSink;
 pub use crate::pdu_writer::PduWriter;
 pub use crate::quadrature_demod::QuadratureDemod;

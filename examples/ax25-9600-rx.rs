@@ -46,26 +46,6 @@ macro_rules! add_block {
 use rustradio::block::{Block, BlockRet};
 use rustradio::stream::{new_streamp, Streamp};
 
-/// Descrambler uses an LFSR to descramble bits.
-pub struct Descrambler {
-    src: Streamp<u8>,
-    dst: Streamp<u8>,
-    lfsr: Lfsr,
-}
-impl Descrambler {
-    /// Create new descrambler.
-    pub fn new(src: Streamp<u8>, mask: u64, seed: u64, len: u8) -> Self {
-        Self {
-            src,
-            dst: new_streamp(),
-            lfsr: Lfsr::new(mask, seed, len),
-        }
-    }
-    /// Get output stream.
-    pub fn out(&self) -> Streamp<u8> {
-        self.dst.clone()
-    }
-}
 struct Lfsr {
     mask: u64,
     len: u8,
@@ -86,6 +66,27 @@ impl Lfsr {
         let ret = 1 & (self.shift_reg & self.mask).count_ones() as u8 ^ i;
         self.shift_reg = (self.shift_reg >> 1) | ((i as u64) << self.len);
         ret
+    }
+}
+
+/// Descrambler uses an LFSR to descramble bits.
+pub struct Descrambler {
+    src: Streamp<u8>,
+    dst: Streamp<u8>,
+    lfsr: Lfsr,
+}
+impl Descrambler {
+    /// Create new descrambler.
+    pub fn new(src: Streamp<u8>, mask: u64, seed: u64, len: u8) -> Self {
+        Self {
+            src,
+            dst: new_streamp(),
+            lfsr: Lfsr::new(mask, seed, len),
+        }
+    }
+    /// Get output stream.
+    pub fn out(&self) -> Streamp<u8> {
+        self.dst.clone()
     }
 }
 
@@ -151,9 +152,6 @@ fn main() -> Result<()> {
     // Demod.
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
-    //let (a, prev) = add_block![g, Tee::new(prev)];
-    //g.add(Box::new(FileSink::new(a, "audio.u8", rustradio::file_sink::Mode::Overwrite)?));
-
     // Filter.
     let taps = rustradio::fir::low_pass(samp_rate, 16000.0, 100.0);
     let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
@@ -164,66 +162,29 @@ fn main() -> Result<()> {
         BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())
     ];
 
+    // Create quad demod raw sample blobs.
     let prev = add_block![
         g,
         StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50)
     ];
 
+    // A kind of frequency lock.
+    let prev = add_block![g, Midpointer::new(prev)];
+
     // Symbol sync.
-    //let prev = add_block![g, Midpointer::new(prev)];
     let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(opt.sample_rate).build()];
 
+    // Turn Vec<Float> into Float.
     let prev = add_block![g, VecToStream::new(prev)];
 
-    let prev = add_block![g, AddConst::new(prev, -0.07)];
-
-    /*
-    let (a, prev) = add_block![g, Tee::new(prev)];
-    g.add(Box::new(FileSink::new(
-        a,
-        "preslice.f32",
-        rustradio::file_sink::Mode::Overwrite,
-    )?));
-     */
-
+    // Turn floats into bits.
     let prev = add_block![g, BinarySlicer::new(prev)];
 
-    /*
-    let (a, prev) = add_block![g, Tee::new(prev)];
-    g.add(Box::new(FileSink::new(
-        a,
-        "sliced.u8",
-        rustradio::file_sink::Mode::Overwrite,
-    )?));
-     */
-
-    // Delay xor.
-    let (a, b) = add_block![g, Tee::new(prev)];
-    let delay = add_block![g, Delay::new(a, 1)];
-    let prev = add_block![g, Xor::new(delay, b)];
-    let prev = add_block![g, XorConst::new(prev, 1u8)];
-
-    /*
-    let (a, prev) = add_block![g, Tee::new(prev)];
-    g.add(Box::new(FileSink::new(
-        a,
-        "after-nrzi.u8",
-        rustradio::file_sink::Mode::Overwrite,
-    )?));
-     */
+    // NRZI decode.
+    let prev = add_block![g, NrziDecode::new(prev)];
 
     // G3RUH descramble.
     let prev = add_block![g, Descrambler::new(prev, 0x21, 0, 16)];
-
-    /*
-    // Save burst stream
-    let (a, prev) = add_block![g, Tee::new(prev)];
-    g.add(Box::new(FileSink::new(
-        a,
-        "test.u8",
-        rustradio::file_sink::Mode::Overwrite,
-    )?));
-     */
 
     // Decode.
     let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];

@@ -139,11 +139,8 @@ fn main() -> Result<()> {
     let prev = add_block![g, ZeroCrossing::new(prev, samp_rate / baud, 0.1)];
     let prev = add_block![g, BinarySlicer::new(prev)];
 
-    // Delay xor.
-    let (a, b) = add_block![g, Tee::new(prev)];
-    let delay = add_block![g, Delay::new(a, 1)];
-    let prev = add_block![g, Xor::new(delay, b)];
-    let prev = add_block![g, XorConst::new(prev, 1u8)];
+    // Delay xor, aka NRZI decode.
+    let prev = add_block![g, NrziDecode::new(prev)];
 
     // Save bits to file.
     /*
