@@ -72,20 +72,6 @@ struct Lfsr {
     shift_reg: u64,
 }
 
-// TODO: this is probably really slow. Maybe not big deal, as it only
-// tends to run at the bitrate.
-fn count_ones(mut i: u64) -> u8 {
-    let mut ret = 0;
-    while i > 0 {
-        while i & 1 == 0 {
-            i >>= 1;
-        }
-        ret += 1;
-        i >>= 1;
-    }
-    ret & 1
-}
-
 impl Lfsr {
     fn new(mask: u64, seed: u64, len: u8) -> Self {
         assert!(len < 64);
@@ -97,7 +83,7 @@ impl Lfsr {
     }
     fn next(&mut self, i: u8) -> u8 {
         assert!(i <= 1);
-        let ret = count_ones(self.shift_reg & self.mask) ^ i;
+        let ret = 1 & (self.shift_reg & self.mask).count_ones() as u8 ^ i;
         self.shift_reg = (self.shift_reg >> 1) | ((i as u64) << self.len);
         ret
     }
