@@ -112,6 +112,7 @@ fn main() -> Result<()> {
     let prev = add_block![g, Midpointer::new(prev)];
     let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(opt.sample_rate).build()];
     let prev = add_block![g, VecToStream::new(prev)];
+    let prev = add_block![g, BinarySlicer::new(prev)];
 
     // Delay xor.
     let (a, b) = add_block![g, Tee::new(prev)];

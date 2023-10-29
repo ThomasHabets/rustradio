@@ -117,7 +117,7 @@ impl WpcrBuilder {
 /// Whole packet clock recovery block.
 pub struct Wpcr {
     src: Streamp<Vec<Float>>,
-    dst: Streamp<Vec<u8>>,
+    dst: Streamp<Vec<Float>>,
     samp_rate: Option<Float>,
 }
 
@@ -137,11 +137,11 @@ impl Wpcr {
     }
 
     /// Return the output stream.
-    pub fn out(&self) -> Streamp<Vec<u8>> {
+    pub fn out(&self) -> Streamp<Vec<Float>> {
         self.dst.clone()
     }
 
-    fn process_one(&self, samples: &[Float]) -> Option<(Vec<u8>, Vec<Tag>)> {
+    fn process_one(&self, samples: &[Float]) -> Option<(Vec<Float>, Vec<Tag>)> {
         if samples.len() < 4 {
             return None;
         }
@@ -201,7 +201,7 @@ impl Wpcr {
         for s in samples {
             if clock_phase >= 1.0 {
                 clock_phase -= 1.0;
-                syms.push(if *s > 0.0 { 1 } else { 0 });
+                syms.push(*s);
             }
             clock_phase += samples_per_symbol;
         }
@@ -217,6 +217,7 @@ impl Wpcr {
                 TagValue::Float(frequency),
             ));
         }
+        debug!("WPCR: Bits: {}", syms.len());
         Some((syms, tags))
     }
 }
