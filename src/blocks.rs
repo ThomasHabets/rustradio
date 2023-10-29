@@ -9,6 +9,7 @@ pub use crate::constant_source::ConstantSource;
 pub use crate::convert::{FloatToComplex, FloatToU32};
 pub use crate::debug_sink::DebugSink;
 pub use crate::delay::Delay;
+pub use crate::descrambler::Descrambler;
 pub use crate::fft_filter::FftFilter;
 pub use crate::fft_filter::FftFilterFloat;
 pub use crate::file_sink::FileSink;
