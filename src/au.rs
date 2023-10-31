@@ -129,13 +129,21 @@ impl Block for AuEncode {
     }
 }
 
+enum DecodeState {
+    WaitingMagic,
+    WaitingSize,
+    WaitingHeader(usize),
+    Data,
+}
+
 /// .au file decoder.
 ///
-/// Currently only accepts a very narrow header format
+/// Currently only accepts a very narrow header format of PCM16, mono,
+/// 44100 Hz.
 pub struct AuDecode {
-    buf: Vec<u8>,
     src: Streamp<u8>,
     dst: Streamp<Float>,
+    state: DecodeState,
 }
 
 impl AuDecode {
@@ -144,7 +152,7 @@ impl AuDecode {
         Self {
             src,
             dst: new_streamp(),
-            buf: Vec::new(),
+            state: DecodeState::WaitingMagic,
         }
     }
     /// Return the output stream.
@@ -163,45 +171,60 @@ impl Block for AuDecode {
             return Ok(BlockRet::Noop);
         }
         let mut o = self.dst.lock()?;
-        if self.buf.len() < 44 {
-            if i.available() < 44 {
-                return Ok(BlockRet::Noop);
+        match self.state {
+            DecodeState::WaitingMagic => {
+                if i.available() < 4 {
+                    return Ok(BlockRet::Noop);
+                }
+                let magic = i.iter().take(4).copied().collect::<Vec<_>>();
+                let magic = u32::from_be_bytes(magic.try_into().unwrap());
+                i.consume(4);
+                assert_eq!(magic, 0x2e736e64u32);
+                self.state = DecodeState::WaitingSize;
             }
-            self.buf.extend(i.iter().take(44));
-            i.consume(44);
-            assert_eq!(
-                0x2e736e64u32,
-                u32::from_be_bytes(self.buf[..4].try_into().unwrap())
-            );
-            assert_eq!(44, u32::from_be_bytes(self.buf[4..8].try_into().unwrap()));
-            assert_eq!(
-                Encoding::PCM16 as u32,
-                u32::from_be_bytes(self.buf[12..16].try_into().unwrap())
-            );
-            assert_eq!(
-                44100u32,
-                u32::from_be_bytes(self.buf[16..20].try_into().unwrap())
-            );
-            assert_eq!(
-                1u32,
-                u32::from_be_bytes(self.buf[20..24].try_into().unwrap())
-            );
-            return Ok(BlockRet::Noop);
-        }
-        let n = i.available() - (i.available() & 1);
-        let v = i
-            .iter()
-            .take(n)
-            .copied()
-            .collect::<Vec<u8>>()
-            .chunks_exact(2)
-            .map(|chunk| {
-                let bytes = [chunk[0], chunk[1]];
-                (i16::from_be_bytes(bytes) as Float) / 32767.0
-            })
-            .collect::<Vec<Float>>();
-        o.write_slice(&v);
-        i.consume(n);
+            DecodeState::WaitingSize => {
+                if i.available() < 4 {
+                    return Ok(BlockRet::Noop);
+                }
+                let len = i.iter().take(4).copied().collect::<Vec<_>>();
+                let len = u32::from_be_bytes(len.try_into().unwrap());
+                i.consume(4);
+                assert_eq!(len, 44);
+                self.state = DecodeState::WaitingHeader(len as usize);
+            }
+            DecodeState::WaitingHeader(len) => {
+                if i.available() < len {
+                    return Ok(BlockRet::Noop);
+                }
+                let head = i.iter().take(len).copied().collect::<Vec<_>>();
+                assert_eq!(
+                    Encoding::PCM16 as u32,
+                    u32::from_be_bytes(head[4..8].try_into().unwrap())
+                );
+                assert_eq!(
+                    44100u32,
+                    u32::from_be_bytes(head[8..12].try_into().unwrap())
+                );
+                assert_eq!(1u32, u32::from_be_bytes(head[12..16].try_into().unwrap()));
+                self.state = DecodeState::Data;
+            }
+            DecodeState::Data => {
+                let n = i.available() - (i.available() & 1);
+                let v = i
+                    .iter()
+                    .take(n)
+                    .copied()
+                    .collect::<Vec<u8>>()
+                    .chunks_exact(2)
+                    .map(|chunk| {
+                        let bytes = [chunk[0], chunk[1]];
+                        (i16::from_be_bytes(bytes) as Float) / 32767.0
+                    })
+                    .collect::<Vec<Float>>();
+                o.write_slice(&v);
+                i.consume(n);
+            }
+        };
         Ok(BlockRet::Ok)
     }
 }
