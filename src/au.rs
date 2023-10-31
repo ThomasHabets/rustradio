@@ -128,3 +128,80 @@ impl Block for AuEncode {
         }
     }
 }
+
+/// .au file decoder.
+///
+/// Currently only accepts a very narrow header format
+pub struct AuDecode {
+    buf: Vec<u8>,
+    src: Streamp<u8>,
+    dst: Streamp<Float>,
+}
+
+impl AuDecode {
+    /// Create new AuDecode block.
+    pub fn new(src: Streamp<u8>) -> Self {
+        Self {
+            src,
+            dst: new_streamp(),
+            buf: Vec::new(),
+        }
+    }
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Float> {
+        self.dst.clone()
+    }
+}
+
+impl Block for AuDecode {
+    fn block_name(&self) -> &'static str {
+        "AuDecode"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut i = self.src.lock()?;
+        if i.available() == 0 {
+            return Ok(BlockRet::Noop);
+        }
+        let mut o = self.dst.lock()?;
+        if self.buf.len() < 44 {
+            if i.available() < 44 {
+                return Ok(BlockRet::Noop);
+            }
+            self.buf.extend(i.iter().take(44));
+            i.consume(44);
+            assert_eq!(
+                0x2e736e64u32,
+                u32::from_be_bytes(self.buf[..4].try_into().unwrap())
+            );
+            assert_eq!(44, u32::from_be_bytes(self.buf[4..8].try_into().unwrap()));
+            assert_eq!(
+                Encoding::PCM16 as u32,
+                u32::from_be_bytes(self.buf[12..16].try_into().unwrap())
+            );
+            assert_eq!(
+                44100u32,
+                u32::from_be_bytes(self.buf[16..20].try_into().unwrap())
+            );
+            assert_eq!(
+                1u32,
+                u32::from_be_bytes(self.buf[20..24].try_into().unwrap())
+            );
+            return Ok(BlockRet::Noop);
+        }
+        let n = i.available() - (i.available() & 1);
+        let v = i
+            .iter()
+            .take(n)
+            .copied()
+            .collect::<Vec<u8>>()
+            .chunks_exact(2)
+            .map(|chunk| {
+                let bytes = [chunk[0], chunk[1]];
+                (i16::from_be_bytes(bytes) as Float) / 32767.0
+            })
+            .collect::<Vec<Float>>();
+        o.write_slice(&v);
+        i.consume(n);
+        Ok(BlockRet::Ok)
+    }
+}
