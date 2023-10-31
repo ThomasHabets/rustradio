@@ -14,10 +14,21 @@ use rustradio::{Error, Float};
 #[structopt()]
 struct Opt {
     #[structopt(short = "r")]
-    read: String,
+    read: Option<String>,
 
-    #[structopt(long = "sample_rate", default_value = "50000")]
-    sample_rate: Float,
+    #[cfg(feature = "rtlsdr")]
+    #[structopt(long = "freq", default_value = "144800000")]
+    freq: u64,
+
+    #[cfg(feature = "rtlsdr")]
+    #[structopt(long = "gain", default_value = "20")]
+    gain: i32,
+
+    #[structopt(long = "rtlsdr")]
+    rtlsdr: bool,
+
+    #[structopt(long = "sample_rate", short = "s", default_value = "50000")]
+    samp_rate: Float,
 
     #[structopt(short = "o")]
     output: PathBuf,
@@ -52,11 +63,27 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let samp_rate = opt.sample_rate;
+    let samp_rate = opt.samp_rate;
     let mut g = Graph::new();
 
-    // Read file.
-    let prev = add_block![g, FileSource::new(&opt.read, false)?];
+    // Source.
+    //let prev = add_block![g, FileSource::new(&opt.read, false)?];
+    let prev = if let Some(read) = opt.read {
+        add_block![g, FileSource::new(&read, false)?]
+    } else if opt.rtlsdr {
+        #[cfg(feature = "rtlsdr")]
+        {
+            // Source.
+            let prev = add_block![g, RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?];
+
+            // Decode.
+            add_block![g, RtlSdrDecode::new(prev)]
+        }
+        #[cfg(not(feature = "rtlsdr"))]
+        panic!("rtlsdr feature not enabled")
+    } else {
+        panic!("Need to provide either --rtlsdr or -r")
+    };
 
     // Filter.
     let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
@@ -86,13 +113,14 @@ fn main() -> Result<()> {
     let taps = rustradio::fir::low_pass(samp_rate, 16000.0, 100.0);
     let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
-    // Tag.
+    // Tag burst.
     let prev = add_block![
         g,
         BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())
     ];
 
-    // Create quad demod raw sample blobs.
+    // Create quad demod raw sample blobs (Vec<Float>) from tagged
+    // stream of Floats.
     let prev = add_block![
         g,
         StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50)
@@ -102,7 +130,7 @@ fn main() -> Result<()> {
     let prev = add_block![g, Midpointer::new(prev)];
 
     // Symbol sync.
-    let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(opt.sample_rate).build()];
+    let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(samp_rate).build()];
 
     // Turn Vec<Float> into Float.
     let prev = add_block![g, VecToStream::new(prev)];
