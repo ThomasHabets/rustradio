@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use anyhow::Result;
-use log::{debug, info};
+use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
 
@@ -69,7 +69,7 @@ impl Graph {
                 match ret {
                     BlockRet::Ok => {
                         // Block did something.
-                        debug!("… {} was not starved", b.block_name());
+                        trace!("… {} was not starved", b.block_name());
                         done = false;
                         all_idle = false;
                     }
@@ -85,7 +85,7 @@ impl Graph {
             }
             if all_idle {
                 let idle_sleep = std::time::Duration::from_millis(10);
-                debug!("No output or consumption from any block. Sleeping a bit.");
+                trace!("No output or consumption from any block. Sleeping a bit.");
                 std::thread::sleep(idle_sleep);
             }
         }
