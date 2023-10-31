@@ -25,3 +25,8 @@ fn main() -> Result<()> {
 
     g.run()
 }
+/* ---- Emacs variables ----
+ * Local variables:
+ * compile-command: "cargo run --example simple_graph"
+ * End:
+ */

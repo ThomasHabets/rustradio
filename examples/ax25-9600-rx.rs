@@ -128,3 +128,8 @@ fn main() -> Result<()> {
     eprintln!("{}", g.generate_stats(st.elapsed()));
     Ok(())
 }
+/* ---- Emacs variables ----
+ * Local variables:
+ * compile-command: "cargo run --example ax25-9600-rx -- -r ../aprs-9600-50k.c32 -o ../packets"
+ * End:
+ */

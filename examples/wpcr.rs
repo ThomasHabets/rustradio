@@ -3,7 +3,7 @@
 This is the same as ax25-1200-rx.rs, except it has fewer options
 (e.g. only supports reading from a file), and uses WPCR instead of
 ZeroCrossing symbol sync.
-*/
+ */
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -129,3 +129,8 @@ fn main() -> Result<()> {
     eprintln!("{}", g.generate_stats(st.elapsed()));
     Ok(())
 }
+/* ---- Emacs variables ----
+ * Local variables:
+ * compile-command: "cargo run --example wpcr -- -r ../aprs-50k.c32 -o ../packets"
+ * End:
+ */
