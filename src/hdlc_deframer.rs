@@ -27,11 +27,11 @@ enum State {
 
 // Calculate CRC. If a bitflip helps the CRC match, then return the
 // new data with the CRC.
-fn find_right_crc(data: &[u8], got: u16) -> (Option<Vec<u8>>, u16) {
+fn find_right_crc(data: &[u8], got: u16) -> (Option<Vec<u8>>, u16, bool) {
     let crc = calc_crc(data);
     if got == crc {
         // Fast path: CRC matches.
-        return (None, crc);
+        return (None, crc, false);
     }
     let mut copy = data.to_vec();
     for byte in 0..data.len() {
@@ -41,12 +41,19 @@ fn find_right_crc(data: &[u8], got: u16) -> (Option<Vec<u8>>, u16) {
             let crc = calc_crc(&copy);
             if crc == got {
                 debug!("Fixed bitflip successfully");
-                return (Some(copy), crc);
+                return (Some(copy), crc, true);
             }
             copy[byte] ^= x;
         }
     }
-    (None, crc)
+    for crcbit in 0..16 {
+        let newcrc = got ^ (1 << crcbit);
+        if newcrc == got {
+            debug!("Fixed bitflip in CRC successfully");
+            return (None, newcrc, true);
+        }
+    }
+    (None, crc, false)
 }
 
 /** HDLC Deframer block.
@@ -61,6 +68,18 @@ pub struct HdlcDeframer {
     min_size: usize,
     max_size: usize,
     strip_checksum: bool,
+    decoded: usize,
+    crc_error: usize,
+    bitfixed: usize,
+}
+
+impl Drop for HdlcDeframer {
+    fn drop(&mut self) {
+        info!(
+            "HDLC Deframer: Decoded {} (incl {} bitfixes), CRC error {}",
+            self.decoded, self.bitfixed, self.crc_error
+        );
+    }
 }
 
 impl HdlcDeframer {
@@ -75,6 +94,9 @@ impl HdlcDeframer {
             max_size,
             state: State::Unsynced(0xff),
             strip_checksum: true,
+            decoded: 0,
+            crc_error: 0,
+            bitfixed: 0,
         }
     }
 
@@ -152,22 +174,25 @@ impl HdlcDeframer {
                         .step_by(8)
                         .map(|i| bits2byte(&bits[i..i + 8]))
                         .collect();
-                    info!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
+                    debug!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
                     if self.strip_checksum {
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);
-                        let (newdata, crc) = find_right_crc(data, got_crc);
+                        let (newdata, crc, fixed) = find_right_crc(data, got_crc);
+                        if fixed {
+                            self.bitfixed += 1;
+                        }
                         let (data, crc) = match &newdata {
                             None => (data, crc),
                             Some(nd) => (&nd[..], crc),
                         };
 
-                        //let crc = calc_crc(data);
                         if crc != got_crc {
-                            info!("want crc {:0>4x}, got {:0>4x}", crc, got_crc);
+                            self.crc_error += 1;
+                            debug!("want crc {:0>4x}, got {:0>4x}", crc, got_crc);
                             return Ok(State::Synced((0, Vec::with_capacity(self.max_size))));
                         }
-
+                        self.decoded += 1;
                         // TODO: why do I need to map this? Why do I get a
                         // BS compile error when I do:
                         //

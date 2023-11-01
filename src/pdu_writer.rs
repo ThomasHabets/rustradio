@@ -6,7 +6,7 @@ receive time.
 TODO: in the future the file naming should be configurable.
 */
 use anyhow::Result;
-use log::debug;
+use log::{debug, info};
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -24,12 +24,23 @@ directory, named as microseconds since epoch.
 pub struct PduWriter<T> {
     src: Streamp<Vec<T>>,
     dir: PathBuf,
+    files_written: usize,
+}
+
+impl<T> Drop for PduWriter<T> {
+    fn drop(&mut self) {
+        info!("PDU Writer: wrote {}", self.files_written);
+    }
 }
 
 impl<T> PduWriter<T> {
     /// Create new PduWriter that'll write to `dir`.
     pub fn new(src: Streamp<Vec<T>>, dir: PathBuf) -> Self {
-        Self { src, dir }
+        Self {
+            src,
+            dir,
+            files_written: 0,
+        }
     }
 }
 
@@ -59,6 +70,7 @@ where
                 v.extend(&s.serialize());
             });
             f.write_all(&v)?;
+            self.files_written += 1;
         }
         input.clear();
         Ok(BlockRet::Ok)
