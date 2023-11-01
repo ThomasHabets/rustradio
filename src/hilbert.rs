@@ -53,7 +53,7 @@ impl<'a> StackedVec<'a> {
         self.vecs.iter().map(|x| x.len()).sum()
     }
     fn collect(&self) -> Vec<Float> {
-        let mut t = Vec::new();
+        let mut t = Vec::with_capacity(self.len());
         for v in &self.vecs {
             v.extend_into(&mut t);
         }
