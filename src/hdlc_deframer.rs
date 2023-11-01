@@ -25,6 +25,30 @@ enum State {
     FinalCheck(Vec<u8>),
 }
 
+// Calculate CRC. If a bitflip helps the CRC match, then return the
+// new data with the CRC.
+fn find_right_crc(data: &[u8], got: u16) -> (Option<Vec<u8>>, u16) {
+    let crc = calc_crc(data);
+    if got == crc {
+        // Fast path: CRC matches.
+        return (None, crc);
+    }
+    let mut copy = data.to_vec();
+    for byte in 0..data.len() {
+        for bit in 0..8 {
+            let x = 1 << bit;
+            copy[byte] ^= x;
+            let crc = calc_crc(&copy);
+            if crc == got {
+                debug!("Fixed bitflip successfully");
+                return (Some(copy), crc);
+            }
+            copy[byte] ^= x;
+        }
+    }
+    (None, crc)
+}
+
 /** HDLC Deframer block.
 
 This block takes a stream of bits (as u8), and outputs any HDLC frames
@@ -132,7 +156,13 @@ impl HdlcDeframer {
                     if self.strip_checksum {
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);
-                        let crc = calc_crc(data);
+                        let (newdata, crc) = find_right_crc(data, got_crc);
+                        let (data, crc) = match &newdata {
+                            None => (data, crc),
+                            Some(nd) => (&nd[..], crc),
+                        };
+
+                        //let crc = calc_crc(data);
                         if crc != got_crc {
                             info!("want crc {:0>4x}, got {:0>4x}", crc, got_crc);
                             return Ok(State::Synced((0, Vec::with_capacity(self.max_size))));
