@@ -202,6 +202,7 @@ impl HdlcDeframer {
                             .map_err(|e| Error::new(&format!("not possible?: {:?}", e)))?
                             .push(data.to_vec());
                     } else {
+                        self.decoded += 1;
                         self.dst
                             .lock()
                             .map_err(|e| Error::new(&format!("not possible?: {:?}", e)))?
