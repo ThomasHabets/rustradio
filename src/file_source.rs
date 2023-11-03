@@ -47,7 +47,7 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         let sample_size = T::size();
         let have = self.buf.len() / sample_size;
-        let want = self.dst.lock().unwrap().capacity();
+        let want = self.dst.lock()?.capacity();
 
         if have < want {
             let get = want - have;
@@ -71,7 +71,7 @@ where
             .map(|d| T::parse(d))
             .collect::<Result<Vec<_>>>()?;
         self.buf.drain(0..(have * sample_size));
-        self.dst.lock().unwrap().write_slice(&v);
+        self.dst.lock()?.write_slice(&v);
         Ok(BlockRet::Ok)
     }
 }
