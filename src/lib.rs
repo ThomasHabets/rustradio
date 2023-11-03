@@ -146,6 +146,7 @@ pub mod rtlsdr_source;
 
 pub mod block;
 pub mod blocks;
+pub mod circular_buffer;
 pub mod graph;
 pub mod stream;
 
