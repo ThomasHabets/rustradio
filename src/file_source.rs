@@ -65,10 +65,11 @@ where
 
         let have = self.buf.len() / sample_size;
 
-        let mut v = Vec::with_capacity(have);
-        for i in (0..(have * sample_size)).step_by(sample_size) {
-            v.push(T::parse(&self.buf[i..i + sample_size])?);
-        }
+        let v = self
+            .buf
+            .chunks_exact(sample_size)
+            .map(|d| T::parse(d))
+            .collect::<Result<Vec<_>>>()?;
         self.buf.drain(0..(have * sample_size));
         self.dst.lock().unwrap().write_slice(&v);
         Ok(BlockRet::Ok)
