@@ -30,7 +30,7 @@ struct Opt {
     #[structopt(long = "sample_rate", short = "s", default_value = "50000")]
     samp_rate: Float,
 
-    #[structopt(short = "o")]
+    #[structopt(long = "out", short = "o")]
     output: PathBuf,
 
     #[structopt(short = "v", default_value = "0")]
