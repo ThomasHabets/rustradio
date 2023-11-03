@@ -51,7 +51,8 @@ where
 
         if have < want {
             let get = want - have;
-            let mut buffer = vec![0; get * sample_size];
+            let get_bytes = get * sample_size;
+            let mut buffer = vec![0; get_bytes];
             let n = self
                 .f
                 .read(&mut buffer[..])
@@ -59,6 +60,14 @@ where
             if n == 0 {
                 warn!("EOF on {}. Repeat: {}", self.filename, self.repeat);
                 return Ok(BlockRet::EOF);
+            }
+            if self.buf.is_empty() && (n % sample_size) == 0 {
+                self.dst.lock()?.write(
+                    buffer
+                        .chunks_exact(sample_size)
+                        .map(|d| T::parse(d).unwrap()),
+                );
+                return Ok(BlockRet::Ok);
             }
             self.buf.extend(&buffer[..n]);
         }
