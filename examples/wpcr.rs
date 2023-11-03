@@ -19,7 +19,7 @@ struct Opt {
     #[structopt(short = "r")]
     read: String,
 
-    #[structopt(long = "samp_rate", default_value = "50000")]
+    #[structopt(long = "sample_rate", default_value = "50000")]
     sample_rate: Float,
 
     #[structopt(short = "o", long = "out")]

@@ -28,7 +28,7 @@ struct Opt {
     #[structopt(long = "rtlsdr")]
     rtlsdr: bool,
 
-    #[structopt(long = "samp_rate", default_value = "300000")]
+    #[structopt(long = "sample_rate", default_value = "300000")]
     samp_rate: u32,
 
     #[structopt(short = "r")]
