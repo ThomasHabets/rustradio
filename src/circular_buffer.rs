@@ -95,7 +95,7 @@ unsafe impl Send for Circ {}
 pub struct Buffer<T> {
     rpos: usize,
     wpos: usize,
-    //buf: Vec<T>,
+    used: usize,
     circ: Circ,
     dummy: std::marker::PhantomData<T>,
 }
@@ -108,7 +108,7 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
         Ok(Self {
             rpos: 0,
             wpos: 0,
-            //buf: vec![T::default(); size],
+            used: 0,
             circ: Circ::new()?,
             dummy: std::marker::PhantomData,
         })
@@ -116,18 +116,14 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
 
     /// Consume samples from input buffer.
     pub fn consume(&mut self, n: usize) {
-        assert!(
-            self.rpos + n <= self.wpos,
-            "Consumed too much: {} + {} <= {}",
-            self.rpos,
-            n,
-            self.wpos
-        );
+        assert!(n <= self.used);
         self.rpos = (self.rpos + n) % self.circ.len();
+        self.used -= n;
     }
 
     /// Produce samples (commit writes).
     pub fn produce(&mut self, n: usize) {
+        assert!(self.free() >= n);
         assert!(
             self.write_capacity() >= n,
             "can't produce that much. {} < {}",
@@ -135,6 +131,7 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
             n
         );
         self.wpos = (self.wpos + n) % self.circ.len();
+        self.used += n;
     }
 
     fn write_capacity(&self) -> usize {
@@ -142,23 +139,17 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
         b - a
     }
 
+    fn free(&self) -> usize {
+        self.circ.len() - self.used
+    }
+
     fn write_range(&self) -> (usize, usize) {
         //eprintln!("Write range: {} {}", self.rpos, self.wpos);
-        if self.rpos <= self.wpos {
-            (self.wpos, self.rpos + self.circ.len())
-        } else {
-            (self.wpos, self.rpos)
-        }
+        (self.wpos, self.wpos + self.free())
     }
 
     fn read_range(&self) -> (usize, usize) {
-        let start = self.rpos;
-        let end = self.wpos;
-        if start <= end {
-            (start, end)
-        } else {
-            (start, end + 4096)
-        }
+        (self.rpos, self.rpos + self.used)
     }
 
     /// Get the read slice.
@@ -227,6 +218,26 @@ mod tests {
         }
         assert_eq!(b.read_buf().len(), 100);
         assert_eq!(b.write_buf().len(), 3996);
+        Ok(())
+    }
+
+    #[test]
+    pub fn exact_overflow() -> Result<()> {
+        let mut b: Buffer<u8> = Buffer::new(20)?;
+
+        // Initial.
+        assert!(b.read_buf().is_empty());
+        assert_eq!(b.write_buf().len(), 4096);
+
+        // Full.
+        b.produce(4096);
+        assert_eq!(b.read_buf().len(), 4096);
+        assert_eq!(b.write_buf().len(), 0);
+
+        // Empty again.
+        b.consume(4096);
+        assert!(b.read_buf().is_empty());
+        assert_eq!(b.write_buf().len(), 4096);
         Ok(())
     }
 }
