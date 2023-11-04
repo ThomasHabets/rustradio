@@ -1,5 +1,5 @@
 //! Test implementation of circular buffers.
-//! Full of unsafe.
+//! Full of unsafe. Full of ugly code.
 
 use anyhow::Result;
 use std::os::fd::AsRawFd;
@@ -93,9 +93,9 @@ unsafe impl Send for Circ {}
 
 /// Type aware buffer.
 pub struct Buffer<T> {
-    rpos: usize,
-    wpos: usize,
-    used: usize,
+    rpos: usize, // In samples.
+    wpos: usize, // In samples.
+    used: usize, // In samples.
     circ: Circ,
     dummy: std::marker::PhantomData<T>,
 }
@@ -104,7 +104,8 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
     /// Create a new Buffer.
     ///
     /// TODO: actually use the `size` parameter.
-    pub fn new(_size: usize) -> Result<Self> {
+    pub fn new(size: usize) -> Result<Self> {
+        assert_eq!(size, 4096);
         Ok(Self {
             rpos: 0,
             wpos: 0,
@@ -116,8 +117,13 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
 
     /// Consume samples from input buffer.
     pub fn consume(&mut self, n: usize) {
-        assert!(n <= self.used);
-        self.rpos = (self.rpos + n) % self.circ.len();
+        assert!(
+            n <= self.used,
+            "trying to consume {}, but only have {}",
+            n,
+            self.used
+        );
+        self.rpos = (self.rpos + n) % self.capacity();
         self.used -= n;
     }
 
@@ -130,24 +136,33 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
             self.write_capacity(),
             n
         );
-        self.wpos = (self.wpos + n) % self.circ.len();
+        self.wpos = (self.wpos + n) % self.capacity();
         self.used += n;
     }
 
+    // In samples.
+    fn capacity(&self) -> usize {
+        self.circ.len() / std::mem::size_of::<T>()
+    }
+
+    // Write capacity, in samples.
     fn write_capacity(&self) -> usize {
         let (a, b) = self.write_range();
         b - a
     }
 
+    // Free space, in samples
     fn free(&self) -> usize {
-        self.circ.len() - self.used
+        self.capacity() - self.used
     }
 
+    // Return write range, in samples.
     fn write_range(&self) -> (usize, usize) {
         //eprintln!("Write range: {} {}", self.rpos, self.wpos);
         (self.wpos, self.wpos + self.free())
     }
 
+    // Read range, in samples
     fn read_range(&self) -> (usize, usize) {
         (self.rpos, self.rpos + self.used)
     }
@@ -170,9 +185,10 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Float;
     #[test]
     pub fn test_typical() -> Result<()> {
-        let mut b: Buffer<u8> = Buffer::new(20)?;
+        let mut b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
         assert!(b.read_buf().is_empty());
@@ -196,11 +212,11 @@ mod tests {
                 b.write_buf()[i] = (i & 0xff) as u8;
             }
             b.produce(n);
-            assert_eq!(b.read_buf().len(), 4000);
+            assert_eq!(b.read_buf().len(), n);
             for i in 0..n {
                 assert_eq!(b.read_buf()[i], (i & 0xff) as u8);
             }
-            assert_eq!(b.write_buf().len(), 96);
+            assert_eq!(b.write_buf().len(), 4096 - n);
         }
         b.consume(4000);
 
@@ -223,7 +239,7 @@ mod tests {
 
     #[test]
     pub fn exact_overflow() -> Result<()> {
-        let mut b: Buffer<u8> = Buffer::new(20)?;
+        let mut b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
         assert!(b.read_buf().is_empty());
@@ -238,6 +254,57 @@ mod tests {
         b.consume(4096);
         assert!(b.read_buf().is_empty());
         assert_eq!(b.write_buf().len(), 4096);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_float() -> Result<()> {
+        let mut b: Buffer<Float> = Buffer::new(4096)?;
+
+        // Initial.
+        assert!(b.read_buf().is_empty());
+        assert_eq!(b.write_buf().len(), 1024);
+
+        // Write a sample.
+        b.write_buf()[0] = 123.321;
+        b.produce(1);
+        assert_eq!(b.read_buf(), vec![123.321]);
+        assert_eq!(b.write_buf().len(), 1023);
+
+        // Consume the sample.
+        b.consume(1);
+        assert!(b.read_buf().is_empty());
+        assert_eq!(b.write_buf().len(), 1024);
+
+        // Write towards the end bytes.
+        {
+            let n = 1000;
+            for i in 0..n {
+                b.write_buf()[i] = i as Float;
+            }
+            b.produce(n);
+            assert_eq!(b.read_buf().len(), n);
+            for i in 0..n {
+                assert_eq!(b.read_buf()[i], i as Float);
+            }
+            assert_eq!(b.write_buf().len(), 24);
+        }
+        b.consume(1000);
+
+        // Write 100 bytes.
+        {
+            let n = 100;
+            for i in 0..n {
+                b.write_buf()[i] = (n - i) as Float;
+            }
+            b.produce(n);
+            assert_eq!(b.read_buf().len(), n);
+            for i in 0..n {
+                assert_eq!(b.read_buf()[i], (n - i) as Float);
+            }
+        }
+        assert_eq!(b.read_buf().len(), 100);
+        assert_eq!(b.write_buf().len(), 1024 - 100);
         Ok(())
     }
 }
