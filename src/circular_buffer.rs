@@ -1,5 +1,13 @@
 //! Test implementation of circular buffers.
 //! Full of unsafe. Full of ugly code.
+//!
+//! TODO:
+//! * It should not be possible to get multiple write buffers.
+//! * read buffer .consume() should consume the read buffer.
+//! * write buffer .produce() should consume the write buffer.
+//!
+//! All of the above probably requires that {read,write}_buf returns
+//! some handler object.
 
 use anyhow::Result;
 use std::os::fd::AsRawFd;
@@ -186,6 +194,20 @@ impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
 mod tests {
     use super::*;
     use crate::Float;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    pub fn test_build() -> Result<()> {
+        let b = Arc::new(Mutex::new(Buffer::<u8>::new(4096)?));
+        let i1 = b.lock().unwrap().read_buf();
+        let i2 = b.lock().unwrap().read_buf();
+        let w1 = b.lock().unwrap().write_buf();
+        let w2 = b.lock().unwrap().write_buf();
+        assert_eq!(i1, i2);
+        assert_eq!(w1, w2);
+        Ok(())
+    }
+
     #[test]
     pub fn test_typical() -> Result<()> {
         let mut b: Buffer<u8> = Buffer::new(4096)?;
