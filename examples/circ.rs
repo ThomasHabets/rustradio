@@ -5,7 +5,7 @@ use rustradio::circular_buffer::Buffer;
 use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
-    let b = Arc::new(Mutex::new(Buffer::new(10)?));
+    let b = Arc::new(Mutex::new(Buffer::new(4096)?));
 
     let b2 = b.clone();
     std::thread::spawn(move || loop {
