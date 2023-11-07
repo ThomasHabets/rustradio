@@ -28,33 +28,41 @@ where
 
 impl<T> Block for DebugSink<T>
 where
-    T: Copy + std::fmt::Debug + Default,
+    T: Copy + std::fmt::Debug + Default + 'static,
 {
     fn block_name(&self) -> &'static str {
         "DebugSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock()?;
-        let tags = i.tags().into_iter().map(|t| (t.pos(), t)).fold(
-            HashMap::new(),
-            |mut acc, (pos, tag)| {
-                acc.entry(pos).or_insert_with(Vec::new).push(tag);
-                acc
-            },
-        );
-        i.iter().enumerate().for_each(|(n, s)| {
-            let ts = tags
-                .get(&(n as TagPos))
-                .map(|ts| {
-                    ts.iter()
-                        .map(|t| format!("{} => {:?}", t.key(), t.val()))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                })
-                .unwrap_or("".to_string());
-            println!("debug: {:?} {}", s, ts);
+        let i = self.src.lock()?.read_buf();
+        i.iter().enumerate().for_each(|(_n, s)| {
+            println!("debug: {:?}", s);
         });
-        i.clear();
+        self.src.lock()?.consume2(i.len());
+        // TODO: print tags.
+
+        /*        let mut i = self.src.lock()?;
+                let tags = i.tags().into_iter().map(|t| (t.pos(), t)).fold(
+                    HashMap::new(),
+                    |mut acc, (pos, tag)| {
+                        acc.entry(pos).or_insert_with(Vec::new).push(tag);
+                        acc
+                    },
+                );
+                i.iter().enumerate().for_each(|(n, s)| {
+                    let ts = tags
+                        .get(&(n as TagPos))
+                        .map(|ts| {
+                            ts.iter()
+                                .map(|t| format!("{} => {:?}", t.key(), t.val()))
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        })
+                        .unwrap_or("".to_string());
+                    println!("debug: {:?} {}", s, ts);
+                });
+                i.clear();
+        */
         Ok(BlockRet::Noop)
     }
 }

@@ -28,6 +28,7 @@ extern "C" {
 }
 
 /// Circular buffer dealing in bytes.
+#[derive(Debug)]
 pub struct Circ {
     buf: *mut c_uchar,
     len: usize,
@@ -100,6 +101,7 @@ impl Circ {
 unsafe impl Send for Circ {}
 
 /// Type aware buffer.
+#[derive(Debug)]
 pub struct Buffer<T> {
     rpos: usize, // In samples.
     wpos: usize, // In samples.
@@ -108,7 +110,7 @@ pub struct Buffer<T> {
     dummy: std::marker::PhantomData<T>,
 }
 
-impl<T: Default + std::fmt::Debug + Copy> Buffer<T> {
+impl<T> Buffer<T> {
     /// Create a new Buffer.
     ///
     /// TODO: actually use the `size` parameter.

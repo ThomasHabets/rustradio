@@ -16,11 +16,12 @@ fn main() -> Result<()> {
         .repeat(2)
         .build(),
     );
-    let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
-    let sink = Box::new(DebugSink::new(add.out()));
+    //let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
+    //let sink = Box::new(DebugSink::new(add.out()));
+    let sink = Box::new(DebugSink::new(src.out()));
 
     g.add(src);
-    g.add(add);
+    //g.add(add);
     g.add(sink);
 
     g.run()

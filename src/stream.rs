@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use log::debug;
 
+use crate::circular_buffer;
 use crate::Float;
 
 /// Tag position in the current stream.
@@ -71,6 +72,7 @@ pub struct Stream<T> {
     data: VecDeque<T>,
     tags: VecDeque<Tag>,
     max_size: usize,
+    circ: circular_buffer::Buffer<T>,
 }
 
 /// Convenience type for a "pointer to a stream".
@@ -94,6 +96,7 @@ impl<T> Stream<T> {
             data: VecDeque::new(),
             tags: VecDeque::new(),
             max_size: 1048576,
+            circ: circular_buffer::Buffer::new(4096).unwrap(),
         }
     }
 
@@ -187,7 +190,21 @@ impl<T: Copy> Stream<T> {
             tags: VecDeque::new(),
             data: VecDeque::from(data.to_vec()),
             max_size: 1048576,
+            circ: circular_buffer::Buffer::new(4096).unwrap(), // TODO
         }
+    }
+
+    pub fn write_buf(&mut self) -> &'static mut [T] {
+        self.circ.write_buf()
+    }
+    pub fn read_buf(&mut self) -> &'static [T] {
+        self.circ.read_buf()
+    }
+    pub fn produce(&mut self, n: usize) {
+        self.circ.produce(n);
+    }
+    pub fn consume2(&mut self, n: usize) {
+        self.circ.consume(n);
     }
 
     // TODO: why can't a slice be turned into a suitable iterator?

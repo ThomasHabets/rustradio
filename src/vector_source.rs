@@ -81,7 +81,7 @@ impl<T: Copy> VectorSource<T> {
 
 impl<T> Block for VectorSource<T>
 where
-    T: Copy,
+    T: Copy + 'static,
 {
     fn block_name(&self) -> &'static str {
         "VectorSource"
@@ -113,7 +113,10 @@ where
                 TagValue::Bool(true),
             ));
         }
-        out.write_tags(self.data[self.pos..(self.pos + n)].iter().copied(), &tags);
+        // TODO: write tags.
+        let os = out.write_buf();
+        os[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
+        out.produce(n);
         self.pos += n;
         if self.pos == self.data.len() {
             self.repeat_count += 1;
