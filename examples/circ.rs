@@ -9,20 +9,22 @@ fn main() -> Result<()> {
 
     let b2 = b.clone();
     std::thread::spawn(move || loop {
-        let rb = b2.read_buf();
-        println!("read buf: {:?}", rb);
-        b2.consume(rb.len());
+        let rb = b2.read_buf().unwrap();
+        assert!(matches![b2.read_buf(), None]);
+        println!("read buf: {:?}", rb.slice());
+        b2.consume(rb.slice().len());
         std::thread::sleep(std::time::Duration::from_millis(1000));
     });
 
     let mut n = 0;
     loop {
-        let wb = b.write_buf();
-        if !wb.is_empty() {
-            wb[0] = n;
+        let mut wb = b.write_buf().unwrap();
+        assert!(matches![b.write_buf(), None]);
+        if !wb.slice().is_empty() {
+            wb.slice()[0] = n;
             n += 1;
-            println!("w capacity: {:?}", wb.len());
-            b.produce(wb.len());
+            println!("w capacity: {:?}", wb.slice().len());
+            b.produce(wb.slice().len());
         }
         std::thread::sleep(std::time::Duration::from_millis(1000));
     }

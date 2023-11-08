@@ -165,6 +165,26 @@ impl<T> Drop for BufferReader<'_, T> {
     }
 }
 
+pub struct BufferWriter<'a, T> {
+    slice: &'a mut [T],
+    parent: &'a Buffer<T>,
+}
+
+impl<'a, T> BufferWriter<'a, T> {
+    fn new(slice: &'a mut [T], parent: &'a Buffer<T>) -> BufferWriter<'a, T> {
+        Self { slice, parent }
+    }
+    pub fn slice(&mut self) -> &mut [T] {
+        self.slice
+    }
+}
+
+impl<T> Drop for BufferWriter<'_, T> {
+    fn drop(&mut self) {
+        self.parent.return_write_buf();
+    }
+}
+
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
@@ -248,14 +268,18 @@ impl<T> Buffer<T> {
     }
 
     /// Get the write slice.
-    pub fn write_buf(&self) -> &mut [T] {
+    pub fn write_buf(&self) -> Option<BufferWriter<T>> {
         let mut s = self.state.lock().unwrap();
         if s.write_borrow {
-            panic!();
+            return None;
         }
+        s.write_borrow = true;
         let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.write_range();
-        unsafe { std::mem::transmute(&mut buf[start..end]) }
+        Some(BufferWriter::new(
+            unsafe { std::mem::transmute(&mut buf[start..end]) },
+            &self,
+        ))
     }
 }
 

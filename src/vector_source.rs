@@ -115,8 +115,8 @@ where
         }
         // TODO: write tags.
 
-        let os = out.write_buf();
-        os[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
+        let mut os = out.write_buf().unwrap();
+        os.slice()[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
         self.dst.produce(n);
 
         self.pos += n;

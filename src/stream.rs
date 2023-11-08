@@ -201,7 +201,7 @@ impl<T: Copy> Stream<T> {
         }
     }
 
-    pub fn write_buf(&self) -> &mut [T] {
+    pub fn write_buf(&self) -> Option<circular_buffer::BufferWriter<T>> {
         self.circ.write_buf()
     }
     pub fn read_buf(&self) -> Option<circular_buffer::BufferReader<T>> {
