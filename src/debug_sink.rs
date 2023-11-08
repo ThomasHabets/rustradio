@@ -34,11 +34,11 @@ where
         "DebugSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let i = self.src.read_buf();
+        let i = self.src.read_buf().unwrap();
         i.iter().enumerate().for_each(|(_n, s)| {
             println!("debug: {:?}", s);
         });
-        self.src.consume2(i.len());
+        self.src.consume2(i.slice().len());
 
         // TODO: print tags.
 

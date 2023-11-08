@@ -109,6 +109,8 @@ struct BufferState {
     used: usize,        // In samples.
     circ_len: usize,    // In bytes.
     member_size: usize, // In bytes.
+    read_borrow: bool,
+    write_borrow: bool,
 }
 
 impl BufferState {
@@ -140,6 +142,29 @@ impl BufferState {
     }
 }
 
+pub struct BufferReader<'a, T> {
+    slice: &'a [T],
+    parent: &'a Buffer<T>,
+}
+
+impl<'a, T> BufferReader<'a, T> {
+    fn new(slice: &'a [T], parent: &'a Buffer<T>) -> BufferReader<'a, T> {
+        Self { slice, parent }
+    }
+    pub fn slice(&self) -> &[T] {
+        self.slice
+    }
+    pub fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.slice.iter()
+    }
+}
+
+impl<T> Drop for BufferReader<'_, T> {
+    fn drop(&mut self) {
+        self.parent.return_read_buf();
+    }
+}
+
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
@@ -156,6 +181,8 @@ impl<T> Buffer<T> {
         assert_eq!(size, 4096);
         Ok(Self {
             state: Arc::new(Mutex::new(BufferState {
+                read_borrow: false,
+                write_borrow: false,
                 rpos: 0,
                 wpos: 0,
                 used: 0,
@@ -194,17 +221,38 @@ impl<T> Buffer<T> {
         s.used += n;
     }
 
-    /// Get the read slice.
-    pub fn read_buf(&self) -> &[T] {
+    pub fn return_read_buf(&self) {
         let mut s = self.state.lock().unwrap();
+        assert!(s.read_borrow);
+        s.read_borrow = false;
+    }
+    pub fn return_write_buf(&self) {
+        let mut s = self.state.lock().unwrap();
+        assert!(s.write_borrow);
+        s.write_borrow = false;
+    }
+
+    /// Get the read slice.
+    pub fn read_buf(&self) -> Option<BufferReader<T>> {
+        let mut s = self.state.lock().unwrap();
+        if s.read_borrow {
+            return None;
+        }
+        s.read_borrow = true;
         let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.read_range();
-        unsafe { std::mem::transmute(&buf[start..end]) }
+        Some(BufferReader::new(
+            unsafe { std::mem::transmute(&buf[start..end]) },
+            &self,
+        ))
     }
 
     /// Get the write slice.
     pub fn write_buf(&self) -> &mut [T] {
         let mut s = self.state.lock().unwrap();
+        if s.write_borrow {
+            panic!();
+        }
         let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.write_range();
         unsafe { std::mem::transmute(&mut buf[start..end]) }
