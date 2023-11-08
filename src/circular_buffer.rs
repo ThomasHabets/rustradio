@@ -11,6 +11,7 @@
 
 use anyhow::Result;
 use std::os::fd::AsRawFd;
+use std::sync::{Arc, Mutex};
 
 use libc::{c_int, c_uchar, c_void, off_t, size_t};
 use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
@@ -87,7 +88,7 @@ impl Circ {
         };
         Ok(Self { len: len2, buf })
     }
-    fn full_buffer<T>(&self) -> &'static mut [T] {
+    fn full_buffer<T>(&self) -> &mut [T] {
         assert!(self.len % std::mem::size_of::<T>() == 0);
         unsafe {
             std::slice::from_raw_parts_mut(self.buf as *mut T, self.len / std::mem::size_of::<T>())
@@ -99,60 +100,32 @@ impl Circ {
 }
 
 unsafe impl Send for Circ {}
+unsafe impl Sync for Circ {}
 
-/// Type aware buffer.
 #[derive(Debug)]
-pub struct Buffer<T> {
-    rpos: usize, // In samples.
-    wpos: usize, // In samples.
-    used: usize, // In samples.
-    circ: Circ,
-    dummy: std::marker::PhantomData<T>,
+struct BufferState {
+    rpos: usize,        // In samples.
+    wpos: usize,        // In samples.
+    used: usize,        // In samples.
+    circ_len: usize,    // In bytes.
+    member_size: usize, // In bytes.
 }
 
-impl<T> Buffer<T> {
-    /// Create a new Buffer.
-    ///
-    /// TODO: actually use the `size` parameter.
-    pub fn new(size: usize) -> Result<Self> {
-        assert_eq!(size, 4096);
-        Ok(Self {
-            rpos: 0,
-            wpos: 0,
-            used: 0,
-            circ: Circ::new()?,
-            dummy: std::marker::PhantomData,
-        })
+impl BufferState {
+    // Return write range, in samples.
+    fn write_range(&self) -> (usize, usize) {
+        //eprintln!("Write range: {} {}", self.rpos, self.wpos);
+        (self.wpos, self.wpos + self.free())
     }
 
-    /// Consume samples from input buffer.
-    pub fn consume(&mut self, n: usize) {
-        assert!(
-            n <= self.used,
-            "trying to consume {}, but only have {}",
-            n,
-            self.used
-        );
-        self.rpos = (self.rpos + n) % self.capacity();
-        self.used -= n;
-    }
-
-    /// Produce samples (commit writes).
-    pub fn produce(&mut self, n: usize) {
-        assert!(self.free() >= n);
-        assert!(
-            self.write_capacity() >= n,
-            "can't produce that much. {} < {}",
-            self.write_capacity(),
-            n
-        );
-        self.wpos = (self.wpos + n) % self.capacity();
-        self.used += n;
+    // Read range, in samples
+    fn read_range(&self) -> (usize, usize) {
+        (self.rpos, self.rpos + self.used)
     }
 
     // In samples.
     fn capacity(&self) -> usize {
-        self.circ.len() / std::mem::size_of::<T>()
+        self.circ_len / self.member_size
     }
 
     // Write capacity, in samples.
@@ -165,29 +138,75 @@ impl<T> Buffer<T> {
     fn free(&self) -> usize {
         self.capacity() - self.used
     }
+}
 
-    // Return write range, in samples.
-    fn write_range(&self) -> (usize, usize) {
-        //eprintln!("Write range: {} {}", self.rpos, self.wpos);
-        (self.wpos, self.wpos + self.free())
+/// Type aware buffer.
+#[derive(Debug)]
+pub struct Buffer<T> {
+    state: Arc<Mutex<BufferState>>,
+    circ: Circ,
+    dummy: std::marker::PhantomData<T>,
+}
+
+impl<T> Buffer<T> {
+    /// Create a new Buffer.
+    ///
+    /// TODO: actually use the `size` parameter.
+    pub fn new(size: usize) -> Result<Self> {
+        assert_eq!(size, 4096);
+        Ok(Self {
+            state: Arc::new(Mutex::new(BufferState {
+                rpos: 0,
+                wpos: 0,
+                used: 0,
+                circ_len: size,
+                member_size: std::mem::size_of::<T>(),
+            })),
+            circ: Circ::new()?,
+            dummy: std::marker::PhantomData,
+        })
     }
 
-    // Read range, in samples
-    fn read_range(&self) -> (usize, usize) {
-        (self.rpos, self.rpos + self.used)
+    /// Consume samples from input buffer.
+    pub fn consume(&self, n: usize) {
+        let mut s = self.state.lock().unwrap();
+        assert!(
+            n <= s.used,
+            "trying to consume {}, but only have {}",
+            n,
+            s.used
+        );
+        s.rpos = (s.rpos + n) % s.capacity();
+        s.used -= n;
+    }
+
+    /// Produce samples (commit writes).
+    pub fn produce(&self, n: usize) {
+        let mut s = self.state.lock().unwrap();
+        assert!(s.free() >= n);
+        assert!(
+            s.write_capacity() >= n,
+            "can't produce that much. {} < {}",
+            s.write_capacity(),
+            n
+        );
+        s.wpos = (s.wpos + n) % s.capacity();
+        s.used += n;
     }
 
     /// Get the read slice.
-    pub fn read_buf(&mut self) -> &'static [T] {
+    pub fn read_buf(&self) -> &[T] {
+        let mut s = self.state.lock().unwrap();
         let buf = self.circ.full_buffer::<T>();
-        let (start, end) = self.read_range();
+        let (start, end) = s.read_range();
         unsafe { std::mem::transmute(&buf[start..end]) }
     }
 
     /// Get the write slice.
-    pub fn write_buf(&mut self) -> &'static mut [T] {
+    pub fn write_buf(&self) -> &mut [T] {
+        let mut s = self.state.lock().unwrap();
         let buf = self.circ.full_buffer::<T>();
-        let (start, end) = self.write_range();
+        let (start, end) = s.write_range();
         unsafe { std::mem::transmute(&mut buf[start..end]) }
     }
 }

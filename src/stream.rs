@@ -78,9 +78,16 @@ pub struct Stream<T> {
 /// Convenience type for a "pointer to a stream".
 pub type Streamp<T> = Arc<Mutex<Stream<T>>>;
 
+pub type Streamp2<T> = Arc<Stream<T>>;
+
 /// Create a new Streamp.
 pub fn new_streamp<T>() -> Streamp<T> {
     Arc::new(Mutex::new(Stream::new()))
+}
+
+/// Create a new Streamp.
+pub fn new_streamp2<T>() -> Streamp2<T> {
+    Arc::new(Stream::new())
 }
 
 /// Create a new Streamp with contents.
@@ -194,16 +201,16 @@ impl<T: Copy> Stream<T> {
         }
     }
 
-    pub fn write_buf(&mut self) -> &'static mut [T] {
+    pub fn write_buf(&self) -> &mut [T] {
         self.circ.write_buf()
     }
-    pub fn read_buf(&mut self) -> &'static [T] {
+    pub fn read_buf(&self) -> &[T] {
         self.circ.read_buf()
     }
-    pub fn produce(&mut self, n: usize) {
+    pub fn produce(&self, n: usize) {
         self.circ.produce(n);
     }
-    pub fn consume2(&mut self, n: usize) {
+    pub fn consume2(&self, n: usize) {
         self.circ.consume(n);
     }
 

@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, Tag, TagValue};
+use crate::stream::{new_streamp, new_streamp2, Streamp, Streamp2, Tag, TagValue};
 use crate::Error;
 
 /// Repeat or counts.
@@ -47,7 +47,7 @@ pub struct VectorSource<T>
 where
     T: Copy,
 {
-    dst: Streamp<T>,
+    dst: Streamp2<T>,
     data: Vec<T>,
     repeat: Repeat,
     repeat_count: u64,
@@ -60,7 +60,7 @@ impl<T: Copy> VectorSource<T> {
     /// Optionally the data can repeat.
     pub fn new(data: Vec<T>) -> Self {
         Self {
-            dst: new_streamp(),
+            dst: new_streamp2(),
             data,
             repeat: Repeat::Finite(1),
             pos: 0,
@@ -74,14 +74,14 @@ impl<T: Copy> VectorSource<T> {
     }
 
     /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
+    pub fn out(&self) -> Streamp2<T> {
         self.dst.clone()
     }
 }
 
 impl<T> Block for VectorSource<T>
 where
-    T: Copy + 'static,
+    T: Copy,
 {
     fn block_name(&self) -> &'static str {
         "VectorSource"
@@ -92,7 +92,7 @@ where
                 return Ok(BlockRet::EOF);
             }
         }
-        let mut out = self.dst.lock().unwrap();
+        let mut out = &self.dst;
         let n = std::cmp::min(out.capacity(), self.data.len() - self.pos);
         let mut tags = if self.pos == 0 {
             vec![
@@ -114,9 +114,11 @@ where
             ));
         }
         // TODO: write tags.
+
         let os = out.write_buf();
         os[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
-        out.produce(n);
+        self.dst.produce(n);
+
         self.pos += n;
         if self.pos == self.data.len() {
             self.repeat_count += 1;

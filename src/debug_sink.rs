@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, TagPos};
+use crate::stream::{Streamp, Streamp2, TagPos};
 use crate::Error;
 
 /// Print values to stdout, for debugging.
@@ -12,7 +12,7 @@ pub struct DebugSink<T>
 where
     T: Copy,
 {
-    src: Streamp<T>,
+    src: Streamp2<T>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -21,24 +21,25 @@ where
     T: Copy,
 {
     /// Create new debug block.
-    pub fn new(src: Streamp<T>) -> Self {
+    pub fn new(src: Streamp2<T>) -> Self {
         Self { src }
     }
 }
 
 impl<T> Block for DebugSink<T>
 where
-    T: Copy + std::fmt::Debug + Default + 'static,
+    T: Copy + std::fmt::Debug + Default,
 {
     fn block_name(&self) -> &'static str {
         "DebugSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let i = self.src.lock()?.read_buf();
+        let i = self.src.read_buf();
         i.iter().enumerate().for_each(|(_n, s)| {
             println!("debug: {:?}", s);
         });
-        self.src.lock()?.consume2(i.len());
+        self.src.consume2(i.len());
+
         // TODO: print tags.
 
         /*        let mut i = self.src.lock()?;
