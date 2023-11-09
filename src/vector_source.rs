@@ -117,7 +117,7 @@ where
 
         let mut os = out.write_buf().unwrap();
         os.slice()[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
-        self.dst.produce(n);
+        os.produce(n);
 
         self.pos += n;
         if self.pos == self.data.len() {

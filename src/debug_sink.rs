@@ -38,7 +38,8 @@ where
         i.iter().enumerate().for_each(|(_n, s)| {
             println!("debug: {:?}", s);
         });
-        self.src.consume2(i.slice().len());
+        let l = i.slice().len();
+        i.consume(l);
 
         // TODO: print tags.
 

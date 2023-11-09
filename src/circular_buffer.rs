@@ -157,6 +157,9 @@ impl<'a, T> BufferReader<'a, T> {
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.slice.iter()
     }
+    pub fn consume(self, n: usize) {
+        self.parent.consume(n);
+    }
 }
 
 impl<T> Drop for BufferReader<'_, T> {
@@ -176,6 +179,9 @@ impl<'a, T> BufferWriter<'a, T> {
     }
     pub fn slice(&mut self) -> &mut [T] {
         self.slice
+    }
+    pub fn produce(self, n: usize) {
+        self.parent.produce(n);
     }
 }
 

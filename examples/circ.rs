@@ -12,7 +12,8 @@ fn main() -> Result<()> {
         let rb = b2.read_buf().unwrap();
         assert!(matches![b2.read_buf(), None]);
         println!("read buf: {:?}", rb.slice());
-        b2.consume(rb.slice().len());
+        let l = rb.slice().len();
+        rb.consume(l);
         std::thread::sleep(std::time::Duration::from_millis(1000));
     });
 
@@ -24,7 +25,8 @@ fn main() -> Result<()> {
             wb.slice()[0] = n;
             n += 1;
             println!("w capacity: {:?}", wb.slice().len());
-            b.produce(wb.slice().len());
+            let l = wb.slice().len();
+            wb.produce(l);
         }
         std::thread::sleep(std::time::Duration::from_millis(1000));
     }
