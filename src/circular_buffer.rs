@@ -261,12 +261,12 @@ impl<T> Buffer<T> {
         // TODO: add tags.
     }
 
-    pub fn return_read_buf(&self) {
+    pub(crate) fn return_read_buf(&self) {
         let mut s = self.state.lock().unwrap();
         assert!(s.read_borrow);
         s.read_borrow = false;
     }
-    pub fn return_write_buf(&self) {
+    pub(crate) fn return_write_buf(&self) {
         let mut s = self.state.lock().unwrap();
         assert!(s.write_borrow);
         s.write_borrow = false;

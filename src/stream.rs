@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use log::debug;
 
 use crate::circular_buffer;
-use crate::{Error,Float};
+use crate::{Error, Float};
 
 /// Tag position in the current stream.
 // TODO: is this a good idea? Just use u32? Or assert that u64 is at
