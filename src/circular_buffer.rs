@@ -165,6 +165,9 @@ impl<'a, T> BufferReader<'a, T> {
     pub fn len(&self) -> usize {
         self.slice.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.slice.is_empty()
+    }
 }
 
 impl<T> Drop for BufferReader<'_, T> {
@@ -190,6 +193,9 @@ impl<'a, T> BufferWriter<'a, T> {
     }
     pub fn len(&self) -> usize {
         self.slice.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.slice.is_empty()
     }
 }
 
@@ -231,7 +237,7 @@ impl<T> Buffer<T> {
     /// Consume samples from input buffer.
     ///
     /// Will only be called from the read buffer.
-    pub(crate) fn consume(&self, n: usize) {
+    pub(in crate::circular_buffer) fn consume(&self, n: usize) {
         let mut s = self.state.lock().unwrap();
         assert!(
             n <= s.used,
@@ -247,7 +253,7 @@ impl<T> Buffer<T> {
     /// Produce samples (commit writes).
     ///
     /// Will only be called from the write buffer.
-    pub(crate) fn produce(&self, n: usize, _tags: &[Tag]) {
+    pub(in crate::circular_buffer) fn produce(&self, n: usize, _tags: &[Tag]) {
         let mut s = self.state.lock().unwrap();
         assert!(s.free() >= n);
         assert!(
@@ -261,12 +267,15 @@ impl<T> Buffer<T> {
         // TODO: add tags.
     }
 
-    pub(crate) fn return_read_buf(&self) {
+    /// Will only be called from the read buffer, as it gets destroyed.
+    pub(in crate::circular_buffer) fn return_read_buf(&self) {
         let mut s = self.state.lock().unwrap();
         assert!(s.read_borrow);
         s.read_borrow = false;
     }
-    pub(crate) fn return_write_buf(&self) {
+
+    /// Will only be called from the write buffer, as it gets destroyed.
+    pub(in crate::circular_buffer) fn return_write_buf(&self) {
         let mut s = self.state.lock().unwrap();
         assert!(s.write_borrow);
         s.write_borrow = false;
@@ -310,65 +319,76 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     #[test]
-    pub fn test_build() -> Result<()> {
-        let b = Arc::new(Mutex::new(Buffer::<u8>::new(4096)?));
-        let i1 = b.lock().unwrap().read_buf();
-        let i2 = b.lock().unwrap().read_buf();
-        let w1 = b.lock().unwrap().write_buf();
-        let w2 = b.lock().unwrap().write_buf();
-        assert_eq!(i1, i2);
-        assert_eq!(w1, w2);
+    pub fn test_no_double() -> Result<()> {
+        let b = Arc::new(Buffer::<u8>::new(4096)?);
+        {
+            let _i1 = b.read_buf()?;
+            assert!(matches![b.read_buf(), Err(_)]);
+        }
+        let _i2 = b.read_buf()?;
+        {
+            let _w1 = b.write_buf()?;
+            assert!(matches![b.write_buf(), Err(_)]);
+        }
+        let _w2 = b.write_buf()?;
         Ok(())
     }
 
     #[test]
     pub fn test_typical() -> Result<()> {
-        let mut b: Buffer<u8> = Buffer::new(4096)?;
+        let b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
-        assert!(b.read_buf().is_empty());
-        assert_eq!(b.write_buf().len(), 4096);
+        assert!(b.read_buf()?.is_empty());
+        assert_eq!(b.write_buf()?.len(), 4096);
 
         // Write a byte.
-        b.write_buf()[0] = 123;
-        b.produce(1);
-        assert_eq!(b.read_buf(), vec![123]);
-        assert_eq!(b.write_buf().len(), 4095);
+        {
+            let mut buf = b.write_buf()?;
+            buf.slice()[0] = 123;
+            buf.produce(1, &vec![]);
+            assert_eq!(b.read_buf()?.slice(), vec![123]);
+            assert_eq!(b.write_buf()?.len(), 4095);
+        }
 
         // Consume the byte.
         b.consume(1);
-        assert!(b.read_buf().is_empty());
-        assert_eq!(b.write_buf().len(), 4096);
+        assert!(b.read_buf()?.is_empty());
+        assert_eq!(b.write_buf()?.len(), 4096);
 
         // Write towards the end bytes.
         {
             let n = 4000;
+            let mut wb = b.write_buf()?;
             for i in 0..n {
-                b.write_buf()[i] = (i & 0xff) as u8;
+                wb.slice()[i] = (i & 0xff) as u8;
             }
-            b.produce(n);
-            assert_eq!(b.read_buf().len(), n);
+            wb.produce(n, &vec![]);
+            let rb = b.read_buf()?;
+            assert_eq!(rb.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()[i], (i & 0xff) as u8);
+                assert_eq!(rb.slice()[i], (i & 0xff) as u8);
             }
-            assert_eq!(b.write_buf().len(), 4096 - n);
+            assert_eq!(b.write_buf()?.len(), 4096 - n);
         }
         b.consume(4000);
 
         // Write 100 bytes.
         {
             let n = 100;
+            let mut wb = b.write_buf()?;
             for i in 0..n {
-                b.write_buf()[i] = ((n - i) & 0xff) as u8;
+                wb.slice()[i] = ((n - i) & 0xff) as u8;
             }
-            b.produce(n);
-            assert_eq!(b.read_buf().len(), n);
+            wb.produce(n, &vec![]);
+            let rb = b.read_buf()?;
+            assert_eq!(rb.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()[i], ((n - i) & 0xff) as u8);
+                assert_eq!(rb.slice()[i], ((n - i) & 0xff) as u8);
             }
         }
-        assert_eq!(b.read_buf().len(), 100);
-        assert_eq!(b.write_buf().len(), 3996);
+        assert_eq!(b.read_buf()?.len(), 100);
+        assert_eq!(b.write_buf()?.len(), 3996);
         Ok(())
     }
 
@@ -377,69 +397,74 @@ mod tests {
         let mut b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
-        assert!(b.read_buf().is_empty());
-        assert_eq!(b.write_buf().len(), 4096);
+        assert!(b.read_buf()?.is_empty());
+        assert_eq!(b.write_buf()?.len(), 4096);
 
         // Full.
-        b.produce(4096);
-        assert_eq!(b.read_buf().len(), 4096);
-        assert_eq!(b.write_buf().len(), 0);
+        b.write_buf()?.produce(4096, &vec![]);
+        assert_eq!(b.read_buf()?.len(), 4096);
+        assert_eq!(b.write_buf()?.len(), 0);
 
         // Empty again.
-        b.consume(4096);
-        assert!(b.read_buf().is_empty());
-        assert_eq!(b.write_buf().len(), 4096);
+        b.read_buf()?.consume(4096);
+        assert!(b.read_buf()?.is_empty());
+        assert_eq!(b.write_buf()?.len(), 4096);
         Ok(())
     }
 
     #[test]
     pub fn test_float() -> Result<()> {
-        let mut b: Buffer<Float> = Buffer::new(4096)?;
+        let b: Buffer<Float> = Buffer::new(4096)?;
 
         // Initial.
-        assert!(b.read_buf().is_empty());
-        assert_eq!(b.write_buf().len(), 1024);
+        assert!(b.read_buf()?.is_empty());
+        assert_eq!(b.write_buf()?.len(), 1024);
 
         // Write a sample.
-        b.write_buf()[0] = 123.321;
-        b.produce(1);
-        assert_eq!(b.read_buf(), vec![123.321]);
-        assert_eq!(b.write_buf().len(), 1023);
+        {
+            let mut wb = b.write_buf()?;
+            wb.slice()[0] = 123.321;
+            wb.produce(1, &vec![]);
+        }
+        assert_eq!(b.read_buf()?.slice(), vec![123.321]);
+        assert_eq!(b.write_buf()?.len(), 1023);
 
         // Consume the sample.
-        b.consume(1);
-        assert!(b.read_buf().is_empty());
-        assert_eq!(b.write_buf().len(), 1024);
+        b.read_buf()?.consume(1);
+        assert!(b.read_buf()?.is_empty());
+        assert_eq!(b.write_buf()?.len(), 1024);
 
         // Write towards the end bytes.
         {
             let n = 1000;
+            let mut wb = b.write_buf()?;
             for i in 0..n {
-                b.write_buf()[i] = i as Float;
+                wb.slice()[i] = i as Float;
             }
-            b.produce(n);
-            assert_eq!(b.read_buf().len(), n);
+            wb.produce(n, &vec![]);
+            assert_eq!(b.read_buf()?.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()[i], i as Float);
+                assert_eq!(b.read_buf()?.slice()[i], i as Float);
             }
-            assert_eq!(b.write_buf().len(), 24);
+            assert_eq!(b.write_buf()?.len(), 24);
         }
-        b.consume(1000);
+        b.read_buf()?.consume(1000);
 
         // Write 100 bytes.
         {
             let n = 100;
+            let mut wb = b.write_buf()?;
             for i in 0..n {
-                b.write_buf()[i] = (n - i) as Float;
+                wb.slice()[i] = (n - i) as Float;
             }
-            b.produce(n);
-            assert_eq!(b.read_buf().len(), n);
+            wb.produce(n, &vec![]);
+            assert_eq!(b.read_buf()?.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()[i], (n - i) as Float);
+                assert_eq!(b.read_buf()?.slice()[i], (n - i) as Float);
             }
         }
-        assert_eq!(b.read_buf().len(), 100);
-        assert_eq!(b.write_buf().len(), 1024 - 100);
+        assert_eq!(b.read_buf()?.len(), 100);
+        assert_eq!(b.write_buf()?.len(), 1024 - 100);
         Ok(())
     }
 }
