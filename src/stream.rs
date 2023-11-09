@@ -207,12 +207,6 @@ impl<T: Copy> Stream<T> {
     pub fn read_buf(&self) -> Option<circular_buffer::BufferReader<T>> {
         self.circ.read_buf()
     }
-    pub fn produce(&self, n: usize) {
-        self.circ.produce(n);
-    }
-    pub fn consume2(&self, n: usize) {
-        self.circ.consume(n);
-    }
 
     // TODO: why can't a slice be turned into a suitable iterator?
     /// Write to stream from slice.

@@ -16,6 +16,8 @@ use std::sync::{Arc, Mutex};
 use libc::{c_int, c_uchar, c_void, off_t, size_t};
 use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
 
+use crate::stream::Tag;
+
 extern "C" {
     fn mmap(
         addr: *const c_void,
@@ -160,6 +162,10 @@ impl<'a, T> BufferReader<'a, T> {
     pub fn consume(self, n: usize) {
         self.parent.consume(n);
     }
+    pub fn tags(&self) -> Vec<Tag> {
+        // TODO: populate tags.
+        vec![]
+    }
 }
 
 impl<T> Drop for BufferReader<'_, T> {
@@ -180,8 +186,8 @@ impl<'a, T> BufferWriter<'a, T> {
     pub fn slice(&mut self) -> &mut [T] {
         self.slice
     }
-    pub fn produce(self, n: usize) {
-        self.parent.produce(n);
+    pub fn produce(self, n: usize, tags: &[Tag]) {
+        self.parent.produce(n, tags);
     }
 }
 
@@ -221,7 +227,9 @@ impl<T> Buffer<T> {
     }
 
     /// Consume samples from input buffer.
-    pub fn consume(&self, n: usize) {
+    ///
+    /// Will only be called from the read buffer.
+    pub(crate) fn consume(&self, n: usize) {
         let mut s = self.state.lock().unwrap();
         assert!(
             n <= s.used,
@@ -231,10 +239,13 @@ impl<T> Buffer<T> {
         );
         s.rpos = (s.rpos + n) % s.capacity();
         s.used -= n;
+        // TODO: clean up tags.
     }
 
     /// Produce samples (commit writes).
-    pub fn produce(&self, n: usize) {
+    ///
+    /// Will only be called from the write buffer.
+    pub(crate) fn produce(&self, n: usize, _tags: &[Tag]) {
         let mut s = self.state.lock().unwrap();
         assert!(s.free() >= n);
         assert!(
@@ -245,6 +256,7 @@ impl<T> Buffer<T> {
         );
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
+        // TODO: add tags.
     }
 
     pub fn return_read_buf(&self) {

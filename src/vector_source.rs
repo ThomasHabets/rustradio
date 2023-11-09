@@ -113,11 +113,9 @@ where
                 TagValue::Bool(true),
             ));
         }
-        // TODO: write tags.
-
         let mut os = out.write_buf().unwrap();
         os.slice()[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
-        os.produce(n);
+        os.produce(n, &tags);
 
         self.pos += n;
         if self.pos == self.data.len() {
