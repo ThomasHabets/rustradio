@@ -1,11 +1,6 @@
 //! Test implementation of circular buffers.
 //! Full of unsafe. Full of ugly code.
 //!
-//! TODO:
-//! * It should not be possible to get multiple write buffers.
-//! * read buffer .consume() should consume the read buffer.
-//! * write buffer .produce() should consume the write buffer.
-//!
 //! All of the above probably requires that {read,write}_buf returns
 //! some handler object.
 
@@ -17,6 +12,7 @@ use libc::{c_int, c_uchar, c_void, off_t, size_t};
 use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
 
 use crate::stream::Tag;
+use crate::Error;
 
 extern "C" {
     fn mmap(
@@ -166,6 +162,9 @@ impl<'a, T> BufferReader<'a, T> {
         // TODO: populate tags.
         vec![]
     }
+    pub fn len(&self) -> usize {
+        self.slice.len()
+    }
 }
 
 impl<T> Drop for BufferReader<'_, T> {
@@ -188,6 +187,9 @@ impl<'a, T> BufferWriter<'a, T> {
     }
     pub fn produce(self, n: usize, tags: &[Tag]) {
         self.parent.produce(n, tags);
+    }
+    pub fn len(&self) -> usize {
+        self.slice.len()
     }
 }
 
@@ -271,30 +273,30 @@ impl<T> Buffer<T> {
     }
 
     /// Get the read slice.
-    pub fn read_buf(&self) -> Option<BufferReader<T>> {
+    pub fn read_buf(&self) -> Result<BufferReader<T>> {
         let mut s = self.state.lock().unwrap();
         if s.read_borrow {
-            return None;
+            return Err(Error::new("read buf already borrowed").into());
         }
         s.read_borrow = true;
         let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.read_range();
-        Some(BufferReader::new(
+        Ok(BufferReader::new(
             unsafe { std::mem::transmute(&buf[start..end]) },
             &self,
         ))
     }
 
     /// Get the write slice.
-    pub fn write_buf(&self) -> Option<BufferWriter<T>> {
+    pub fn write_buf(&self) -> Result<BufferWriter<T>> {
         let mut s = self.state.lock().unwrap();
         if s.write_borrow {
-            return None;
+            return Err(Error::new("write buf already borrowed").into());
         }
         s.write_borrow = true;
         let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.write_range();
-        Some(BufferWriter::new(
+        Ok(BufferWriter::new(
             unsafe { std::mem::transmute(&mut buf[start..end]) },
             &self,
         ))

@@ -92,8 +92,8 @@ where
                 return Ok(BlockRet::EOF);
             }
         }
-        let mut out = &self.dst;
-        let n = std::cmp::min(out.capacity(), self.data.len() - self.pos);
+        let mut os = self.dst.write_buf()?;
+        let n = std::cmp::min(os.len(), self.data.len() - self.pos);
         let mut tags = if self.pos == 0 {
             vec![
                 Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
@@ -113,7 +113,6 @@ where
                 TagValue::Bool(true),
             ));
         }
-        let mut os = out.write_buf().unwrap();
         os.slice()[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
         os.produce(n, &tags);
 

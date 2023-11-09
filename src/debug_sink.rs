@@ -34,7 +34,7 @@ where
         "DebugSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let i = self.src.read_buf().unwrap();
+        let i = self.src.read_buf()?;
 
         let tags = i.tags().into_iter().map(|t| (t.pos(), t)).fold(
             HashMap::new(),

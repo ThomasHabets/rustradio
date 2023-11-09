@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use log::debug;
 
 use crate::circular_buffer;
-use crate::Float;
+use crate::{Error,Float};
 
 /// Tag position in the current stream.
 // TODO: is this a good idea? Just use u32? Or assert that u64 is at
@@ -201,11 +201,13 @@ impl<T: Copy> Stream<T> {
         }
     }
 
-    pub fn write_buf(&self) -> Option<circular_buffer::BufferWriter<T>> {
-        self.circ.write_buf()
+    pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>, Error> {
+        // TODO: not sure why I need to use both Ok and ?.
+        Ok(self.circ.write_buf()?)
     }
-    pub fn read_buf(&self) -> Option<circular_buffer::BufferReader<T>> {
-        self.circ.read_buf()
+    pub fn read_buf(&self) -> Result<circular_buffer::BufferReader<T>, Error> {
+        // TODO: not sure why I need to use both Ok and ?.
+        Ok(self.circ.read_buf()?)
     }
 
     // TODO: why can't a slice be turned into a suitable iterator?
