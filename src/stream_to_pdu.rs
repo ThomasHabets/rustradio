@@ -32,13 +32,13 @@ use std::collections::HashMap;
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, Tag, TagPos, TagValue};
+use crate::stream::{new_streamp2, Streamp2, Tag, TagPos, TagValue};
 use crate::{Error, Sample};
 
 /// Stream to PDU block.
 pub struct StreamToPdu<T> {
-    src: Streamp<T>,
-    dst: Streamp<Vec<T>>,
+    src: Streamp2<T>,
+    dst: Streamp2<Vec<T>>,
     tag: String,
     buf: Vec<T>,
     endcounter: Option<usize>,
@@ -48,11 +48,11 @@ pub struct StreamToPdu<T> {
 
 impl<T> StreamToPdu<T> {
     /// Make new Stream to PDU block.
-    pub fn new(src: Streamp<T>, tag: String, max_size: usize, tail: usize) -> Self {
+    pub fn new(src: Streamp2<T>, tag: String, max_size: usize, tail: usize) -> Self {
         Self {
             src,
             tag,
-            dst: new_streamp(),
+            dst: new_streamp2(),
             buf: Vec::with_capacity(max_size),
             endcounter: None,
             max_size,
@@ -60,7 +60,7 @@ impl<T> StreamToPdu<T> {
         }
     }
     /// Get output PDU stream.
-    pub fn out(&self) -> Streamp<Vec<T>> {
+    pub fn out(&self) -> Streamp2<Vec<T>> {
         self.dst.clone()
     }
 }
@@ -84,18 +84,21 @@ where
         "StreamToPdu"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock()?;
-        if input.available() == 0 {
+        let input = self.src.read_buf()?;
+        if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
+
         // TODO: we actually only care about one single tag,
         // and I think we should drop the rest no matter what.
-        let tags = input
+        let tags = self
+            .src
             .tags()
             .into_iter()
             .map(|t| ((t.pos(), t.key().to_string()), t))
             .collect::<HashMap<(TagPos, String), Tag>>();
         trace!("StreamToPdu: tags: {:?}", tags);
+
         for (i, sample) in input.iter().enumerate() {
             if let Some(0) = self.endcounter {
                 let mut delme = Vec::with_capacity(self.max_size);
@@ -105,7 +108,7 @@ where
                     delme.len(),
                     delme.len() * T::size()
                 );
-                self.dst.lock()?.push(delme);
+                self.dst.push2(delme);
                 self.endcounter = None;
             }
             if let Some(c) = self.endcounter {
@@ -129,7 +132,8 @@ where
                 self.endcounter = None;
             }
         }
-        input.clear();
+        let n = input.len();
+        input.consume(n);
         Ok(BlockRet::Ok)
     }
 }

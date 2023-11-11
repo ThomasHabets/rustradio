@@ -5,6 +5,7 @@
 //! some handler object.
 
 use anyhow::Result;
+use std::collections::VecDeque;
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, Mutex};
 
@@ -101,7 +102,7 @@ unsafe impl Send for Circ {}
 unsafe impl Sync for Circ {}
 
 #[derive(Debug)]
-struct BufferState {
+struct BufferState<T> {
     rpos: usize,        // In samples.
     wpos: usize,        // In samples.
     used: usize,        // In samples.
@@ -109,9 +110,10 @@ struct BufferState {
     member_size: usize, // In bytes.
     read_borrow: bool,
     write_borrow: bool,
+    noncopy: VecDeque<T>,
 }
 
-impl BufferState {
+impl<T> BufferState<T> {
     // Return write range, in samples.
     fn write_range(&self) -> (usize, usize) {
         //eprintln!("Write range: {} {}", self.rpos, self.wpos);
@@ -140,12 +142,12 @@ impl BufferState {
     }
 }
 
-pub struct BufferReader<'a, T> {
+pub struct BufferReader<'a, T: Copy> {
     slice: &'a [T],
     parent: &'a Buffer<T>,
 }
 
-impl<'a, T> BufferReader<'a, T> {
+impl<'a, T: Copy> BufferReader<'a, T> {
     fn new(slice: &'a [T], parent: &'a Buffer<T>) -> BufferReader<'a, T> {
         Self { slice, parent }
     }
@@ -170,18 +172,18 @@ impl<'a, T> BufferReader<'a, T> {
     }
 }
 
-impl<T> Drop for BufferReader<'_, T> {
+impl<T: Copy> Drop for BufferReader<'_, T> {
     fn drop(&mut self) {
         self.parent.return_read_buf();
     }
 }
 
-pub struct BufferWriter<'a, T> {
+pub struct BufferWriter<'a, T: Copy> {
     slice: &'a mut [T],
     parent: &'a Buffer<T>,
 }
 
-impl<'a, T> BufferWriter<'a, T> {
+impl<'a, T: Copy> BufferWriter<'a, T> {
     fn new(slice: &'a mut [T], parent: &'a Buffer<T>) -> BufferWriter<'a, T> {
         Self { slice, parent }
     }
@@ -199,7 +201,7 @@ impl<'a, T> BufferWriter<'a, T> {
     }
 }
 
-impl<T> Drop for BufferWriter<'_, T> {
+impl<T: Copy> Drop for BufferWriter<'_, T> {
     fn drop(&mut self) {
         self.parent.return_write_buf();
     }
@@ -208,7 +210,7 @@ impl<T> Drop for BufferWriter<'_, T> {
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
-    state: Arc<Mutex<BufferState>>,
+    state: Arc<Mutex<BufferState<T>>>,
     circ: Circ,
     dummy: std::marker::PhantomData<T>,
 }
@@ -228,12 +230,15 @@ impl<T> Buffer<T> {
                 used: 0,
                 circ_len: size,
                 member_size: std::mem::size_of::<T>(),
+                noncopy: VecDeque::<T>::new(),
             })),
             circ: Circ::new()?,
             dummy: std::marker::PhantomData,
         })
     }
+}
 
+impl<T: Copy> Buffer<T> {
     /// Consume samples from input buffer.
     ///
     /// Will only be called from the read buffer.
@@ -309,6 +314,20 @@ impl<T> Buffer<T> {
             unsafe { std::mem::transmute(&mut buf[start..end]) },
             &self,
         ))
+    }
+}
+
+// TODO: Can we have these only exist when *not* Copy?
+impl<T> Buffer<T> {
+    /// Push a value.
+    pub fn push(&self, v: T) {
+        let mut s = self.state.lock().unwrap();
+        s.noncopy.push_back(v);
+    }
+    /// Push a value.
+    pub fn pop(&self) -> Option<T> {
+        let mut s = self.state.lock().unwrap();
+        s.noncopy.pop_front()
     }
 }
 

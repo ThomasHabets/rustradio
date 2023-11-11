@@ -112,6 +112,16 @@ impl<T> Stream<T> {
         self.data.push_back(val);
     }
 
+    /// Push one sample, handing off ownership.
+    pub fn push2(&self, val: T) {
+        self.circ.push(val);
+    }
+
+    /// Pop one sample.
+    pub fn pop(&self) -> Option<T> {
+        self.circ.pop()
+    }
+
     /// Push one sample, with tags.
     pub fn push_tags(&mut self, val: T, tags: &[Tag]) {
         let ofs = self.pos + self.data.len() as TagPos;
