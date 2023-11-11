@@ -1,8 +1,9 @@
 //! Test implementation of circular buffers.
 //! Full of unsafe. Full of ugly code.
 //!
-//! All of the above probably requires that {read,write}_buf returns
-//! some handler object.
+//! TODO:
+//! * Tag support.
+//! * Rewrite all blocks for this API.
 
 use anyhow::Result;
 use std::collections::VecDeque;
