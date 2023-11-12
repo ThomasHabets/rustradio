@@ -34,15 +34,15 @@ where
         "DebugSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let i = self.src.read_buf()?;
+        let (i, tags) = self.src.read_buf()?;
 
-        let tags = i.tags().into_iter().map(|t| (t.pos(), t)).fold(
-            HashMap::new(),
-            |mut acc, (pos, tag)| {
-                acc.entry(pos).or_insert_with(Vec::new).push(tag);
-                acc
-            },
-        );
+        let tags =
+            tags.into_iter()
+                .map(|t| (t.pos(), t))
+                .fold(HashMap::new(), |mut acc, (pos, tag)| {
+                    acc.entry(pos).or_insert_with(Vec::new).push(tag);
+                    acc
+                });
 
         i.iter().enumerate().for_each(|(n, s)| {
             let ts = tags

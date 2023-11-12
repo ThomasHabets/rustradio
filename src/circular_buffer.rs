@@ -5,15 +5,15 @@
 //! * Tag support.
 //! * Rewrite all blocks for this API.
 
-use anyhow::Result;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, Mutex};
 
+use anyhow::Result;
 use libc::{c_int, c_uchar, c_void, off_t, size_t};
 use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
 
-use crate::stream::Tag;
+use crate::stream::{Tag, TagPos};
 use crate::Error;
 
 extern "C" {
@@ -112,6 +112,7 @@ struct BufferState<T> {
     read_borrow: bool,
     write_borrow: bool,
     noncopy: VecDeque<T>,
+    tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 
 impl<T> BufferState<T> {
@@ -161,10 +162,6 @@ impl<'a, T: Copy> BufferReader<'a, T> {
     pub fn consume(self, n: usize) {
         self.parent.consume(n);
     }
-    pub fn tags(&self) -> Vec<Tag> {
-        // TODO: populate tags.
-        vec![]
-    }
     pub fn len(&self) -> usize {
         self.slice.len()
     }
@@ -213,7 +210,6 @@ impl<T: Copy> Drop for BufferWriter<'_, T> {
 pub struct Buffer<T> {
     state: Arc<Mutex<BufferState<T>>>,
     circ: Circ,
-    dummy: std::marker::PhantomData<T>,
 }
 
 impl<T> Buffer<T> {
@@ -232,9 +228,9 @@ impl<T> Buffer<T> {
                 circ_len: size,
                 member_size: std::mem::size_of::<T>(),
                 noncopy: VecDeque::<T>::new(),
+                tags: BTreeMap::new(),
             })),
             circ: Circ::new()?,
-            dummy: std::marker::PhantomData,
         })
     }
 }
@@ -259,7 +255,7 @@ impl<T: Copy> Buffer<T> {
     /// Produce samples (commit writes).
     ///
     /// Will only be called from the write buffer.
-    pub(in crate::circular_buffer) fn produce(&self, n: usize, _tags: &[Tag]) {
+    pub(in crate::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
         let mut s = self.state.lock().unwrap();
         assert!(s.free() >= n);
         assert!(
@@ -268,9 +264,13 @@ impl<T: Copy> Buffer<T> {
             s.write_capacity(),
             n
         );
+        for tag in tags {
+            let pos = (tag.pos() + s.wpos as u64) % s.capacity() as u64;
+            let tag = Tag::new(pos, tag.key().into(), tag.val().clone());
+            s.tags.entry(pos).or_insert_with(Vec::new).push(tag);
+        }
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
-        // TODO: add tags.
     }
 
     /// Will only be called from the read buffer, as it gets destroyed.
@@ -288,7 +288,7 @@ impl<T: Copy> Buffer<T> {
     }
 
     /// Get the read slice.
-    pub fn read_buf(&self) -> Result<BufferReader<T>> {
+    pub fn read_buf(&self) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let mut s = self.state.lock().unwrap();
         if s.read_borrow {
             return Err(Error::new("read buf already borrowed").into());
@@ -296,9 +296,35 @@ impl<T: Copy> Buffer<T> {
         s.read_borrow = true;
         let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.read_range();
-        Ok(BufferReader::new(
-            unsafe { std::mem::transmute(&buf[start..end]) },
-            &self,
+        let mut tags = Vec::new();
+
+        // TODO: range scan the tags.
+        for (n, ts) in &s.tags {
+            let modded_n: usize = (*n % s.capacity() as TagPos).try_into().unwrap();
+            if end < s.capacity() && start < s.capacity() {
+                // Start and end are both in first half.
+                if modded_n < start || modded_n > end {
+                    continue;
+                }
+            } else {
+                // Start and end can't both be in the second half, and
+                // end has to be higher than start.
+                assert!(start < s.capacity());
+                if modded_n > (end % s.capacity()) && modded_n < start {
+                    continue;
+                }
+            }
+            for tag in ts {
+                tags.push(Tag::new(
+                    tag.pos() - start as TagPos,
+                    tag.key().into(),
+                    tag.val().clone(),
+                ));
+            }
+        }
+        Ok((
+            BufferReader::new(unsafe { std::mem::transmute(&buf[start..end]) }, &self),
+            tags,
         ))
     }
 

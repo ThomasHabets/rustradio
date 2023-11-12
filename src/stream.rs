@@ -215,7 +215,7 @@ impl<T: Copy> Stream<T> {
         // TODO: not sure why I need to use both Ok and ?.
         Ok(self.circ.write_buf()?)
     }
-    pub fn read_buf(&self) -> Result<circular_buffer::BufferReader<T>, Error> {
+    pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
         // TODO: not sure why I need to use both Ok and ?.
         Ok(self.circ.read_buf()?)
     }

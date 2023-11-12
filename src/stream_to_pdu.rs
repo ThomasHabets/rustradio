@@ -84,7 +84,7 @@ where
         "StreamToPdu"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let input = self.src.read_buf()?;
+        let (input, _) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
