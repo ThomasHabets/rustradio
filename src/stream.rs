@@ -12,9 +12,7 @@ use crate::circular_buffer;
 use crate::{Error, Float};
 
 /// Tag position in the current stream.
-// TODO: is this a good idea? Just use u32? Or assert that u64 is at
-// least usize?
-pub type TagPos = u64;
+pub type TagPos = usize;
 
 /// Enum of tag values.
 #[derive(Clone, Debug)]

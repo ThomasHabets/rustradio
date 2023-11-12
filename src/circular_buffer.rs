@@ -248,8 +248,28 @@ impl<T: Copy> Buffer<T> {
             s.used
         );
         let newpos = (s.rpos + n) % s.capacity();
-        for n in s.rpos..newpos {
-            s.tags.remove(&(n as TagPos));
+        use std::ops::Bound::{Excluded, Included};
+
+        let keys: Vec<TagPos> = if newpos > s.rpos {
+            s.tags
+                .range((Included(s.rpos), Excluded(newpos)))
+                .map(|(k, _)| *k)
+                .collect()
+        } else {
+            let mut t: Vec<TagPos> = s
+                .tags
+                .range((Included(s.rpos), Excluded(s.capacity())))
+                .map(|(k, _)| *k)
+                .collect();
+            t.extend(
+                s.tags
+                    .range((Included(0), Excluded(newpos)))
+                    .map(|(k, _)| *k),
+            );
+            t
+        };
+        for k in keys {
+            s.tags.remove(&k);
         }
         s.rpos = newpos;
         s.used -= n;
@@ -268,7 +288,7 @@ impl<T: Copy> Buffer<T> {
             n
         );
         for tag in tags {
-            let pos = (tag.pos() + s.wpos as u64) % s.capacity() as u64;
+            let pos = (tag.pos() + s.wpos) % s.capacity();
             let tag = Tag::new(pos, tag.key().into(), tag.val().clone());
             s.tags.entry(pos).or_insert_with(Vec::new).push(tag);
         }

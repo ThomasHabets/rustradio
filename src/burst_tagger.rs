@@ -91,7 +91,7 @@ where
             let cur = *tv > self.threshold;
             if cur != self.last {
                 tags.push(Tag::new(
-                    i as u64,
+                    i,
                     self.tag.clone(),
                     if cur {
                         TagValue::Bool(true)
