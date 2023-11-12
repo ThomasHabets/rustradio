@@ -247,9 +247,12 @@ impl<T: Copy> Buffer<T> {
             n,
             s.used
         );
-        s.rpos = (s.rpos + n) % s.capacity();
+        let newpos = (s.rpos + n) % s.capacity();
+        for n in s.rpos..newpos {
+            s.tags.remove(&(n as TagPos));
+        }
+        s.rpos = newpos;
         s.used -= n;
-        // TODO: clean up tags.
     }
 
     /// Produce samples (commit writes).
