@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, new_streamp2, Streamp, Streamp2, Tag, TagValue};
+use crate::stream::{new_streamp2, Streamp2, Tag, TagValue};
 use crate::Error;
 
 /// Repeat or counts.

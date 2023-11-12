@@ -144,6 +144,7 @@ impl<T> BufferState<T> {
     }
 }
 
+/// BufferReader is an RAII'd read slice with some helper functions.
 pub struct BufferReader<'a, T: Copy> {
     slice: &'a [T],
     parent: &'a Buffer<T>,
@@ -153,18 +154,28 @@ impl<'a, T: Copy> BufferReader<'a, T> {
     fn new(slice: &'a [T], parent: &'a Buffer<T>) -> BufferReader<'a, T> {
         Self { slice, parent }
     }
+
+    /// Return slice to read from.
     pub fn slice(&self) -> &[T] {
         self.slice
     }
+
+    /// Helper function to iterate over input instead.
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.slice.iter()
     }
+
+    /// We're done with the buffer. Consume `n` samples.
     pub fn consume(self, n: usize) {
         self.parent.consume(n);
     }
+
+    /// len convenience function.
     pub fn len(&self) -> usize {
         self.slice.len()
     }
+
+    /// is_empty convenience function.
     pub fn is_empty(&self) -> bool {
         self.slice.is_empty()
     }
@@ -176,6 +187,7 @@ impl<T: Copy> Drop for BufferReader<'_, T> {
     }
 }
 
+/// BufferWriter is an RAII slice with some helper functions.
 pub struct BufferWriter<'a, T: Copy> {
     slice: &'a mut [T],
     parent: &'a Buffer<T>,
@@ -185,15 +197,25 @@ impl<'a, T: Copy> BufferWriter<'a, T> {
     fn new(slice: &'a mut [T], parent: &'a Buffer<T>) -> BufferWriter<'a, T> {
         Self { slice, parent }
     }
+
+    /// Return the slice to write to.
     pub fn slice(&mut self) -> &mut [T] {
         self.slice
     }
+
+    /// Having written into the write buffer, now tell the buffer
+    /// we're done. Also here are the tags, with positions relative to
+    /// start of buffer.
     pub fn produce(self, n: usize, tags: &[Tag]) {
         self.parent.produce(n, tags);
     }
+
+    /// len convenience function.
     pub fn len(&self) -> usize {
         self.slice.len()
     }
+
+    /// is_empty convenience function.
     pub fn is_empty(&self) -> bool {
         self.slice.is_empty()
     }
@@ -323,7 +345,7 @@ impl<T: Copy> Buffer<T> {
 
         // TODO: range scan the tags.
         for (n, ts) in &s.tags {
-            let modded_n: usize = (*n % s.capacity() as TagPos).try_into().unwrap();
+            let modded_n: usize = *n % s.capacity();
             if end < s.capacity() && start < s.capacity() {
                 // Start and end are both in first half.
                 if modded_n < start || modded_n > end {
@@ -346,7 +368,7 @@ impl<T: Copy> Buffer<T> {
             }
         }
         Ok((
-            BufferReader::new(unsafe { std::mem::transmute(&buf[start..end]) }, &self),
+            BufferReader::new(unsafe { std::mem::transmute(&buf[start..end]) }, self),
             tags,
         ))
     }
@@ -362,7 +384,7 @@ impl<T: Copy> Buffer<T> {
         let (start, end) = s.write_range();
         Ok(BufferWriter::new(
             unsafe { std::mem::transmute(&mut buf[start..end]) },
-            &self,
+            self,
         ))
     }
 }

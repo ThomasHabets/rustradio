@@ -76,6 +76,7 @@ pub struct Stream<T> {
 /// Convenience type for a "pointer to a stream".
 pub type Streamp<T> = Arc<Mutex<Stream<T>>>;
 
+/// Convenience type for a "pointer to a new type of stream".
 pub type Streamp2<T> = Arc<Stream<T>>;
 
 /// Create a new Streamp.
@@ -209,12 +210,21 @@ impl<T: Copy> Stream<T> {
         }
     }
 
+    /// Reterun a write slice.
+    ///
+    /// The only reason for returning error should be if there's
+    /// already a write slice handed out.
     pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>, Error> {
         // TODO: not sure why I need to use both Ok and ?.
         Ok(self.circ.write_buf()?)
     }
+
+    /// Return a read slice and the tags within the slice.
+    ///
+    /// The only reason for returning error should be if there's
+    /// already a read slice handed out.
     pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
-        // TODO: not sure why I need to use both Ok and ?.
+        // TODO: not sure why I need to use both Ok and ?. Should it not be From'd?
         Ok(self.circ.read_buf()?)
     }
 
