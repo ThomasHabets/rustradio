@@ -94,6 +94,11 @@ pub fn streamp_from_slice<T: Copy>(data: &[T]) -> Streamp<T> {
     Arc::new(Mutex::new(Stream::from_slice(data)))
 }
 
+/// Create a new Streamp with contents.
+pub fn streamp2_from_slice<T: Copy>(data: &[T]) -> Streamp2<T> {
+    Arc::new(Stream::from_slice(data))
+}
+
 impl<T> Stream<T> {
     /// Create a new stream.
     pub fn new() -> Self {

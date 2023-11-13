@@ -130,7 +130,7 @@ pub mod pdu_writer;
 // pub mod rational_resampler;
 // pub mod rtlsdr_decode;
 // pub mod signal_source;
-// pub mod single_pole_iir_filter;
+pub mod single_pole_iir_filter;
 pub mod stream_to_pdu;
 // pub mod symbol_sync;
 // pub mod tcp_source;
