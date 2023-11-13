@@ -154,7 +154,6 @@ impl Block for Hilbert {
             newhist.push(stack[i]);
         }
         self.history = newhist;
-        let n = i.len();
         i.consume(n);
         Ok(BlockRet::Ok)
     }
