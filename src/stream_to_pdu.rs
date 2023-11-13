@@ -84,16 +84,14 @@ where
         "StreamToPdu"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let (input, _) = self.src.read_buf()?;
+        let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
 
         // TODO: we actually only care about one single tag,
         // and I think we should drop the rest no matter what.
-        let tags = self
-            .src
-            .tags()
+        let tags = tags
             .into_iter()
             .map(|t| ((t.pos(), t.key().to_string()), t))
             .collect::<HashMap<(TagPos, String), Tag>>();
@@ -108,7 +106,7 @@ where
                     delme.len(),
                     delme.len() * T::size()
                 );
-                self.dst.push2(delme);
+                self.dst.push(delme);
                 self.endcounter = None;
             }
             if let Some(c) = self.endcounter {
