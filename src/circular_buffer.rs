@@ -367,7 +367,7 @@ impl<T: Copy> Buffer<T> {
                 ));
             }
         }
-        tags.sort_by(|a, b| a.pos().cmp(&b.pos()));
+        tags.sort_by_key(|a| a.pos());
         Ok((
             BufferReader::new(unsafe { std::mem::transmute(&buf[start..end]) }, self),
             tags,
