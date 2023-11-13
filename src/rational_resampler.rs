@@ -55,23 +55,24 @@ impl<T: Copy> Block for RationalResampler<T> {
         "RationalResampler"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock().unwrap();
-        let mut v = Vec::new();
-        //self.counter -= self.deci;
-        for s in i.iter() {
+        let (i, _tags) = self.src.read_buf()?;
+        let mut o = self.dst.write_buf()?;
+        let n = std::cmp::min(i.len() - self.interp as usize, o.len() - self.deci as usize);
+        if n == 0 {
+            return Ok(BlockRet::Noop);
+        }
+        let mut opos = 0;
+        for s in i.iter().take(n) {
             self.counter += self.interp;
             while self.counter >= 0 {
-                v.push(*s);
+                o.slice()[opos] = *s;
+                opos += 1;
                 self.counter -= self.deci;
             }
         }
-        if i.is_empty() {
-            Ok(BlockRet::Noop)
-        } else {
-            i.clear();
-            self.dst.lock().unwrap().write_slice(&v);
-            Ok(BlockRet::Ok)
-        }
+        i.consume(n);
+        o.produce(0, &vec![]);
+        Ok(BlockRet::Ok)
     }
 }
 
