@@ -45,9 +45,10 @@ where
         "FileSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut o = self.dst.write_buf()?;
         let sample_size = T::size();
         let have = self.buf.len() / sample_size;
-        let want = self.dst.lock()?.capacity();
+        let want = o.len();
 
         if have < want {
             let get = want - have;
@@ -63,11 +64,13 @@ where
             }
             if self.buf.is_empty() && (n % sample_size) == 0 {
                 // Fast path when reading only whole samples.
-                self.dst.lock()?.write(
-                    buffer
+                o.slice().clone_from_slice(
+                    &buffer
                         .chunks_exact(sample_size)
-                        .map(|d| T::parse(d).unwrap()),
+                        .map(|d| T::parse(d).unwrap())
+                        .collect::<Vec<_>>(),
                 );
+                o.produce(n / sample_size, &vec![]);
                 return Ok(BlockRet::Ok);
             }
             self.buf.extend(&buffer[..n]);
@@ -75,18 +78,20 @@ where
 
         let have = self.buf.len() / sample_size;
 
+        // TODO: remove needless copy.
         let v = self
             .buf
             .chunks_exact(sample_size)
             .map(|d| T::parse(d))
             .collect::<Result<Vec<_>>>()?;
         self.buf.drain(0..(have * sample_size));
-        self.dst.lock()?.write_slice(&v);
+        o.slice().clone_from_slice(&v);
+        o.produce(v.len(), &vec![]);
         Ok(BlockRet::Ok)
     }
 }
 
-#[cfg(test2)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{Complex, Float};
@@ -104,18 +109,15 @@ mod tests {
         )?;
 
         let mut src = FileSource::<Float>::new(&tmpfn, false)?;
-        let mut is = InputStreams::new();
-        let mut os = OutputStreams::new();
-        os.add_stream(StreamType::new_float());
-        src.work(&mut is, &mut os)?;
+        src.work()?;
 
-        let res: Streamp<Float> = os.get(0).into();
+        let (res, _) = src.dst.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
-        assert_eq!(*res.borrow().data(), correct);
+        assert_eq!(res.slice(), correct);
         Ok(())
     }
-
+/*
     #[test]
     fn source_c32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
@@ -138,4 +140,5 @@ mod tests {
         assert_eq!(*res.borrow().data(), correct);
         Ok(())
     }
+*/
 }
