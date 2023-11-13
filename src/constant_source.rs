@@ -33,8 +33,10 @@ where
         "ConstantSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let n = self.dst.lock()?.capacity();
-        self.dst.lock()?.write_slice(&vec![self.val; n]);
+        let mut o = self.dst.write_buf()?;
+        o.slice().fill(self.val);
+        let n = o.len();
+        o.produce(n, &vec![]);
         Ok(BlockRet::Ok)
     }
 }
