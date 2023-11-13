@@ -69,15 +69,25 @@ impl Block for ZeroCrossing {
         "ZeroCrossing"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut v = Vec::new();
-        let mut input = self.src.lock()?;
+        let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
+        let mut o = self.dst.write_buf()?;
+        if o.len() == 0 {
+            return Ok(BlockRet::Noop);
+        }
+        let mut n = 0;
+        let mut opos = 0;
         for sample in input.iter() {
+            n += 1;
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
-                v.push(*sample);
+                o.slice()[opos] = *sample;
+                opos += 1;
                 self.last_cross += self.clock;
+                if opos == o.len() {
+                    break;
+                }
             }
 
             let sign = *sample > 0.0;
@@ -96,8 +106,8 @@ impl Block for ZeroCrossing {
                 self.last_cross -= step_back as f32;
             }
         }
-        input.clear();
-        self.dst.lock()?.write_slice(&v);
+        input.consume(n);
+        o.produce(opos, &vec![]);
         Ok(BlockRet::Ok)
     }
 }

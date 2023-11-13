@@ -58,7 +58,6 @@ impl<T: Copy> Block for RationalResampler<T> {
         let (i, _tags) = self.src.read_buf()?;
         let mut o = self.dst.write_buf()?;
         if i.len() < self.interp as usize || o.len() < self.deci as usize {
-            eprintln!("NEIN {} {}", i.len(), o.len());
             return Ok(BlockRet::Noop);
         }
         let n = std::cmp::min(i.len() - self.interp as usize, o.len() - self.deci as usize);

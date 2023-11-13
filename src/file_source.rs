@@ -3,7 +3,7 @@ use std::io::BufReader;
 use std::io::Read;
 
 use anyhow::Result;
-use log::{debug, warn};
+use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp};
@@ -70,6 +70,7 @@ where
                         .map(|d| T::parse(d).unwrap())
                         .collect::<Vec<_>>(),
                 );
+                trace!("FileSource: Produced {} in fast path", n / sample_size);
                 o.produce(n / sample_size, &vec![]);
                 return Ok(BlockRet::Ok);
             }
@@ -77,6 +78,9 @@ where
         }
 
         let have = self.buf.len() / sample_size;
+        if have == 0 {
+            return Ok(BlockRet::Noop);
+        }
 
         // TODO: remove needless copy.
         let v = self
@@ -86,6 +90,7 @@ where
             .collect::<Result<Vec<_>>>()?;
         self.buf.drain(0..(have * sample_size));
         o.slice().clone_from_slice(&v);
+        trace!("FileSource: Produced {}", v.len());
         o.produce(v.len(), &vec![]);
         Ok(BlockRet::Ok)
     }

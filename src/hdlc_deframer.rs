@@ -193,20 +193,10 @@ impl HdlcDeframer {
                             return Ok(State::Synced((0, Vec::with_capacity(self.max_size))));
                         }
                         self.decoded += 1;
-                        // TODO: why do I need to map this? Why do I get a
-                        // BS compile error when I do:
-                        //
-                        // dst.lock()?.push(bytes);
-                        self.dst
-                            .lock()
-                            .map_err(|e| Error::new(&format!("not possible?: {:?}", e)))?
-                            .push(data.to_vec());
+                        self.dst.push(data.to_vec());
                     } else {
                         self.decoded += 1;
-                        self.dst
-                            .lock()
-                            .map_err(|e| Error::new(&format!("not possible?: {:?}", e)))?
-                            .push(bytes);
+                        self.dst.push(bytes);
                     }
                 }
 
@@ -225,7 +215,7 @@ impl Block for HdlcDeframer {
 
     fn work(&mut self) -> Result<BlockRet, Error> {
         let ti = self.src.clone();
-        let mut input = ti.lock()?;
+        let (input, _tags) = ti.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
@@ -234,7 +224,8 @@ impl Block for HdlcDeframer {
             // new state. The old state is moved from.
             self.state = self.update_state(bit)?;
         }
-        input.clear();
+        let n = input.len();
+        input.consume(n);
         Ok(BlockRet::Ok)
     }
 }
