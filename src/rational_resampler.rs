@@ -57,7 +57,12 @@ impl<T: Copy> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let mut o = self.dst.write_buf()?;
+        if i.len() < self.interp as usize || o.len() < self.deci as usize {
+            eprintln!("NEIN {} {}", i.len(), o.len());
+            return Ok(BlockRet::Noop);
+        }
         let n = std::cmp::min(i.len() - self.interp as usize, o.len() - self.deci as usize);
+        eprintln!("n = {n}");
         if n == 0 {
             return Ok(BlockRet::Noop);
         }
@@ -71,12 +76,12 @@ impl<T: Copy> Block for RationalResampler<T> {
             }
         }
         i.consume(n);
-        o.produce(0, &vec![]);
+        o.produce(opos, &vec![]);
         Ok(BlockRet::Ok)
     }
 }
 
-#[cfg(test2)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::blocks::VectorSource;
@@ -86,15 +91,17 @@ mod tests {
         let input: Vec<_> = (0..inputsize)
             .map(|i| Complex::new(i as Float, 0.0))
             .collect();
-        let src = VectorSource::new(&input);
+        let mut src = VectorSource::new(input);
+        src.work()?;
         let mut resamp = RationalResampler::new(src.out(), interp, deci)?;
         resamp.work()?;
-        let res = resamp.out();
+        let os = resamp.out();
+        let (res, _) = os.read_buf()?;
         assert_eq!(
             finalcount,
-            res.borrow().available(),
-            "{:?}",
-            res.borrow().data()
+            res.len(),
+            "inputsize={inputsize} interp={interp} deci={deci} finalcount={finalcount}: Actual={} values={:?}",
+            res.len(), res.slice()
         );
         Ok(())
     }
