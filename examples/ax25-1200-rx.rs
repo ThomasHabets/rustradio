@@ -109,9 +109,27 @@ fn main() -> Result<()> {
         };
         let samp_rate = opt.samp_rate as Float;
 
+        /*
+                let (prev, b) = add_block![g, Tee::new(prev)];
+                g.add(Box::new(FileSink::new(
+                    b,
+                    "debug/00-unfiltered.c32",
+                    rustradio::file_sink::Mode::Overwrite,
+                )?));
+        */
+
         // Filter RF.
         let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
         let prev = add_block![g, FftFilter::new(prev, &taps)];
+
+        /*
+        let (prev, b) = add_block![g, Tee::new(prev)];
+        g.add(Box::new(FileSink::new(
+            b,
+            "debug/01-filtered.c32",
+            rustradio::file_sink::Mode::Overwrite,
+        )?));
+         */
 
         // Resample RF.
         let new_samp_rate = 50_000.0;
