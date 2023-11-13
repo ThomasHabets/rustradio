@@ -132,7 +132,7 @@ impl Block for Hilbert {
         let mut stack = StackedVec::new();
         stack.vecs.push(&self.history);
         // TODO: needless copy.
-        let t = i.slice().iter().copied().collect::<Vec<_>>();
+        let t = i.slice().iter().take(o.len()).copied().collect::<Vec<_>>();
         stack.vecs.push(&t);
 
         let len = stack.len();

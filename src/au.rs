@@ -230,7 +230,7 @@ impl Block for AuDecode {
                     })
                     .collect::<Vec<Float>>();
                 o.slice()[..(n / 2)].clone_from_slice(&v);
-                o.produce(n/2, &vec![]);
+                o.produce(n / 2, &vec![]);
                 i.consume(n);
             }
         };
