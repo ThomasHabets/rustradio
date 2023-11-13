@@ -41,8 +41,8 @@ impl Circ {
     /// TODO:
     /// * don't leak memory on error.
     /// * release memory on drop.
-    pub fn new() -> Result<Self> {
-        let len = 4096usize;
+    pub fn new(size: usize) -> Result<Self> {
+        let len = size;
         let len2 = len * 2;
         let f = tempfile::tempfile()?;
         f.set_len(len2 as u64)?;
@@ -239,7 +239,6 @@ impl<T> Buffer<T> {
     ///
     /// TODO: actually use the `size` parameter.
     pub fn new(size: usize) -> Result<Self> {
-        assert_eq!(size, 4096);
         Ok(Self {
             state: Arc::new(Mutex::new(BufferState {
                 read_borrow: false,
@@ -252,7 +251,7 @@ impl<T> Buffer<T> {
                 noncopy: VecDeque::<T>::new(),
                 tags: BTreeMap::new(),
             })),
-            circ: Circ::new()?,
+            circ: Circ::new(size)?,
         })
     }
 }

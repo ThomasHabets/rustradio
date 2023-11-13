@@ -30,6 +30,7 @@ let sink = Box::new(NullSink::new(fft.out()));
 use std::sync::Arc;
 
 use anyhow::Result;
+use log::trace;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
@@ -111,6 +112,11 @@ impl Block for FftFilter {
             let mut o = self.dst.write_buf()?;
 
             if self.nsamples > o.len() {
+                trace!(
+                    "FftFilter: Need {} output space, only have {}",
+                    self.nsamples,
+                    o.len()
+                );
                 break;
             }
             // Read so that self.buf contains exactly self.nsamples samples.

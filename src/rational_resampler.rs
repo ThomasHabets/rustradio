@@ -3,6 +3,7 @@
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
  */
 use anyhow::Result;
+use log::trace;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp};
@@ -61,7 +62,7 @@ impl<T: Copy> Block for RationalResampler<T> {
             return Ok(BlockRet::Noop);
         }
         let n = std::cmp::min(i.len() - self.interp as usize, o.len() - self.deci as usize);
-        eprintln!("n = {n}");
+        trace!("RationalResampler: n = {n}");
         if n == 0 {
             return Ok(BlockRet::Noop);
         }

@@ -49,6 +49,10 @@ where
         let sample_size = T::size();
         let have = self.buf.len() / sample_size;
         let want = o.len();
+        if want == 0 {
+            trace!("FileSource: no space left in output stream");
+            return Ok(BlockRet::Ok);
+        }
 
         if have < want {
             let get = want - have;

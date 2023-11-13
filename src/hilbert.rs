@@ -125,6 +125,10 @@ impl Block for Hilbert {
         if i.len() == 0 {
             return Ok(BlockRet::Noop);
         }
+        let mut o = self.dst.write_buf()?;
+        if o.len() == 0 {
+            return Ok(BlockRet::Ok);
+        }
         let mut stack = StackedVec::new();
         stack.vecs.push(&self.history);
         // TODO: needless copy.
@@ -136,7 +140,6 @@ impl Block for Hilbert {
         // TODO: remove copy.
         let iv = stack.collect();
 
-        let mut o = self.dst.write_buf()?;
         let n = len - self.ntaps;
         for i in 0..n {
             let t = &iv[i..(i + self.ntaps)];

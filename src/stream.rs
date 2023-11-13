@@ -76,11 +76,13 @@ pub fn streamp_from_slice<T: Copy>(data: &[T]) -> Streamp<T> {
     Arc::new(Stream::from_slice(data))
 }
 
+const DEFAULT_STREAM_SIZE: usize = 409600;
+
 impl<T> Stream<T> {
     /// Create a new stream.
     pub fn new() -> Self {
         Self {
-            circ: circular_buffer::Buffer::new(4096).unwrap(),
+            circ: circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(),
         }
     }
 
@@ -100,7 +102,7 @@ impl<T> Stream<T> {
 impl<T: Copy> Stream<T> {
     /// Create a new stream with initial data in it.
     pub fn from_slice(data: &[T]) -> Self {
-        let circ = circular_buffer::Buffer::new(4096).unwrap(); // TODO
+        let circ = circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(); // TODO
         let mut wb = circ.write_buf().unwrap();
         wb.slice()[..data.len()].clone_from_slice(data);
         wb.produce(data.len(), &vec![]);
