@@ -121,34 +121,38 @@ impl Block for Hilbert {
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         assert_eq!(self.ntaps, self.history.len());
-        let mut i = self.src.lock()?;
-        if i.available() == 0 {
+        let (i, tags) = self.src.read_buf()?;
+        if i.len() == 0 {
             return Ok(BlockRet::Noop);
         }
         let mut stack = StackedVec::new();
         stack.vecs.push(&self.history);
-        stack.vecs.push(i.data());
+        // TODO: needless copy.
+        let t = i.slice().iter().copied().collect::<Vec<_>>();
+        stack.vecs.push(&t);
 
         let len = stack.len();
-        let mut v = Vec::with_capacity(len);
 
         // TODO: remove copy.
         let iv = stack.collect();
 
-        for i in 0..(len - self.ntaps) {
+        let mut o = self.dst.write_buf()?;
+        let n = len - self.ntaps;
+        for i in 0..n {
             let t = &iv[i..(i + self.ntaps)];
-            v.push(Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t)));
+            o.slice()[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t));
         }
-        self.dst.lock()?.write(v.iter().copied());
+        o.produce(n, &tags);
 
         // TODO: use fancy chained iterator.
         let mut newhist = Vec::with_capacity(self.ntaps);
-        for i in (len - self.ntaps)..len {
+        for i in n..len {
             //self.history.extend(stack.iter().skip(len-self.ntaps));
             newhist.push(stack[i]);
         }
         self.history = newhist;
-        i.clear();
+        let n = i.len();
+        i.consume(n);
         Ok(BlockRet::Ok)
     }
 }

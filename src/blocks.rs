@@ -16,7 +16,7 @@ pub use crate::debug_sink::DebugSink;
 // pub use crate::file_source::FileSource;
 // pub use crate::fir::FIRFilter;
 // pub use crate::hdlc_deframer::HdlcDeframer;
-// pub use crate::hilbert::Hilbert;
+pub use crate::hilbert::Hilbert;
 pub use crate::multiply_const::MultiplyConst;
 // pub use crate::nrzi::NrziDecode;
 // pub use crate::null_sink::NullSink;

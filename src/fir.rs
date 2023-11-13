@@ -77,15 +77,15 @@ where
         "FirFilter"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock().unwrap();
-        let mut out = self.dst.lock().unwrap();
-        let n = std::cmp::min(input.available(), out.capacity());
+        let (mut input, tags) = self.src.read_buf()?;
+        let mut out = self.dst.write_buf()?;
+        let n = std::cmp::min(input.len(), out.len());
         if n > self.ntaps {
             // TODO: needless copy.
-            let v: Vec<T> = input.data().clone().into();
-            let v = self.fir.filter_n(&v[..n]);
+            let v = self.fir.filter_n(&input.slice()[..n]);
             input.consume(v.len());
-            out.write_slice(&v);
+            out.slice().clone_from_slice(&v);
+            out.produce(n, &tags);
         }
         Ok(BlockRet::Ok)
     }
