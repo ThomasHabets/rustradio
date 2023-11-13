@@ -361,12 +361,13 @@ impl<T: Copy> Buffer<T> {
             }
             for tag in ts {
                 tags.push(Tag::new(
-                    tag.pos() - start as TagPos,
+                    (tag.pos() + s.capacity() - start) % s.capacity(),
                     tag.key().into(),
                     tag.val().clone(),
                 ));
             }
         }
+        tags.sort_by(|a, b| a.pos().cmp(&b.pos()));
         Ok((
             BufferReader::new(unsafe { std::mem::transmute(&buf[start..end]) }, self),
             tags,
@@ -406,8 +407,9 @@ impl<T> Buffer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stream::TagValue;
     use crate::Float;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     #[test]
     pub fn test_no_double() -> Result<()> {
@@ -430,21 +432,26 @@ mod tests {
         let b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
-        assert!(b.read_buf()?.is_empty());
+        assert!(b.read_buf()?.0.is_empty());
         assert_eq!(b.write_buf()?.len(), 4096);
 
         // Write a byte.
         {
             let mut buf = b.write_buf()?;
             buf.slice()[0] = 123;
-            buf.produce(1, &vec![]);
-            assert_eq!(b.read_buf()?.slice(), vec![123]);
+            buf.produce(1, &vec![Tag::new(0, "start".into(), TagValue::Bool(true))]);
+            assert_eq!(b.read_buf()?.0.slice(), vec![123]);
+            assert_eq!(
+                b.read_buf()?.1,
+                vec![Tag::new(0, "start".into(), TagValue::Bool(true))]
+            );
             assert_eq!(b.write_buf()?.len(), 4095);
         }
 
         // Consume the byte.
         b.consume(1);
-        assert!(b.read_buf()?.is_empty());
+        assert!(b.read_buf()?.0.is_empty());
+        assert!(b.read_buf()?.1.is_empty());
         assert_eq!(b.write_buf()?.len(), 4096);
 
         // Write towards the end bytes.
@@ -454,12 +461,19 @@ mod tests {
             for i in 0..n {
                 wb.slice()[i] = (i & 0xff) as u8;
             }
-            wb.produce(n, &vec![]);
-            let rb = b.read_buf()?;
+            wb.produce(
+                n,
+                &vec![Tag::new(1, "foo".into(), TagValue::String("bar".into()))],
+            );
+            let (rb, rt) = b.read_buf()?;
             assert_eq!(rb.len(), n);
             for i in 0..n {
                 assert_eq!(rb.slice()[i], (i & 0xff) as u8);
             }
+            assert_eq!(
+                rt,
+                vec![Tag::new(1, "foo".into(), TagValue::String("bar".into()))]
+            );
             assert_eq!(b.write_buf()?.len(), 4096 - n);
         }
         b.consume(4000);
@@ -471,34 +485,108 @@ mod tests {
             for i in 0..n {
                 wb.slice()[i] = ((n - i) & 0xff) as u8;
             }
-            wb.produce(n, &vec![]);
-            let rb = b.read_buf()?;
+            wb.produce(
+                n,
+                &vec![
+                    Tag::new(0, "first".into(), TagValue::Bool(true)),
+                    Tag::new(99, "last".into(), TagValue::Bool(false)),
+                ],
+            );
+            let (rb, rt) = b.read_buf()?;
             assert_eq!(rb.len(), n);
             for i in 0..n {
                 assert_eq!(rb.slice()[i], ((n - i) & 0xff) as u8);
             }
+            assert_eq!(
+                rt,
+                vec![
+                    Tag::new(0, "first".into(), TagValue::Bool(true)),
+                    Tag::new(99, "last".into(), TagValue::Bool(false))
+                ]
+            );
+            drop(rb);
+            assert_eq!(b.read_buf()?.0.len(), 100);
+            assert_eq!(b.write_buf()?.len(), 3996);
         }
-        assert_eq!(b.read_buf()?.len(), 100);
-        assert_eq!(b.write_buf()?.len(), 3996);
+
+        // Clear it.
+        {
+            let (rb, _) = b.read_buf()?;
+            let n = rb.len();
+            rb.consume(n);
+            assert_eq!(b.read_buf()?.0.len(), 0);
+            assert!(b.read_buf()?.1.is_empty());
+            assert_eq!(b.write_buf()?.len(), 4096);
+        }
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_two_writes() -> Result<()> {
+        let b: Buffer<u8> = Buffer::new(4096)?;
+
+        // Write 10 bytes.
+        {
+            let mut buf = b.write_buf()?;
+            buf.slice()[1] = 123;
+            buf.produce(10, &vec![Tag::new(1, "first".into(), TagValue::Bool(true))]);
+            assert_eq!(
+                b.read_buf()?.0.slice(),
+                vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0]
+            );
+            assert_eq!(
+                b.read_buf()?.1,
+                vec![Tag::new(1, "first".into(), TagValue::Bool(true))]
+            );
+            assert_eq!(b.write_buf()?.len(), 4086);
+        }
+
+        // Write 5 more bytes.
+        {
+            let mut buf = b.write_buf()?;
+            buf.slice()[2] = 42;
+            buf.produce(
+                5,
+                &vec![Tag::new(2, "second".into(), TagValue::Bool(false))],
+            );
+            assert_eq!(
+                b.read_buf()?.0.slice(),
+                vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42, 0, 0]
+            );
+            assert_eq!(
+                b.read_buf()?.1,
+                vec![
+                    Tag::new(1, "first".into(), TagValue::Bool(true)),
+                    Tag::new(12, "second".into(), TagValue::Bool(false))
+                ]
+            );
+            assert_eq!(b.write_buf()?.len(), 4081);
+        }
+
+        // Consume the byte.
+        b.consume(15);
+        assert!(b.read_buf()?.0.is_empty());
+        assert!(b.read_buf()?.1.is_empty());
+        assert_eq!(b.write_buf()?.len(), 4096);
         Ok(())
     }
 
     #[test]
     pub fn exact_overflow() -> Result<()> {
-        let mut b: Buffer<u8> = Buffer::new(4096)?;
+        let b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
-        assert!(b.read_buf()?.is_empty());
+        assert!(b.read_buf()?.0.is_empty());
         assert_eq!(b.write_buf()?.len(), 4096);
 
         // Full.
         b.write_buf()?.produce(4096, &vec![]);
-        assert_eq!(b.read_buf()?.len(), 4096);
+        assert_eq!(b.read_buf()?.0.len(), 4096);
         assert_eq!(b.write_buf()?.len(), 0);
 
         // Empty again.
-        b.read_buf()?.consume(4096);
-        assert!(b.read_buf()?.is_empty());
+        b.read_buf()?.0.consume(4096);
+        assert!(b.read_buf()?.0.is_empty());
         assert_eq!(b.write_buf()?.len(), 4096);
         Ok(())
     }
@@ -508,7 +596,7 @@ mod tests {
         let b: Buffer<Float> = Buffer::new(4096)?;
 
         // Initial.
-        assert!(b.read_buf()?.is_empty());
+        assert!(b.read_buf()?.0.is_empty());
         assert_eq!(b.write_buf()?.len(), 1024);
 
         // Write a sample.
@@ -517,12 +605,12 @@ mod tests {
             wb.slice()[0] = 123.321;
             wb.produce(1, &vec![]);
         }
-        assert_eq!(b.read_buf()?.slice(), vec![123.321]);
+        assert_eq!(b.read_buf()?.0.slice(), vec![123.321]);
         assert_eq!(b.write_buf()?.len(), 1023);
 
         // Consume the sample.
-        b.read_buf()?.consume(1);
-        assert!(b.read_buf()?.is_empty());
+        b.read_buf()?.0.consume(1);
+        assert!(b.read_buf()?.0.is_empty());
         assert_eq!(b.write_buf()?.len(), 1024);
 
         // Write towards the end bytes.
@@ -533,13 +621,13 @@ mod tests {
                 wb.slice()[i] = i as Float;
             }
             wb.produce(n, &vec![]);
-            assert_eq!(b.read_buf()?.len(), n);
+            assert_eq!(b.read_buf()?.0.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()?.slice()[i], i as Float);
+                assert_eq!(b.read_buf()?.0.slice()[i], i as Float);
             }
             assert_eq!(b.write_buf()?.len(), 24);
         }
-        b.read_buf()?.consume(1000);
+        b.read_buf()?.0.consume(1000);
 
         // Write 100 bytes.
         {
@@ -549,12 +637,12 @@ mod tests {
                 wb.slice()[i] = (n - i) as Float;
             }
             wb.produce(n, &vec![]);
-            assert_eq!(b.read_buf()?.len(), n);
+            assert_eq!(b.read_buf()?.0.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()?.slice()[i], (n - i) as Float);
+                assert_eq!(b.read_buf()?.0.slice()[i], (n - i) as Float);
             }
         }
-        assert_eq!(b.read_buf()?.len(), 100);
+        assert_eq!(b.read_buf()?.0.len(), 100);
         assert_eq!(b.write_buf()?.len(), 1024 - 100);
         Ok(())
     }

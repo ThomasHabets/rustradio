@@ -15,7 +15,7 @@ use crate::{Error, Float};
 pub type TagPos = usize;
 
 /// Enum of tag values.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TagValue {
     /// String value.
     String(String),
@@ -31,7 +31,7 @@ pub enum TagValue {
 }
 
 /// Tags associated with a stream.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Tag {
     pos: TagPos,
     key: String,
