@@ -50,9 +50,13 @@ impl Block for SignalSourceComplex {
         "SignalSourceComplex"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let n = self.dst.lock()?.capacity();
-        let v: Vec<Complex> = self.take(n).collect();
-        self.dst.lock()?.write_slice(&v);
+        let obind = self.dst.clone();
+        let mut o = obind.write_buf()?;
+        let n = o.len();
+        for (to, from) in o.slice().iter_mut().zip(self.take(n)) {
+            *to = from;
+        }
+        o.produce(n, &vec![]);
         Ok(BlockRet::Ok)
     }
 }

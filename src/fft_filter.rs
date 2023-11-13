@@ -105,10 +105,14 @@ impl Block for FftFilter {
         "FftFilter"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock()?;
-        let mut o = self.dst.lock()?;
         let mut produced = false;
         loop {
+            let (input, _tags) = self.src.read_buf()?;
+            let mut o = self.dst.write_buf()?;
+
+            if self.nsamples > o.len() {
+                break;
+            }
             // Read so that self.buf contains exactly self.nsamples samples.
             //
             // Yes, this part is weird. It evolved into this, but any
@@ -126,7 +130,7 @@ impl Block for FftFilter {
             // Why are these things not fixed: Because then it's
             // slower, for some reason. At least as of 2023-10-07, on
             // amd64, with Rust 1.7.1.
-            let add = std::cmp::min(input.available(), self.nsamples - self.buf.len());
+            let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
             if add < self.nsamples {
                 break;
             }
@@ -156,7 +160,9 @@ impl Block for FftFilter {
             }
 
             // Output.
-            o.write_slice(&filtered[..self.nsamples]);
+            // TODO: needless copy.
+            o.slice()[..self.nsamples].clone_from_slice(&filtered[..self.nsamples]);
+            o.produce(self.nsamples, &vec![]);
             produced = true;
 
             // Stash tail.
@@ -218,36 +224,31 @@ impl Block for FftFilterFloat {
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         // Convert input to Complex.
-        let input: Vec<Complex> = self
-            .src
-            .lock()?
-            .iter()
-            .copied()
-            .map(|f| Complex::new(f, 0.0))
-            .collect();
-        self.inner_in.lock()?.write_slice(&input);
-        // Set up input and output streams.
+        {
+            let (outer_in, tags) = self.src.read_buf()?;
+            let mut inner_to = self.inner_in.write_buf()?;
+            let n = std::cmp::min(outer_in.len(), inner_to.len());
+            for (i, samp) in outer_in.iter().take(n).enumerate() {
+                inner_to.slice()[i] = Complex::new(*samp, 0.0);
+            }
+            inner_to.produce(n, &tags);
+            outer_in.consume(n);
+        }
 
         // Run Complex FftFilter.
         let ret = self.complex.work()?;
 
-        // Replicate stream consume on the Float streams.
-        self.src.lock()?.clear();
-
         // Replicate stream write.
-        //
-        // You'd think calling .write() with the iterator coming out
-        // of .map would be faster, but you'd be wrong.
-        // (as of 2023-10-07, Rust 1.71.1, amd64)
-        let out: Vec<Float> = self
-            .inner_out
-            .lock()?
-            .iter()
-            .copied()
-            .map(|c: Complex| c.re)
-            .collect();
-        self.dst.lock()?.write_slice(&out);
-        self.inner_out.lock()?.clear();
+        {
+            let (inner_from, tags) = self.inner_out.read_buf()?;
+            let mut outer_to = self.dst.write_buf()?;
+            let n = std::cmp::min(inner_from.len(), outer_to.len());
+            for (i, samp) in inner_from.iter().take(n).enumerate() {
+                outer_to.slice()[i] = samp.re;
+            }
+            inner_from.consume(n);
+            outer_to.produce(n, &tags);
+        }
         Ok(ret)
     }
 }
@@ -273,54 +274,56 @@ mod tests {
         let mut fft = FftFilter::new(src.out(), &taps);
 
         // Generate a bunch of samples from signal generator.
-        let out;
-        {
-            src.work()?;
-            out = src
-                .out()
-                .lock()
-                .unwrap()
-                .iter()
-                .copied()
-                .collect::<Vec<Complex>>();
-            // write_vec("bleh.txt", &out)?;
-            let m = out
-                .iter()
-                .map(|x| x.norm_sqr().sqrt())
-                .max_by(|a, b| a.total_cmp(b))
-                .unwrap();
-            assert!((0.999..1.001).contains(&m));
-            eprintln!("{}", out.len());
-        }
+        let mut total = 0;
+        loop {
+            let out;
+            {
+                src.work()?;
+                out = src
+                    .out()
+                    .read_buf()?
+                    .0
+                    .iter()
+                    .copied()
+                    .collect::<Vec<Complex>>();
+                // write_vec("bleh.txt", &out)?;
+                let m = out
+                    .iter()
+                    .map(|x| x.norm_sqr().sqrt())
+                    .max_by(|a, b| a.total_cmp(b))
+                    .unwrap();
+                assert!((0.999..1.001).contains(&m));
+                eprintln!("Generated {} samples, and they look good", out.len());
+            }
 
-        // Filter the stream.
-        {
-            fft.work()?;
-            let out = fft
-                .out()
-                .lock()
-                .unwrap()
-                .iter()
-                .skip(taps.len()) // I get garbage in the beginning.
-                .copied()
-                .collect::<Vec<Complex>>();
-            assert!(
-                out.len() > samp_rate as usize,
-                "need at least 1s of data for real test. Got {}",
-                out.len()
-            );
-            // write_vec("bleh.txt", &out)?;
+            // Filter the stream.
+            {
+                fft.work()?;
+                let out = fft
+                    .out()
+                    .read_buf()?
+                    .0
+                    .iter()
+                    .skip(taps.len()) // I get garbage in the beginning.
+                    .copied()
+                    .collect::<Vec<Complex>>();
+                // write_vec("bleh.txt", &out)?;
 
-            let m = out
-                .iter()
-                .map(|x| x.norm_sqr().sqrt())
-                .max_by(|a, b| a.total_cmp(b))
-                .unwrap();
-            assert!(
-                (0.0..0.0002).contains(&m),
-                "Signal insufficiently suppressed. Got magnitude {}",
-                m
-            );
+                total += out.len();
+                let m = out
+                    .iter()
+                    .map(|x| x.norm_sqr().sqrt())
+                    .max_by(|a, b| a.total_cmp(b))
+                    .unwrap();
+                assert!(
+                    (0.0..0.0002).contains(&m),
+                    "Signal insufficiently suppressed. Got magnitude {}",
+                    m
+                );
+            }
+            if total > samp_rate as usize {
+                break;
+            }
         }
 
         Ok(())
