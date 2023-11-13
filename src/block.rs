@@ -195,7 +195,7 @@ macro_rules! map_block_convert_macro {
                 // Don't process more than we have, and fit.
                 let n = std::cmp::min(i.len(), o.len());
                 if n == 0 {
-                    return Ok($crate::block::BlockRet::Noop)
+                    return Ok($crate::block::BlockRet::Noop);
                 }
 
                 // Map one sample at a time. Is this really the best way?
