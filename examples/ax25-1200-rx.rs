@@ -84,6 +84,15 @@ fn main() -> Result<()> {
         if let Some(read) = opt.read {
             let prev = add_block![g, FileSource::new(&read, false)?];
             let prev = add_block![g, AuDecode::new(prev)];
+            /*
+            let (prev, b) = add_block![g, Tee::new(prev)];
+            g.add(Box::new(FileSink::new(
+                b,
+                "debug/00-audio.f32",
+                rustradio::file_sink::Mode::Overwrite,
+            )?));
+            */
+
             (prev, opt.samp_rate as Float)
         } else {
             panic!("Audio can only be read from file")
