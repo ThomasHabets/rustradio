@@ -183,21 +183,29 @@ macro_rules! map_block_convert_macro {
                 stringify! {$name}
             }
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let (v, tags) = {
-                    let c = self.src.clone();
-                    let i = c.lock().unwrap();
-                    if i.is_empty() {
-                        return Ok($crate::block::BlockRet::Noop);
-                    }
-                    let v = i.iter().map(|x| self.process_one(*x)).collect::<Vec<_>>();
-                    let tags = i.tags();
-                    (v, tags)
-                };
-                self.dst
-                    .lock()
-                    .unwrap()
-                    .write_tags(v.iter().copied(), &tags);
-                self.src.lock().unwrap().clear();
+                // Bindings, since borrow checker won't let us call
+                // mut `process_one` if we borrow `src` and `dst`.
+                let ibind = self.src.clone();
+                let obind = self.dst.clone();
+
+                // Get input and output buffers.
+                let (i, tags) = ibind.read_buf()?;
+                let mut o = obind.write_buf()?;
+
+                // Don't process more than we have, and fit.
+                let n = std::cmp::min(i.len(), o.len());
+                if n == 0 {
+                    return Ok($crate::block::BlockRet::Noop)
+                }
+
+                // Map one sample at a time. Is this really the best way?
+                for (place, ival) in o.slice().iter_mut().zip(i.iter()) {
+                    *place = self.process_one(*ival);
+                }
+
+                // Finalize.
+                o.produce(n, &tags);
+                i.consume(n);
                 Ok($crate::block::BlockRet::Ok)
             }
         }
