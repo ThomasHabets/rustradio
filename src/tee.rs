@@ -33,15 +33,19 @@ impl<T: Copy> Block for Tee<T> {
         "Tee"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock()?;
-        let mut o1 = self.dst1.lock()?;
-        let mut o2 = self.dst2.lock()?;
-        if i.available() == 0 {
+        let (i, tags) = self.src.read_buf()?;
+        let mut o1 = self.dst1.write_buf()?;
+        let mut o2 = self.dst2.write_buf()?;
+        if i.len() == 0 {
             return Ok(BlockRet::Noop);
         }
-        o1.write(i.iter().copied());
-        o2.write(i.iter().copied());
-        i.clear();
+        let n = std::cmp::min(i.len(), o1.len());
+        let n = std::cmp::min(n, o2.len());
+        o1.slice()[..n].clone_from_slice(&i.slice()[..n]);
+        o2.slice()[..n].clone_from_slice(&i.slice()[..n]);
+        o1.produce(n, &tags);
+        o2.produce(n, &tags);
+        i.consume(n);
         Ok(BlockRet::Ok)
     }
 }
