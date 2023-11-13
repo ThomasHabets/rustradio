@@ -84,6 +84,7 @@ fn main() -> Result<()> {
         if let Some(read) = opt.read {
             let prev = add_block![g, FileSource::new(&read, false)?];
             let prev = add_block![g, AuDecode::new(prev)];
+
             /*
             let (prev, b) = add_block![g, Tee::new(prev)];
             g.add(Box::new(FileSink::new(
@@ -91,7 +92,7 @@ fn main() -> Result<()> {
                 "debug/00-audio.f32",
                 rustradio::file_sink::Mode::Overwrite,
             )?));
-            */
+             */
 
             (prev, opt.samp_rate as Float)
         } else {
@@ -163,6 +164,16 @@ fn main() -> Result<()> {
         (prev, samp_rate)
     };
     let prev = add_block![g, Hilbert::new(prev, 65)];
+
+    /*
+    let (prev, b) = add_block![g, Tee::new(prev)];
+    g.add(Box::new(FileSink::new(
+        b,
+        "debug/10-hilbert.c32",
+        rustradio::file_sink::Mode::Overwrite,
+    )?));
+     */
+
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
     let taps = rustradio::fir::low_pass(samp_rate, 2400.0, 100.0);
