@@ -105,7 +105,7 @@ use anyhow::Result;
 use stream::Stream;
 
 // Blocks.
-//pub mod add;
+pub mod add;
 pub mod add_const;
 pub mod au;
 pub mod binary_slicer;
@@ -138,7 +138,7 @@ pub mod tee;
 // pub mod vec_to_stream;
 pub mod vector_source;
 // pub mod wpcr;
-// pub mod xor;
+pub mod xor;
 pub mod xor_const;
 
 #[cfg(feature = "rtlsdr")]

@@ -1,5 +1,5 @@
 //! Convenient mod collecting all standard library blocks for import.
-//pub use crate::add::Add;
+pub use crate::add::Add;
 pub use crate::add_const::AddConst;
 pub use crate::au::{AuDecode, AuEncode};
 pub use crate::binary_slicer::BinarySlicer;
@@ -33,7 +33,7 @@ pub use crate::tee::Tee;
 // pub use crate::vec_to_stream::VecToStream;
 pub use crate::vector_source::{VectorSource, VectorSourceBuilder};
 // pub use crate::wpcr::{Midpointer, Wpcr, WpcrBuilder};
-// pub use crate::xor::Xor;
+pub use crate::xor::Xor;
 pub use crate::xor_const::XorConst;
 
 #[cfg(feature = "rtlsdr")]
