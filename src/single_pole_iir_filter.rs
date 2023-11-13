@@ -1,7 +1,7 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp2, Streamp2};
 use crate::{map_block_macro_v2, Float};
 
 struct SinglePoleIIR<Tout> {
@@ -47,8 +47,8 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     iir: SinglePoleIIR<T>,
-    src: Streamp<T>,
-    dst: Streamp<T>,
+    src: Streamp2<T>,
+    dst: Streamp2<T>,
 }
 
 impl<T> SinglePoleIIRFilter<T>
@@ -60,10 +60,10 @@ where
         + std::ops::Add<T, Output = T>,
 {
     /// Create new IIR filter.
-    pub fn new(src: Streamp<T>, alpha: Float) -> Option<Self> {
+    pub fn new(src: Streamp2<T>, alpha: Float) -> Option<Self> {
         Some(Self {
             src,
-            dst: new_streamp(),
+            dst: new_streamp2(),
             iir: SinglePoleIIR::<T>::new(alpha)?,
         })
     }
@@ -85,13 +85,13 @@ map_block_macro_v2![
 mod tests {
     use super::*;
     use crate::block::Block;
-    use crate::stream::streamp_from_slice;
+    use crate::stream::streamp2_from_slice;
     use crate::{Complex, Error};
 
     #[test]
     fn iir_ff() -> Result<()> {
         // TODO: create an actual test.
-        let src = streamp_from_slice(&[0.1, 0.2]);
+        let src = streamp2_from_slice(&[0.1, 0.2]);
         let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn iir_cc() -> Result<()> {
         // TODO: create an actual test.
-        let src = streamp_from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
+        let src = streamp2_from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
         let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn reject_bad_alpha() -> Result<()> {
-        let src = streamp_from_slice(&[0.1, 0.2]);
+        let src = streamp2_from_slice(&[0.1, 0.2]);
         SinglePoleIIRFilter::new(src.clone(), 0.0).ok_or(Error::new("should accept 0.0"))?;
         SinglePoleIIRFilter::new(src.clone(), 0.1).ok_or(Error::new("should accept 0.1"))?;
         SinglePoleIIRFilter::new(src.clone(), 1.0).ok_or(Error::new("should accept 1.0"))?;

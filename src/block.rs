@@ -115,7 +115,7 @@ macro_rules! map_block_macro_v2 {
     ($name:path, $($tr:path), *) => {
         impl<T: Copy $(+$tr)*> $name {
             /// Return the output stream.
-            pub fn out(&self) -> Streamp<T> {
+            pub fn out(&self) -> $crate::stream::Streamp2<T> {
                 self.dst.clone()
             }
         }
@@ -127,18 +127,17 @@ macro_rules! map_block_macro_v2 {
                 stringify!{$name}
             }
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
-                let cs = self.src.clone();
-                let mut i = cs.lock().unwrap();
-                if i.is_empty() {
-                    return Ok($crate::block::BlockRet::Noop);
+                let (i, tags) = self.src.read_buf()?;
+                let mut o = self.dst.write_buf()?;
+                let n = std::cmp::min(i.len(), o.len());
+                if n == 0 {
+                    return Ok($crate::block::BlockRet::Noop)
                 }
-                let tags = i.tags();
-                let cd = self.dst.clone();
-                cd.lock()?
-                    .write_tags(i
-                           .iter()
-                           .map(|x| self.process_one(x)), &tags);
-                i.clear();
+                for (place, ival) in o.slice().iter_mut().zip(i.iter()) {
+                    *place = self.process_one(ival);
+                }
+                o.produce(n, &tags);
+                i.consume(n);
                 Ok($crate::block::BlockRet::Ok)
             }
         }
