@@ -61,8 +61,8 @@ where
         "FileSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock().unwrap();
-        let n = i.available();
+        let (i, _tags) = self.src.read_buf()?;
+        let n = i.len();
         let mut v = Vec::with_capacity(T::size() * n);
         i.iter().for_each(|s: &T| {
             v.extend(&s.serialize());
