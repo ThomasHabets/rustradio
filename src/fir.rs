@@ -77,7 +77,7 @@ where
         "FirFilter"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let (mut input, tags) = self.src.read_buf()?;
+        let (input, tags) = self.src.read_buf()?;
         let mut out = self.dst.write_buf()?;
         let n = std::cmp::min(input.len(), out.len());
         if n > self.ntaps {
