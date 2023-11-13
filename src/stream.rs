@@ -4,7 +4,7 @@ Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
 */
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use log::debug;
 
@@ -74,28 +74,15 @@ pub struct Stream<T> {
 }
 
 /// Convenience type for a "pointer to a stream".
-pub type Streamp<T> = Arc<Mutex<Stream<T>>>;
-
-/// Convenience type for a "pointer to a new type of stream".
-pub type Streamp2<T> = Arc<Stream<T>>;
+pub type Streamp<T> = Arc<Stream<T>>;
 
 /// Create a new Streamp.
 pub fn new_streamp<T>() -> Streamp<T> {
-    Arc::new(Mutex::new(Stream::new()))
-}
-
-/// Create a new Streamp.
-pub fn new_streamp2<T>() -> Streamp2<T> {
     Arc::new(Stream::new())
 }
 
 /// Create a new Streamp with contents.
 pub fn streamp_from_slice<T: Copy>(data: &[T]) -> Streamp<T> {
-    Arc::new(Mutex::new(Stream::from_slice(data)))
-}
-
-/// Create a new Streamp with contents.
-pub fn streamp2_from_slice<T: Copy>(data: &[T]) -> Streamp2<T> {
     Arc::new(Stream::from_slice(data))
 }
 

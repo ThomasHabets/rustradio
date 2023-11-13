@@ -1,6 +1,6 @@
 //! Add a constant value to every sample.
 use crate::map_block_macro_v2;
-use crate::stream::{new_streamp2, Streamp2};
+use crate::stream::{new_streamp, Streamp};
 
 /// AddConst adds a constant value to every sample.
 pub struct AddConst<T>
@@ -8,8 +8,8 @@ where
     T: Copy,
 {
     val: T,
-    src: Streamp2<T>,
-    dst: Streamp2<T>,
+    src: Streamp<T>,
+    dst: Streamp<T>,
 }
 
 impl<T> AddConst<T>
@@ -17,11 +17,11 @@ where
     T: Copy + std::ops::Add<Output = T>,
 {
     /// Create a new AddConst, providing the constant to be added.
-    pub fn new(src: Streamp2<T>, val: T) -> Self {
+    pub fn new(src: Streamp<T>, val: T) -> Self {
         Self {
             val,
             src,
-            dst: new_streamp2(),
+            dst: new_streamp(),
         }
     }
 

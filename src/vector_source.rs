@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp2, Streamp2, Tag, TagValue};
+use crate::stream::{new_streamp, Streamp, Tag, TagValue};
 use crate::Error;
 
 /// Repeat or counts.
@@ -47,7 +47,7 @@ pub struct VectorSource<T>
 where
     T: Copy,
 {
-    dst: Streamp2<T>,
+    dst: Streamp<T>,
     data: Vec<T>,
     repeat: Repeat,
     repeat_count: u64,
@@ -60,7 +60,7 @@ impl<T: Copy> VectorSource<T> {
     /// Optionally the data can repeat.
     pub fn new(data: Vec<T>) -> Self {
         Self {
-            dst: new_streamp2(),
+            dst: new_streamp(),
             data,
             repeat: Repeat::Finite(1),
             pos: 0,
@@ -74,7 +74,7 @@ impl<T: Copy> VectorSource<T> {
     }
 
     /// Return the output stream.
-    pub fn out(&self) -> Streamp2<T> {
+    pub fn out(&self) -> Streamp<T> {
         self.dst.clone()
     }
 }

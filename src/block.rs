@@ -115,7 +115,7 @@ macro_rules! map_block_macro_v2 {
     ($name:path, $($tr:path), *) => {
         impl<T: Copy $(+$tr)*> $name {
             /// Return the output stream.
-            pub fn out(&self) -> $crate::stream::Streamp2<T> {
+            pub fn out(&self) -> $crate::stream::Streamp<T> {
                 self.dst.clone()
             }
         }
