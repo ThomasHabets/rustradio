@@ -29,7 +29,9 @@ where
         "NullSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        self.src.lock().unwrap().clear();
+        let (i, _) = self.src.read_buf()?;
+        let n = i.len();
+        i.consume(n);
         Ok(BlockRet::Noop)
     }
 }
