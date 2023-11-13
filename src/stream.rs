@@ -99,7 +99,9 @@ impl<T: Copy> Stream<T> {
     /// Create a new stream with initial data in it.
     pub fn from_slice(data: &[T]) -> Self {
         let circ = circular_buffer::Buffer::new(4096).unwrap(); // TODO
-        circ.write_buf().unwrap().slice().clone_from_slice(data);
+        let mut wb = circ.write_buf().unwrap();
+        wb.slice()[..data.len()].clone_from_slice(data);
+        wb.produce(data.len(), &vec![]);
         Self {
             circ,
         }
