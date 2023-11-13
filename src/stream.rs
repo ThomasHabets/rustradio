@@ -85,11 +85,13 @@ impl<T> Stream<T> {
     }
 
     /// Push one sample, handing off ownership.
+    /// Ideally this should only be NoCopy.
     pub fn push(&self, val: T) {
         self.circ.push(val);
     }
 
     /// Pop one sample.
+    /// Ideally this should only be NoCopy.
     pub fn pop(&self) -> Option<T> {
         self.circ.pop()
     }
@@ -102,9 +104,7 @@ impl<T: Copy> Stream<T> {
         let mut wb = circ.write_buf().unwrap();
         wb.slice()[..data.len()].clone_from_slice(data);
         wb.produce(data.len(), &vec![]);
-        Self {
-            circ,
-        }
+        Self { circ }
     }
 
     /// Return a write slice.

@@ -104,28 +104,35 @@ impl Block for AuEncode {
         "AuEncode"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut o = self.dst.lock().unwrap();
+        let mut o = self.dst.write_buf()?;
         if let Some(h) = &self.header {
-            o.write(h.iter().copied());
-            self.header = None;
+            let n = std::cmp::min(h.len(), o.len());
+            o.slice()[..n].clone_from_slice(&h[..n]);
+            o.produce(n, &vec![]);
+            self.header.as_mut().unwrap().drain(0..n);
+            if self.header.as_ref().unwrap().is_empty() {
+                self.header = None;
+            }
+            return Ok(BlockRet::Ok);
         }
 
         assert_eq!(self.encoding, Encoding::PCM16);
         type S = i16;
         let scale = S::MAX as Float;
+        let ss = std::mem::size_of::<S>();
 
-        let mut i = self.src.lock().unwrap();
-        let mut v = Vec::with_capacity(i.available() * std::mem::size_of::<S>());
-        i.iter().for_each(|x: &Float| {
-            v.extend(((*x * scale) as S).to_be_bytes());
-        });
-        i.clear();
-        if v.is_empty() {
-            Ok(BlockRet::Noop)
-        } else {
-            o.write_slice(&v);
-            Ok(BlockRet::Ok)
+        let (i, _tags) = self.src.read_buf()?;
+        let n = std::cmp::min(i.len(), o.len() / ss);
+        if n == 0 {
+            return Ok(BlockRet::Noop);
         }
+
+        for j in 0..n {
+            let val = (i.slice()[j] * scale) as S;
+            o.slice()[j * ss..(j + 1) * ss].clone_from_slice(&val.to_be_bytes());
+        }
+        o.produce(n, &vec![]);
+        Ok(BlockRet::Ok)
     }
 }
 
@@ -166,14 +173,14 @@ impl Block for AuDecode {
         "AuDecode"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock()?;
-        if i.available() == 0 {
+        let (i, _tags) = self.src.read_buf()?;
+        if i.len() == 0 {
             return Ok(BlockRet::Noop);
         }
-        let mut o = self.dst.lock()?;
+        let mut o = self.dst.write_buf()?;
         match self.state {
             DecodeState::WaitingMagic => {
-                if i.available() < 4 {
+                if i.len() < 4 {
                     return Ok(BlockRet::Noop);
                 }
                 let magic = i.iter().take(4).copied().collect::<Vec<_>>();
@@ -183,7 +190,7 @@ impl Block for AuDecode {
                 self.state = DecodeState::WaitingSize;
             }
             DecodeState::WaitingSize => {
-                if i.available() < 4 {
+                if i.len() < 4 {
                     return Ok(BlockRet::Noop);
                 }
                 let len = i.iter().take(4).copied().collect::<Vec<_>>();
@@ -193,7 +200,7 @@ impl Block for AuDecode {
                 self.state = DecodeState::WaitingHeader(len as usize);
             }
             DecodeState::WaitingHeader(len) => {
-                if i.available() < len {
+                if i.len() < len {
                     return Ok(BlockRet::Noop);
                 }
                 let head = i.iter().take(len).copied().collect::<Vec<_>>();
@@ -209,7 +216,8 @@ impl Block for AuDecode {
                 self.state = DecodeState::Data;
             }
             DecodeState::Data => {
-                let n = i.available() - (i.available() & 1);
+                let n = std::cmp::min(i.len(), o.len() * 2); // Bytes.
+                let n = n - (n & 1);
                 let v = i
                     .iter()
                     .take(n)
@@ -221,7 +229,7 @@ impl Block for AuDecode {
                         (i16::from_be_bytes(bytes) as Float) / 32767.0
                     })
                     .collect::<Vec<Float>>();
-                o.write_slice(&v);
+                o.slice()[..(n / 2)].clone_from_slice(&v);
                 i.consume(n);
             }
         };
