@@ -280,7 +280,9 @@ impl Sample for u32 {
     }
 }
 
+/// Trivial trait for types that have .len().
 pub trait Len {
+    /// Get the length.
     fn len(&self) -> usize;
 }
 impl<T> Len for Vec<T> {

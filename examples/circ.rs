@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use rustradio::circular_buffer::Buffer;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 fn main() -> Result<()> {
     let b = Arc::new(Buffer::new(4096)?);

@@ -54,7 +54,7 @@ where
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         {
-            let mut o = self.dst.write_buf()?;
+            let o = self.dst.write_buf()?;
             if o.len() == 0 {
                 return Ok(BlockRet::Ok);
             }

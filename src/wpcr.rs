@@ -230,7 +230,7 @@ impl Block for Wpcr {
             None => return Ok(BlockRet::Noop),
             Some(x) => x,
         };
-        if let Some((packet, tags)) = self.process_one(&x) {
+        if let Some((packet, _tags)) = self.process_one(&x) {
             self.dst.push(packet);
         }
         Ok(BlockRet::Ok)

@@ -45,49 +45,51 @@ impl Circ {
         let fd = f.as_raw_fd();
 
         // Map first.
-        let buf = unsafe {
-            let buf = mmap(
-                std::ptr::null::<c_void>(),
-                len2 as size_t,
-                PROT_READ | PROT_WRITE,
-                MAP_SHARED, // flags
-                fd,         // fd
-                0,          // offset
-            );
+        let buf = {
+            let buf = unsafe {
+                mmap(
+                    std::ptr::null::<c_void>(),
+                    len2 as size_t,
+                    PROT_READ | PROT_WRITE,
+                    MAP_SHARED, // flags
+                    fd,         // fd
+                    0,          // offset
+                )
+            };
             if buf == MAP_FAILED {
                 return Err(Error::new("Initial mmap() failed").into());
             }
             buf as *mut c_uchar
         };
         let second = (buf as libc::uintptr_t + len as libc::uintptr_t) as *const c_void;
+
         // Unmap second half.
-        unsafe {
-            let rc = munmap(second, len);
-            if rc != 0 {
-                panic!("munmap() failed on second half of circular buffer");
-            }
+        let rc = unsafe { munmap(second, len) };
+        if rc != 0 {
+            panic!("munmap() failed on second half of circular buffer");
         }
-        // Map second half.
-        unsafe {
-            let buf = mmap(
+
+        // Re-map second half.
+        let buf2 = unsafe {
+            mmap(
                 second as *const c_void,
                 len as size_t,
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED, // flags
                 fd,         // fd
                 0,          // offset
-            );
-            if buf == MAP_FAILED {
-                return Err(Error::new("second mmap did not succeed").into());
-            }
-            if buf as *const c_void != second {
-                let rc = unsafe { munmap(buf as *const c_void, len) };
-                if rc != 0 {
-                    panic!("munmap() failed on buffer that we *definitely* allocated. Something is seriously broken!");
-                }
-                return Err(Error::new("second mmap did not end up where we wanted it").into());
-            }
+            )
         };
+        if buf2 == MAP_FAILED {
+            return Err(Error::new("second mmap did not succeed").into());
+        }
+        if buf2 as *const c_void != second {
+            let rc = unsafe { munmap(buf as *const c_void, len) };
+            if rc != 0 {
+                panic!("munmap() failed on buffer that we *definitely* allocated. Something is seriously broken!");
+            }
+            return Err(Error::new("second mmap did not end up where we wanted it").into());
+        }
         Ok(Self { len: len2, buf })
     }
 
@@ -116,9 +118,6 @@ impl Circ {
         unsafe {
             std::slice::from_raw_parts_mut(self.buf as *mut T, self.len / std::mem::size_of::<T>())
         }
-    }
-    fn len(&self) -> usize {
-        self.len / 2
     }
 }
 
@@ -434,8 +433,9 @@ impl<T> Buffer<T> {
     }
 }
 impl<T: Len> Buffer<T> {
+    /// Get the size of the first item in the stream.
     pub fn peek_size(&self) -> Option<usize> {
-        let mut s = self.state.lock().unwrap();
+        let s = self.state.lock().unwrap();
         Some(s.noncopy.front()?.len())
     }
 }
