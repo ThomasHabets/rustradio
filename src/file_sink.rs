@@ -63,6 +63,9 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
+        if n == 0 {
+            return Ok(BlockRet::Noop);
+        }
         let mut v = Vec::with_capacity(T::size() * n);
         i.iter().for_each(|s: &T| {
             v.extend(&s.serialize());
@@ -70,7 +73,7 @@ where
         self.f.write_all(&v)?;
         self.f.flush()?;
         i.consume(n);
-        Ok(BlockRet::Noop)
+        Ok(BlockRet::Ok)
     }
 }
 
