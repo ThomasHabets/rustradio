@@ -65,26 +65,22 @@ impl Block for Midpointer {
     }
 
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock()?;
-        if i.available() == 0 {
-            return Ok(BlockRet::Noop);
+        let v = match self.src.pop() {
+            None =>             return Ok(BlockRet::Noop),
+            Some(x) => x,
+        };
+        let mean: Float = v.iter().sum::<Float>() / v.len() as Float;
+        if mean.is_nan() {
+            warn!("Midpointer got NaN");
+        } else {
+            let (mut a, mut b): (Vec<Float>, Vec<Float>) = v.iter().partition(|&t| *t > mean);
+            a.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            b.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let high = a[a.len() / 2];
+            let low = b[b.len() / 2];
+            let offset = low + (high - low) / 2.0;
+            self.dst.push(v.iter().map(|t| t - offset).collect::<Vec<_>>());
         }
-        let mut o = self.dst.lock()?;
-        for v in i.iter() {
-            let mean: Float = v.iter().sum::<Float>() / v.len() as Float;
-            if mean.is_nan() {
-                warn!("Midpointer got NaN");
-            } else {
-                let (mut a, mut b): (Vec<Float>, Vec<Float>) = v.iter().partition(|&t| *t > mean);
-                a.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                b.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                let high = a[a.len() / 2];
-                let low = b[b.len() / 2];
-                let offset = low + (high - low) / 2.0;
-                o.push(v.iter().map(|t| t - offset).collect::<Vec<_>>());
-            }
-        }
-        i.clear();
         Ok(BlockRet::Ok)
     }
 }
@@ -228,18 +224,14 @@ impl Block for Wpcr {
     }
 
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let c = self.src.clone();
-        let mut i = c.lock().unwrap();
-        if i.is_empty() {
-            return Ok(BlockRet::Noop);
+        // TODO: handle tags.
+        let x = match self.src.pop() {
+            None =>             return Ok(BlockRet::Noop),
+            Some(x) => x,
+        };
+        if let Some((packet, tags)) = self.process_one(&x) {
+            self.dst.push(packet);
         }
-        let mut o = self.dst.lock()?;
-        i.iter().for_each(|x| {
-            if let Some((packet, tags)) = self.process_one(x) {
-                o.push_tags(packet, &tags);
-            }
-        });
-        i.clear();
         Ok(BlockRet::Ok)
     }
 }

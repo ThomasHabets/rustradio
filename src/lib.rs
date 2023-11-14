@@ -137,7 +137,7 @@ pub mod symbol_sync;
 pub mod tee;
 // pub mod vec_to_stream;
 pub mod vector_source;
-// pub mod wpcr;
+pub mod wpcr;
 pub mod xor;
 pub mod xor_const;
 
