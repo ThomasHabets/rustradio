@@ -31,16 +31,21 @@ impl<T: Copy> Block for VecToStream<T> {
         "VecToStream"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut i = self.src.lock()?;
-        if i.available() == 0 {
-            return Ok(BlockRet::Noop);
+        let n = match self.src.peek_size() {
+            None => return Ok(BlockRet::Noop),
+            Some(x) => x,
+        };
+        let mut o = self.dst.write_buf()?;
+        if n < o.len() {
+            return Ok(BlockRet::Ok);
         }
-        let mut o = self.dst.lock()?;
-        for v in i.iter() {
-            // TODO: write start and end tags.
-            o.write_slice(v);
-        }
-        i.clear();
+        let v = self
+            .src
+            .pop()
+            .expect("we just checked the size. It must exist");
+        // TODO: write start and end tags.
+        o.slice()[..n].clone_from_slice(&v);
+        o.produce(n, &vec![]);
         Ok(BlockRet::Ok)
     }
 }

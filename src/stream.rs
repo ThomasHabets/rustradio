@@ -6,7 +6,7 @@ streams, and write to zero or more output streams.
 use std::sync::Arc;
 
 use crate::circular_buffer;
-use crate::{Error, Float};
+use crate::{Error, Float, Len};
 
 /// Tag position in the current stream.
 pub type TagPos = usize;
@@ -96,6 +96,13 @@ impl<T> Stream<T> {
     /// Ideally this should only be NoCopy.
     pub fn pop(&self) -> Option<T> {
         self.circ.pop()
+    }
+}
+
+impl<T: Len> Stream<T> {
+    /// Get the size of the front packet.
+    pub fn peek_size(&self) -> Option<usize> {
+        self.circ.peek_size()
     }
 }
 

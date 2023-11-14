@@ -135,7 +135,7 @@ pub mod stream_to_pdu;
 pub mod symbol_sync;
 // pub mod tcp_source;
 pub mod tee;
-// pub mod vec_to_stream;
+pub mod vec_to_stream;
 pub mod vector_source;
 pub mod wpcr;
 pub mod xor;
@@ -277,6 +277,15 @@ impl Sample for u32 {
     }
     fn serialize(&self) -> Vec<u8> {
         u32::to_le_bytes(*self).to_vec()
+    }
+}
+
+pub trait Len {
+    fn len(&self) -> usize;
+}
+impl<T> Len for Vec<T> {
+    fn len(&self) -> usize {
+        self.len()
     }
 }
 

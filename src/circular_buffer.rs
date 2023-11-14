@@ -14,7 +14,7 @@ use libc::{c_int, c_uchar, c_void, off_t, size_t};
 use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
 
 use crate::stream::{Tag, TagPos};
-use crate::Error;
+use crate::{Error, Len};
 
 extern "C" {
     fn mmap(
@@ -408,6 +408,12 @@ impl<T> Buffer<T> {
     pub fn pop(&self) -> Option<T> {
         let mut s = self.state.lock().unwrap();
         s.noncopy.pop_front()
+    }
+}
+impl<T: Len> Buffer<T> {
+    pub fn peek_size(&self) -> Option<usize> {
+        let mut s = self.state.lock().unwrap();
+        Some(s.noncopy.front()?.len())
     }
 }
 
