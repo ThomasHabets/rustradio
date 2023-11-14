@@ -52,6 +52,7 @@ impl<T> From<SendError<T>> for Error {
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,
     dst: Streamp<u8>,
+    buf: Vec<u8>,
 }
 
 impl RtlSdrSource {
@@ -102,6 +103,7 @@ impl RtlSdrSource {
         Ok(Self {
             rx,
             dst: new_streamp(),
+            buf: Vec::new(),
         })
     }
     /// Return the output stream.
@@ -115,11 +117,25 @@ impl Block for RtlSdrSource {
         "RtlSdrSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut o = self.dst.write_buf()?;
+        if o.is_empty() {
+            return Ok(BlockRet::Noop);
+        }
+        if !self.buf.is_empty() {
+            let n = std::cmp::min(o.len(), self.buf.len());
+            o.slice()[..n].clone_from_slice(&self.buf[..n]);
+            self.buf.drain(0..n);
+            o.produce(n, &[]);
+            return Ok(BlockRet::Ok);
+        }
         match self.rx.try_recv() {
             Err(TryRecvError::Empty) => Ok(BlockRet::Pending),
             Err(other) => Err(other.into()),
             Ok(buf) => {
-                self.dst.lock().unwrap().write_slice(&buf);
+                let n = std::cmp::min(o.len(), buf.len());
+                o.slice()[..n].clone_from_slice(&buf[..n]);
+                self.buf.extend(&buf[n..]);
+                o.produce(n, &[]);
                 Ok(BlockRet::Ok)
             }
         }
