@@ -285,7 +285,7 @@ fn calc_crc(data: &[u8]) -> u16 {
     }) ^ 0xffff
 }
 
-#[cfg(test2)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::stream::streamp_from_slice;
@@ -314,8 +314,9 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![vec![0xaa, 0x7]]);
+            let res = o.pop().unwrap();
+            assert_eq!(res, vec![0xaa, 0x7]);
+            assert!(matches![o.pop(), None]);
         }
         Ok(())
     }
@@ -336,8 +337,9 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![vec![0xaa, 0x7], vec![0xaa, 0x55]]);
+            assert_eq!(o.pop().unwrap(), vec![0xaa, 0x7]);
+            assert_eq!(o.pop().unwrap(), vec![0xaa, 0x55]);
+            assert!(matches![o.pop(), None]);
         }
         Ok(())
     }
@@ -349,8 +351,9 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![vec![0xff, 0xff]]);
+            let res = o.pop().unwrap();
+            assert_eq!(res, vec![0xff, 0xff]);
+            assert!(matches![o.pop(), None]);
         }
         Ok(())
     }
@@ -362,8 +365,8 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![vec![0xff, 0xff]]);
+            let res = o.pop().unwrap();
+            assert_eq!(res, vec![0xff, 0xff]);
         }
         Ok(())
     }
@@ -375,8 +378,12 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.lock().unwrap();
-            assert!(res.data().is_empty());
+            let res = o.pop();
+            assert!(
+                matches![res, None],
+                "expected to discard short packet: {:?}",
+                res
+            );
         }
         Ok(())
     }
@@ -388,11 +395,11 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.lock().unwrap();
+            let res = o.pop();
             assert!(
-                res.data().is_empty(),
-                "expected to discard: {:?}",
-                *res.data()
+                matches![res, None],
+                "expected to discard long packet: {:?}",
+                res
             );
         }
         Ok(())
@@ -404,8 +411,9 @@ mod tests {
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.work()?;
             let o = b.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![vec![0x55]]);
+            let res = o.pop().unwrap();
+            assert_eq!(res, vec![0x55]);
+            assert!(matches![o.pop(), None]);
         }
         Ok(())
     }
