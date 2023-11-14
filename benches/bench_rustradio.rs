@@ -20,9 +20,25 @@ fn bench_fft_filter(b: &mut Bencher) {
     let s = new_streamp();
     let mut filter = FftFilter::new(s.clone(), &taps);
     b.iter(|| {
-        s.lock().unwrap().clear();
-        s.lock().unwrap().write_slice(&input);
-        filter.out().lock().unwrap().clear();
+        // Empty input buffer.
+        {
+            let (i, _) = s.read_buf().unwrap();
+            let n = i.len();
+            i.consume(n);
+        }
+        // Fill input buffer.
+        {
+            let o = s.write_buf().unwrap();
+            //o.slice()[..input.len()].clone_from_slice(&input);
+            o.produce(input.len(), &[]);
+        }
+        // Empty output buffer.
+        {
+            let obind = filter.out();
+            let (out, _) = obind.read_buf().unwrap();
+            let n = out.len();
+            out.consume(n);
+        }
         filter.work().unwrap();
     });
 }
@@ -38,9 +54,25 @@ fn bench_fir_filter(b: &mut Bencher) {
     let s = new_streamp();
     let mut filter = FIRFilter::new(s.clone(), &taps);
     b.iter(|| {
-        s.lock().unwrap().clear();
-        s.lock().unwrap().write_slice(&input);
-        filter.out().lock().unwrap().clear();
+        // Empty input buffer.
+        {
+            let (i, _) = s.read_buf().unwrap();
+            let n = i.len();
+            i.consume(n);
+        }
+        // Fill input buffer.
+        {
+            let o = s.write_buf().unwrap();
+            //o.slice()[..input.len()].clone_from_slice(&input);
+            o.produce(input.len(), &[]);
+        }
+        // Empty output buffer.
+        {
+            let obind = filter.out();
+            let (out, _) = obind.read_buf().unwrap();
+            let n = out.len();
+            out.consume(n);
+        }
         filter.work().unwrap();
     });
 }
