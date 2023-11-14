@@ -79,13 +79,19 @@ where
     }
 
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock()?;
-        let mut trigger = self.trigger.lock()?;
-        let n = std::cmp::min(input.available(), trigger.available());
+        let (input, tags) = self.src.read_buf()?;
+        let (trigger, _) = self.trigger.read_buf()?;
+        let mut o = self.dst.write_buf()?;
+        let n = std::cmp::min(input.len(), trigger.len());
         if n == 0 {
             return Ok(BlockRet::Noop);
         }
-        let mut v = Vec::with_capacity(input.available());
+        let n = std::cmp::min(n, o.len());
+        if n == 0 {
+            return Ok(BlockRet::Ok);
+        }
+
+        let mut v = Vec::with_capacity(input.len());
         let mut tags = Vec::new();
         for (i, (s, tv)) in input.iter().zip(trigger.iter()).enumerate().take(n) {
             let cur = *tv > self.threshold;
@@ -103,7 +109,8 @@ where
             self.last = cur;
             v.push(*s);
         }
-        self.dst.lock()?.write_tags(v.iter().copied(), &tags);
+        o.slice().clone_from_slice(&v);
+        o.produce(n, &tags);
         input.consume(n);
         trigger.consume(n);
         Ok(BlockRet::Ok)

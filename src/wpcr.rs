@@ -66,7 +66,7 @@ impl Block for Midpointer {
 
     fn work(&mut self) -> Result<BlockRet, Error> {
         let v = match self.src.pop() {
-            None =>             return Ok(BlockRet::Noop),
+            None => return Ok(BlockRet::Noop),
             Some(x) => x,
         };
         let mean: Float = v.iter().sum::<Float>() / v.len() as Float;
@@ -79,7 +79,8 @@ impl Block for Midpointer {
             let high = a[a.len() / 2];
             let low = b[b.len() / 2];
             let offset = low + (high - low) / 2.0;
-            self.dst.push(v.iter().map(|t| t - offset).collect::<Vec<_>>());
+            self.dst
+                .push(v.iter().map(|t| t - offset).collect::<Vec<_>>());
         }
         Ok(BlockRet::Ok)
     }
@@ -226,7 +227,7 @@ impl Block for Wpcr {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: handle tags.
         let x = match self.src.pop() {
-            None =>             return Ok(BlockRet::Noop),
+            None => return Ok(BlockRet::Noop),
             Some(x) => x,
         };
         if let Some((packet, tags)) = self.process_one(&x) {
