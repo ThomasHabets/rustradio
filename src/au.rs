@@ -108,7 +108,7 @@ impl Block for AuEncode {
         if let Some(h) = &self.header {
             let n = std::cmp::min(h.len(), o.len());
             o.slice()[..n].clone_from_slice(&h[..n]);
-            o.produce(n, &vec![]);
+            o.produce(n, &[]);
             self.header.as_mut().unwrap().drain(0..n);
             if self.header.as_ref().unwrap().is_empty() {
                 self.header = None;
@@ -131,7 +131,7 @@ impl Block for AuEncode {
             let val = (i.slice()[j] * scale) as S;
             o.slice()[j * ss..(j + 1) * ss].clone_from_slice(&val.to_be_bytes());
         }
-        o.produce(n, &vec![]);
+        o.produce(n, &[]);
         Ok(BlockRet::Ok)
     }
 }
@@ -174,7 +174,7 @@ impl Block for AuDecode {
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
-        if i.len() == 0 {
+        if i.is_empty() {
             return Ok(BlockRet::Noop);
         }
         let mut o = self.dst.write_buf()?;
@@ -230,7 +230,7 @@ impl Block for AuDecode {
                     })
                     .collect::<Vec<Float>>();
                 o.slice()[..(n / 2)].clone_from_slice(&v);
-                o.produce(n / 2, &vec![]);
+                o.produce(n / 2, &[]);
                 i.consume(n);
             }
         };

@@ -168,7 +168,7 @@ impl Block for FftFilter {
             // Output.
             // TODO: needless copy.
             o.slice()[..self.nsamples].clone_from_slice(&filtered[..self.nsamples]);
-            o.produce(self.nsamples, &vec![]);
+            o.produce(self.nsamples, &[]);
             produced = true;
 
             // Stash tail.
@@ -341,7 +341,7 @@ mod tests {
         use std::io::Write;
         let mut f = BufWriter::new(std::fs::File::create(filename)?);
         for s in v {
-            f.write_all(&format!("{} {}\n", s.re, s.im).as_bytes())?;
+            f.write_all(format!("{} {}\n", s.re, s.im).as_bytes())?;
         }
         Ok(())
     }

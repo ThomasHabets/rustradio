@@ -76,7 +76,7 @@ impl<T: Copy> Block for RationalResampler<T> {
             }
         }
         i.consume(n);
-        o.produce(opos, &vec![]);
+        o.produce(opos, &[]);
         Ok(BlockRet::Ok)
     }
 }

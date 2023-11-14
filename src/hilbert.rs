@@ -52,11 +52,11 @@ impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet, Error> {
         assert_eq!(self.ntaps, self.history.len());
         let (i, tags) = self.src.read_buf()?;
-        if i.len() == 0 {
+        if i.is_empty() {
             return Ok(BlockRet::Noop);
         }
         let mut o = self.dst.write_buf()?;
-        if o.len() == 0 {
+        if o.is_empty() {
             return Ok(BlockRet::Ok);
         }
 

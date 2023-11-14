@@ -36,7 +36,7 @@ impl<T: Copy> Block for Tee<T> {
         let (i, tags) = self.src.read_buf()?;
         let mut o1 = self.dst1.write_buf()?;
         let mut o2 = self.dst2.write_buf()?;
-        if i.len() == 0 {
+        if i.is_empty() {
             return Ok(BlockRet::Noop);
         }
         let n = std::cmp::min(i.len(), o1.len());

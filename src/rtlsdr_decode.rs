@@ -53,7 +53,7 @@ impl Block for RtlSdrDecode {
                 .as_slice(),
         );
         input.consume(isamples);
-        out.produce(osamples, &vec![]);
+        out.produce(osamples, &[]);
         Ok(BlockRet::Ok)
     }
 }

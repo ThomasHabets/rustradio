@@ -75,7 +75,7 @@ where
                         .collect::<Vec<_>>(),
                 );
                 trace!("FileSource: Produced {} in fast path", n / sample_size);
-                o.produce(n / sample_size, &vec![]);
+                o.produce(n / sample_size, &[]);
                 return Ok(BlockRet::Ok);
             }
             self.buf.extend(&buffer[..n]);
@@ -95,7 +95,7 @@ where
         self.buf.drain(0..(have * sample_size));
         o.slice().clone_from_slice(&v);
         trace!("FileSource: Produced {}", v.len());
-        o.produce(v.len(), &vec![]);
+        o.produce(v.len(), &[]);
         Ok(BlockRet::Ok)
     }
 }

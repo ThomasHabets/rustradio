@@ -475,7 +475,7 @@ mod tests {
         {
             let mut buf = b.write_buf()?;
             buf.slice()[0] = 123;
-            buf.produce(1, &vec![Tag::new(0, "start".into(), TagValue::Bool(true))]);
+            buf.produce(1, &[Tag::new(0, "start".into(), TagValue::Bool(true))]);
             assert_eq!(b.read_buf()?.0.slice(), vec![123]);
             assert_eq!(
                 b.read_buf()?.1,
@@ -499,7 +499,7 @@ mod tests {
             }
             wb.produce(
                 n,
-                &vec![Tag::new(1, "foo".into(), TagValue::String("bar".into()))],
+                &[Tag::new(1, "foo".into(), TagValue::String("bar".into()))],
             );
             let (rb, rt) = b.read_buf()?;
             assert_eq!(rb.len(), n);
@@ -523,7 +523,7 @@ mod tests {
             }
             wb.produce(
                 n,
-                &vec![
+                &[
                     Tag::new(0, "first".into(), TagValue::Bool(true)),
                     Tag::new(99, "last".into(), TagValue::Bool(false)),
                 ],
@@ -565,7 +565,7 @@ mod tests {
         {
             let mut buf = b.write_buf()?;
             buf.slice()[1] = 123;
-            buf.produce(10, &vec![Tag::new(1, "first".into(), TagValue::Bool(true))]);
+            buf.produce(10, &[Tag::new(1, "first".into(), TagValue::Bool(true))]);
             assert_eq!(
                 b.read_buf()?.0.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -581,10 +581,7 @@ mod tests {
         {
             let mut buf = b.write_buf()?;
             buf.slice()[2] = 42;
-            buf.produce(
-                5,
-                &vec![Tag::new(2, "second".into(), TagValue::Bool(false))],
-            );
+            buf.produce(5, &[Tag::new(2, "second".into(), TagValue::Bool(false))]);
             assert_eq!(
                 b.read_buf()?.0.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42, 0, 0]
@@ -616,7 +613,7 @@ mod tests {
         assert_eq!(b.write_buf()?.len(), 4096);
 
         // Full.
-        b.write_buf()?.produce(4096, &vec![]);
+        b.write_buf()?.produce(4096, &[]);
         assert_eq!(b.read_buf()?.0.len(), 4096);
         assert_eq!(b.write_buf()?.len(), 0);
 
@@ -639,7 +636,7 @@ mod tests {
         {
             let mut wb = b.write_buf()?;
             wb.slice()[0] = 123.321;
-            wb.produce(1, &vec![]);
+            wb.produce(1, &[]);
         }
         assert_eq!(b.read_buf()?.0.slice(), vec![123.321]);
         assert_eq!(b.write_buf()?.len(), 1023);
@@ -656,7 +653,7 @@ mod tests {
             for i in 0..n {
                 wb.slice()[i] = i as Float;
             }
-            wb.produce(n, &vec![]);
+            wb.produce(n, &[]);
             assert_eq!(b.read_buf()?.0.len(), n);
             for i in 0..n {
                 assert_eq!(b.read_buf()?.0.slice()[i], i as Float);
@@ -672,7 +669,7 @@ mod tests {
             for i in 0..n {
                 wb.slice()[i] = (n - i) as Float;
             }
-            wb.produce(n, &vec![]);
+            wb.produce(n, &[]);
             assert_eq!(b.read_buf()?.0.len(), n);
             for i in 0..n {
                 assert_eq!(b.read_buf()?.0.slice()[i], (n - i) as Float);

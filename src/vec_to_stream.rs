@@ -45,7 +45,7 @@ impl<T: Copy> Block for VecToStream<T> {
             .expect("we just checked the size. It must exist");
         // TODO: write start and end tags.
         o.slice()[..n].clone_from_slice(&v);
-        o.produce(n, &vec![]);
+        o.produce(n, &[]);
         Ok(BlockRet::Ok)
     }
 }

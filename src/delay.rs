@@ -55,7 +55,7 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         {
             let o = self.dst.write_buf()?;
-            if o.len() == 0 {
+            if o.is_empty() {
                 return Ok(BlockRet::Ok);
             }
         }
@@ -66,7 +66,7 @@ where
                 return Ok(BlockRet::Noop);
             }
             o.slice()[..n].fill(T::default());
-            o.produce(n, &vec![]);
+            o.produce(n, &[]);
             self.current_delay -= n;
         }
         {
@@ -137,7 +137,7 @@ mod tests {
         {
             let mut b = s.write_buf()?;
             b.slice()[..2].clone_from_slice(&[3, 4]);
-            b.produce(2, &vec![]);
+            b.produce(2, &[]);
         }
         delay.set_delay(2);
         delay.work()?;
@@ -151,7 +151,7 @@ mod tests {
         {
             let mut b = s.write_buf()?;
             b.slice()[..2].clone_from_slice(&[5, 6]);
-            b.produce(2, &vec![]);
+            b.produce(2, &[]);
         }
         delay.set_delay(0);
         delay.work()?;
@@ -165,7 +165,7 @@ mod tests {
         {
             let mut b = s.write_buf()?;
             b.slice()[0] = 7;
-            b.produce(1, &vec![]);
+            b.produce(1, &[]);
         }
         delay.set_delay(0);
         delay.work()?;

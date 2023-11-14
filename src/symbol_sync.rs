@@ -74,7 +74,7 @@ impl Block for ZeroCrossing {
             return Ok(BlockRet::Noop);
         }
         let mut o = self.dst.write_buf()?;
-        if o.len() == 0 {
+        if o.is_empty() {
             return Ok(BlockRet::Noop);
         }
         let mut n = 0;
@@ -107,7 +107,7 @@ impl Block for ZeroCrossing {
             }
         }
         input.consume(n);
-        o.produce(opos, &vec![]);
+        o.produce(opos, &[]);
         Ok(BlockRet::Ok)
     }
 }

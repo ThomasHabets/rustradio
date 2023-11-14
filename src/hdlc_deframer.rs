@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn find_simple_frame() -> Result<()> {
         //                12345678123456781234567812345678
-        for bits in vec![
+        for bits in &[
             "01111110010101011110000001111110",
             "0101011111100101010111100000011111100101",
             "01111110011111100101011111100101010111100000011111100101",
@@ -322,8 +322,7 @@ mod tests {
     }
     #[test]
     fn find_simple_frames() -> Result<()> {
-        for bits in vec![
-            // Shared flag.
+        for bits in &[
             "01111110010101011110000001111110010101011010101001111110",
             // One flag each.
             "0111111001010101111000000111111001111110010101011010101001111110",
@@ -345,7 +344,7 @@ mod tests {
     }
     #[test]
     fn bitstuffed1() -> Result<()> {
-        for bits in vec!["01111110111110111110111110101111110"] {
+        for bits in &["01111110111110111110111110101111110"] {
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
@@ -359,7 +358,7 @@ mod tests {
     }
     #[test]
     fn bitstuffed2() -> Result<()> {
-        for bits in vec!["01111110111110111110111110101111110"] {
+        for bits in &["01111110111110111110111110101111110"] {
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
@@ -372,7 +371,7 @@ mod tests {
     }
     #[test]
     fn too_short() -> Result<()> {
-        for bits in vec!["01111110111110111110111110101111110"] {
+        for bits in &["01111110111110111110111110101111110"] {
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 3, 10);
             b.set_checksum(false);
@@ -389,7 +388,7 @@ mod tests {
     }
     #[test]
     fn too_long() -> Result<()> {
-        for bits in vec!["01111110111110111110111110101111110"] {
+        for bits in &["01111110111110111110111110101111110"] {
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 1);
             b.set_checksum(false);
@@ -406,7 +405,7 @@ mod tests {
     }
     #[test]
     fn check_crc() -> Result<()> {
-        for bits in vec!["0111111010101010000010101010111101111110"] {
+        for bits in &["0111111010101010000010101010111101111110"] {
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.work()?;

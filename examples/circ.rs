@@ -26,7 +26,7 @@ fn main() -> Result<()> {
             n += 1;
             println!("w capacity: {:?}", wb.slice().len());
             let l = wb.slice().len();
-            wb.produce(l, &vec![]);
+            wb.produce(l, &[]);
         }
         std::thread::sleep(std::time::Duration::from_millis(1000));
     }

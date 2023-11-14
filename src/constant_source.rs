@@ -36,7 +36,7 @@ where
         let mut o = self.dst.write_buf()?;
         o.slice().fill(self.val);
         let n = o.len();
-        o.produce(n, &vec![]);
+        o.produce(n, &[]);
         Ok(BlockRet::Ok)
     }
 }

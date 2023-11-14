@@ -57,27 +57,25 @@ fn main() -> Result<()> {
         .init()?;
 
     let mut g = Graph::new();
-    let samp_rate = 1024_000.0;
+    let samp_rate = 1_024_000.0;
 
     let prev = if let Some(filename) = opt.filename {
         blehbleh!(g, FileSource::<Complex>::new(&filename, false)?)
+    } else if !cfg!(feature = "rtlsdr") {
+        panic!("RTL SDR feature not enabled")
     } else {
-        if !cfg!(feature = "rtlsdr") {
-            panic!("RTL SDR feature not enabled")
-        } else {
-            // RTL SDR source.
-            #[cfg(feature = "rtlsdr")]
-            {
-                let src = Box::new(RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?);
-                let dec = Box::new(RtlSdrDecode::new(src.out()));
-                let prev = dec.out();
-                g.add(src);
-                g.add(dec);
-                prev
-            }
-            #[cfg(not(feature = "rtlsdr"))]
-            panic!("can't happen, but must be here to compile")
+        // RTL SDR source.
+        #[cfg(feature = "rtlsdr")]
+        {
+            let src = Box::new(RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?);
+            let dec = Box::new(RtlSdrDecode::new(src.out()));
+            let prev = dec.out();
+            g.add(src);
+            g.add(dec);
+            prev
         }
+        #[cfg(not(feature = "rtlsdr"))]
+        panic!("can't happen, but must be here to compile")
     };
 
     // Filter.

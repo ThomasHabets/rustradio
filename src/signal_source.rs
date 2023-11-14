@@ -56,7 +56,7 @@ impl Block for SignalSourceComplex {
         for (to, from) in o.slice().iter_mut().zip(self.take(n)) {
             *to = from;
         }
-        o.produce(n, &vec![]);
+        o.produce(n, &[]);
         Ok(BlockRet::Ok)
     }
 }
