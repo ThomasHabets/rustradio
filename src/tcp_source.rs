@@ -42,9 +42,9 @@ where
         "TcpSource<T>"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut o = self.dst.lock()?;
+        let mut o = self.dst.write_buf()?;
         let size = T::size();
-        let mut buffer = vec![0; o.capacity()];
+        let mut buffer = vec![0; o.len()];
         // TODO: this read blocks.
         let n = self
             .stream
@@ -69,7 +69,9 @@ where
             v.push(T::parse(&buffer[pos..pos + size])?);
         }
         self.buf.extend(&buffer[n - remaining..n]);
-        o.write(v.into_iter());
+        let n = v.len();
+        o.slice()[..n].clone_from_slice(&v);
+        o.produce(n, &[]);
         Ok(BlockRet::Ok)
     }
 }
@@ -78,7 +80,6 @@ where
 mod tests {
     use super::*;
 
-    use std::collections::VecDeque;
     use std::io::Write;
 
     use crate::Float;
@@ -118,17 +119,17 @@ mod tests {
         src.work()?;
         {
             let o = src.out();
-            let res = o.lock().unwrap();
-            let want: VecDeque<Float> = [12345678.91817].into();
-            assert_eq!(*res.data(), want, "first failed");
+            let (res, _) = o.read_buf()?;
+            let want: Vec<Float> = [12345678.91817].into();
+            assert_eq!(res.slice(), want, "first failed");
         }
 
         src.work()?;
         {
             let o = src.out();
-            let res = o.lock().unwrap();
+            let (res, _) = o.read_buf()?;
             assert_eq!(
-                *res.data(),
+                res.slice(),
                 vec![12345678.91817, 91817.12345678],
                 "second failed"
             );
@@ -137,9 +138,9 @@ mod tests {
         src.work()?;
         {
             let o = src.out();
-            let res = o.lock().unwrap();
+            let (res, _) = o.read_buf()?;
             assert_eq!(
-                *res.data(),
+                res.slice(),
                 vec![
                     12345678.91817,
                     91817.12345678,
