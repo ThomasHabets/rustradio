@@ -108,7 +108,7 @@ where
             self.last = cur;
             v.push(*s);
         }
-        o.slice().clone_from_slice(&v);
+        o.slice()[..n].clone_from_slice(&v);
         o.produce(n, &tags);
         input.consume(n);
         trigger.consume(n);
