@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use libc::{c_int, c_uchar, c_void, off_t, size_t};
 use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
+use log::{debug, trace};
 
 use crate::stream::{Tag, TagPos};
 use crate::{Error, Len};
@@ -36,12 +37,7 @@ pub struct Circ {
 }
 
 impl Circ {
-    /// Create a new circular buffer.
-    ///
-    /// TODO:
-    /// * don't leak memory on error.
-    /// * release memory on drop.
-    pub fn new(size: usize) -> Result<Self> {
+    fn create(size: usize) -> Result<Self> {
         let len = size;
         let len2 = len * 2;
         let f = tempfile::tempfile()?;
@@ -59,7 +55,7 @@ impl Circ {
                 0,          // offset
             );
             if buf == MAP_FAILED {
-                panic!();
+                return Err(Error::new("Initial mmap() failed").into());
             }
             buf as *mut c_uchar
         };
@@ -68,7 +64,7 @@ impl Circ {
         unsafe {
             let rc = munmap(second, len);
             if rc != 0 {
-                panic!();
+                panic!("munmap() failed on second half of circular buffer");
             }
         }
         // Map second half.
@@ -82,11 +78,38 @@ impl Circ {
                 0,          // offset
             );
             if buf == MAP_FAILED {
-                panic!();
+                return Err(Error::new("second mmap did not succeed").into());
             }
-            assert_eq!(buf as *const c_void, second);
+            if buf as *const c_void != second {
+                let rc = unsafe { munmap(buf as *const c_void, len) };
+                if rc != 0 {
+                    panic!("munmap() failed on buffer that we *definitely* allocated. Something is seriously broken!");
+                }
+                return Err(Error::new("second mmap did not end up where we wanted it").into());
+            }
         };
         Ok(Self { len: len2, buf })
+    }
+
+    /// Create a new circular buffer.
+    ///
+    /// TODO:
+    /// * don't leak memory on error.
+    /// * release memory on drop.
+    pub fn new(size: usize) -> Result<Self> {
+        for attempt in 0..10 {
+            trace!("Creating circular buffer, attempt {attempt}");
+            match Circ::create(size) {
+                Ok(x) => return Ok(x),
+                Err(e) => {
+                    debug!(
+                        "Failed to create circular buffer in attempt {attempt}: {:?}",
+                        e
+                    );
+                }
+            }
+        }
+        Err(Error::new("failed to allocate circular buffer").into())
     }
     fn full_buffer<T>(&self) -> &mut [T] {
         assert!(self.len % std::mem::size_of::<T>() == 0);
