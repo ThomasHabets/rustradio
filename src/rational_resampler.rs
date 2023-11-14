@@ -67,15 +67,20 @@ impl<T: Copy> Block for RationalResampler<T> {
             return Ok(BlockRet::Noop);
         }
         let mut opos = 0;
-        for s in i.iter().take(n) {
+        let mut taken = 0;
+        'outer: for s in i.iter() {
+            taken += 1;
             self.counter += self.interp;
-            while self.counter >= 0 {
+            while self.counter > 0 {
                 o.slice()[opos] = *s;
-                opos += 1;
                 self.counter -= self.deci;
+                opos += 1;
+                if opos == o.len() {
+                    break 'outer;
+                }
             }
         }
-        i.consume(n);
+        i.consume(taken);
         o.produce(opos, &[]);
         Ok(BlockRet::Ok)
     }
@@ -111,10 +116,10 @@ mod tests {
         runtest(10, 1, 1, 10)?;
         runtest(10, 1, 2, 5)?;
         runtest(10, 2, 1, 20)?;
-        runtest(100, 2, 3, 66)?;
+        runtest(100, 2, 3, 67)?;
         runtest(100, 3, 2, 150)?;
         runtest(100, 300, 200, 150)?;
-        runtest(100, 200000, 1024000, 19)?;
+        runtest(100, 200000, 1024000, 20)?;
         Ok(())
     }
 }
