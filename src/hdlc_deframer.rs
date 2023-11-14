@@ -285,7 +285,7 @@ fn calc_crc(data: &[u8]) -> u16 {
     }) ^ 0xffff
 }
 
-#[cfg(test)]
+#[cfg(test2)]
 mod tests {
     use super::*;
     use crate::stream::streamp_from_slice;

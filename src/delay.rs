@@ -53,26 +53,39 @@ where
         "Delay"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
+        {
+            let mut o = self.dst.write_buf()?;
+            if o.len() == 0 {
+                return Ok(BlockRet::Ok);
+            }
+        }
         if self.current_delay > 0 {
-            let n = std::cmp::min(self.current_delay, self.dst.lock()?.capacity());
+            let mut o = self.dst.write_buf()?;
+            let n = std::cmp::min(self.current_delay, o.len());
             if n == 0 {
                 return Ok(BlockRet::Noop);
             }
-            self.dst.lock()?.write_slice(&vec![T::default(); n]);
+            o.slice()[..n].fill(T::default());
+            o.produce(n, &vec![]);
             self.current_delay -= n;
         }
         {
-            let a = self.src.lock()?.available();
+            let (input, _tags) = self.src.read_buf()?;
+            let a = input.len();
             let n = std::cmp::min(a, self.skip);
             if n == 0 && a == 0 {
                 return Ok(BlockRet::Noop);
             }
-            self.src.lock()?.consume(n);
+            input.consume(n);
             debug!("Delay: skipped {n}");
             self.skip -= n;
         }
-        self.dst.lock()?.write(self.src.lock()?.iter().copied());
-        self.src.lock()?.clear();
+        let mut o = self.dst.write_buf()?;
+        let (input, tags) = self.src.read_buf()?;
+        let n = std::cmp::min(input.len(), o.len());
+        o.slice()[..n].clone_from_slice(input.slice());
+        o.produce(n, &tags);
+        input.consume(n);
         Ok(BlockRet::Ok)
     }
 }
@@ -82,6 +95,8 @@ mod tests {
     use super::*;
     use crate::stream::streamp_from_slice;
 
+    // TODO: test tag propagation.
+
     #[test]
     fn delay_zero() -> Result<()> {
         let s = streamp_from_slice(&[1.0f32, 2.0, 3.0]);
@@ -89,8 +104,8 @@ mod tests {
 
         delay.work()?;
         let o = delay.out();
-        let res = o.lock().unwrap();
-        assert_eq!(*res.data(), vec![1.0f32, 2.0, 3.0]);
+        let (res, _) = o.read_buf()?;
+        assert_eq!(res.slice(), vec![1.0f32, 2.0, 3.0]);
         Ok(())
     }
 
@@ -101,8 +116,8 @@ mod tests {
 
         delay.work()?;
         let o = delay.out();
-        let res = o.lock().unwrap();
-        assert_eq!(*res.data(), vec![0.0f32, 1.0, 2.0, 3.0]);
+        let (res, _) = o.read_buf()?;
+        assert_eq!(res.slice(), vec![0.0f32, 1.0, 2.0, 3.0]);
         Ok(())
     }
 
@@ -114,38 +129,50 @@ mod tests {
         delay.work()?;
         {
             let o = delay.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![0, 1, 2]);
+            let (res, _) = o.read_buf()?;
+            assert_eq!(res.slice(), vec![0, 1, 2]);
         }
 
         // 3,4 => 0,3,4
-        s.lock().unwrap().write([3, 4]);
+        {
+            let mut b = s.write_buf()?;
+            b.slice()[..2].clone_from_slice(&[3, 4]);
+            b.produce(2, &vec![]);
+        }
         delay.set_delay(2);
         delay.work()?;
         {
             let o = delay.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![0, 1, 2, 0, 3, 4]);
+            let (res, _) = o.read_buf()?;
+            assert_eq!(res.slice(), vec![0, 1, 2, 0, 3, 4]);
         }
 
         // 5,6 => 0,3,4
-        s.lock().unwrap().write([5, 6]);
+        {
+            let mut b = s.write_buf()?;
+            b.slice()[..2].clone_from_slice(&[5, 6]);
+            b.produce(2, &vec![]);
+        }
         delay.set_delay(0);
         delay.work()?;
         {
             let o = delay.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![0, 1, 2, 0, 3, 4]);
+            let (res, _) = o.read_buf()?;
+            assert_eq!(res.slice(), vec![0, 1, 2, 0, 3, 4]);
         }
 
         // 7 => 7
-        s.lock().unwrap().write([7]);
+        {
+            let mut b = s.write_buf()?;
+            b.slice()[0] = 7;
+            b.produce(1, &vec![]);
+        }
         delay.set_delay(0);
         delay.work()?;
         {
             let o = delay.out();
-            let res = o.lock().unwrap();
-            assert_eq!(*res.data(), vec![0, 1, 2, 0, 3, 4, 7]);
+            let (res, _) = o.read_buf()?;
+            assert_eq!(res.slice(), vec![0, 1, 2, 0, 3, 4, 7]);
         }
         Ok(())
     }
