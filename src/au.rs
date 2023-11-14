@@ -122,16 +122,20 @@ impl Block for AuEncode {
         let ss = std::mem::size_of::<S>();
 
         let (i, _tags) = self.src.read_buf()?;
+        if i.is_empty() {
+            return Ok(BlockRet::Noop);
+        }
         let n = std::cmp::min(i.len(), o.len() / ss);
         if n == 0 {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::Ok);
         }
 
         for j in 0..n {
             let val = (i.slice()[j] * scale) as S;
             o.slice()[j * ss..(j + 1) * ss].clone_from_slice(&val.to_be_bytes());
         }
-        o.produce(n, &[]);
+        i.consume(n);
+        o.produce(n * ss, &[]);
         Ok(BlockRet::Ok)
     }
 }
