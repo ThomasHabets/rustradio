@@ -79,7 +79,7 @@ where
     }
 
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let (input, tags) = self.src.read_buf()?;
+        let (input, mut tags) = self.src.read_buf()?;
         let (trigger, _) = self.trigger.read_buf()?;
         let mut o = self.dst.write_buf()?;
         let n = std::cmp::min(input.len(), trigger.len());
@@ -92,7 +92,6 @@ where
         }
 
         let mut v = Vec::with_capacity(input.len());
-        let mut tags = Vec::new();
         for (i, (s, tv)) in input.iter().zip(trigger.iter()).enumerate().take(n) {
             let cur = *tv > self.threshold;
             if cur != self.last {
