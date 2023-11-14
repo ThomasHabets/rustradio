@@ -30,29 +30,30 @@ impl Block for RtlSdrDecode {
         "RtlSdrDecode"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let mut input = self.src.lock().unwrap();
-        let samples = input.available() - input.available() % 2;
-        if samples == 0 {
+        // TODO: handle tags.
+        let (input, _tags) = self.src.read_buf()?;
+        let isamples = input.len() - input.len() % 2;
+        let osamples = isamples / 2;
+        if isamples == 0 {
             return Ok(BlockRet::Noop);
         }
-        let mut out = self.dst.lock().unwrap();
+        let mut out = self.dst.write_buf()?;
 
         // TODO: needless copy.
-        let buf: Vec<u8> = input.data().clone().into();
-        let buf = &buf[..samples];
-        out.write_slice(
-            (0..samples)
+        out.slice()[..osamples].clone_from_slice(
+            (0..isamples)
                 .step_by(2)
                 .map(|e| {
                     Complex::new(
-                        ((buf[e] as Float) - 127.0) * 0.008,
-                        ((buf[e + 1] as Float) - 127.0) * 0.008,
+                        ((input[e] as Float) - 127.0) * 0.008,
+                        ((input[e + 1] as Float) - 127.0) * 0.008,
                     )
                 })
                 .collect::<Vec<Complex>>()
                 .as_slice(),
         );
-        input.consume(samples);
+        input.consume(isamples);
+        out.produce(osamples, &vec![]);
         Ok(BlockRet::Ok)
     }
 }

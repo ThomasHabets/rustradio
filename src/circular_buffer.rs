@@ -181,6 +181,14 @@ impl<'a, T: Copy> BufferReader<'a, T> {
     }
 }
 
+impl<T: Copy> std::ops::Index<usize> for BufferReader<'_, T> {
+    type Output = T;
+
+    fn index(&self, n: usize) -> &Self::Output {
+        &self.slice[n]
+    }
+}
+
 impl<T: Copy> Drop for BufferReader<'_, T> {
     fn drop(&mut self) {
         self.parent.return_read_buf();

@@ -23,7 +23,7 @@ pub use crate::null_sink::NullSink;
 pub use crate::pdu_writer::PduWriter;
 pub use crate::quadrature_demod::QuadratureDemod;
 pub use crate::rational_resampler::RationalResampler;
-// pub use crate::rtlsdr_decode::RtlSdrDecode;
+pub use crate::rtlsdr_decode::RtlSdrDecode;
 pub use crate::signal_source::SignalSourceComplex;
 pub use crate::single_pole_iir_filter::SinglePoleIIRFilter;
 pub use crate::stream_to_pdu::StreamToPdu;
