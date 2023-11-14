@@ -12,80 +12,10 @@ This implementation is a pretty inefficient.
 [wiki]: https://en.wikipedia.org/wiki/Hilbert_transform
 */
 
-use std::collections::VecDeque;
-
 use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
 use crate::stream::{new_streamp, Streamp};
 use crate::{Complex, Error, Float};
-
-trait IndexLen: std::ops::Index<usize, Output = Float> {
-    fn len(&self) -> usize;
-    fn extend_into(&self, v: &mut Vec<Float>);
-}
-
-impl IndexLen for Vec<Float> {
-    fn len(&self) -> usize {
-        Vec::<Float>::len(self)
-    }
-    fn extend_into(&self, v: &mut Vec<Float>) {
-        v.extend(self);
-    }
-}
-impl IndexLen for VecDeque<Float> {
-    fn len(&self) -> usize {
-        VecDeque::<Float>::len(self)
-    }
-    fn extend_into(&self, v: &mut Vec<Float>) {
-        v.extend(self);
-    }
-}
-
-struct StackedVec<'a> {
-    vecs: Vec<&'a dyn IndexLen>,
-}
-
-impl<'a> StackedVec<'a> {
-    fn new() -> Self {
-        Self { vecs: Vec::new() }
-    }
-    fn len(&self) -> usize {
-        self.vecs.iter().map(|x| x.len()).sum()
-    }
-    fn collect(&self) -> Vec<Float> {
-        let mut t = Vec::with_capacity(self.len());
-        for v in &self.vecs {
-            v.extend_into(&mut t);
-        }
-        t
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn stack_one() {
-        let v = vec![0.1, 1.0, 2.0];
-        let mut stack = StackedVec::new();
-        stack.vecs.push(&v);
-        assert_eq!(stack[0], 0.1);
-    }
-}
-
-impl<'a> std::ops::Index<usize> for StackedVec<'a> {
-    type Output = Float;
-    fn index(&self, n: usize) -> &Float {
-        let mut n = n;
-        for cont in &self.vecs {
-            if n < cont.len() {
-                return &cont[n];
-            }
-            n -= cont.len();
-        }
-        panic!("Failed to index into stacked");
-    }
-}
 
 /// Hilbert transformer block.
 pub struct Hilbert {
@@ -129,31 +59,26 @@ impl Block for Hilbert {
         if o.len() == 0 {
             return Ok(BlockRet::Ok);
         }
-        let mut stack = StackedVec::new();
-        stack.vecs.push(&self.history);
-        // TODO: needless copy.
-        let t = i.slice().iter().take(o.len()).copied().collect::<Vec<_>>();
-        stack.vecs.push(&t);
 
-        let len = stack.len();
-
-        // TODO: remove copy.
-        let iv = stack.collect();
-
+        let inout = std::cmp::min(i.len(), o.len());
+        let len = self.history.len() + inout;
         let n = len - self.ntaps;
+
+        // TODO: Probably needless copy.
+        let mut iv = Vec::with_capacity(len);
+        iv.extend(&self.history);
+        iv.extend(i.iter().take(inout).copied());
+
+        // I tried a couple of variations of this loop, and this was
+        // the fastest on my laptop.
         for i in 0..n {
             let t = &iv[i..(i + self.ntaps)];
             o.slice()[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t));
         }
+
         o.produce(n, &tags);
 
-        // TODO: use fancy chained iterator.
-        let mut newhist = Vec::with_capacity(self.ntaps);
-        for i in n..len {
-            //self.history.extend(stack.iter().skip(len-self.ntaps));
-            newhist.push(stack[i]);
-        }
-        self.history = newhist;
+        self.history[..self.ntaps].clone_from_slice(&iv[n..len]);
         i.consume(n);
         Ok(BlockRet::Ok)
     }
