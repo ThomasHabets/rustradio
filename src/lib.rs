@@ -281,6 +281,7 @@ impl Sample for u32 {
 }
 
 /// Trivial trait for types that have .len().
+#[allow(clippy::len_without_is_empty)]
 pub trait Len {
     /// Get the length.
     fn len(&self) -> usize;

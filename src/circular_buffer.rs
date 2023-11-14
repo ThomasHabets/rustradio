@@ -113,11 +113,19 @@ impl Circ {
         }
         Err(Error::new("failed to allocate circular buffer").into())
     }
-    fn full_buffer<T>(&self) -> &mut [T] {
+
+    // I'm pretty sure this is a safe error to suppress. Clippy is not
+    // wrong, it's scary. But this whole thing is scary unsafe.
+    //
+    // Possibly the compiler sees something UB, and breaks things with
+    // a strange optimization, but let's hope not. :-)
+    #[allow(clippy::mut_from_ref)]
+    fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         assert!(self.len % std::mem::size_of::<T>() == 0);
-        unsafe {
+        let buf = unsafe {
             std::slice::from_raw_parts_mut(self.buf as *mut T, self.len / std::mem::size_of::<T>())
-        }
+        };
+        &mut buf[start..end]
     }
 }
 
@@ -368,8 +376,8 @@ impl<T: Copy> Buffer<T> {
             return Err(Error::new("read buf already borrowed").into());
         }
         s.read_borrow = true;
-        let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.read_range();
+        let buf = self.circ.full_buffer::<T>(start, end);
         let mut tags = Vec::new();
 
         // TODO: range scan the tags.
@@ -398,7 +406,7 @@ impl<T: Copy> Buffer<T> {
         }
         tags.sort_by_key(|a| a.pos());
         Ok((
-            BufferReader::new(unsafe { std::mem::transmute(&buf[start..end]) }, self),
+            BufferReader::new(unsafe { std::mem::transmute(buf) }, self),
             tags,
         ))
     }
@@ -410,12 +418,9 @@ impl<T: Copy> Buffer<T> {
             return Err(Error::new("write buf already borrowed").into());
         }
         s.write_borrow = true;
-        let buf = self.circ.full_buffer::<T>();
         let (start, end) = s.write_range();
-        Ok(BufferWriter::new(
-            unsafe { std::mem::transmute(&mut buf[start..end]) },
-            self,
-        ))
+        let buf = self.circ.full_buffer::<T>(start, end);
+        Ok(BufferWriter::new(unsafe { std::mem::transmute(buf) }, self))
     }
 }
 
