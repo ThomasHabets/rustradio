@@ -81,10 +81,10 @@ where
         let mut out = self.dst.write_buf()?;
         let n = std::cmp::min(input.len(), out.len());
         if n > self.ntaps {
-            // TODO: needless copy.
             let v = self.fir.filter_n(&input.slice()[..n]);
-            input.consume(v.len());
-            out.slice().clone_from_slice(&v);
+            let n = v.len();
+            input.consume(n);
+            out.slice()[..n].clone_from_slice(&v);
             out.produce(n, &tags);
         }
         Ok(BlockRet::Ok)
