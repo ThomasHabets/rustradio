@@ -9,8 +9,8 @@ fn main() -> Result<()> {
 
     let b2 = b.clone();
     std::thread::spawn(move || loop {
-        let rb = b2.read_buf().unwrap();
-        assert!(matches![b2.read_buf(), None]);
+        let (rb, _) = b2.read_buf().unwrap();
+        assert!(matches![b2.read_buf(), Err(_)]);
         println!("read buf: {:?}", rb.slice());
         let l = rb.slice().len();
         rb.consume(l);
@@ -20,13 +20,13 @@ fn main() -> Result<()> {
     let mut n = 0;
     loop {
         let mut wb = b.write_buf().unwrap();
-        assert!(matches![b.write_buf(), None]);
+        assert!(matches![b.write_buf(), Err(_)]);
         if !wb.slice().is_empty() {
             wb.slice()[0] = n;
             n += 1;
             println!("w capacity: {:?}", wb.slice().len());
             let l = wb.slice().len();
-            wb.produce(l);
+            wb.produce(l, &vec![]);
         }
         std::thread::sleep(std::time::Duration::from_millis(1000));
     }
