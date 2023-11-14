@@ -36,7 +36,7 @@ impl<T: Copy> Block for VecToStream<T> {
             Some(x) => x,
         };
         let mut o = self.dst.write_buf()?;
-        if n < o.len() {
+        if n > o.len() {
             return Ok(BlockRet::Ok);
         }
         let v = self
