@@ -112,7 +112,7 @@ pub mod binary_slicer;
 pub mod burst_tagger;
 pub mod complex_to_mag2;
 pub mod constant_source;
-// pub mod convert;
+pub mod convert;
 pub mod debug_sink;
 pub mod delay;
 pub mod descrambler;

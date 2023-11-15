@@ -241,6 +241,16 @@ impl<'a, T: Copy> BufferWriter<'a, T> {
         self.slice
     }
 
+    /// Shortcut to save typing for the common operation of copying
+    /// from an iterator.
+    ///
+    /// Hence the new name.
+    pub fn copy_from_iter(&mut self, src: impl Iterator<Item = T>) {
+        for (place, item) in self.slice.iter_mut().zip(src) {
+            *place = item;
+        }
+    }
+
     /// Having written into the write buffer, now tell the buffer
     /// we're done. Also here are the tags, with positions relative to
     /// start of buffer.
