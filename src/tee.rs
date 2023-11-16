@@ -41,8 +41,8 @@ impl<T: Copy> Block for Tee<T> {
         }
         let n = std::cmp::min(i.len(), o1.len());
         let n = std::cmp::min(n, o2.len());
-        o1.slice()[..n].clone_from_slice(&i.slice()[..n]);
-        o2.slice()[..n].clone_from_slice(&i.slice()[..n]);
+        o1.fill_from_slice(&i.slice()[..n]);
+        o2.fill_from_slice(&i.slice()[..n]);
         o1.produce(n, &tags);
         o2.produce(n, &tags);
         i.consume(n);

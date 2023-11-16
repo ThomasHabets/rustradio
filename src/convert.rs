@@ -69,7 +69,7 @@ impl Block for FloatToComplex {
         }
         let mut o = self.dst.write_buf()?;
         let n = std::cmp::min(n, o.len());
-        o.copy_from_iter(
+        o.fill_from_iter(
             a.iter()
                 .zip(b.iter())
                 .take(n)

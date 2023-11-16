@@ -123,7 +123,7 @@ impl Block for RtlSdrSource {
         }
         if !self.buf.is_empty() {
             let n = std::cmp::min(o.len(), self.buf.len());
-            o.slice()[..n].clone_from_slice(&self.buf[..n]);
+            o.fill_from_slice(&self.buf[..n]);
             self.buf.drain(0..n);
             o.produce(n, &[]);
             return Ok(BlockRet::Ok);
@@ -133,7 +133,7 @@ impl Block for RtlSdrSource {
             Err(other) => Err(other.into()),
             Ok(buf) => {
                 let n = std::cmp::min(o.len(), buf.len());
-                o.slice()[..n].clone_from_slice(&buf[..n]);
+                o.fill_from_slice(&buf[..n]);
                 self.buf.extend(&buf[n..]);
                 o.produce(n, &[]);
                 Ok(BlockRet::Ok)

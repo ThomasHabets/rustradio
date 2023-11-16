@@ -167,7 +167,7 @@ impl Block for FftFilter {
 
             // Output.
             // TODO: needless copy.
-            o.slice()[..self.nsamples].clone_from_slice(&filtered[..self.nsamples]);
+            o.fill_from_slice(&filtered[..self.nsamples]);
             o.produce(self.nsamples, &[]);
             produced = true;
 

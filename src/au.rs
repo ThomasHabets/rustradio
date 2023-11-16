@@ -107,7 +107,7 @@ impl Block for AuEncode {
         let mut o = self.dst.write_buf()?;
         if let Some(h) = &self.header {
             let n = std::cmp::min(h.len(), o.len());
-            o.slice()[..n].clone_from_slice(&h[..n]);
+            o.fill_from_slice(&h[..n]);
             o.produce(n, &[]);
             self.header.as_mut().unwrap().drain(0..n);
             if self.header.as_ref().unwrap().is_empty() {
@@ -233,7 +233,7 @@ impl Block for AuDecode {
                         (i16::from_be_bytes(bytes) as Float) / 32767.0
                     })
                     .collect::<Vec<Float>>();
-                o.slice()[..(n / 2)].clone_from_slice(&v);
+                o.fill_from_iter(v);
                 o.produce(n / 2, &[]);
                 i.consume(n);
             }

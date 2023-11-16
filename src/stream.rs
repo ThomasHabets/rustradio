@@ -111,7 +111,7 @@ impl<T: Copy> Stream<T> {
     pub fn from_slice(data: &[T]) -> Self {
         let circ = circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(); // TODO
         let mut wb = circ.write_buf().unwrap();
-        wb.slice()[..data.len()].clone_from_slice(data);
+        wb.fill_from_slice(data);
         wb.produce(data.len(), &[]);
         Self { circ }
     }

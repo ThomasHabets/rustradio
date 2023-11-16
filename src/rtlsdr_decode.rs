@@ -40,18 +40,12 @@ impl Block for RtlSdrDecode {
         let mut out = self.dst.write_buf()?;
 
         // TODO: needless copy.
-        out.slice()[..osamples].clone_from_slice(
-            (0..isamples)
-                .step_by(2)
-                .map(|e| {
-                    Complex::new(
-                        ((input[e] as Float) - 127.0) * 0.008,
-                        ((input[e + 1] as Float) - 127.0) * 0.008,
-                    )
-                })
-                .collect::<Vec<Complex>>()
-                .as_slice(),
-        );
+        out.fill_from_iter((0..isamples).step_by(2).map(|e| {
+            Complex::new(
+                ((input[e] as Float) - 127.0) * 0.008,
+                ((input[e + 1] as Float) - 127.0) * 0.008,
+            )
+        }));
         input.consume(isamples);
         out.produce(osamples, &[]);
         Ok(BlockRet::Ok)

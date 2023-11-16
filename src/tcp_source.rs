@@ -70,7 +70,7 @@ where
         }
         self.buf.extend(&buffer[n - remaining..n]);
         let n = v.len();
-        o.slice()[..n].clone_from_slice(&v);
+        o.fill_from_iter(v);
         o.produce(n, &[]);
         Ok(BlockRet::Ok)
     }

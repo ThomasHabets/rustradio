@@ -84,7 +84,7 @@ where
             let v = self.fir.filter_n(&input.slice()[..n]);
             let n = v.len();
             input.consume(n);
-            out.slice()[..n].clone_from_slice(&v);
+            out.fill_from_iter(v);
             out.produce(n, &tags);
         }
         Ok(BlockRet::Ok)

@@ -113,7 +113,7 @@ where
         }
         let mut os = self.dst.write_buf()?;
         let n = std::cmp::min(os.len(), self.data.len() - self.pos);
-        os.slice()[..n].clone_from_slice(&self.data[self.pos..(self.pos + n)]);
+        os.fill_from_slice(&self.data[self.pos..(self.pos + n)]);
         os.produce(n, &tags);
 
         self.pos += n;

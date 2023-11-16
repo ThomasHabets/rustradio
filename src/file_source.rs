@@ -68,11 +68,10 @@ where
             }
             if self.buf.is_empty() && (n % sample_size) == 0 {
                 // Fast path when reading only whole samples.
-                o.slice().clone_from_slice(
-                    &buffer
+                o.fill_from_iter(
+                    buffer
                         .chunks_exact(sample_size)
-                        .map(|d| T::parse(d).unwrap())
-                        .collect::<Vec<_>>(),
+                        .map(|d| T::parse(d).unwrap()),
                 );
                 trace!("FileSource: Produced {} in fast path", n / sample_size);
                 o.produce(n / sample_size, &[]);
@@ -93,9 +92,10 @@ where
             .map(|d| T::parse(d))
             .collect::<Result<Vec<_>>>()?;
         self.buf.drain(0..(have * sample_size));
-        o.slice().clone_from_slice(&v);
-        trace!("FileSource: Produced {}", v.len());
-        o.produce(v.len(), &[]);
+        let n = v.len();
+        o.fill_from_iter(v);
+        trace!("FileSource: Produced {}", n);
+        o.produce(n, &[]);
         Ok(BlockRet::Ok)
     }
 }

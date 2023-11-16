@@ -83,7 +83,7 @@ where
         let mut o = self.dst.write_buf()?;
         let (input, tags) = self.src.read_buf()?;
         let n = std::cmp::min(input.len(), o.len());
-        o.slice()[..n].clone_from_slice(input.slice());
+        o.fill_from_slice(input.slice());
         o.produce(n, &tags);
         input.consume(n);
         Ok(BlockRet::Ok)
@@ -136,7 +136,7 @@ mod tests {
         // 3,4 => 0,3,4
         {
             let mut b = s.write_buf()?;
-            b.slice()[..2].clone_from_slice(&[3, 4]);
+            b.fill_from_slice(&[3, 4]);
             b.produce(2, &[]);
         }
         delay.set_delay(2);
@@ -150,7 +150,7 @@ mod tests {
         // 5,6 => 0,3,4
         {
             let mut b = s.write_buf()?;
-            b.slice()[..2].clone_from_slice(&[5, 6]);
+            b.fill_from_slice(&[5, 6]);
             b.produce(2, &[]);
         }
         delay.set_delay(0);
