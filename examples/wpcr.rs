@@ -124,6 +124,13 @@ fn main() -> Result<()> {
     g.add(Box::new(PduWriter::new(prev, opt.output)));
 
     // Run.
+    let cancel = g.cancel_token();
+    ctrlc::set_handler(move || {
+        eprintln!("Received Ctrl+C!");
+        cancel.cancel();
+    })
+    .expect("Error setting Ctrl-C handler");
+
     let st = std::time::Instant::now();
     g.run()?;
     eprintln!("{}", g.generate_stats(st.elapsed()));
