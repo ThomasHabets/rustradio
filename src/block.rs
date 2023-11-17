@@ -15,7 +15,8 @@ This will let the scheduler know if more data could come out of this block, or i
 it should just never bother calling it again.
 
 TODO: Add state for "don't call me unless there's more input".
-*/
+ */
+#[derive(Debug, Clone)]
 pub enum BlockRet {
     /// The normal return. More data may be produced only if more data
     /// comes in.
@@ -37,6 +38,9 @@ pub enum BlockRet {
     /// * reading from file, without repeating, and file reached EOF.
     /// * Head block reached its max.
     EOF,
+
+    /// Internal state for two-phase done detection.
+    InternalAwaiting,
 }
 
 /**

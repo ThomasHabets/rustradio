@@ -78,6 +78,9 @@ impl Graph {
                     }
                     BlockRet::Noop => {}
                     BlockRet::EOF => {}
+                    BlockRet::InternalAwaiting => {
+                        panic!("blocks must never return InternalAwaiting")
+                    }
                 };
             }
             if done {

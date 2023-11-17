@@ -148,6 +148,7 @@ pub mod block;
 pub mod blocks;
 pub mod circular_buffer;
 pub mod graph;
+pub mod mtgraph;
 pub mod stream;
 
 /// Float type used. Usually f32, but not guaranteed.
