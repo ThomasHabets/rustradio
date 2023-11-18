@@ -29,7 +29,7 @@ let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
  */
 use std::collections::HashMap;
 
-use log::{info, trace};
+use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp, Tag, TagPos, TagValue};
@@ -101,7 +101,7 @@ where
             if let Some(0) = self.endcounter {
                 let mut delme = Vec::with_capacity(self.max_size);
                 std::mem::swap(&mut delme, &mut self.buf);
-                info!(
+                debug!(
                     "StreamToPdu> got burst of size {} samples, {} bytes",
                     delme.len(),
                     delme.len() * T::size()
