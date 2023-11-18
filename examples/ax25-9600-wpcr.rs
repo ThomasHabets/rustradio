@@ -110,8 +110,8 @@ fn main() -> Result<()> {
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
     // Filter.
-    let taps = rustradio::fir::low_pass(samp_rate, 16000.0, 100.0);
-    let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
+    //let taps = rustradio::fir::low_pass(samp_rate, 16000.0, 100.0);
+    //let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
     // Tag burst.
     let prev = add_block![
