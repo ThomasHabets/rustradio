@@ -162,13 +162,13 @@ impl HdlcDeframer {
                 bits.truncate(bits.len() - 7);
 
                 if bits.len() % 8 != 0 {
-                    debug!(
+                    trace!(
                         "HdlcDeframer: Packet len not multiple of 8: {} {:?}",
                         bits.len(),
                         bits
                     );
                 } else if bits.len() / 8 < self.min_size {
-                    debug!("Packet too short: {} < {}", bits.len() / 8, self.min_size);
+                    trace!("Packet too short: {} < {}", bits.len() / 8, self.min_size);
                 } else {
                     let bytes: Vec<u8> = (0..bits.len())
                         .step_by(8)
