@@ -1,0 +1,141 @@
+options:
+  parameters:
+    author: Thomas Habets <thomas@habets.se>
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: ''
+    copyright: ''
+    description: ''
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: no_gui
+    hier_block_src_path: '.:'
+    id: grsat_decode
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: grsat_decode
+    window_size: (1000,1000)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    rotation: 0
+    state: enabled
+
+blocks:
+- name: baud
+  id: variable
+  parameters:
+    comment: ''
+    value: '9600'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [312, 12.0]
+    rotation: 0
+    state: true
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: '50000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [208, 12.0]
+    rotation: 0
+    state: true
+- name: blocks_file_source_0
+  id: blocks_file_source
+  parameters:
+    affinity: ''
+    alias: ''
+    begin_tag: pmt.PMT_NIL
+    comment: ''
+    file: aprs_capture_test1.c32
+    length: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    offset: '0'
+    repeat: 'False'
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [48, 156.0]
+    rotation: 0
+    state: enabled
+- name: blocks_message_debug_0
+  id: blocks_message_debug
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    en_uvec: 'True'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [784, 192.0]
+    rotation: 0
+    state: true
+- name: satellites_ax25_deframer_0
+  id: satellites_ax25_deframer
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    g3ruh_scrambler: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    options: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [504, 188.0]
+    rotation: 0
+    state: true
+- name: satellites_fsk_demodulator_0
+  id: satellites_fsk_demodulator
+  parameters:
+    affinity: ''
+    alias: ''
+    baudrate: baud
+    comment: ''
+    iq: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    options: '""'
+    samp_rate: samp_rate
+    subaudio: 'False'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [296, 172.0]
+    rotation: 0
+    state: true
+
+connections:
+- [blocks_file_source_0, '0', satellites_fsk_demodulator_0, '0']
+- [satellites_ax25_deframer_0, out, blocks_message_debug_0, print]
+- [satellites_fsk_demodulator_0, '0', satellites_ax25_deframer_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.6.0
