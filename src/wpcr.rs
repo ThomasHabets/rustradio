@@ -35,7 +35,7 @@ Drawbacks of this method:
 [nrz]: https://en.wikipedia.org/wiki/Non-return-to-zero
 [video]: https://youtu.be/rQkBDMeODHc
  */
-use log::{debug, warn};
+use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp, Tag, TagValue};
@@ -170,7 +170,7 @@ impl Wpcr {
         let bin = match find_best_bin(&d) {
             Some(bin) => bin,
             None => {
-                eprintln!("No best bin");
+                trace!("No best bin found, giving up on burst");
                 return None;
             }
         };
