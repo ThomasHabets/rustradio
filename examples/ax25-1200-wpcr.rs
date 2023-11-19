@@ -143,6 +143,6 @@ fn main() -> Result<()> {
 }
 /* ---- Emacs variables ----
  * Local variables:
- * compile-command: "cargo run --example wpcr -- -r ../aprs-50k.c32 -o ../packets"
+ * compile-command: "cargo run --example ax25-1200-wpcr -- -r ../aprs-50k.c32 -o ../packets"
  * End:
  */
