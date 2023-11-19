@@ -11,12 +11,19 @@ $ ./ax25-1200-rx --rtlsdr -o captured -v 2
 […]
 ```
 
-I should run this against <http://wa8lmf.net/TNCtest/index.htm>, and
-read
-<https://github.com/wb2osz/direwolf/raw/master/doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf>
-https://github.com/wb2osz/direwolf/raw/master/doc/WA8LMF-TNC-Test-CD-Results.pdf
-https://www.febo.com/packet/layer-one/transmit.html
-https://www.febo.com/packet/layer-one/receive.html
+Test recordings for this code are at
+<http://wa8lmf.net/TNCtest/index.htm>. Note that track 2 should not
+be used, as it's incorrectly de-emphasized.
+
+As of 2023-11-19 this code scores 746.
+
+## Other useful links.
+
+* <https://github.com/wb2osz/direwolf/raw/master/doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf>
+* <https://github.com/wb2osz/direwolf/raw/master/doc/WA8LMF-TNC-Test-CD-Results.pdf>
+* <https://github.com/wb2osz/direwolf/blob/master/doc/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf>
+* <https://www.febo.com/packet/layer-one/transmit.html>
+* <https://www.febo.com/packet/layer-one/receive.html>
 
 */
 use std::path::PathBuf;
