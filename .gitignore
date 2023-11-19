@@ -11,3 +11,4 @@ attic/
 *.au
 /packets
 cd/
+examples/gr/*.py
