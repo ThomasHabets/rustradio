@@ -3,6 +3,11 @@
 This is the same as ax25-1200-rx.rs, except it has fewer options
 (e.g. only supports reading from a file), and uses WPCR instead of
 ZeroCrossing symbol sync.
+
+Ideally this should be tested using [the standard test CD][cd], but we
+need the raw I/Q for burst detection. Just the audio won't do.
+
+[cd]: http://wa8lmf.net/TNCtest/index.htm
  */
 use std::path::PathBuf;
 
