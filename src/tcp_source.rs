@@ -54,8 +54,7 @@ where
             warn!("TCP connection closed?");
             return Ok(BlockRet::EOF);
         }
-        let mut v = Vec::new();
-        v.reserve(n / size + 1);
+        let mut v = Vec::with_capacity(n / size + 1);
 
         let mut steal = 0;
         if !self.buf.is_empty() {
