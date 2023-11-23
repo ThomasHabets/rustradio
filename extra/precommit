@@ -17,8 +17,8 @@ cargo +nightly bench --no-run -F rtlsdr || {
     exit 1
 }
 
-# TODO: maybe add --alltargets
-cargo clippy -- -D warnings || {
+# TODO: maybe add --all-targets
+cargo +nightly clippy -- -D warnings || {
     echo "Clippy fail" >&2
     exit 1
 }

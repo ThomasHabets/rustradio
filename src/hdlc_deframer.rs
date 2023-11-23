@@ -316,7 +316,7 @@ mod tests {
             let o = b.out();
             let res = o.pop().unwrap();
             assert_eq!(res, vec![0xaa, 0x7]);
-            assert!(matches![o.pop(), None]);
+            assert!(o.pop().is_none());
         }
         Ok(())
     }
@@ -338,13 +338,14 @@ mod tests {
             let o = b.out();
             assert_eq!(o.pop().unwrap(), vec![0xaa, 0x7]);
             assert_eq!(o.pop().unwrap(), vec![0xaa, 0x55]);
-            assert!(matches![o.pop(), None]);
+            assert!(o.pop().is_none());
         }
         Ok(())
     }
     #[test]
     fn bitstuffed1() -> Result<()> {
-        for bits in &["01111110111110111110111110101111110"] {
+        {
+            let bits = &"01111110111110111110111110101111110";
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
@@ -352,13 +353,14 @@ mod tests {
             let o = b.out();
             let res = o.pop().unwrap();
             assert_eq!(res, vec![0xff, 0xff]);
-            assert!(matches![o.pop(), None]);
+            assert!(o.pop().is_none());
         }
         Ok(())
     }
     #[test]
     fn bitstuffed2() -> Result<()> {
-        for bits in &["01111110111110111110111110101111110"] {
+        {
+            let bits = &"01111110111110111110111110101111110";
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
@@ -371,48 +373,43 @@ mod tests {
     }
     #[test]
     fn too_short() -> Result<()> {
-        for bits in &["01111110111110111110111110101111110"] {
+        {
+            let bits = &"01111110111110111110111110101111110";
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 3, 10);
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
             let res = o.pop();
-            assert!(
-                matches![res, None],
-                "expected to discard short packet: {:?}",
-                res
-            );
+            assert!(res.is_none(), "expected to discard short packet: {:?}", res);
         }
         Ok(())
     }
     #[test]
     fn too_long() -> Result<()> {
-        for bits in &["01111110111110111110111110101111110"] {
+        {
+            let bits = &"01111110111110111110111110101111110";
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 1);
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
             let res = o.pop();
-            assert!(
-                matches![res, None],
-                "expected to discard long packet: {:?}",
-                res
-            );
+            assert!(res.is_none(), "expected to discard long packet: {:?}", res);
         }
         Ok(())
     }
     #[test]
     fn check_crc() -> Result<()> {
-        for bits in &["0111111010101010000010101010111101111110"] {
+        {
+            let bits = &"0111111010101010000010101010111101111110";
             let s = streamp_from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.work()?;
             let o = b.out();
             let res = o.pop().unwrap();
             assert_eq!(res, vec![0x55]);
-            assert!(matches![o.pop(), None]);
+            assert!(o.pop().is_none());
         }
         Ok(())
     }

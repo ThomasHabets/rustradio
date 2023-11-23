@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     let b2 = b.clone();
     std::thread::spawn(move || loop {
         let (rb, _) = b2.read_buf().unwrap();
-        assert!(matches![b2.read_buf(), Err(_)]);
+        assert!(b2.read_buf().is_err());
         println!("read buf: {:?}", rb.slice());
         let l = rb.slice().len();
         rb.consume(l);
@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     let mut n = 0;
     loop {
         let mut wb = b.write_buf().unwrap();
-        assert!(matches![b.write_buf(), Err(_)]);
+        assert!(b.write_buf().is_err());
         if !wb.slice().is_empty() {
             wb.slice()[0] = n;
             n += 1;

@@ -471,12 +471,12 @@ mod tests {
         let b = Arc::new(Buffer::<u8>::new(4096)?);
         {
             let _i1 = b.read_buf()?;
-            assert!(matches![b.read_buf(), Err(_)]);
+            assert!(b.read_buf().is_err());
         }
         let _i2 = b.read_buf()?;
         {
             let _w1 = b.write_buf()?;
-            assert!(matches![b.write_buf(), Err(_)]);
+            assert!(b.write_buf().is_err());
         }
         let _w2 = b.write_buf()?;
         Ok(())

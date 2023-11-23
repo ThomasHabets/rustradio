@@ -88,6 +88,7 @@ mod tests {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
         {
+            #[allow(clippy::approx_constant)]
             let ssrc = streamp_from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
             let mut sink = FileSink::<Float>::new(ssrc, &tmpfn, Mode::Create)?;
             sink.work()?;
@@ -106,6 +107,7 @@ mod tests {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin").display().to_string();
         {
+            #[allow(clippy::approx_constant)]
             let ssrc = streamp_from_slice(&[Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
             let mut sink = FileSink::<Complex>::new(ssrc, &tmpfn, Mode::Create)?;
             sink.work()?;
