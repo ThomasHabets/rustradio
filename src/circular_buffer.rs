@@ -72,7 +72,7 @@ impl Circ {
         // Re-map second half.
         let buf2 = unsafe {
             mmap(
-                second as *const c_void,
+                second,
                 len as size_t,
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED, // flags
@@ -363,7 +363,7 @@ impl<T: Copy> Buffer<T> {
         for tag in tags {
             let pos = (tag.pos() + s.wpos) % s.capacity();
             let tag = Tag::new(pos, tag.key().into(), tag.val().clone());
-            s.tags.entry(pos).or_insert_with(Vec::new).push(tag);
+            s.tags.entry(pos).or_default().push(tag);
         }
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
