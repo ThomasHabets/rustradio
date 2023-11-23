@@ -30,13 +30,13 @@ g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
 */
-pub struct Graph {
-    blocks: Vec<Box<dyn Block>>,
+pub struct Graph<'a> {
+    blocks: Vec<&'a mut dyn Block>,
     cancel_token: CancellationToken,
     times: Vec<std::time::Duration>,
 }
 
-impl Graph {
+impl<'a> Graph<'a> {
     /// Create a new flowgraph.
     pub fn new() -> Self {
         Self {
@@ -47,7 +47,7 @@ impl Graph {
     }
 
     /// Add a block to the flowgraph.
-    pub fn add(&mut self, b: Box<dyn Block>) {
+    pub fn add(&mut self, b: &'a mut dyn Block) {
         self.blocks.push(b);
     }
 
@@ -175,7 +175,7 @@ impl Graph {
     }
 }
 
-impl Default for Graph {
+impl Default for Graph<'_> {
     fn default() -> Self {
         Self::new()
     }

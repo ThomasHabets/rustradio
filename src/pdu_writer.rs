@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::Stream;
 use crate::{Error, Sample};
 
 /** PDU writer
@@ -21,21 +21,21 @@ use crate::{Error, Sample};
 This block takes PDUs (as Vec<u8>), and writes them to an output
 directory, named as microseconds since epoch.
 */
-pub struct PduWriter<T> {
-    src: Streamp<Vec<T>>,
+pub struct PduWriter<'a, T> {
+    src: &'a Stream<Vec<T>>,
     dir: PathBuf,
     files_written: usize,
 }
 
-impl<T> Drop for PduWriter<T> {
+impl<T> Drop for PduWriter<'_, T> {
     fn drop(&mut self) {
         info!("PDU Writer: wrote {}", self.files_written);
     }
 }
 
-impl<T> PduWriter<T> {
+impl<'a, T> PduWriter<'a, T> {
     /// Create new PduWriter that'll write to `dir`.
-    pub fn new(src: Streamp<Vec<T>>, dir: PathBuf) -> Self {
+    pub fn new(src: &'a Stream<Vec<T>>, dir: PathBuf) -> Self {
         Self {
             src,
             dir,
@@ -44,7 +44,7 @@ impl<T> PduWriter<T> {
     }
 }
 
-impl<T> Block for PduWriter<T>
+impl<T> Block for PduWriter<'_, T>
 where
     T: Sample,
 {

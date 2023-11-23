@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, Tag, TagValue};
+use crate::stream::{Stream, Tag, TagValue};
 use crate::Error;
 
 /// Repeat or counts.
@@ -15,52 +15,52 @@ pub enum Repeat {
 }
 
 /// VectorSource builder.
-pub struct VectorSourceBuilder<T: Copy> {
-    block: VectorSource<T>,
+pub struct VectorSourceBuilder<'a, T: Copy> {
+    block: VectorSource<'a, T>,
 }
 
-impl<T: Copy> VectorSourceBuilder<T> {
+impl<'a, T: Copy> VectorSourceBuilder<'a, T> {
     /// New VectorSource builder.
-    pub fn new(data: Vec<T>) -> Self {
+    pub fn new(data: Vec<T>, dst: &'a Stream<T>) -> Self {
         Self {
-            block: VectorSource::new(data),
+            block: VectorSource::new(data, &dst),
         }
     }
     /// Set a finite repeat count.
-    pub fn repeat(mut self, r: u64) -> VectorSourceBuilder<T> {
+    pub fn repeat(mut self, r: u64) -> VectorSourceBuilder<'a, T> {
         self.block.set_repeat(Repeat::Finite(r));
         self
     }
     /// Repeat the block forever.
-    pub fn repeat_forever(mut self) -> VectorSourceBuilder<T> {
+    pub fn repeat_forever(mut self) -> VectorSourceBuilder<'a, T> {
         self.block.set_repeat(Repeat::Infinite);
         self
     }
     /// Build the VectorSource.
-    pub fn build(self) -> VectorSource<T> {
+    pub fn build(self) -> VectorSource<'a, T> {
         self.block
     }
 }
 
 /// Generate values from a fixed vector.
-pub struct VectorSource<T>
+pub struct VectorSource<'a, T>
 where
     T: Copy,
 {
-    dst: Streamp<T>,
+    dst: &'a Stream<T>,
     data: Vec<T>,
     repeat: Repeat,
     repeat_count: u64,
     pos: usize,
 }
 
-impl<T: Copy> VectorSource<T> {
+impl<'a, T: Copy> VectorSource<'a, T> {
     /// Create new Vector Source block.
     ///
     /// Optionally the data can repeat.
-    pub fn new(data: Vec<T>) -> Self {
+    pub fn new(data: Vec<T>, dst: &'a Stream<T>) -> Self {
         Self {
-            dst: new_streamp(),
+            dst,
             data,
             repeat: Repeat::Finite(1),
             pos: 0,
@@ -74,12 +74,12 @@ impl<T: Copy> VectorSource<T> {
     }
 
     /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
+    pub fn out(&self) -> &Stream<T> {
+        &self.dst
     }
 }
 
-impl<T> Block for VectorSource<T>
+impl<'a, T> Block for VectorSource<'a, T>
 where
     T: Copy,
 {
