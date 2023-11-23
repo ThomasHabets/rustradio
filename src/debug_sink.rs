@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, TagPos};
+use crate::stream::{Streamp, Tag, TagPos};
 use crate::Error;
 
 /// Print values to stdout, for debugging.
@@ -36,11 +36,11 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
 
-        let tags =
+        let tags: HashMap<usize, Vec<Tag>> =
             tags.into_iter()
                 .map(|t| (t.pos(), t))
                 .fold(HashMap::new(), |mut acc, (pos, tag)| {
-                    acc.entry(pos).or_insert_with(Vec::new).push(tag);
+                    acc.entry(pos).or_default().push(tag);
                     acc
                 });
 
