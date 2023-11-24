@@ -3,7 +3,7 @@
 Turn stream of e.g. `Vec<u8>` to stream of `u8`.
  */
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 
 /// Block for vector to stream.

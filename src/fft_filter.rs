@@ -34,7 +34,7 @@ use log::trace;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, ReadStreamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.

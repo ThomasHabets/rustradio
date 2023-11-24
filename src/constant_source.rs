@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 
 /// Generate the same value, forever.

@@ -1,7 +1,7 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{map_block_macro_v2, Float};
 
 struct SinglePoleIIR<Tout> {

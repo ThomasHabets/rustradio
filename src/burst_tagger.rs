@@ -33,7 +33,7 @@ let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
  */
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, ReadStreamp,Streamp, Tag, TagValue};
+use crate::stream::{new_streamp, ReadStreamp,ReadStream,Streamp, Tag, TagValue};
 use crate::{Error, Float};
 
 /// Burst tagger:

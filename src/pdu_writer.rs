@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::{Streamp,ReadStreamp};
 use crate::{Error, Sample};
 
 /** PDU writer

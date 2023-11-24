@@ -48,7 +48,7 @@ pub struct Midpointer {
 }
 impl Midpointer {
     /// Create new midpointer.
-    pub fn new(src: ReadStreamp<Vec<Float>>) -> Self {
+    pub fn new(src: ReadStreamNoCopyp<Vec<Float>>) -> Self {
         Self {
             src,
             dst: new_streamp(),
@@ -93,7 +93,7 @@ pub struct WpcrBuilder {
 
 impl WpcrBuilder {
     /// Create new WpcrBuilder
-    pub fn new(src: ReadStreamp<Vec<Float>>) -> Self {
+    pub fn new(src: ReadStreamNoCopyp<Vec<Float>>) -> Self {
         Self {
             wpcr: Wpcr::new(src),
         }
@@ -113,14 +113,14 @@ impl WpcrBuilder {
 
 /// Whole packet clock recovery block.
 pub struct Wpcr {
-    src: ReadStreamp<Vec<Float>>,
+    src: ReadStreamNoCopyp<Vec<Float>>,
     dst: Streamp<Vec<Float>>,
     samp_rate: Option<Float>,
 }
 
 impl Wpcr {
     /// Create new WPCR block.
-    pub fn new(src: ReadStreamp<Vec<Float>>) -> Self {
+    pub fn new(src: ReadStreamNoCopyp<Vec<Float>>) -> Self {
         Self {
             src,
             dst: new_streamp(),

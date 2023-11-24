@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.

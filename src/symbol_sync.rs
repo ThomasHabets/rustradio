@@ -7,7 +7,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{Error, Float};
 
 /** Very simple clock recovery by looking at zero crossings.
@@ -26,7 +26,6 @@ looping.
 But for now it's "good enough" to get simple 2FSK decoded pretty
 reliably.
  */
-use crate::stream::ReadStreamp;
 pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,

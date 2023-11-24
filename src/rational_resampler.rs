@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::trace;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 
 fn gcd(mut a: usize, mut b: usize) -> usize {

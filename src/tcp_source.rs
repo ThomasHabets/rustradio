@@ -8,7 +8,7 @@ use anyhow::Result;
 use log::warn;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{Error, Sample};
 
 /// TCP Source, connecting to a server and streaming the data.

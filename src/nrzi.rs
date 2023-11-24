@@ -17,7 +17,7 @@ constant is one, because that's what done by AX.25, both 1200bps Bell
 202, and 9600 G3RUH.
 */
 use crate::map_block_convert_macro;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 
 /// NRZI decoder.
 pub struct NrziDecode {
