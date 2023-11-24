@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, ReadStreamp,Tag, TagPos, TagValue};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp, Tag, TagPos, TagValue};
 use crate::{Error, Sample};
 
 /// Stream to PDU block.

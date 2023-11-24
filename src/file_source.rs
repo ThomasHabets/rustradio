@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::{Error, Sample};
 
 /// Read stream from raw file.

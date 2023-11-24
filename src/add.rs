@@ -1,6 +1,6 @@
 //! Add two streams.
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::Error;
 
 /// Adds a constant value to every sample.

@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp,ReadStreamp};
+use crate::stream::{ReadStreamp, Streamp};
 use crate::{Error, Sample};
 
 /// File write mode.

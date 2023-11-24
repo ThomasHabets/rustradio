@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::Error;
 use crate::{map_block_convert_macro, Complex, Float};
 

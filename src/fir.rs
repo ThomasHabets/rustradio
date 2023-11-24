@@ -7,7 +7,7 @@ Use FftFilter if many taps are used, for better performance.
  * * Only handles case where input, output, and tap type are all the same.
  */
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Finite impulse response filter.

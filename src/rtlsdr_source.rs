@@ -19,7 +19,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::Error;
 
 const CHUNK_SIZE: usize = 8192;

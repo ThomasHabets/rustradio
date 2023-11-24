@@ -1,7 +1,7 @@
 //! Turn positive Float values into binary `1u8`, and negative into `0u8`.
 use anyhow::Result;
 
-use crate::stream::{new_streamp, ReadStreamp,Streamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::{map_block_convert_macro, Float};
 
 /// Turn positive Float values into binary `1u8`, and negative into `0u8`.

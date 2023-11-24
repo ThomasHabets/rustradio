@@ -26,7 +26,7 @@ QuadratureDemod by about 4x.
  */
 use anyhow::Result;
 
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::{map_block_convert_macro, Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.

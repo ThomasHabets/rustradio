@@ -33,7 +33,7 @@ let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
  */
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, ReadStreamp,ReadStream,Streamp, Tag, TagValue};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp, Tag, TagValue};
 use crate::{Error, Float};
 
 /// Burst tagger:
@@ -53,7 +53,12 @@ impl<T> BurstTagger<T> {
     /// * trigger: Trigger stream.
     /// * threshold: Threshold on trigger stream.
     /// * tag: Tag name to add.
-    pub fn new(src: ReadStreamp<T>, trigger: Streamp<Float>, threshold: Float, tag: String) -> Self {
+    pub fn new(
+        src: ReadStreamp<T>,
+        trigger: Streamp<Float>,
+        threshold: Float,
+        tag: String,
+    ) -> Self {
         Self {
             src,
             trigger,

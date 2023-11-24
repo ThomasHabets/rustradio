@@ -75,6 +75,9 @@ pub trait ReadStreamNoCopy<T> {
     /// Pop one sample.
     /// Ideally this should only be NoCopy.
     fn pop(&self) -> Option<T>;
+
+    /// Get the size of the front packet.
+    fn peek_size(&self) -> Option<usize>;
 }
 pub type ReadStreamp<T> = Arc<dyn ReadStream<T>>;
 pub type ReadStreamNoCopyp<T> = Arc<dyn ReadStreamNoCopy<T>>;
@@ -109,13 +112,6 @@ impl<T> Stream<T> {
     }
 }
 
-impl<T: Len> Stream<T> {
-    /// Get the size of the front packet.
-    pub fn peek_size(&self) -> Option<usize> {
-        self.circ.peek_size()
-    }
-}
-
 impl<T: Copy> Stream<T> {
     /// Create a new stream with initial data in it.
     pub fn from_slice(data: &[T]) -> Self {
@@ -142,13 +138,16 @@ impl<T: Copy> ReadStream<T> for Stream<T> {
         Ok(self.circ.read_buf()?)
     }
 }
-impl<T> ReadStreamNoCopy<T> for Stream<T> {
+impl<T: Len> ReadStreamNoCopy<T> for Stream<T> {
     /// Pop one sample.
     /// Ideally this should only be NoCopy.
     fn pop(&self) -> Option<T> {
         self.circ.pop()
     }
-}    
+    fn peek_size(&self) -> Option<usize> {
+        self.circ.peek_size()
+    }
+}
 impl<T> Default for Stream<T> {
     fn default() -> Self {
         Self::new()

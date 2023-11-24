@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp,ReadStreamp};
+use crate::stream::{ReadStreamp, Streamp};
 use crate::Error;
 
 /// Discard anything written to this block.

@@ -5,7 +5,7 @@ by the time the packet arrives the original seed will be shifted out
 anyway.
  */
 use crate::map_block_convert_macro;
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 
 struct Lfsr {
     mask: u64,

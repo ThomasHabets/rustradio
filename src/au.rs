@@ -12,7 +12,7 @@ It's also much simpler.
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::{Error, Float};
 
 /// Au support several encodings. This code currently only one.

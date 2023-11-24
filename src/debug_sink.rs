@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, ReadStreamp, Tag, TagPos};
+use crate::stream::{ReadStream, ReadStreamp, Streamp, Tag, TagPos};
 use crate::Error;
 
 /// Print values to stdout, for debugging.

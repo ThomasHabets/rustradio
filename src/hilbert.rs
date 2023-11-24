@@ -14,7 +14,7 @@ This implementation is a pretty inefficient.
 
 use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
-use crate::stream::{new_streamp, Streamp, ReadStreamp};
+use crate::stream::{new_streamp, ReadStream, ReadStreamp, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Hilbert transformer block.
