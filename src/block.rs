@@ -94,7 +94,7 @@ E.g.:
 
 ```
 use rustradio::block::Block;
-use rustradio::stream::{Streamp, new_streamp};
+use rustradio::stream::{Streamp, ReadStreamp, new_streamp};
 struct Noop<T: Copy>{
   src: ReadStreamp<T>,
   dst: Streamp<T>,
