@@ -7,13 +7,13 @@ use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
 pub struct RtlSdrDecode {
-    src: Streamp<u8>,
+    src: ReadStreamp<u8>,
     dst: Streamp<Complex>,
 }
 
 impl RtlSdrDecode {
     /// Create new RTL SDR Decode block.
-    pub fn new(src: Streamp<u8>) -> Self {
+    pub fn new(src: ReadStreamp<u8>) -> Self {
         Self {
             src,
             dst: new_streamp(),

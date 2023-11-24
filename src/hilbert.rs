@@ -14,12 +14,12 @@ This implementation is a pretty inefficient.
 
 use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{Complex, Error, Float};
 
 /// Hilbert transformer block.
 pub struct Hilbert {
-    src: Streamp<Float>,
+    src: ReadStreamp<Float>,
     dst: Streamp<Complex>,
     history: Vec<Float>,
     filter: FIR<Float>,
@@ -28,7 +28,7 @@ pub struct Hilbert {
 
 impl Hilbert {
     /// Create new hilber transformer with this many taps.
-    pub fn new(src: Streamp<Float>, ntaps: usize) -> Self {
+    pub fn new(src: ReadStreamp<Float>, ntaps: usize) -> Self {
         assert!(ntaps & 1 == 1, "hilbert filter len must be odd");
         let taps = crate::fir::hilbert(ntaps); // TODO: provide window function.
         Self {

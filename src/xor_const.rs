@@ -8,7 +8,7 @@ where
     T: Copy,
 {
     val: T,
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
     dst: Streamp<T>,
 }
 
@@ -17,7 +17,7 @@ where
     T: Copy + std::ops::BitXor<Output = T>,
 {
     /// Create a new XorConst, providing the constant to be xored.
-    pub fn new(src: Streamp<T>, val: T) -> Self {
+    pub fn new(src: ReadStreamp<T>, val: T) -> Self {
         Self {
             val,
             src,

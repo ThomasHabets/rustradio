@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, Tag, TagPos};
+use crate::stream::{Streamp, ReadStreamp, Tag, TagPos};
 use crate::Error;
 
 /// Print values to stdout, for debugging.
@@ -12,7 +12,7 @@ pub struct DebugSink<T>
 where
     T: Copy,
 {
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -21,7 +21,7 @@ where
     T: Copy,
 {
     /// Create new debug block.
-    pub fn new(src: Streamp<T>) -> Self {
+    pub fn new(src: ReadStreamp<T>) -> Self {
         Self { src }
     }
 }

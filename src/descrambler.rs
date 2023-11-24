@@ -5,7 +5,7 @@ by the time the packet arrives the original seed will be shifted out
 anyway.
  */
 use crate::map_block_convert_macro;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 
 struct Lfsr {
     mask: u64,
@@ -32,13 +32,13 @@ impl Lfsr {
 
 /// Descrambler uses an LFSR to descramble bits.
 pub struct Descrambler {
-    src: Streamp<u8>,
+    src: ReadStreamp<u8>,
     dst: Streamp<u8>,
     lfsr: Lfsr,
 }
 impl Descrambler {
     /// Create new descrambler.
-    pub fn new(src: Streamp<u8>, mask: u64, seed: u64, len: u8) -> Self {
+    pub fn new(src: ReadStreamp<u8>, mask: u64, seed: u64, len: u8) -> Self {
         Self {
             src,
             dst: new_streamp(),

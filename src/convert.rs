@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 use crate::{map_block_convert_macro, Complex, Float};
 
@@ -11,7 +11,7 @@ use crate::{map_block_convert_macro, Complex, Float};
 /// `u32 = Float * scale`
 pub struct FloatToU32 {
     scale: Float,
-    src: Streamp<Float>,
+    src: ReadStreamp<Float>,
     dst: Streamp<u32>,
 }
 
@@ -20,7 +20,7 @@ impl FloatToU32 {
     ///
     /// Return value is the input multiplied by the scale. E.g. with a
     /// scale of 100.0, the input 0.123 becomes 12.
-    pub fn new(src: Streamp<Float>, scale: Float) -> Self {
+    pub fn new(src: ReadStreamp<Float>, scale: Float) -> Self {
         Self {
             scale,
             src,

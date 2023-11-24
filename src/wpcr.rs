@@ -38,17 +38,17 @@ Drawbacks of this method:
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, Tag, TagValue};
+use crate::stream::{new_streamp, ReadStreamNoCopyp, Streamp, Tag, TagValue};
 use crate::{Complex, Error, Float};
 
 /// Midpointer is a block re-center a NRZ burst around 0.
 pub struct Midpointer {
-    src: Streamp<Vec<Float>>,
+    src: ReadStreamNoCopyp<Vec<Float>>,
     dst: Streamp<Vec<Float>>,
 }
 impl Midpointer {
     /// Create new midpointer.
-    pub fn new(src: Streamp<Vec<Float>>) -> Self {
+    pub fn new(src: ReadStreamp<Vec<Float>>) -> Self {
         Self {
             src,
             dst: new_streamp(),
@@ -93,7 +93,7 @@ pub struct WpcrBuilder {
 
 impl WpcrBuilder {
     /// Create new WpcrBuilder
-    pub fn new(src: Streamp<Vec<Float>>) -> Self {
+    pub fn new(src: ReadStreamp<Vec<Float>>) -> Self {
         Self {
             wpcr: Wpcr::new(src),
         }
@@ -113,14 +113,14 @@ impl WpcrBuilder {
 
 /// Whole packet clock recovery block.
 pub struct Wpcr {
-    src: Streamp<Vec<Float>>,
+    src: ReadStreamp<Vec<Float>>,
     dst: Streamp<Vec<Float>>,
     samp_rate: Option<Float>,
 }
 
 impl Wpcr {
     /// Create new WPCR block.
-    pub fn new(src: Streamp<Vec<Float>>) -> Self {
+    pub fn new(src: ReadStreamp<Vec<Float>>) -> Self {
         Self {
             src,
             dst: new_streamp(),

@@ -11,12 +11,12 @@ pub struct NullSink<T>
 where
     T: Copy,
 {
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
 }
 
 impl<T: Default + Copy> NullSink<T> {
     /// Create new NullSink block.
-    pub fn new(src: Streamp<T>) -> Self {
+    pub fn new(src: ReadStreamp<T>) -> Self {
         Self { src }
     }
 }

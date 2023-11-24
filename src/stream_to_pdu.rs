@@ -37,7 +37,7 @@ use crate::{Error, Sample};
 
 /// Stream to PDU block.
 pub struct StreamToPdu<T> {
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
     dst: Streamp<Vec<T>>,
     tag: String,
     buf: Vec<T>,
@@ -48,7 +48,7 @@ pub struct StreamToPdu<T> {
 
 impl<T> StreamToPdu<T> {
     /// Make new Stream to PDU block.
-    pub fn new(src: Streamp<T>, tag: String, max_size: usize, tail: usize) -> Self {
+    pub fn new(src: ReadStreamp<T>, tag: String, max_size: usize, tail: usize) -> Self {
         Self {
             src,
             tag,

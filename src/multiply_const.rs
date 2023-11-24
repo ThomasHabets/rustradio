@@ -5,7 +5,7 @@ use crate::stream::{new_streamp, Streamp};
 /// Multiply stream by a constant value.
 pub struct MultiplyConst<T: Copy> {
     val: T,
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
     dst: Streamp<T>,
 }
 
@@ -14,7 +14,7 @@ where
     T: Copy + std::ops::Mul<Output = T>,
 {
     /// Create new MultiplyConst block.
-    pub fn new(src: Streamp<T>, val: T) -> Self {
+    pub fn new(src: ReadStreamp<T>, val: T) -> Self {
         Self {
             val,
             src,

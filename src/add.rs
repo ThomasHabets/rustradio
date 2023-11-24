@@ -1,6 +1,6 @@
 //! Add two streams.
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 
 /// Adds a constant value to every sample.
@@ -8,8 +8,8 @@ pub struct Add<T>
 where
     T: Copy,
 {
-    a: Streamp<T>,
-    b: Streamp<T>,
+    a: ReadStreamp<T>,
+    b: ReadStreamp<T>,
     dst: Streamp<T>,
 }
 
@@ -18,7 +18,7 @@ where
     T: Copy + std::ops::Add<Output = T>,
 {
     /// Create a new AddConst, providing the constant to be added.
-    pub fn new(a: Streamp<T>, b: Streamp<T>) -> Self {
+    pub fn new(a: ReadStreamp<T>, b: ReadStreamp<T>) -> Self {
         Self {
             a,
             b,

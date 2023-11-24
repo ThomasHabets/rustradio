@@ -33,7 +33,7 @@ use crate::{map_block_convert_macro, Complex, Float};
 pub struct QuadratureDemod {
     gain: Float,
     last: Complex,
-    src: Streamp<Complex>,
+    src: ReadStreamp<Complex>,
     dst: Streamp<Float>,
 }
 
@@ -42,7 +42,7 @@ impl QuadratureDemod {
     ///
     /// Gain is just used to scale the value, and can be set to 1.0 if
     /// you don't care about the scale.
-    pub fn new(src: Streamp<Complex>, gain: Float) -> Self {
+    pub fn new(src: ReadStreamp<Complex>, gain: Float) -> Self {
         Self {
             src,
             dst: new_streamp(),

@@ -96,11 +96,11 @@ E.g.:
 use rustradio::block::Block;
 use rustradio::stream::{Streamp, new_streamp};
 struct Noop<T: Copy>{
-  src: Streamp<T>,
+  src: ReadStreamp<T>,
   dst: Streamp<T>,
 };
 impl<T: Copy> Noop<T> {
-  fn new(src: Streamp<T>) -> Self {
+  fn new(src: ReadStreamp<T>) -> Self {
     Self {
       src,
       dst: new_streamp(),

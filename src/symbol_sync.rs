@@ -25,7 +25,8 @@ looping.
 
 But for now it's "good enough" to get simple 2FSK decoded pretty
 reliably.
-*/
+ */
+use crate::stream::ReadStreamp;
 pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,
@@ -33,7 +34,7 @@ pub struct ZeroCrossing {
     last_sign: bool,
     last_cross: f32,
     counter: u64,
-    src: Streamp<Float>,
+    src: ReadStreamp<Float>,
     dst: Streamp<Float>,
 }
 
@@ -44,7 +45,7 @@ impl ZeroCrossing {
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
     * `max_deviation`: Not currently used.
      */
-    pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
+    pub fn new(src: ReadStreamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
         Self {
             src,
@@ -92,10 +93,13 @@ impl Block for ZeroCrossing {
 
             let sign = *sample > 0.0;
             if sign != self.last_sign {
+                // TODO: we need to cap inside the loop filter.
+                /*
+                self.clock = self.clock_filter(self.counter - self.last_cross);
+                self.clock = std::cmp::max(self.sps - self.max_deviation, self.clock);
+                self.clock = std::cmp::min(self.sps + self.max_deviation, self.clock);
+                 */
                 self.last_cross = self.counter as f32;
-                // TODO: adjust clock, within sps. Here just shut up the linter.
-                self.sps *= 1.0;
-                self.max_deviation *= 1.0;
             }
             self.last_sign = sign;
             self.counter += 1;

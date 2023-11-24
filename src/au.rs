@@ -12,7 +12,7 @@ It's also much simpler.
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{Error, Float};
 
 /// Au support several encodings. This code currently only one.
@@ -51,7 +51,7 @@ g.run()?;
 pub struct AuEncode {
     header: Option<Vec<u8>>,
     encoding: Encoding,
-    src: Streamp<Float>,
+    src: ReadStreamp<Float>,
     dst: Streamp<u8>,
 }
 
@@ -61,7 +61,7 @@ impl AuEncode {
     /// * `encoding`: currently only `Encoding::PCM16` is implemented.
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
-    pub fn new(src: Streamp<Float>, encoding: Encoding, bitrate: u32, channels: u32) -> Self {
+    pub fn new(src: ReadStreamp<Float>, encoding: Encoding, bitrate: u32, channels: u32) -> Self {
         assert_eq!(channels, 1, "only mono supported at the moment");
         let mut v = Vec::with_capacity(28);
 
@@ -152,14 +152,14 @@ enum DecodeState {
 /// Currently only accepts a very narrow header format of PCM16, mono,
 /// 44100 Hz.
 pub struct AuDecode {
-    src: Streamp<u8>,
+    src: ReadStreamp<u8>,
     dst: Streamp<Float>,
     state: DecodeState,
 }
 
 impl AuDecode {
     /// Create new AuDecode block.
-    pub fn new(src: Streamp<u8>) -> Self {
+    pub fn new(src: ReadStreamp<u8>) -> Self {
         Self {
             src,
             dst: new_streamp(),

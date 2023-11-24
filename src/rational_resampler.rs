@@ -23,7 +23,7 @@ pub struct RationalResampler<T: Copy> {
     deci: i64,
     interp: i64,
     counter: i64,
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
     dst: Streamp<T>,
 }
 
@@ -32,7 +32,7 @@ impl<T: Copy> RationalResampler<T> {
     ///
     /// A common pattern to convert between arbitrary sample rates X
     /// and Y is to decimate by X and interpolate by Y.
-    pub fn new(src: Streamp<T>, mut interp: usize, mut deci: usize) -> Result<Self> {
+    pub fn new(src: ReadStreamp<T>, mut interp: usize, mut deci: usize) -> Result<Self> {
         let g = gcd(deci, interp);
         deci /= g;
         interp /= g;

@@ -3,7 +3,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 
 /// Delay stream. Good for syncing up streams.
@@ -11,13 +11,13 @@ pub struct Delay<T: Copy> {
     delay: usize,
     current_delay: usize,
     skip: usize,
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
     dst: Streamp<T>,
 }
 
 impl<T: Copy> Delay<T> {
     /// Create new Delay block.
-    pub fn new(src: Streamp<T>, delay: usize) -> Self {
+    pub fn new(src: ReadStreamp<T>, delay: usize) -> Self {
         Self {
             src,
             dst: new_streamp(),

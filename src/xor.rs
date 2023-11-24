@@ -1,6 +1,6 @@
 //! Xor two streams.
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 
 /// Xors a constant value to every sample.
@@ -8,8 +8,8 @@ pub struct Xor<T>
 where
     T: Copy,
 {
-    a: Streamp<T>,
-    b: Streamp<T>,
+    a: ReadStreamp<T>,
+    b: ReadStreamp<T>,
     dst: Streamp<T>,
 }
 
@@ -18,7 +18,7 @@ where
     T: Copy + std::ops::BitXor<Output = T>,
 {
     /// Create a new XorConst, providing the constant to be xored.
-    pub fn new(a: Streamp<T>, b: Streamp<T>) -> Self {
+    pub fn new(a: ReadStreamp<T>, b: ReadStreamp<T>) -> Self {
         Self {
             a,
             b,

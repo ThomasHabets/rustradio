@@ -1,18 +1,18 @@
 //! Convert Complex numbers to square of their magnitude.
 use anyhow::Result;
 
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{map_block_convert_macro, Complex, Float};
 
 /// Convert Complex numbers to square of their magnitude.
 pub struct ComplexToMag2 {
-    src: Streamp<Complex>,
+    src: ReadStreamp<Complex>,
     dst: Streamp<Float>,
 }
 
 impl ComplexToMag2 {
     /// Create new ComplexToMag2 block.
-    pub fn new(src: Streamp<Complex>) -> Self {
+    pub fn new(src: ReadStreamp<Complex>) -> Self {
         Self {
             src,
             dst: new_streamp(),

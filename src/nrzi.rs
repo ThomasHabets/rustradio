@@ -22,13 +22,13 @@ use crate::stream::{new_streamp, Streamp};
 /// NRZI decoder.
 pub struct NrziDecode {
     last: u8,
-    src: Streamp<u8>,
+    src: ReadStreamp<u8>,
     dst: Streamp<u8>,
 }
 
 impl NrziDecode {
     /// Create a new NRZI block.
-    pub fn new(src: Streamp<u8>) -> Self {
+    pub fn new(src: ReadStreamp<u8>) -> Self {
         Self {
             src,
             dst: new_streamp(),

@@ -10,7 +10,7 @@ therefore [APRS][aprs].
 use log::{debug, info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::{Error, Result};
 
 enum State {
@@ -62,7 +62,7 @@ This block takes a stream of bits (as u8), and outputs any HDLC frames
 found as Vec<u8>.
 */
 pub struct HdlcDeframer {
-    src: Streamp<u8>,
+    src: ReadStreamp<u8>,
     dst: Streamp<Vec<u8>>,
     state: State,
     min_size: usize,
@@ -86,7 +86,7 @@ impl HdlcDeframer {
     /// Create new HdlcDeframer.
     ///
     /// min_size and max_size is size in bytes.
-    pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
+    pub fn new(src: ReadStreamp<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
             dst: new_streamp(),

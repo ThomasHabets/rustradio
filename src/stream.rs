@@ -63,6 +63,22 @@ pub struct Stream<T> {
     circ: circular_buffer::Buffer<T>,
 }
 
+pub trait ReadStream<T: Copy> {
+    /// Return a read slice and the tags within the slice.
+    ///
+    /// The only reason for returning error should be if there's
+    /// already a read slice handed out.
+    fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error>;
+}
+
+pub trait ReadStreamNoCopy<T> {
+    /// Pop one sample.
+    /// Ideally this should only be NoCopy.
+    fn pop(&self) -> Option<T>;
+}
+pub type ReadStreamp<T> = Arc<dyn ReadStream<T>>;
+pub type ReadStreamNoCopyp<T> = Arc<dyn ReadStreamNoCopy<T>>;
+
 /// Convenience type for a "pointer to a stream".
 pub type Streamp<T> = Arc<Stream<T>>;
 
@@ -91,12 +107,6 @@ impl<T> Stream<T> {
     pub fn push(&self, val: T) {
         self.circ.push(val);
     }
-
-    /// Pop one sample.
-    /// Ideally this should only be NoCopy.
-    pub fn pop(&self) -> Option<T> {
-        self.circ.pop()
-    }
 }
 
 impl<T: Len> Stream<T> {
@@ -124,16 +134,21 @@ impl<T: Copy> Stream<T> {
         // TODO: not sure why I need to use both Ok and ?. Should it not be From'd?
         Ok(self.circ.write_buf()?)
     }
+}
 
-    /// Return a read slice and the tags within the slice.
-    ///
-    /// The only reason for returning error should be if there's
-    /// already a read slice handed out.
-    pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
+impl<T: Copy> ReadStream<T> for Stream<T> {
+    fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
         // TODO: not sure why I need to use both Ok and ?. Should it not be From'd?
         Ok(self.circ.read_buf()?)
     }
 }
+impl<T> ReadStreamNoCopy<T> for Stream<T> {
+    /// Pop one sample.
+    /// Ideally this should only be NoCopy.
+    fn pop(&self) -> Option<T> {
+        self.circ.pop()
+    }
+}    
 impl<T> Default for Stream<T> {
     fn default() -> Self {
         Self::new()

@@ -47,7 +47,7 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     iir: SinglePoleIIR<T>,
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
     dst: Streamp<T>,
 }
 
@@ -60,7 +60,7 @@ where
         + std::ops::Add<T, Output = T>,
 {
     /// Create new IIR filter.
-    pub fn new(src: Streamp<T>, alpha: Float) -> Option<Self> {
+    pub fn new(src: ReadStreamp<T>, alpha: Float) -> Option<Self> {
         Some(Self {
             src,
             dst: new_streamp(),

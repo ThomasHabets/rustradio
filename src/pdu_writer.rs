@@ -22,7 +22,7 @@ This block takes PDUs (as Vec<u8>), and writes them to an output
 directory, named as microseconds since epoch.
 */
 pub struct PduWriter<T> {
-    src: Streamp<Vec<T>>,
+    src: ReadStreamp<Vec<T>>,
     dir: PathBuf,
     files_written: usize,
 }
@@ -35,7 +35,7 @@ impl<T> Drop for PduWriter<T> {
 
 impl<T> PduWriter<T> {
     /// Create new PduWriter that'll write to `dir`.
-    pub fn new(src: Streamp<Vec<T>>, dir: PathBuf) -> Self {
+    pub fn new(src: ReadStreamp<Vec<T>>, dir: PathBuf) -> Self {
         Self {
             src,
             dir,

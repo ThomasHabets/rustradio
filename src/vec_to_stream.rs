@@ -8,13 +8,13 @@ use crate::Error;
 
 /// Block for vector to stream.
 pub struct VecToStream<T> {
-    src: Streamp<Vec<T>>,
+    src: ReadStreamp<Vec<T>>,
     dst: Streamp<T>,
 }
 
 impl<T> VecToStream<T> {
     /// Create new VecToStream.
-    pub fn new(src: Streamp<Vec<T>>) -> Self {
+    pub fn new(src: ReadStreamp<Vec<T>>) -> Self {
         Self {
             src,
             dst: new_streamp(),

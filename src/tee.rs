@@ -3,19 +3,19 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, ReadStreamp};
 use crate::Error;
 
 /// Tee
 pub struct Tee<T: Copy> {
-    src: Streamp<T>,
+    src: ReadStreamp<T>,
     dst1: Streamp<T>,
     dst2: Streamp<T>,
 }
 
 impl<T: Copy> Tee<T> {
     /// Create new Tee block.
-    pub fn new(src: Streamp<T>) -> Self {
+    pub fn new(src: ReadStreamp<T>) -> Self {
         Self {
             src,
             dst1: new_streamp(),
