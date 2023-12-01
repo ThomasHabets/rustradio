@@ -7,6 +7,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
+use crate::single_pole_iir_filter::SinglePoleIIR;
 use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Float};
 
@@ -30,6 +31,7 @@ pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,
     clock: Float,
+    clock_filter: SinglePoleIIR<Float>,
     last_sign: bool,
     last_cross: f32,
     counter: u64,
@@ -46,11 +48,14 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
+        let mut clock_filter = SinglePoleIIR::new(1.0).unwrap();
+        clock_filter.set_prev(sps);
         Self {
             src,
             dst: new_streamp(),
             sps,
             clock: sps,
+            clock_filter,
             max_deviation,
             last_sign: false,
             last_cross: 0.0,
@@ -92,10 +97,18 @@ impl Block for ZeroCrossing {
 
             let sign = *sample > 0.0;
             if sign != self.last_sign {
+                let t = self.counter as Float - self.last_cross;
                 self.last_cross = self.counter as f32;
                 // TODO: adjust clock, within sps. Here just shut up the linter.
                 self.sps *= 1.0;
                 self.max_deviation *= 1.0;
+                let mi = self.sps - self.max_deviation;
+                let mx = self.sps + self.max_deviation;
+                if t > 0.0 {
+                    let pre = self.clock;
+                    self.clock = self.clock_filter.filter_capped(self.clock, mi, mx);
+                    assert_eq!(self.clock, pre);
+                }
             }
             self.last_sign = sign;
             self.counter += 1;

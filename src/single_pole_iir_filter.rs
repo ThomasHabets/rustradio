@@ -4,7 +4,25 @@ use anyhow::Result;
 use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_macro_v2, Float};
 
-struct SinglePoleIIR<Tout> {
+/// Ability to call .min and .max, like floats.
+pub trait MinMax {
+    /// Return min of two values.
+    fn min(&self, o: Self) -> Self;
+
+    /// Return max of two values.
+    fn max(&self, o: Self) -> Self;
+}
+impl MinMax for Float {
+    fn max(&self, r: Float) -> Self {
+        r.max(*self)
+    }
+    fn min(&self, r: Float) -> Self {
+        r.min(*self)
+    }
+}
+
+/// Very simple IIR.
+pub struct SinglePoleIIR<Tout> {
     alpha: Float, // TODO: GNURadio uses double
     one_minus_alpha: Float,
     prev_output: Tout,
@@ -14,7 +32,8 @@ impl<Tout> SinglePoleIIR<Tout>
 where
     Tout: Copy + Default + std::ops::Mul<Float, Output = Tout> + std::ops::Add<Output = Tout>,
 {
-    fn new(alpha: Float) -> Option<Self> {
+    /// Create new IIR.
+    pub fn new(alpha: Float) -> Option<Self> {
         let mut r = Self {
             alpha: Float::default(),
             one_minus_alpha: Float::default(),
@@ -23,6 +42,11 @@ where
         r.set_taps(alpha)?;
         Some(r)
     }
+    /// Set previous output
+    pub fn set_prev(&mut self, prev: Tout) {
+        self.prev_output = prev;
+    }
+
     fn filter<Tin>(&mut self, sample: Tin) -> Tout
     where
         Tin: Copy + std::ops::Mul<Float, Output = Tin> + std::ops::Add<Tout, Output = Tout>,
@@ -31,6 +55,7 @@ where
         self.prev_output = o;
         o
     }
+
     fn set_taps(&mut self, alpha: Float) -> Option<()> {
         if !(0.0..=1.0).contains(&alpha) {
             return None;
@@ -38,6 +63,26 @@ where
         self.alpha = alpha;
         self.one_minus_alpha = 1.0 - alpha;
         Some(())
+    }
+}
+
+impl<Tout> SinglePoleIIR<Tout>
+where
+    Tout: Copy
+        + Default
+        + std::ops::Mul<Float, Output = Tout>
+        + std::ops::Add<Output = Tout>
+        + MinMax,
+{
+    /// Filter one sample, capped.
+    pub fn filter_capped<Tin>(&mut self, sample: Tin, mi: Tout, mx: Tout) -> Tout
+    where
+        Tin:
+            Copy + std::ops::Mul<Float, Output = Tin> + std::ops::Add<Tout, Output = Tout> + MinMax,
+    {
+        let o: Tout = sample * self.alpha + self.prev_output * self.one_minus_alpha;
+        self.prev_output = o.max(mi).min(mx);
+        o
     }
 }
 
