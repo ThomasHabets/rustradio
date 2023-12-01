@@ -144,6 +144,9 @@ pub mod xor_const;
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;
 
+#[cfg(feature = "soapysdr")]
+pub mod soapysdr_source;
+
 pub mod block;
 pub mod blocks;
 pub mod circular_buffer;

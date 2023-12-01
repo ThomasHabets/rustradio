@@ -38,3 +38,6 @@ pub use crate::xor_const::XorConst;
 
 #[cfg(feature = "rtlsdr")]
 pub use crate::rtlsdr_source::RtlSdrSource;
+
+#[cfg(feature = "soapysdr")]
+pub use crate::soapysdr_source::{SoapySdrSource, SoapySdrSourceBuilder};
