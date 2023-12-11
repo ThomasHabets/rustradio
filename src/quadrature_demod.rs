@@ -62,3 +62,53 @@ impl QuadratureDemod {
     }
 }
 map_block_convert_macro![QuadratureDemod, Float];
+
+/// A faster version of FM modulation, that makes some assumptions.
+///
+/// This block can be used instead of a QuadratureDemod block, for
+/// performance. It's much faster (~4x compared to the fast-math
+/// version of QuadratureDemod), but it's less good.
+///
+/// The algorithm is taken from Lyons, Understanding Digital Signal
+/// Processing, third edition, page 760.
+///
+/// This is the faster version of the two, which assumes all
+/// frequencies are constant amplitude. This means it can be used to
+/// e.g. demodulate an FM carrier for 1200bps AX.25, but *not* to
+/// decode the preemphasized bell 202 inside.
+///
+/// You could deemphasize, if you know all transmitters preemp
+/// parameters.
+///
+/// Really, just use QuadratureDemod unless it's shown to be too slow
+/// for your use case.
+///
+/// Lyons has an more general version of this algorithm, also on page
+/// 760, but it's not implemented here.
+pub struct FastFM {
+    src: Streamp<Complex>,
+    dst: Streamp<Float>,
+    q1: Complex,
+    q2: Complex,
+}
+
+impl FastFM {
+    /// Create a new FastFM block.
+    pub fn new(src: Streamp<Complex>) -> Self {
+        Self {
+            src,
+            dst: new_streamp(),
+            q1: Complex::default(),
+            q2: Complex::default(),
+        }
+    }
+
+    fn process_one(&mut self, s: Complex) -> Float {
+        let top = (s.im - self.q2.im) * self.q1.re;
+        let bottom = (s.re - self.q2.re) * self.q1.im;
+        self.q2 = self.q1;
+        self.q1 = s;
+        top - bottom
+    }
+}
+map_block_convert_macro![FastFM, Float];

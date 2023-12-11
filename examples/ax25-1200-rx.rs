@@ -38,10 +38,10 @@ use rustradio::{Complex, Float};
 #[derive(StructOpt, Debug)]
 #[structopt()]
 struct Opt {
-    #[structopt(long = "audio", short = "a")]
+    #[structopt(long = "audio", short = "a", help = "Input is an .au file, not I/Q")]
     audio: bool,
 
-    #[structopt(long = "out", short = "o")]
+    #[structopt(long = "out", short = "o", help = "Directory to write packets to")]
     output: PathBuf,
 
     #[cfg(feature = "rtlsdr")]
@@ -55,14 +55,17 @@ struct Opt {
     #[structopt(short = "v", default_value = "0")]
     verbose: usize,
 
-    #[structopt(long = "rtlsdr")]
+    #[structopt(long = "rtlsdr", help = "Stream I/Q from an RTLSDR")]
     rtlsdr: bool,
 
     #[structopt(long = "sample_rate", default_value = "300000")]
     samp_rate: u32,
 
-    #[structopt(short = "r")]
+    #[structopt(short = "r", help = "Read I/Q from file")]
     read: Option<String>,
+
+    #[structopt(long = "fast_fm", help = "Use FastFM for the FM carrier demod")]
+    fast_fm: bool,
 }
 
 macro_rules! add_block {
@@ -166,7 +169,12 @@ fn main() -> Result<()> {
              */
 
         // TODO: AGC step?
-        let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
+        let prev = if opt.fast_fm {
+            // This is faster, but slightly worse.
+            add_block![g, FastFM::new(prev)]
+        } else {
+            add_block![g, QuadratureDemod::new(prev, 1.0)]
+        };
         (prev, samp_rate)
     };
     let prev = add_block![g, Hilbert::new(prev, 65)];
@@ -180,6 +188,8 @@ fn main() -> Result<()> {
     )?));
      */
 
+    // Can't use FastFM here, because it doesn't work well with
+    // preemph'd input.
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
     let taps = rustradio::fir::low_pass(samp_rate, 2400.0, 100.0);
