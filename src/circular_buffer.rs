@@ -114,6 +114,14 @@ impl Circ {
         Err(Error::new("failed to allocate circular buffer").into())
     }
 
+    /// Return length.
+    pub fn len(&self) -> usize {
+        // self.len is number of bytes in the entire buffer. The
+        // mapping is 2x the writable size when the buffer is empty,
+        // which is what's relevant to callers.
+        self.len / 2
+    }
+
     // I'm pretty sure this is a safe error to suppress. Clippy is not
     // wrong, it's scary. But this whole thing is scary unsafe.
     //
@@ -284,12 +292,11 @@ impl<T: Copy> Drop for BufferWriter<'_, T> {
 pub struct Buffer<T> {
     state: Arc<Mutex<BufferState<T>>>,
     circ: Circ,
+    member_size: usize,
 }
 
 impl<T> Buffer<T> {
     /// Create a new Buffer.
-    ///
-    /// TODO: actually use the `size` parameter.
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             state: Arc::new(Mutex::new(BufferState {
@@ -303,8 +310,14 @@ impl<T> Buffer<T> {
                 noncopy: VecDeque::<T>::new(),
                 tags: BTreeMap::new(),
             })),
+            member_size: std::mem::size_of::<T>(),
             circ: Circ::new(size)?,
         })
+    }
+
+    /// Return length.
+    pub fn len(&self) -> usize {
+        self.circ.len() / self.member_size
     }
 }
 
@@ -353,7 +366,12 @@ impl<T: Copy> Buffer<T> {
     /// Will only be called from the write buffer.
     pub(in crate::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
         let mut s = self.state.lock().unwrap();
-        assert!(s.free() >= n);
+        assert!(
+            s.free() >= n,
+            "tried to produce {n}, but only {} is free out of {}",
+            s.free(),
+            self.len()
+        );
         assert!(
             s.write_capacity() >= n,
             "can't produce that much. {} < {}",

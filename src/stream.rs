@@ -116,6 +116,11 @@ impl<T: Copy> Stream<T> {
         Self { circ }
     }
 
+    /// Return length.
+    pub fn len(&self) -> usize {
+        self.circ.len()
+    }
+
     /// Return a write slice.
     ///
     /// The only reason for returning error should be if there's
