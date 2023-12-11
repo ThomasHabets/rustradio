@@ -114,8 +114,8 @@ impl Circ {
         Err(Error::new("failed to allocate circular buffer").into())
     }
 
-    /// Return length.
-    pub fn len(&self) -> usize {
+    /// Return length of buffer, *before* the double mapping, in bytes.
+    pub fn total_size(&self) -> usize {
         // self.len is number of bytes in the entire buffer. The
         // mapping is 2x the writable size when the buffer is empty,
         // which is what's relevant to callers.
@@ -315,9 +315,10 @@ impl<T> Buffer<T> {
         })
     }
 
-    /// Return length.
-    pub fn len(&self) -> usize {
-        self.circ.len() / self.member_size
+    /// Return length of buffer, ignoring how much is in use, and the
+    /// double buffer.
+    pub fn total_size(&self) -> usize {
+        self.circ.total_size() / self.member_size
     }
 }
 
@@ -370,7 +371,7 @@ impl<T: Copy> Buffer<T> {
             s.free() >= n,
             "tried to produce {n}, but only {} is free out of {}",
             s.free(),
-            self.len()
+            self.total_size()
         );
         assert!(
             s.write_capacity() >= n,

@@ -116,9 +116,10 @@ impl<T: Copy> Stream<T> {
         Self { circ }
     }
 
-    /// Return length.
-    pub fn len(&self) -> usize {
-        self.circ.len()
+    /// Return total length of underlying circular buffer (before the
+    /// mapping doubling).
+    pub fn total_size(&self) -> usize {
+        self.circ.total_size()
     }
 
     /// Return a write slice.
