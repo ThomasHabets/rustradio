@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 
+export RUSTFLAGS="--deny warnings"
+
 cargo fmt -- --check || {
     echo "Run: cargo fmt" >&2
     exit 1
 }
 cargo test || {
-    echo "Tests fail without rtlsdr" >&2
+    echo "Tests fail without features" >&2
     exit 1
 }
-cargo test -F rtlsdr || {
-    echo "Tests fail with rtlsdr" >&2
+cargo test --all-features || {
+    echo "Tests fail with features" >&2
     exit 1
 }
 cargo +nightly bench --no-run -F rtlsdr || {
