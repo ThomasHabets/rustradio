@@ -63,7 +63,7 @@ impl QuadratureDemod {
 }
 map_block_convert_macro![QuadratureDemod, Float];
 
-/// A faster version of FM modulation, that makes some assumptions.
+/// A faster version of FM demodulation, that makes some assumptions.
 ///
 /// This block can be used instead of a QuadratureDemod block, for
 /// performance. It's much faster (~4x compared to the fast-math
@@ -79,6 +79,12 @@ map_block_convert_macro![QuadratureDemod, Float];
 ///
 /// You could deemphasize, if you know all transmitters preemp
 /// parameters.
+///
+/// For 9600bps AX.25 it works fine, if the sample rate is high
+/// enough. At 50ksps QuadratureDemod works well, but FastFM does
+/// not. At 500ksps FastFM performs just as well in my tests. But
+/// FastFM at 500ksps is about half the speed of QuadratureDemod at
+/// 50ksps.
 ///
 /// Really, just use QuadratureDemod unless it's shown to be too slow
 /// for your use case.
