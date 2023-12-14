@@ -37,6 +37,7 @@ pub struct ZeroCrossing {
     counter: u64,
     src: Streamp<Float>,
     dst: Streamp<Float>,
+    out_clock: Option<Streamp<Float>>,
 }
 
 impl ZeroCrossing {
@@ -48,7 +49,7 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
-        let mut clock_filter = SinglePoleIIR::new(1.0).unwrap();
+        let mut clock_filter = SinglePoleIIR::new(0.9).unwrap();
         clock_filter.set_prev(sps);
         Self {
             src,
@@ -60,12 +61,19 @@ impl ZeroCrossing {
             last_sign: false,
             last_cross: 0.0,
             counter: 0,
+            out_clock: None,
         }
     }
 
     /// Return the output stream.
     pub fn out(&self) -> Streamp<Float> {
         self.dst.clone()
+    }
+
+    /// Return the output stream.
+    pub fn out_clock(&mut self) -> Streamp<Float> {
+        let r = self.out_clock.get_or_insert(new_streamp()).clone();
+        r
     }
 }
 
@@ -82,12 +90,16 @@ impl Block for ZeroCrossing {
         if o.is_empty() {
             return Ok(BlockRet::Noop);
         }
+        let mut out_clock = self.out_clock.as_mut().map(|x| x.write_buf().unwrap());
         let mut n = 0;
         let mut opos = 0;
         for sample in input.iter() {
             n += 1;
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 o.slice()[opos] = *sample;
+                if let Some(ref mut s) = out_clock {
+                    s.slice()[opos] = self.clock;
+                }
                 opos += 1;
                 self.last_cross += self.clock;
                 if opos == o.len() {
@@ -98,16 +110,16 @@ impl Block for ZeroCrossing {
             let sign = *sample > 0.0;
             if sign != self.last_sign {
                 let t = self.counter as Float - self.last_cross;
+                let t = (t + self.clock * 100.0) % self.clock;
                 self.last_cross = self.counter as f32;
-                // TODO: adjust clock, within sps. Here just shut up the linter.
-                self.sps *= 1.0;
-                self.max_deviation *= 1.0;
                 let mi = self.sps - self.max_deviation;
                 let mx = self.sps + self.max_deviation;
                 if t > 0.0 {
                     let pre = self.clock;
-                    self.clock = self.clock_filter.filter_capped(self.clock, mi, mx);
-                    assert_eq!(self.clock, pre);
+                    self.clock = self.clock_filter.filter_capped(t, mi, mx);
+                    //assert_eq!(self.clock, pre);
+                    eprintln!("clock {pre} {t} {mi} {mx} => {}", self.clock);
+                    //assert_eq!(self.clock, pre-1.0);
                 }
             }
             self.last_sign = sign;
@@ -121,6 +133,10 @@ impl Block for ZeroCrossing {
         }
         input.consume(n);
         o.produce(opos, &[]);
+        if let Some(s) = out_clock {
+            eprintln!("produced {opos}");
+            s.produce(opos, &[]);
+        }
         Ok(BlockRet::Ok)
     }
 }

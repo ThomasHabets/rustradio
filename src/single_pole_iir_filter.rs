@@ -82,7 +82,7 @@ where
     {
         let o: Tout = sample * self.alpha + self.prev_output * self.one_minus_alpha;
         self.prev_output = o.max(mi).min(mx);
-        o
+        self.prev_output
     }
 }
 

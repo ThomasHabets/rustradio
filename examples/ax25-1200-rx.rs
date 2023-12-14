@@ -203,17 +203,35 @@ fn main() -> Result<()> {
         AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)
     ];
 
-    /*
     // Save floats to file.
     let (a, prev) = add_block![g, Tee::new(prev)];
+    {
+        let a = add_block![g, ToText::new(vec![a])];
+        g.add(Box::new(FileSink::new(
+            a,
+            "demod.dat",
+            rustradio::file_sink::Mode::Overwrite,
+        )?));
+    }
+
+    let baud = 1200.0;
+    let (prev, clock) = {
+        let mut block = ZeroCrossing::new(prev, samp_rate / baud, 3.0);
+        let prev = block.out();
+        let clock = block.out_clock();
+        g.add(Box::new(block));
+        (prev, clock)
+    };
+
+    let (a, prev) = add_block![g, Tee::new(prev)];
+    let clock = add_block![g, AddConst::new(clock, -samp_rate / baud)];
+    let clock = add_block![g, ToText::new(vec![a, clock])];
     g.add(Box::new(FileSink::new(
-        a,
-        "test.f32",
+        clock,
+        "test.dat",
         rustradio::file_sink::Mode::Overwrite,
     )?));
-     */
-    let baud = 1200.0;
-    let prev = add_block![g, ZeroCrossing::new(prev, samp_rate / baud, 0.1)];
+
     let prev = add_block![g, BinarySlicer::new(prev)];
 
     // Delay xor, aka NRZI decode.
