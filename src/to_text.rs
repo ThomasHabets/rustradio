@@ -30,7 +30,6 @@ use crate::Error;
 ///
 /// Read from one or more streams, and produce a text file where each
 /// line is one sample per stream, separated by spaces.
-
 pub struct ToText<T: Copy> {
     srcs: Vec<Streamp<T>>,
     dst: Streamp<u8>,
