@@ -5,6 +5,7 @@
 * https://youtu.be/uMEfx_l5Oxk
 */
 use anyhow::Result;
+use log::trace;
 
 use crate::block::{Block, BlockRet};
 use crate::single_pole_iir_filter::SinglePoleIIR;
@@ -33,8 +34,9 @@ pub struct ZeroCrossing {
     clock: Float,
     clock_filter: SinglePoleIIR<Float>,
     last_sign: bool,
-    last_cross: f32,
-    counter: u64,
+    stream_pos: Float,
+    last_sym_boundary_pos: Float,
+    next_sym_middle: Float,
     src: Streamp<Float>,
     dst: Streamp<Float>,
     out_clock: Option<Streamp<Float>>,
@@ -49,7 +51,7 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
-        let mut clock_filter = SinglePoleIIR::new(0.9).unwrap();
+        let mut clock_filter = SinglePoleIIR::new(0.01).unwrap();
         clock_filter.set_prev(sps);
         Self {
             src,
@@ -59,8 +61,9 @@ impl ZeroCrossing {
             clock_filter,
             max_deviation,
             last_sign: false,
-            last_cross: 0.0,
-            counter: 0,
+            stream_pos: 0.0,
+            last_sym_boundary_pos: 0.0,
+            next_sym_middle: 0.0,
             out_clock: None,
         }
     }
@@ -90,51 +93,88 @@ impl Block for ZeroCrossing {
         if o.is_empty() {
             return Ok(BlockRet::Noop);
         }
+        // TODO: get rid of unwrap.
         let mut out_clock = self.out_clock.as_mut().map(|x| x.write_buf().unwrap());
-        let mut n = 0;
-        let mut opos = 0;
+
+        let mut n = 0; // Samples consumed.
+        let mut opos = 0; // Current output position.
+        let olen = o.len();
+        let oslice = o.slice();
         for sample in input.iter() {
             n += 1;
-            if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
-                o.slice()[opos] = *sample;
+            if self.stream_pos >= self.next_sym_middle {
+                // TODO: use more than center sample.
+                oslice[opos] = *sample;
                 if let Some(ref mut s) = out_clock {
                     s.slice()[opos] = self.clock;
                 }
                 opos += 1;
-                self.last_cross += self.clock;
-                if opos == o.len() {
+                self.next_sym_middle += self.clock;
+                if opos == olen {
                     break;
                 }
             }
 
             let sign = *sample > 0.0;
             if sign != self.last_sign {
-                let t = self.counter as Float - self.last_cross;
-                let t = (t + self.clock * 100.0) % self.clock;
-                self.last_cross = self.counter as f32;
-                let mi = self.sps - self.max_deviation;
-                let mx = self.sps + self.max_deviation;
-                if t > 0.0 {
+                if self.stream_pos > 0.0 && self.last_sym_boundary_pos > 0.0 {
+                    assert!(
+                        self.stream_pos > self.last_sym_boundary_pos,
+                        "{} not > {}",
+                        self.stream_pos,
+                        self.last_sym_boundary_pos
+                    );
+                    let mi = self.sps - self.max_deviation;
+                    let mx = self.sps + self.max_deviation;
+                    let mut t = self.stream_pos - self.last_sym_boundary_pos;
                     let pre = self.clock;
-                    self.clock = self.clock_filter.filter_capped(t, mi, mx);
-                    //assert_eq!(self.clock, pre);
-                    eprintln!("clock {pre} {t} {mi} {mx} => {}", self.clock);
-                    //assert_eq!(self.clock, pre-1.0);
+                    while t > mx {
+                        let t2 = t - self.clock;
+                        if (t - self.clock).abs() < (t2 - self.clock).abs() {
+                            break;
+                        }
+                        t = t2;
+                    }
+                    if self.stream_pos > 0.0 {
+                        assert!(
+                            t > 0.0,
+                            "t negative {} {}",
+                            self.stream_pos,
+                            self.last_sym_boundary_pos
+                        );
+                        self.clock = self.clock_filter.filter_capped(t, mi, mx);
+                        self.next_sym_middle = self.last_sym_boundary_pos + self.clock / 2.0;
+                        while self.next_sym_middle < self.stream_pos {
+                            self.next_sym_middle += self.clock;
+                        }
+                        trace!(
+                            "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
+                            self.stream_pos,
+                            self.clock
+                        );
+                    }
                 }
+                self.last_sym_boundary_pos = self.stream_pos;
+                self.last_sign = sign;
             }
-            self.last_sign = sign;
-            self.counter += 1;
+            self.stream_pos += 1.0;
 
-            let step_back = (10.0 * self.clock) as u64;
-            if self.counter > step_back && self.last_cross as u64 > step_back {
-                self.counter -= step_back;
-                self.last_cross -= step_back as f32;
+            // Stay around zero so that we don't lose float precision.
+            if true {
+                let step_back = 10.0 * self.clock;
+                if self.stream_pos > step_back
+                    && self.last_sym_boundary_pos > step_back
+                    && self.next_sym_middle > step_back
+                {
+                    self.stream_pos -= step_back;
+                    self.last_sym_boundary_pos -= step_back;
+                    self.next_sym_middle -= step_back;
+                }
             }
         }
         input.consume(n);
         o.produce(opos, &[]);
         if let Some(s) = out_clock {
-            eprintln!("produced {opos}");
             s.produce(opos, &[]);
         }
         Ok(BlockRet::Ok)

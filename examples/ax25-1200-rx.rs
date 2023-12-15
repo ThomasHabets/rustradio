@@ -203,7 +203,11 @@ fn main() -> Result<()> {
         AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)
     ];
 
+    //let prev = add_block![g, Skip::new(prev, 1530*43)];
+    //let prev = add_block![g, Skip::new(prev, 20)];
+
     // Save floats to file.
+    /*
     let (a, prev) = add_block![g, Tee::new(prev)];
     {
         let a = add_block![g, ToText::new(vec![a])];
@@ -213,10 +217,11 @@ fn main() -> Result<()> {
             rustradio::file_sink::Mode::Overwrite,
         )?));
     }
+     */
 
     let baud = 1200.0;
     let (prev, clock) = {
-        let mut block = ZeroCrossing::new(prev, samp_rate / baud, 3.0);
+        let mut block = ZeroCrossing::new(prev, samp_rate / baud, 0.1);
         let prev = block.out();
         let clock = block.out_clock();
         g.add(Box::new(block));
