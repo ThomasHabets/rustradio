@@ -5,7 +5,8 @@
 * https://youtu.be/uMEfx_l5Oxk
 */
 use anyhow::Result;
-use log::trace;
+use log::{debug, trace};
+use std::collections::VecDeque;
 
 use crate::block::{Block, BlockRet};
 use crate::single_pole_iir_filter::SinglePoleIIR;
@@ -27,7 +28,7 @@ looping.
 
 But for now it's "good enough" to get simple 2FSK decoded pretty
 reliably.
-*/
+ */
 pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,
@@ -37,6 +38,7 @@ pub struct ZeroCrossing {
     stream_pos: Float,
     last_sym_boundary_pos: Float,
     next_sym_middle: Float,
+    crossing_history: VecDeque<Float>,
     src: Streamp<Float>,
     dst: Streamp<Float>,
     out_clock: Option<Streamp<Float>>,
@@ -51,7 +53,7 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
-        let mut clock_filter = SinglePoleIIR::new(0.01).unwrap();
+        let mut clock_filter = SinglePoleIIR::new(0.03).unwrap();
         clock_filter.set_prev(sps);
         Self {
             src,
@@ -65,6 +67,7 @@ impl ZeroCrossing {
             last_sym_boundary_pos: 0.0,
             next_sym_middle: 0.0,
             out_clock: None,
+            crossing_history: VecDeque::new(),
         }
     }
 
@@ -136,22 +139,39 @@ impl Block for ZeroCrossing {
                         t = t2;
                     }
                     if self.stream_pos > 0.0 {
-                        assert!(
-                            t > 0.0,
-                            "t negative {} {}",
-                            self.stream_pos,
-                            self.last_sym_boundary_pos
-                        );
-                        self.clock = self.clock_filter.filter_capped(t, mi, mx);
-                        self.next_sym_middle = self.last_sym_boundary_pos + self.clock / 2.0;
-                        while self.next_sym_middle < self.stream_pos {
-                            self.next_sym_middle += self.clock;
+                        if true && t > mi * 0.8 {
+                            // Single pole IIR
+                            assert!(
+                                t > 0.0,
+                                "t negative {} {}",
+                                self.stream_pos,
+                                self.last_sym_boundary_pos
+                            );
+                            self.clock = self.clock_filter.filter_capped(t, mi, mx);
+                            self.next_sym_middle = self.last_sym_boundary_pos + self.clock / 2.0;
+                            while self.next_sym_middle < self.stream_pos {
+                                self.next_sym_middle += self.clock;
+                            }
+                            trace!(
+                                "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
+                                self.stream_pos,
+                                self.clock
+                            );
+                        } else if false && t > mi / 2.0 {
+                            // FIR.
+                            self.crossing_history.push_back(t);
+                            if self.crossing_history.len() > 5 {
+                                self.crossing_history.pop_front();
+                            }
+                            let sum: Float = self.crossing_history.iter().sum();
+                            let t = (sum / self.crossing_history.len() as Float).max(mi).min(mx);
+                            self.clock = self.clock_filter.filter_capped(t, mi, mx);
+                            debug!("{:?}", self.crossing_history);
+                            debug!(
+                                "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
+                                self.stream_pos, self.clock
+                            );
                         }
-                        trace!(
-                            "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
-                            self.stream_pos,
-                            self.clock
-                        );
                     }
                 }
                 self.last_sym_boundary_pos = self.stream_pos;

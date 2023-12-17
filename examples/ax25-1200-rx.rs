@@ -221,7 +221,7 @@ fn main() -> Result<()> {
 
     let baud = 1200.0;
     let (prev, clock) = {
-        let mut block = ZeroCrossing::new(prev, samp_rate / baud, 0.1);
+        let mut block = ZeroCrossing::new(prev, samp_rate / baud, 0.5);
         let prev = block.out();
         let clock = block.out_clock();
         g.add(Box::new(block));
