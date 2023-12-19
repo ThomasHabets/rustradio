@@ -5,7 +5,7 @@
 * https://youtu.be/uMEfx_l5Oxk
 */
 use anyhow::Result;
-use log::{debug, trace};
+use log::{debug, info, trace};
 use std::collections::VecDeque;
 
 use crate::block::{Block, BlockRet};
@@ -53,7 +53,7 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
-        let mut clock_filter = SinglePoleIIR::new(0.03).unwrap();
+        let mut clock_filter = SinglePoleIIR::new(0.01).unwrap();
         clock_filter.set_prev(sps);
         Self {
             src,
@@ -139,7 +139,7 @@ impl Block for ZeroCrossing {
                         t = t2;
                     }
                     if self.stream_pos > 0.0 {
-                        if true && t > mi * 0.8 {
+                        if true && t > mi * 0.8 && t < mx * 1.2 {
                             // Single pole IIR
                             assert!(
                                 t > 0.0,
@@ -152,10 +152,9 @@ impl Block for ZeroCrossing {
                             while self.next_sym_middle < self.stream_pos {
                                 self.next_sym_middle += self.clock;
                             }
-                            trace!(
+                            debug!(
                                 "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
-                                self.stream_pos,
-                                self.clock
+                                self.stream_pos, self.clock
                             );
                         } else if false && t > mi / 2.0 {
                             // FIR.
