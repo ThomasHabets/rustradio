@@ -54,7 +54,7 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
-        let taps = vec![0.69, 0.30, 0.01];
+        let taps = vec![0.01, 0.30, 0.69];
         assert_eq!(taps.iter().sum::<Float>(), 1.0);
         let mut f = IIRFilter::new(&taps);
         //let mut f = IIRFilter::new(&[0.99, 0.01]);

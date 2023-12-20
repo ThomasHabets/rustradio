@@ -35,7 +35,7 @@ where
     /// Create new FIR.
     pub fn new(taps: &[T]) -> Self {
         Self {
-            taps: taps.iter().copied().rev().collect(),
+            taps: taps.iter().copied().collect(),
             buf: VecDeque::new(),
         }
     }
