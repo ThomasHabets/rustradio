@@ -5,10 +5,11 @@
 * https://youtu.be/uMEfx_l5Oxk
 */
 use anyhow::Result;
-use log::{debug, info, trace};
+use log::debug;
 use std::collections::VecDeque;
 
 use crate::block::{Block, BlockRet};
+use crate::iir_filter::{Filter, IIRFilter};
 use crate::single_pole_iir_filter::SinglePoleIIR;
 use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Float};
@@ -33,7 +34,7 @@ pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,
     clock: Float,
-    clock_filter: SinglePoleIIR<Float>,
+    clock_filter: Box<dyn Filter<Float>>,
     last_sign: bool,
     stream_pos: Float,
     last_sym_boundary_pos: Float,
@@ -53,8 +54,12 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
         assert!(sps > 1.0);
-        let mut clock_filter = SinglePoleIIR::new(0.01).unwrap();
-        clock_filter.set_prev(sps);
+        let taps = vec![0.69, 0.30, 0.01];
+        assert_eq!(taps.iter().sum::<Float>(), 1.0);
+        let mut f = IIRFilter::new(&taps);
+        //let mut f = IIRFilter::new(&[0.99, 0.01]);
+        f.fill(sps);
+        let mut clock_filter = Box::new(f);
         Self {
             src,
             dst: new_streamp(),

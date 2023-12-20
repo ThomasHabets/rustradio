@@ -1,31 +1,15 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
+use crate::iir_filter::{Filter, MinMax};
 use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_macro_v2, Float};
 
-/// Ability to call .min and .max, like floats.
-pub trait MinMax {
-    /// Return min of two values.
-    fn min(&self, o: Self) -> Self;
-
-    /// Return max of two values.
-    fn max(&self, o: Self) -> Self;
-}
-impl MinMax for Float {
-    fn max(&self, r: Float) -> Self {
-        r.max(*self)
-    }
-    fn min(&self, r: Float) -> Self {
-        r.min(*self)
-    }
-}
-
 /// Very simple IIR.
-pub struct SinglePoleIIR<Tout> {
+pub struct SinglePoleIIR<T> {
     alpha: Float, // TODO: GNURadio uses double
     one_minus_alpha: Float,
-    prev_output: Tout,
+    prev_output: T,
 }
 
 impl<Tout> SinglePoleIIR<Tout>
@@ -43,17 +27,8 @@ where
         Some(r)
     }
     /// Set previous output
-    pub fn set_prev(&mut self, prev: Tout) {
+    pub fn fill(&mut self, prev: Tout) {
         self.prev_output = prev;
-    }
-
-    fn filter<Tin>(&mut self, sample: Tin) -> Tout
-    where
-        Tin: Copy + std::ops::Mul<Float, Output = Tin> + std::ops::Add<Tout, Output = Tout>,
-    {
-        let o: Tout = sample * self.alpha + self.prev_output * self.one_minus_alpha;
-        self.prev_output = o;
-        o
     }
 
     fn set_taps(&mut self, alpha: Float) -> Option<()> {
@@ -63,6 +38,24 @@ where
         self.alpha = alpha;
         self.one_minus_alpha = 1.0 - alpha;
         Some(())
+    }
+}
+
+impl<T> Filter<T> for SinglePoleIIR<T>
+where
+    T: Copy + Default + std::ops::Mul<Float, Output = T> + std::ops::Add<Output = T> + MinMax,
+{
+    fn filter(&mut self, sample: T) -> T {
+        let o: T = sample * self.alpha + self.prev_output * self.one_minus_alpha;
+        self.prev_output = o;
+        o
+    }
+    fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
+        let o: T = (sample * self.alpha + self.prev_output * self.one_minus_alpha)
+            .min(mx)
+            .max(mi);
+        self.prev_output = o;
+        o
     }
 }
 
@@ -102,7 +95,8 @@ where
         + Default
         + std::ops::Mul<Float, Output = T>
         + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>,
+        + std::ops::Add<T, Output = T>
+        + MinMax,
 {
     /// Create new IIR filter.
     pub fn new(src: Streamp<T>, alpha: Float) -> Option<Self> {
@@ -123,7 +117,8 @@ map_block_macro_v2![
     std::ops::Add<Output = T>,
     std::ops::Mul<T, Output = T>,
     std::ops::Mul<Float, Output = T>,
-    std::ops::Add<T, Output = T>
+    std::ops::Add<T, Output = T>,
+    MinMax
 ];
 
 #[cfg(test)]
