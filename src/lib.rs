@@ -122,6 +122,7 @@ pub mod file_source;
 pub mod fir;
 pub mod hdlc_deframer;
 pub mod hilbert;
+pub mod iir_filter;
 pub mod multiply_const;
 pub mod nrzi;
 pub mod null_sink;
