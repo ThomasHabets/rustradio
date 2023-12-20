@@ -1,7 +1,7 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
-use crate::iir_filter::{Filter, MinMax};
+use crate::iir_filter::{Filter, CappedFilter, MinMax};
 use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_macro_v2, Float};
 
@@ -43,13 +43,18 @@ where
 
 impl<T> Filter<T> for SinglePoleIIR<T>
 where
-    T: Copy + Default + std::ops::Mul<Float, Output = T> + std::ops::Add<Output = T> + MinMax,
+    T: Copy + Default + std::ops::Mul<Float, Output = T> + std::ops::Add<Output = T>,
 {
     fn filter(&mut self, sample: T) -> T {
         let o: T = sample * self.alpha + self.prev_output * self.one_minus_alpha;
         self.prev_output = o;
         o
     }
+}
+impl<T> CappedFilter<T> for SinglePoleIIR<T>
+where
+    T: Copy + Default + std::ops::Mul<Float, Output = T> + std::ops::Add<Output = T> + MinMax,
+{
     fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
         let o: T = (sample * self.alpha + self.prev_output * self.one_minus_alpha)
             .min(mx)

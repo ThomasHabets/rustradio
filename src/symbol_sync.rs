@@ -9,7 +9,7 @@ use log::debug;
 use std::collections::VecDeque;
 
 use crate::block::{Block, BlockRet};
-use crate::iir_filter::{Filter, IIRFilter};
+use crate::iir_filter::{CappedFilter, IIRFilter};
 use crate::single_pole_iir_filter::SinglePoleIIR;
 use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Float};
@@ -34,7 +34,7 @@ pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,
     clock: Float,
-    clock_filter: Box<dyn Filter<Float>>,
+    clock_filter: Box<dyn CappedFilter<Float>>,
     last_sign: bool,
     stream_pos: Float,
     last_sym_boundary_pos: Float,

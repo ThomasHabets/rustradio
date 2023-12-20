@@ -48,6 +48,10 @@ where
 
 pub trait Filter<T: Copy + Default> {
     fn filter(&mut self, input: T) -> T;
+    // TODO: also filter_n().
+}
+
+pub trait CappedFilter<T: Copy + Default + MinMax> {
     fn filter_capped(&mut self, input: T, mi: T, mx: T) -> T;
     // TODO: also filter_n().
 }
@@ -67,6 +71,11 @@ where
         }
         ret
     }
+}
+impl<T> CappedFilter<T> for IIRFilter<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + MinMax,
+{
     fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
         // TODO: dedup.
         let mut ret = self.taps[0] * sample;
