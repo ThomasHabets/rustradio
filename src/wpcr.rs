@@ -79,8 +79,9 @@ impl Block for Midpointer {
             let high = a[a.len() / 2];
             let low = b[b.len() / 2];
             let offset = low + (high - low) / 2.0;
+            // TODO: record position of burst.
             self.dst
-                .push(v.iter().map(|t| t - offset).collect::<Vec<_>>());
+                .push(v.iter().map(|t| t - offset).collect::<Vec<_>>(), &[]);
         }
         Ok(BlockRet::Ok)
     }
@@ -230,8 +231,8 @@ impl Block for Wpcr {
             None => return Ok(BlockRet::Noop),
             Some(x) => x,
         };
-        if let Some((packet, _tags)) = self.process_one(&x) {
-            self.dst.push(packet);
+        if let Some((packet, tags)) = self.process_one(&x) {
+            self.dst.push(packet, &tags);
         }
         Ok(BlockRet::Ok)
     }

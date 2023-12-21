@@ -10,7 +10,7 @@ therefore [APRS][aprs].
 use log::{debug, info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, Streamp, Tag, TagValue};
 use crate::{Error, Result};
 
 enum State {
@@ -71,6 +71,7 @@ pub struct HdlcDeframer {
     decoded: usize,
     crc_error: usize,
     bitfixed: usize,
+    stream_pos: u64,
 }
 
 impl Drop for HdlcDeframer {
@@ -97,6 +98,7 @@ impl HdlcDeframer {
             decoded: 0,
             crc_error: 0,
             bitfixed: 0,
+            stream_pos: 0,
         }
     }
 
@@ -110,7 +112,7 @@ impl HdlcDeframer {
         self.dst.clone()
     }
 
-    fn update_state(&mut self, bit: u8) -> Result<State> {
+    fn update_state(&mut self, bit: u8, stream_pos: u64) -> Result<State> {
         Ok(match &mut self.state {
             State::Unsynced(v) => {
                 let n = (*v >> 1) | (bit << 7);
@@ -175,6 +177,7 @@ impl HdlcDeframer {
                         .map(|i| bits2byte(&bits[i..i + 8]))
                         .collect();
                     debug!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
+                    let tags = &[Tag::new(0, "packet_pos".into(), TagValue::U64(stream_pos))];
                     if self.strip_checksum {
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);
@@ -193,10 +196,10 @@ impl HdlcDeframer {
                             return Ok(State::Synced((0, Vec::with_capacity(self.max_size))));
                         }
                         self.decoded += 1;
-                        self.dst.push(data.to_vec());
+                        self.dst.push(data.to_vec(), tags);
                     } else {
                         self.decoded += 1;
-                        self.dst.push(bytes);
+                        self.dst.push(bytes, tags);
                     }
                 }
 
@@ -222,7 +225,8 @@ impl Block for HdlcDeframer {
         for bit in input.iter().copied() {
             // This is a bit ugly in that it destructively creates the
             // new state. The old state is moved from.
-            self.state = self.update_state(bit)?;
+            self.state = self.update_state(bit, self.stream_pos)?;
+            self.stream_pos += 1;
         }
         let n = input.len();
         input.consume(n);

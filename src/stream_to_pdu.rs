@@ -106,7 +106,8 @@ where
                     delme.len(),
                     delme.len() * T::size()
                 );
-                self.dst.push(delme);
+                // TODO: record stream pos.
+                self.dst.push(delme, &[]);
                 self.endcounter = None;
             }
             if let Some(c) = self.endcounter {

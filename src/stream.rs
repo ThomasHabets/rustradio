@@ -88,7 +88,9 @@ impl<T> Stream<T> {
 
     /// Push one sample, handing off ownership.
     /// Ideally this should only be NoCopy.
-    pub fn push(&self, val: T) {
+    ///
+    /// TODO: Actually store the tags.
+    pub fn push(&self, val: T, _tags: &[Tag]) {
         self.circ.push(val);
     }
 
