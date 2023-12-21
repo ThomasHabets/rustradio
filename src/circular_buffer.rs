@@ -1,11 +1,7 @@
 //! Test implementation of circular buffers.
 //! Full of unsafe. Full of ugly code.
-//!
-//! TODO:
-//! * Tag support.
-//! * Rewrite all blocks for this API.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, Mutex};
 
@@ -15,7 +11,7 @@ use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
 use log::{debug, trace};
 
 use crate::stream::{Tag, TagPos};
-use crate::{Error, Len};
+use crate::Error;
 
 extern "C" {
     fn mmap(
@@ -141,7 +137,7 @@ unsafe impl Send for Circ {}
 unsafe impl Sync for Circ {}
 
 #[derive(Debug)]
-struct BufferState<T> {
+struct BufferState {
     rpos: usize,        // In samples.
     wpos: usize,        // In samples.
     used: usize,        // In samples.
@@ -149,11 +145,10 @@ struct BufferState<T> {
     member_size: usize, // In bytes.
     read_borrow: bool,
     write_borrow: bool,
-    noncopy: VecDeque<T>,
     tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 
-impl<T> BufferState<T> {
+impl BufferState {
     // Return write range, in samples.
     fn write_range(&self) -> (usize, usize) {
         //eprintln!("Write range: {} {}", self.rpos, self.wpos);
@@ -290,9 +285,10 @@ impl<T: Copy> Drop for BufferWriter<'_, T> {
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
-    state: Arc<Mutex<BufferState<T>>>,
+    state: Arc<Mutex<BufferState>>,
     circ: Circ,
     member_size: usize,
+    dummy: std::marker::PhantomData<T>,
 }
 
 impl<T> Buffer<T> {
@@ -307,11 +303,11 @@ impl<T> Buffer<T> {
                 used: 0,
                 circ_len: size,
                 member_size: std::mem::size_of::<T>(),
-                noncopy: VecDeque::<T>::new(),
                 tags: BTreeMap::new(),
             })),
             member_size: std::mem::size_of::<T>(),
             circ: Circ::new(size)?,
+            dummy: std::marker::PhantomData,
         })
     }
 
@@ -454,27 +450,6 @@ impl<T: Copy> Buffer<T> {
         let (start, end) = s.write_range();
         let buf = self.circ.full_buffer::<T>(start, end);
         Ok(BufferWriter::new(unsafe { std::mem::transmute(buf) }, self))
-    }
-}
-
-// TODO: Can we have these only exist when *not* Copy?
-impl<T> Buffer<T> {
-    /// Push a value.
-    pub fn push(&self, v: T) {
-        let mut s = self.state.lock().unwrap();
-        s.noncopy.push_back(v);
-    }
-    /// Push a value.
-    pub fn pop(&self) -> Option<T> {
-        let mut s = self.state.lock().unwrap();
-        s.noncopy.pop_front()
-    }
-}
-impl<T: Len> Buffer<T> {
-    /// Get the size of the first item in the stream.
-    pub fn peek_size(&self) -> Option<usize> {
-        let s = self.state.lock().unwrap();
-        Some(s.noncopy.front()?.len())
     }
 }
 

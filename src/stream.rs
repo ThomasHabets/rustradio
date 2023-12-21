@@ -3,7 +3,8 @@
 Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
 */
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 use crate::circular_buffer;
 use crate::{Error, Float, Len};
@@ -71,6 +72,19 @@ pub fn new_streamp<T>() -> Streamp<T> {
     Arc::new(Stream::new())
 }
 
+/// A stream of noncopyable objects (e.g. Vec / PDUs).
+pub struct NoCopyStream<T> {
+    s: Mutex<VecDeque<T>>,
+}
+
+/// Convenience type for a "pointer to a stream".
+pub type NoCopyStreamp<T> = Arc<NoCopyStream<T>>;
+
+/// Create a new Streamp.
+pub fn new_nocopy_streamp<T>() -> NoCopyStreamp<T> {
+    Arc::new(NoCopyStream::new())
+}
+
 /// Create a new Streamp with contents.
 pub fn streamp_from_slice<T: Copy>(data: &[T]) -> Streamp<T> {
     Arc::new(Stream::from_slice(data))
@@ -85,26 +99,41 @@ impl<T> Stream<T> {
             circ: circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(),
         }
     }
+}
+
+impl<T> NoCopyStream<T> {
+    /// Create new stream.
+    pub fn new() -> Self {
+        Self {
+            s: Mutex::new(VecDeque::new()),
+        }
+    }
 
     /// Push one sample, handing off ownership.
     /// Ideally this should only be NoCopy.
     ///
     /// TODO: Actually store the tags.
     pub fn push(&self, val: T, _tags: &[Tag]) {
-        self.circ.push(val);
+        self.s.lock().unwrap().push_back(val);
     }
 
     /// Pop one sample.
     /// Ideally this should only be NoCopy.
     pub fn pop(&self) -> Option<T> {
-        self.circ.pop()
+        self.s.lock().unwrap().pop_front()
     }
 }
 
-impl<T: Len> Stream<T> {
+impl<T> Default for NoCopyStream<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Len> NoCopyStream<T> {
     /// Get the size of the front packet.
     pub fn peek_size(&self) -> Option<usize> {
-        self.circ.peek_size()
+        self.s.lock().unwrap().front().map(|e| e.len())
     }
 }
 

@@ -38,24 +38,24 @@ Drawbacks of this method:
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, Tag, TagValue};
+use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Tag, TagValue};
 use crate::{Complex, Error, Float};
 
 /// Midpointer is a block re-center a NRZ burst around 0.
 pub struct Midpointer {
-    src: Streamp<Vec<Float>>,
-    dst: Streamp<Vec<Float>>,
+    src: NoCopyStreamp<Vec<Float>>,
+    dst: NoCopyStreamp<Vec<Float>>,
 }
 impl Midpointer {
     /// Create new midpointer.
-    pub fn new(src: Streamp<Vec<Float>>) -> Self {
+    pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: new_nocopy_streamp(),
         }
     }
     /// Get output stream.
-    pub fn out(&self) -> Streamp<Vec<Float>> {
+    pub fn out(&self) -> NoCopyStreamp<Vec<Float>> {
         self.dst.clone()
     }
 }
@@ -94,7 +94,7 @@ pub struct WpcrBuilder {
 
 impl WpcrBuilder {
     /// Create new WpcrBuilder
-    pub fn new(src: Streamp<Vec<Float>>) -> Self {
+    pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
         Self {
             wpcr: Wpcr::new(src),
         }
@@ -114,17 +114,17 @@ impl WpcrBuilder {
 
 /// Whole packet clock recovery block.
 pub struct Wpcr {
-    src: Streamp<Vec<Float>>,
-    dst: Streamp<Vec<Float>>,
+    src: NoCopyStreamp<Vec<Float>>,
+    dst: NoCopyStreamp<Vec<Float>>,
     samp_rate: Option<Float>,
 }
 
 impl Wpcr {
     /// Create new WPCR block.
-    pub fn new(src: Streamp<Vec<Float>>) -> Self {
+    pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: new_nocopy_streamp(),
             samp_rate: None,
         }
     }
@@ -135,7 +135,7 @@ impl Wpcr {
     }
 
     /// Return the output stream.
-    pub fn out(&self) -> Streamp<Vec<Float>> {
+    pub fn out(&self) -> NoCopyStreamp<Vec<Float>> {
         self.dst.clone()
     }
 

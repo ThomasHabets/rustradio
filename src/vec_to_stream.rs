@@ -3,18 +3,18 @@
 Turn stream of e.g. `Vec<u8>` to stream of `u8`.
  */
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{new_streamp, NoCopyStreamp, Streamp};
 use crate::Error;
 
 /// Block for vector to stream.
 pub struct VecToStream<T> {
-    src: Streamp<Vec<T>>,
+    src: NoCopyStreamp<Vec<T>>,
     dst: Streamp<T>,
 }
 
 impl<T> VecToStream<T> {
     /// Create new VecToStream.
-    pub fn new(src: Streamp<Vec<T>>) -> Self {
+    pub fn new(src: NoCopyStreamp<Vec<T>>) -> Self {
         Self {
             src,
             dst: new_streamp(),

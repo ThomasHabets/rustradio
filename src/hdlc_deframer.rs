@@ -10,7 +10,7 @@ therefore [APRS][aprs].
 use log::{debug, info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp, Tag, TagValue};
+use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Streamp, Tag, TagValue};
 use crate::{Error, Result};
 
 enum State {
@@ -63,7 +63,7 @@ found as Vec<u8>.
 */
 pub struct HdlcDeframer {
     src: Streamp<u8>,
-    dst: Streamp<Vec<u8>>,
+    dst: NoCopyStreamp<Vec<u8>>,
     state: State,
     min_size: usize,
     max_size: usize,
@@ -90,7 +90,7 @@ impl HdlcDeframer {
     pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: new_nocopy_streamp(),
             min_size,
             max_size,
             state: State::Unsynced(0xff),
@@ -108,7 +108,7 @@ impl HdlcDeframer {
     }
 
     /// Get output stream.
-    pub fn out(&self) -> Streamp<Vec<u8>> {
+    pub fn out(&self) -> NoCopyStreamp<Vec<u8>> {
         self.dst.clone()
     }
 
