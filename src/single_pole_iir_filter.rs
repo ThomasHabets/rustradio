@@ -1,7 +1,7 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
-use crate::iir_filter::{Filter, CappedFilter, MinMax};
+use crate::iir_filter::{CappedFilter, Filter, MinMax};
 use crate::stream::{new_streamp, Streamp};
 use crate::{map_block_macro_v2, Float};
 

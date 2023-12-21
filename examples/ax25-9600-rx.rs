@@ -48,6 +48,12 @@ struct Opt {
 
     #[structopt(short = "r")]
     read: Option<String>,
+
+    #[structopt(long = "symbol_taps", default_value = "1.0", use_delimiter = true)]
+    symbol_taps: Vec<Float>,
+
+    #[structopt(long, default_value = "0.1")]
+    symbol_max_deviation: Float,
 }
 
 macro_rules! add_block {
@@ -138,7 +144,15 @@ fn main() -> Result<()> {
     //let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
     let baud = 9600.0;
-    let prev = add_block![g, ZeroCrossing::new(prev, samp_rate / baud, 0.1)];
+    let prev = add_block![
+        g,
+        ZeroCrossing::new(
+            prev,
+            samp_rate / baud,
+            opt.symbol_max_deviation,
+            &opt.symbol_taps
+        )
+    ];
     let prev = add_block![g, BinarySlicer::new(prev)];
 
     // Delay xor, aka NRZI decode.

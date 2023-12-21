@@ -66,6 +66,12 @@ struct Opt {
 
     #[structopt(long = "fast_fm", help = "Use FastFM for the FM carrier demod")]
     fast_fm: bool,
+
+    #[structopt(long = "symbol_taps", default_value = "1.0", use_delimiter = true)]
+    symbol_taps: Vec<Float>,
+
+    #[structopt(long, default_value = "0.5")]
+    symbol_max_deviation: Float,
 }
 
 macro_rules! add_block {
@@ -221,7 +227,12 @@ fn main() -> Result<()> {
 
     let baud = 1200.0;
     let (prev, clock) = {
-        let mut block = ZeroCrossing::new(prev, samp_rate / baud, 0.5);
+        let mut block = ZeroCrossing::new(
+            prev,
+            samp_rate / baud,
+            opt.symbol_max_deviation,
+            &opt.symbol_taps,
+        );
         let prev = block.out();
         let clock = block.out_clock();
         g.add(Box::new(block));
