@@ -54,9 +54,11 @@ impl ZeroCrossing {
      */
     pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float, taps: &[Float]) -> Self {
         assert!(sps > 1.0);
-        assert_eq!(taps.iter().sum::<Float>(), 1.0);
+
+        // Commented out since filter may want to be biased towards the sps.
+        // assert_eq!(taps.iter().sum::<Float>(), 1.0);
+
         let mut f = IIRFilter::new(&taps);
-        //let mut f = IIRFilter::new(&[0.99, 0.01]);
         f.fill(sps);
         let mut clock_filter = Box::new(f);
         Self {
@@ -151,7 +153,11 @@ impl Block for ZeroCrossing {
                                 self.stream_pos,
                                 self.last_sym_boundary_pos
                             );
-                            self.clock = self.clock_filter.filter_capped(t, mi, mx);
+                            self.clock = self.clock_filter.filter_capped(
+                                t - self.sps,
+                                mi - self.sps,
+                                mx - self.sps,
+                            ) + self.sps;
                             self.next_sym_middle = self.last_sym_boundary_pos + self.clock / 2.0;
                             while self.next_sym_middle < self.stream_pos {
                                 self.next_sym_middle += self.clock;
