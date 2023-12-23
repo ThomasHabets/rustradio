@@ -4,8 +4,50 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, Tag, TagPos};
+use crate::stream::{NoCopyStreamp, Streamp, Tag, TagPos};
 use crate::Error;
+
+/// Nocopy version of DebugSink.
+// TODO: maybe merge with DebugSink using an enum?
+pub struct DebugSinkNoCopy<T> {
+    src: NoCopyStreamp<T>,
+}
+
+impl<T> DebugSinkNoCopy<T> {
+    /// Create new debug block.
+    pub fn new(src: NoCopyStreamp<T>) -> Self {
+        Self { src }
+    }
+}
+
+impl<T> Block for DebugSinkNoCopy<T>
+where
+    T: std::fmt::Debug + Default,
+{
+    fn block_name(&self) -> &'static str {
+        "DebugSinkNoCopy"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let (v, _tags) = match self.src.pop() {
+            None => return Ok(BlockRet::Noop),
+            Some(x) => x,
+        };
+
+        // TODO: print tags.
+        /*
+        let tags: HashMap<usize, Vec<Tag>> =
+                    tags.into_iter()
+                        .map(|t| (t.pos(), t))
+                        .fold(HashMap::new(), |mut acc, (pos, tag)| {
+                            acc.entry(pos).or_default().push(tag);
+                            acc
+                        });
+                 */
+
+        println!("debug: {:?}", v);
+        Ok(BlockRet::Ok)
+    }
+}
 
 /// Print values to stdout, for debugging.
 pub struct DebugSink<T>

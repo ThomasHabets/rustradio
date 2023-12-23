@@ -42,7 +42,7 @@ struct Opt {
     audio: bool,
 
     #[structopt(long = "out", short = "o", help = "Directory to write packets to")]
-    output: PathBuf,
+    output: Option<PathBuf>,
 
     #[cfg(feature = "rtlsdr")]
     #[structopt(long = "freq", default_value = "144800000")]
@@ -230,7 +230,11 @@ fn main() -> Result<()> {
      */
 
     let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
-    g.add(Box::new(PduWriter::new(prev, opt.output)));
+    if let Some(o) = opt.output {
+        g.add(Box::new(PduWriter::new(prev, o)));
+    } else {
+        g.add(Box::new(DebugSinkNoCopy::new(prev)));
+    }
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
