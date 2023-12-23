@@ -39,7 +39,7 @@ impl<T: Copy> Block for VecToStream<T> {
         if n > o.len() {
             return Ok(BlockRet::Ok);
         }
-        let v = self
+        let (v, _tags) = self
             .src
             .pop()
             .expect("we just checked the size. It must exist");

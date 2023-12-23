@@ -54,7 +54,7 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         let packet = match self.src.pop() {
             None => return Ok(BlockRet::Noop),
-            Some(x) => x,
+            Some((x, _tags)) => x,
         };
         let name = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)

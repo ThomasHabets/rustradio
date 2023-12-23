@@ -67,7 +67,7 @@ impl Block for Midpointer {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let v = match self.src.pop() {
             None => return Ok(BlockRet::Noop),
-            Some(x) => x,
+            Some((x, _tags)) => x,
         };
         let mean: Float = v.iter().sum::<Float>() / v.len() as Float;
         if mean.is_nan() {
@@ -229,7 +229,7 @@ impl Block for Wpcr {
         // TODO: handle tags.
         let x = match self.src.pop() {
             None => return Ok(BlockRet::Noop),
-            Some(x) => x,
+            Some((x, _tags)) => x,
         };
         if let Some((packet, tags)) = self.process_one(&x) {
             self.dst.push(packet, &tags);

@@ -318,7 +318,7 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.pop().unwrap();
+            let (res, _) = o.pop().unwrap();
             assert_eq!(res, vec![0xaa, 0x7]);
             assert!(o.pop().is_none());
         }
@@ -340,8 +340,10 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            assert_eq!(o.pop().unwrap(), vec![0xaa, 0x7]);
-            assert_eq!(o.pop().unwrap(), vec![0xaa, 0x55]);
+            let (t, _tags) = o.pop().unwrap();
+            assert_eq!(t, vec![0xaa, 0x7]);
+            let (t, _tags) = o.pop().unwrap();
+            assert_eq!(t, vec![0xaa, 0x55]);
             assert!(o.pop().is_none());
         }
         Ok(())
@@ -355,7 +357,7 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.pop().unwrap();
+            let (res, _tags) = o.pop().unwrap();
             assert_eq!(res, vec![0xff, 0xff]);
             assert!(o.pop().is_none());
         }
@@ -370,7 +372,7 @@ mod tests {
             b.set_checksum(false);
             b.work()?;
             let o = b.out();
-            let res = o.pop().unwrap();
+            let (res, _tags) = o.pop().unwrap();
             assert_eq!(res, vec![0xff, 0xff]);
         }
         Ok(())
@@ -411,7 +413,7 @@ mod tests {
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.work()?;
             let o = b.out();
-            let res = o.pop().unwrap();
+            let (res, _tags) = o.pop().unwrap();
             assert_eq!(res, vec![0x55]);
             assert!(o.pop().is_none());
         }

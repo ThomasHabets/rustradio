@@ -119,8 +119,9 @@ impl<T> NoCopyStream<T> {
 
     /// Pop one sample.
     /// Ideally this should only be NoCopy.
-    pub fn pop(&self) -> Option<T> {
-        self.s.lock().unwrap().pop_front()
+    pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
+        // TODO: attach tags.
+        self.s.lock().unwrap().pop_front().map(|v| (v, Vec::new()))
     }
 }
 
