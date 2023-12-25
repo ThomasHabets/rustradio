@@ -19,7 +19,7 @@ As of 2023-12-25:
 
 * 100% / 1031 Dire Wolf, single bit fix up. -P E+ -F 1
 * 93% / 1015 Dire Wolf, error-free frames only. -P E+
-* 78% / 804 This code, single bit fix up.
+* 78% / 804 This code, error-free frames only.
 * (from direwolf doc) 70% Kantronics KPC-3 Plus
 * (from direwolf doc) 67% Kenwood TM-D710A
 
