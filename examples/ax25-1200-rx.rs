@@ -15,6 +15,14 @@ Test recordings for this code are at
 <http://wa8lmf.net/TNCtest/index.htm>. Note that track 2 should not
 be used, as it's incorrectly de-emphasized.
 
+As of 2023-12-25:
+
+* 100% / 1031 Dire Wolf, single bit fix up. -P E+ -F 1
+* 93% / 1015 Dire Wolf, error-free frames only. -P E+
+* 78% / 804 This code, single bit fix up.
+* 70% / presumably 721, Kantronics KPC-3 Plus
+* 67% / presumably 690, Kenwood TM-D710A
+
 As of 2023-11-19 this code scores 746.
 
 ## Other useful links.
