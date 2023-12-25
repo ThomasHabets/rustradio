@@ -6,13 +6,17 @@ Use FftFilter if many taps are used, for better performance.
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
+use std::collections::VecDeque;
+
 use crate::block::{Block, BlockRet};
+use crate::iir_filter::{CappedFilter, Filter, MinMax};
 use crate::stream::{new_streamp, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Finite impulse response filter.
 pub struct FIR<T: Copy> {
     taps: Vec<T>,
+    buf: VecDeque<T>,
 }
 
 impl<T> FIR<T>
@@ -21,13 +25,16 @@ where
 {
     /// Create new FIR.
     pub fn new(taps: &[T]) -> Self {
-        Self {
+        let mut ret = Self {
             taps: taps.iter().copied().rev().collect(),
-        }
+            buf: VecDeque::new(),
+        };
+        ret.fill(T::default());
+        ret
     }
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
-    pub fn filter(&self, input: &[T]) -> T {
+    pub fn filter_nobuf(&self, input: &[T]) -> T {
         input
             .iter()
             .take(self.taps.len())
@@ -38,7 +45,43 @@ where
     /// Call `filter()` multiple times, across an input range.
     pub fn filter_n(&self, input: &[T]) -> Vec<T> {
         let n = input.len() - self.taps.len() + 1;
-        (0..n).map(|i| self.filter(&input[i..])).collect()
+        (0..n).map(|i| self.filter_nobuf(&input[i..])).collect()
+    }
+}
+
+impl<T> Filter<T> for FIR<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+{
+    fn filter(&mut self, sample: T) -> T {
+        self.buf.push_back(sample);
+        self.buf.pop_front();
+        let mut ret = T::default();
+        for (i, s) in self.buf.iter().rev().enumerate() {
+            ret = ret + *s * self.taps[i];
+        }
+        ret
+    }
+    fn fill(&mut self, s: T) {
+        for _ in 0..(self.taps.len() - 1) {
+            self.buf.push_back(s);
+        }
+    }
+}
+
+impl<T> CappedFilter<T> for FIR<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + MinMax,
+{
+    fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
+        self.buf.push_back(sample);
+        self.buf.pop_front();
+        let mut ret = T::default();
+        for (i, s) in self.buf.iter().rev().enumerate() {
+            ret = ret + *s * self.taps[i];
+        }
+        ret = ret.min(mx).max(mi);
+        ret
     }
 }
 

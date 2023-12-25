@@ -39,20 +39,24 @@ where
             buf: VecDeque::new(),
         }
     }
-    pub fn fill(&mut self, s: T) {
-        for i in 0..(self.taps.len() - 1) {
-            self.buf.push_back(s);
-        }
-    }
 }
 
+/// FIR or IIR filter.
 pub trait Filter<T: Copy + Default> {
+    /// Filter from one input sample.
     fn filter(&mut self, input: T) -> T;
+
+    /// Fill filter history.
+    fn fill(&mut self, s: T);
+
     // TODO: also filter_n().
 }
 
-pub trait CappedFilter<T: Copy + Default + MinMax> {
+/// FIR or IIR filter, with capping helpers.
+pub trait CappedFilter<T: Copy + Default + MinMax>: Filter<T> {
+    /// Filter capped from one input sample.
     fn filter_capped(&mut self, input: T, mi: T, mx: T) -> T;
+
     // TODO: also filter_n().
 }
 
@@ -71,7 +75,14 @@ where
         }
         ret
     }
+
+    fn fill(&mut self, s: T) {
+        for _ in 0..(self.taps.len() - 1) {
+            self.buf.push_back(s);
+        }
+    }
 }
+
 impl<T> CappedFilter<T> for IIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + MinMax,

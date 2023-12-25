@@ -225,13 +225,14 @@ fn main() -> Result<()> {
     }
      */
 
+    let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
     let baud = 1200.0;
     let (prev, clock) = {
         let mut block = ZeroCrossing::new(
             prev,
             samp_rate / baud,
             opt.symbol_max_deviation,
-            &opt.symbol_taps,
+            Box::new(clock_filter),
         );
         let prev = block.out();
         let clock = block.out_clock();

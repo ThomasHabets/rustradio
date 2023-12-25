@@ -73,7 +73,7 @@ impl Block for Hilbert {
         // the fastest on my laptop.
         for i in 0..n {
             let t = &iv[i..(i + self.ntaps)];
-            o.slice()[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t));
+            o.slice()[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter_nobuf(t));
         }
 
         o.produce(n, &tags);

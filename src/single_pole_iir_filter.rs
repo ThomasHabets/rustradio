@@ -26,10 +26,6 @@ where
         r.set_taps(alpha)?;
         Some(r)
     }
-    /// Set previous output
-    pub fn fill(&mut self, prev: Tout) {
-        self.prev_output = prev;
-    }
 
     fn set_taps(&mut self, alpha: Float) -> Option<()> {
         if !(0.0..=1.0).contains(&alpha) {
@@ -49,6 +45,9 @@ where
         let o: T = sample * self.alpha + self.prev_output * self.one_minus_alpha;
         self.prev_output = o;
         o
+    }
+    fn fill(&mut self, prev: T) {
+        self.prev_output = prev;
     }
 }
 impl<T> CappedFilter<T> for SinglePoleIIR<T>

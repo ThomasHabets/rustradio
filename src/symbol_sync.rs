@@ -6,11 +6,9 @@
 */
 use anyhow::Result;
 use log::debug;
-use std::collections::VecDeque;
 
 use crate::block::{Block, BlockRet};
-use crate::iir_filter::{CappedFilter, IIRFilter};
-use crate::single_pole_iir_filter::SinglePoleIIR;
+use crate::iir_filter::CappedFilter;
 use crate::stream::{new_streamp, Streamp};
 use crate::{Error, Float};
 
@@ -39,7 +37,6 @@ pub struct ZeroCrossing {
     stream_pos: Float,
     last_sym_boundary_pos: Float,
     next_sym_middle: Float,
-    crossing_history: VecDeque<Float>,
     src: Streamp<Float>,
     dst: Streamp<Float>,
     out_clock: Option<Streamp<Float>>,
@@ -52,15 +49,18 @@ impl ZeroCrossing {
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
     * `max_deviation`: Not currently used.
      */
-    pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float, taps: &[Float]) -> Self {
+    pub fn new(
+        src: Streamp<Float>,
+        sps: Float,
+        max_deviation: Float,
+        mut clock_filter: Box<dyn CappedFilter<Float>>,
+    ) -> Self {
         assert!(sps > 1.0);
 
         // Commented out since filter may want to be biased towards the sps.
         // assert_eq!(taps.iter().sum::<Float>(), 1.0);
 
-        let mut f = IIRFilter::new(&taps);
-        f.fill(sps);
-        let mut clock_filter = Box::new(f);
+        clock_filter.fill(sps);
         Self {
             src,
             dst: new_streamp(),
@@ -73,7 +73,6 @@ impl ZeroCrossing {
             last_sym_boundary_pos: 0.0,
             next_sym_middle: 0.0,
             out_clock: None,
-            crossing_history: VecDeque::new(),
         }
     }
 
