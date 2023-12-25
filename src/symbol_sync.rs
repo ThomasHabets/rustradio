@@ -144,43 +144,27 @@ impl Block for ZeroCrossing {
                         }
                         t = t2;
                     }
-                    if self.stream_pos > 0.0 {
-                        if true && t > mi * 0.8 && t < mx * 1.2 {
-                            // Single pole IIR
-                            assert!(
-                                t > 0.0,
-                                "t negative {} {}",
-                                self.stream_pos,
-                                self.last_sym_boundary_pos
-                            );
-                            self.clock = self.clock_filter.filter_capped(
-                                t - self.sps,
-                                mi - self.sps,
-                                mx - self.sps,
-                            ) + self.sps;
-                            self.next_sym_middle = self.last_sym_boundary_pos + self.clock / 2.0;
-                            while self.next_sym_middle < self.stream_pos {
-                                self.next_sym_middle += self.clock;
-                            }
-                            debug!(
-                                "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
-                                self.stream_pos, self.clock
-                            );
-                        } else if false && t > mi / 2.0 {
-                            // FIR.
-                            self.crossing_history.push_back(t);
-                            if self.crossing_history.len() > 5 {
-                                self.crossing_history.pop_front();
-                            }
-                            let sum: Float = self.crossing_history.iter().sum();
-                            let t = (sum / self.crossing_history.len() as Float).max(mi).min(mx);
-                            self.clock = self.clock_filter.filter_capped(t, mi, mx);
-                            debug!("{:?}", self.crossing_history);
-                            debug!(
-                                "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
-                                self.stream_pos, self.clock
-                            );
+                    // Single pole IIR
+                    if t > mi * 0.8 && t < mx * 1.2 {
+                        assert!(
+                            t > 0.0,
+                            "t negative {} {}",
+                            self.stream_pos,
+                            self.last_sym_boundary_pos
+                        );
+                        self.clock = self.clock_filter.filter_capped(
+                            t - self.sps,
+                            mi - self.sps,
+                            mx - self.sps,
+                        ) + self.sps;
+                        self.next_sym_middle = self.last_sym_boundary_pos + self.clock / 2.0;
+                        while self.next_sym_middle < self.stream_pos {
+                            self.next_sym_middle += self.clock;
                         }
+                        debug!(
+                            "ZeroCrossing: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
+                            self.stream_pos, self.clock
+                        );
                     }
                 }
                 self.last_sym_boundary_pos = self.stream_pos;
