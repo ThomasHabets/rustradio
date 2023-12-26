@@ -29,8 +29,8 @@ pub struct FileSink<T: Copy> {
 
 impl<T: Copy> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new(src: Streamp<T>, filename: &str, mode: Mode) -> Result<Self> {
-        debug!("Opening sink {filename}");
+    pub fn new(src: Streamp<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
+        debug!("Opening sink {}", filename.display());
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
                 .read(false)

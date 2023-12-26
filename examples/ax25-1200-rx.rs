@@ -17,9 +17,9 @@ be used, as it's incorrectly de-emphasized.
 
 As of 2023-12-25:
 
-* 100% / 1031 Dire Wolf, single bit fix up. -P E+ -F 1
-* 93% / 1015 Dire Wolf, error-free frames only. -P E+
-* 78% / 804 This code, error-free frames only.
+* 1031 Dire Wolf, single bit fix up. -P E+ -F 1
+* 1015 Dire Wolf, error-free frames only. -P E+
+*  804 This code, error-free frames only.
 * (from direwolf doc) 70% Kantronics KPC-3 Plus
 * (from direwolf doc) 67% Kenwood TM-D710A
 
@@ -49,6 +49,9 @@ struct Opt {
 
     #[structopt(long = "out", short = "o", help = "Directory to write packets to")]
     output: Option<PathBuf>,
+
+    #[structopt(long = "clock-file", help = "File to write clock sync data to")]
+    clock_file: Option<PathBuf>,
 
     #[cfg(feature = "rtlsdr")]
     #[structopt(long = "freq", default_value = "144800000")]
@@ -231,29 +234,34 @@ fn main() -> Result<()> {
     }
      */
 
-    let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
     let baud = 1200.0;
-    let (prev, clock) = {
-        let mut block = ZeroCrossing::new(
+    let (prev, mut block) = {
+        let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
+        let block = ZeroCrossing::new(
             prev,
             samp_rate / baud,
             opt.symbol_max_deviation,
             Box::new(clock_filter),
         );
-        let prev = block.out();
-        let clock = block.out_clock();
-        g.add(Box::new(block));
-        (prev, clock)
+        (block.out(), block)
     };
 
-    let (a, prev) = add_block![g, Tee::new(prev)];
-    let clock = add_block![g, AddConst::new(clock, -samp_rate / baud)];
-    let clock = add_block![g, ToText::new(vec![a, clock])];
-    g.add(Box::new(FileSink::new(
-        clock,
-        "test.dat",
-        rustradio::file_sink::Mode::Overwrite,
-    )?));
+    // Optional clock output.
+    let prev = if let Some(clockfile) = opt.clock_file {
+        let clock = block.out_clock();
+        let (a, prev) = add_block![g, Tee::new(prev)];
+        let clock = add_block![g, AddConst::new(clock, -samp_rate / baud)];
+        let clock = add_block![g, ToText::new(vec![a, clock])];
+        g.add(Box::new(FileSink::new(
+            clock,
+            clockfile,
+            rustradio::file_sink::Mode::Overwrite,
+        )?));
+        prev
+    } else {
+        prev
+    };
+    g.add(Box::new(block));
 
     let prev = add_block![g, BinarySlicer::new(prev)];
 
