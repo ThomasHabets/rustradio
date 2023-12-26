@@ -76,7 +76,7 @@ struct Opt {
     #[structopt(long = "fast_fm", help = "Use FastFM for the FM carrier demod")]
     fast_fm: bool,
 
-    #[structopt(long = "symbol_taps", default_value = "1.0", use_delimiter = true)]
+    #[structopt(long = "symbol_taps", default_value = "0.5,0.5", use_delimiter = true)]
     symbol_taps: Vec<Float>,
 
     #[structopt(long, default_value = "0.5")]
