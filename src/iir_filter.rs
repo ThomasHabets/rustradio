@@ -54,7 +54,7 @@ where
     /// Create new FIR.
     pub fn new(taps: &[T]) -> Self {
         Self {
-            taps: taps.iter().copied().rev().collect(),
+            taps: taps.to_vec(),
             buf: VecDeque::new(),
         }
     }
@@ -66,11 +66,11 @@ where
 {
     fn filter(&mut self, sample: T) -> T {
         let mut ret = self.taps[0] * sample;
-        for (i, s) in self.buf.iter().enumerate() {
+        for (i, s) in self.buf.iter().rev().enumerate() {
             ret = ret + *s * self.taps[i + 1];
         }
         self.buf.push_back(ret);
-        if self.buf.len() >= self.taps.len() {
+        if self.buf.len() == self.taps.len() {
             self.buf.pop_front();
         }
         ret
@@ -89,7 +89,7 @@ where
 {
     fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
         let mut ret = self.taps[0] * sample;
-        for (i, s) in self.buf.iter().enumerate() {
+        for (i, s) in self.buf.iter().rev().enumerate() {
             ret = ret + *s * self.taps[i + 1];
         }
         ret = ret.min(mx).max(mi);
@@ -119,12 +119,12 @@ mod tests {
 
     #[test]
     fn single_pole() -> Result<()> {
-        let mut f = IIRFilter::new(&[0.0, 1.0]);
+        let mut f = IIRFilter::new(&[1.0, 0.0]);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
 
-        let mut f = IIRFilter::new(&[0.1f32, 0.9]);
+        let mut f = IIRFilter::new(&[0.9f32, 0.1]);
         assert_eq!(f.filter(100.0), 90.0);
         assert_eq!(f.filter(100.0), 99.0);
         assert_eq!(f.filter(100.0), 99.9);
@@ -135,17 +135,17 @@ mod tests {
 
     #[test]
     fn multi_pole() -> Result<()> {
-        let mut f = IIRFilter::new(&[0.0, 0.0, 1.0]);
+        let mut f = IIRFilter::new(&[1.0, 0.0, 0.0]);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
 
-        let mut f = IIRFilter::new(&[0.1f32, 0.9, 1.0]);
+        let mut f = IIRFilter::new(&[1.0f32, 0.9, 0.1]);
         assert_eq!(f.filter(100.0), 100.0);
         assert_eq!(f.filter(100.0), 190.0);
-        assert_eq!(f.filter(100.0), 209.0);
-        assert_eq!(f.filter(100.0), 291.9);
+        assert_eq!(f.filter(100.0), 281.0);
+        assert_eq!(f.filter(100.0), 371.9);
 
         Ok(())
     }

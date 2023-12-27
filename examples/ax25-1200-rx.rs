@@ -80,7 +80,10 @@ struct Opt {
     #[structopt(long = "fast_fm", help = "Use FastFM for the FM carrier demod")]
     fast_fm: bool,
 
-    #[structopt(long, default_value = "0.1")]
+    #[structopt(long = "symbol_taps", default_value = "0.5,0.5", use_delimiter = true)]
+    symbol_taps: Vec<Float>,
+
+    #[structopt(long, default_value = "0.5")]
     symbol_max_deviation: Float,
 }
 
@@ -230,7 +233,15 @@ fn main() -> Result<()> {
      */
     let baud = 1200.0;
     let (prev, mut block) = {
-        let block = ZeroCrossing::new(prev, samp_rate / baud, opt.symbol_max_deviation);
+        //let block = ZeroCrossing::new(prev, samp_rate / baud, opt.symbol_max_deviation);
+        let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
+        let block = SymbolSync::new(
+            prev,
+            samp_rate / baud,
+            opt.symbol_max_deviation,
+            Box::new(rustradio::symbol_sync::TEDZeroCrossing::new()),
+            Box::new(clock_filter),
+        );
         (block.out(), block)
     };
 
