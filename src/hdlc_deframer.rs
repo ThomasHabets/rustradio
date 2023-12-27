@@ -27,10 +27,18 @@ enum State {
 
 // Calculate CRC. If a bitflip helps the CRC match, then return the
 // new data with the CRC.
-fn find_right_crc(data: &[u8], got: u16) -> (Option<Vec<u8>>, u16, bool) {
+//
+// Return tuple of:
+// * new data, if modified.
+// * correct CRC.
+// * true/false if a bit was flipped or not.
+fn find_right_crc(data: &[u8], got: u16, fix_bits: bool) -> (Option<Vec<u8>>, u16, bool) {
     let crc = calc_crc(data);
     if got == crc {
         // Fast path: CRC matches.
+        return (None, crc, false);
+    }
+    if !fix_bits {
         return (None, crc, false);
     }
     let mut copy = data.to_vec();
@@ -72,6 +80,7 @@ pub struct HdlcDeframer {
     crc_error: usize,
     bitfixed: usize,
     stream_pos: u64,
+    fix_bits: bool,
 }
 
 impl Drop for HdlcDeframer {
@@ -99,7 +108,13 @@ impl HdlcDeframer {
             crc_error: 0,
             bitfixed: 0,
             stream_pos: 0,
+            fix_bits: false,
         }
+    }
+
+    /// Set fix bits.
+    pub fn set_fix_bits(&mut self, v: bool) {
+        self.fix_bits = v;
     }
 
     /// Set whether to check/strip checksum
@@ -181,7 +196,7 @@ impl HdlcDeframer {
                     if self.strip_checksum {
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);
-                        let (newdata, crc, fixed) = find_right_crc(data, got_crc);
+                        let (newdata, crc, fixed) = find_right_crc(data, got_crc, self.fix_bits);
                         if fixed {
                             self.bitfixed += 1;
                         }
