@@ -3,6 +3,44 @@
 */
 use std::collections::VecDeque;
 
+use crate::Float;
+
+/// Ability to call .min and .max, like floats.
+pub trait MinMax {
+    /// Return min of two values.
+    fn min(&self, o: Self) -> Self;
+
+    /// Return max of two values.
+    fn max(&self, o: Self) -> Self;
+}
+impl MinMax for Float {
+    fn max(&self, r: Float) -> Self {
+        r.max(*self)
+    }
+    fn min(&self, r: Float) -> Self {
+        r.min(*self)
+    }
+}
+
+/// General filter.
+///
+/// TODO: also add filter_n.
+pub trait Filter<T: Copy + Default> {
+    /// Filter from one input sample.
+    fn filter(&mut self, input: T) -> T;
+
+    /// Fill filter history.
+    fn fill(&mut self, s: T);
+}
+
+/// General filter.
+///
+/// TODO: also add filter_n.
+pub trait CappedFilter<T: Copy + Default + MinMax>: Filter<T> {
+    /// Filter from one input sample.
+    fn filter_capped(&mut self, input: T, mi: T, mx: T) -> T;
+}
+
 /// Finite impulse response filter.
 pub struct IIRFilter<T: Copy> {
     taps: Vec<T>,
@@ -22,11 +60,6 @@ where
     }
 }
 
-trait Filter<T: Copy + Default> {
-    fn filter(&mut self, input: T) -> T;
-    // TODO: also filter_n().
-}
-
 impl<T> Filter<T> for IIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
@@ -38,6 +71,30 @@ where
         }
         self.buf.push_back(ret);
         if self.buf.len() >= self.taps.len() {
+            self.buf.pop_front();
+        }
+        ret
+    }
+
+    fn fill(&mut self, s: T) {
+        for _ in 0..(self.taps.len() - 1) {
+            self.buf.push_back(s);
+        }
+    }
+}
+
+impl<T> CappedFilter<T> for IIRFilter<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + MinMax,
+{
+    fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
+        let mut ret = self.taps[0] * sample;
+        for (i, s) in self.buf.iter().enumerate() {
+            ret = ret + *s * self.taps[i + 1];
+        }
+        ret = ret.min(mx).max(mi);
+        self.buf.push_back(ret);
+        if self.buf.len() == self.taps.len() {
             self.buf.pop_front();
         }
         ret
