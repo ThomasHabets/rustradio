@@ -143,6 +143,7 @@ pub mod vector_source;
 pub mod wpcr;
 pub mod xor;
 pub mod xor_const;
+pub mod zero_crossing;
 
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;

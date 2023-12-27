@@ -28,7 +28,7 @@ pub use crate::signal_source::SignalSourceComplex;
 pub use crate::single_pole_iir_filter::SinglePoleIIRFilter;
 pub use crate::skip::Skip;
 pub use crate::stream_to_pdu::StreamToPdu;
-pub use crate::symbol_sync::{SymbolSync, ZeroCrossing};
+pub use crate::symbol_sync::SymbolSync;
 pub use crate::tcp_source::TcpSource;
 pub use crate::tee::Tee;
 pub use crate::to_text::ToText;
@@ -37,6 +37,7 @@ pub use crate::vector_source::{VectorSource, VectorSourceBuilder};
 pub use crate::wpcr::{Midpointer, Wpcr, WpcrBuilder};
 pub use crate::xor::Xor;
 pub use crate::xor_const::XorConst;
+pub use crate::zero_crossing::ZeroCrossing;
 
 #[cfg(feature = "rtlsdr")]
 pub use crate::rtlsdr_source::RtlSdrSource;
