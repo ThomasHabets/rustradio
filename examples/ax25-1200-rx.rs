@@ -15,7 +15,14 @@ Test recordings for this code are at
 <http://wa8lmf.net/TNCtest/index.htm>. Note that track 2 should not
 be used, as it's incorrectly de-emphasized.
 
-As of 2023-11-19 this code scores 746.
+As of 2023-12-27:
+
+* 1031 Dire Wolf, single bit fix up. -P E+ -F 1
+* 1015 Dire Wolf, error-free frames only. -P E+
+*  906 This code, single bit fix up.
+*  906 This code, error-free frames only.
+* (from direwolf doc) 70% Kantronics KPC-3 Plus
+* (from direwolf doc) 67% Kenwood TM-D710A
 
 ## Other useful links.
 
@@ -54,6 +61,9 @@ struct Opt {
 
     #[structopt(short = "v", default_value = "0")]
     verbose: usize,
+
+    #[structopt(long)]
+    fix_bits: bool,
 
     #[structopt(long = "rtlsdr", help = "Stream I/Q from an RTLSDR")]
     rtlsdr: bool,
@@ -229,7 +239,9 @@ fn main() -> Result<()> {
     )?));
      */
 
-    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
+    let mut hdlc = HdlcDeframer::new(prev, 10, 1500);
+    hdlc.set_fix_bits(opt.fix_bits);
+    let prev = add_block![g, hdlc];
     if let Some(o) = opt.output {
         g.add(Box::new(PduWriter::new(prev, o)));
     } else {
