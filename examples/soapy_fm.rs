@@ -19,7 +19,7 @@ mod internal {
         driver: String,
 
         #[structopt(short = "o")]
-        output: String,
+        output: std::path::PathBuf,
 
         // Unused if soapysdr feature not enabled.
         #[allow(dead_code)]
@@ -107,7 +107,7 @@ mod internal {
         ];
 
         // Save to file.
-        g.add(Box::new(FileSink::new(prev, &opt.output, Mode::Overwrite)?));
+        g.add(Box::new(FileSink::new(prev, opt.output, Mode::Overwrite)?));
 
         let cancel = g.cancel_token();
         ctrlc::set_handler(move || {

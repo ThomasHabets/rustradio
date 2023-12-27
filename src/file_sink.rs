@@ -29,8 +29,8 @@ pub struct FileSink<T: Copy> {
 
 impl<T: Copy> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new(src: Streamp<T>, filename: &str, mode: Mode) -> Result<Self> {
-        debug!("Opening sink {filename}");
+    pub fn new(src: Streamp<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
+        debug!("Opening sink {}", filename.display());
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
                 .read(false)
@@ -86,11 +86,11 @@ mod tests {
     #[test]
     fn sink_f32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
-        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+        let tmpfn = tmpd.path().join("delme.bin");
         {
             #[allow(clippy::approx_constant)]
             let ssrc = streamp_from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
-            let mut sink = FileSink::<Float>::new(ssrc, &tmpfn, Mode::Create)?;
+            let mut sink = FileSink::<Float>::new(ssrc, tmpfn.clone(), Mode::Create)?;
             sink.work()?;
             sink.flush()?;
         }
@@ -105,11 +105,11 @@ mod tests {
     #[test]
     fn sink_c32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
-        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+        let tmpfn = tmpd.path().join("delme.bin");
         {
             #[allow(clippy::approx_constant)]
             let ssrc = streamp_from_slice(&[Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
-            let mut sink = FileSink::<Complex>::new(ssrc, &tmpfn, Mode::Create)?;
+            let mut sink = FileSink::<Complex>::new(ssrc, tmpfn.clone(), Mode::Create)?;
             sink.work()?;
             sink.flush()?;
         }

@@ -10,7 +10,7 @@ use rustradio::Float;
 let src1 = ConstantSource::new(1.0);
 let src2 = ConstantSource::new(-1.0);
 let to_text = ToText::new(vec![src1.out(), src2.out()]);
-let sink = FileSink::new(to_text.out(), "/dev/null", Mode::Append)?;
+let sink = FileSink::new(to_text.out(), "/dev/null".into(), Mode::Append)?;
 let mut g = Graph::new();
 g.add(Box::new(src1));
 g.add(Box::new(src2));

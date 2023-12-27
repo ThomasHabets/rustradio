@@ -39,7 +39,7 @@ let src = VectorSource::new(
 let src_out = src.out();
 let au = AuEncode::new(src_out, Encoding::PCM16, 48000, 1);
 let au_out = au.out();
-let sink = FileSink::new(au_out, "/dev/null", Mode::Overwrite)?;
+let sink = FileSink::new(au_out, "/dev/null".into(), Mode::Overwrite)?;
 let mut g = Graph::new();
 g.add(Box::new(src));
 g.add(Box::new(au));

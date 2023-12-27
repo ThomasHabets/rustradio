@@ -17,7 +17,7 @@ struct Opt {
     filename: Option<String>,
 
     #[structopt(short = "o")]
-    output: String,
+    output: std::path::PathBuf,
 
     // Unused if rtlsdr feature not enabled.
     #[allow(dead_code)]
@@ -117,7 +117,7 @@ fn main() -> Result<()> {
     ];
 
     // Save to file.
-    g.add(Box::new(FileSink::new(prev, &opt.output, Mode::Overwrite)?));
+    g.add(Box::new(FileSink::new(prev, opt.output, Mode::Overwrite)?));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
