@@ -35,6 +35,7 @@ pub struct ZeroCrossing {
     counter: u64,
     src: Streamp<Float>,
     dst: Streamp<Float>,
+    out_clock: Option<Streamp<Float>>,
 }
 
 impl ZeroCrossing {
@@ -55,12 +56,18 @@ impl ZeroCrossing {
             last_sign: false,
             last_cross: 0.0,
             counter: 0,
+            out_clock: None,
         }
     }
 
     /// Return the output stream.
     pub fn out(&self) -> Streamp<Float> {
         self.dst.clone()
+    }
+
+    /// Return clock stream.
+    pub fn out_clock(&mut self) -> Streamp<Float> {
+        self.out_clock.get_or_insert(new_streamp()).clone()
     }
 }
 
@@ -79,10 +86,15 @@ impl Block for ZeroCrossing {
         }
         let mut n = 0;
         let mut opos = 0;
+        // TODO: get rid of unwrap.
+        let mut out_clock = self.out_clock.as_mut().map(|x| x.write_buf().unwrap());
         for sample in input.iter() {
             n += 1;
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 o.slice()[opos] = *sample;
+                if let Some(ref mut s) = out_clock {
+                    s.slice()[opos] = self.clock;
+                }
                 opos += 1;
                 self.last_cross += self.clock;
                 if opos == o.len() {
@@ -108,6 +120,9 @@ impl Block for ZeroCrossing {
         }
         input.consume(n);
         o.produce(opos, &[]);
+        if let Some(s) = out_clock {
+            s.produce(opos, &[]);
+        }
         Ok(BlockRet::Ok)
     }
 }

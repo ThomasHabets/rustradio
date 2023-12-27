@@ -68,6 +68,9 @@ struct Opt {
     #[structopt(long = "rtlsdr", help = "Stream I/Q from an RTLSDR")]
     rtlsdr: bool,
 
+    #[structopt(long = "clock-file", help = "File to write clock sync data to")]
+    clock_file: Option<PathBuf>,
+
     #[structopt(long = "sample_rate", default_value = "300000")]
     samp_rate: u32,
 
@@ -223,7 +226,28 @@ fn main() -> Result<()> {
     )?));
      */
     let baud = 1200.0;
-    let prev = add_block![g, ZeroCrossing::new(prev, samp_rate / baud, 0.1)];
+    let (prev, mut block) = {
+        let block = ZeroCrossing::new(prev, samp_rate / baud, 0.1);
+        (block.out(), block)
+    };
+
+    // Optional clock output.
+    let prev = if let Some(clockfile) = opt.clock_file {
+        let clock = block.out_clock();
+        let (a, prev) = add_block![g, Tee::new(prev)];
+        let clock = add_block![g, AddConst::new(clock, -samp_rate / baud)];
+        let clock = add_block![g, ToText::new(vec![a, clock])];
+        g.add(Box::new(FileSink::new(
+            clock,
+            clockfile,
+            rustradio::file_sink::Mode::Overwrite,
+        )?));
+        prev
+    } else {
+        prev
+    };
+    g.add(Box::new(block));
+
     let prev = add_block![g, BinarySlicer::new(prev)];
 
     // Delay xor, aka NRZI decode.
