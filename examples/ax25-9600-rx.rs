@@ -10,6 +10,8 @@ $ ./ax25-9600-rx -r captured.c32 --samp_rate 50000 -o captured
 $ ./ax25-9600-rx --rtlsdr -o captured -v 2
 […]
 ```
+
+* <https://www.amsat.org/amsat/articles/kd2bd/9k6modem/>
 */
 use std::path::PathBuf;
 
@@ -48,6 +50,13 @@ struct Opt {
 
     #[structopt(short = "r")]
     read: Option<String>,
+
+    #[structopt(
+        long = "symbol_taps",
+        default_value = "0.0001,0.99999999",
+        use_delimiter = true
+    )]
+    symbol_taps: Vec<Float>,
 
     #[structopt(long, default_value = "0.1")]
     symbol_max_deviation: Float,
@@ -141,10 +150,17 @@ fn main() -> Result<()> {
     //let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
     let baud = 9600.0;
-    let prev = add_block![
-        g,
-        ZeroCrossing::new(prev, samp_rate / baud, opt.symbol_max_deviation)
-    ];
+    let prev = {
+        let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
+        let block = SymbolSync::new(
+            prev,
+            samp_rate / baud,
+            opt.symbol_max_deviation,
+            Box::new(rustradio::symbol_sync::TEDZeroCrossing::new()),
+            Box::new(clock_filter),
+        );
+        add_block![g, block]
+    };
     let prev = add_block![g, BinarySlicer::new(prev)];
 
     // Delay xor, aka NRZI decode.
