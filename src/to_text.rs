@@ -63,7 +63,7 @@ impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
         loop {
             let mut outs = Vec::new();
             for src in &mut self.srcs {
-                let (i, _tags) = src.read_buf()?;
+                let (i, tags) = src.read_buf()?;
                 if i.is_empty() {
                     if empty {
                         return Ok(BlockRet::Noop);
@@ -71,7 +71,18 @@ impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
                         return Ok(BlockRet::Ok);
                     }
                 }
-                outs.push(format!("{:?}", i.slice()[0]));
+                let mut s: String = format!("{:?}", i.slice()[0]);
+                if !tags.is_empty() && tags[0].pos() == 0 {
+                    s += " (";
+                    for tag in tags {
+                        if tag.pos() != 0 {
+                            break;
+                        }
+                        s += &format!("{}={:?}", tag.key(), tag.val());
+                    }
+                    s += ")";
+                }
+                outs.push(s);
             }
             empty = false;
             let out = (outs.join(" ") + "\n").into_bytes();
