@@ -19,9 +19,9 @@ impl CorrelateAccessCode {
     pub fn new(src: Streamp<u8>, code: Vec<u8>, allowed_diffs: usize) -> Self {
         Self {
             src,
-            code,
             dst: new_streamp(),
-            slide: Vec::new(),
+            slide: vec![0; code.len()],
+            code,
             allowed_diffs,
         }
     }
