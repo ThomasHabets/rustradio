@@ -113,25 +113,25 @@ fn main() -> Result<()> {
 
     let prev = add_block![g, BinarySlicer::new(prev)];
     let prev = add_block![g, XorConst::new(prev, 1)];
-
-    // Save bits to file.
-    let (a, prev) = add_block![g, Tee::new(prev)];
-
     let prev = add_block![
         g,
-        CorrelateAccessCode::new(
+        CorrelateAccessCodeTag::new(
             prev,
             vec![1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0],
+            "sync".into(),
             0,
         )
     ];
 
-    let clock = add_block![g, ToText::new(vec![a, prev])];
+    let (a, prev) = add_block![g, Tee::new(prev)];
+    let clock = add_block![g, ToText::new(vec![a])];
     g.add(Box::new(FileSink::new(
         clock,
         "test.u8".into(),
         rustradio::file_sink::Mode::Overwrite,
     )?));
+
+    g.add(Box::new(NullSink::new(prev)));
 
     // Run the graph.
     let cancel = g.cancel_token();

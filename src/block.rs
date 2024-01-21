@@ -162,7 +162,7 @@ macro_rules! map_block_macro_v2 {
 
 /** Macro to make it easier to write converting blocks.
 
-Output type will be different from input type.
+Output may will be different from input type.
 
 `process_one(&mut self, s: Type1) -> Type2` must be implemented by the
 block.
@@ -209,6 +209,68 @@ macro_rules! map_block_convert_macro {
 
                 // Finalize.
                 o.produce(n, &tags);
+                i.consume(n);
+                Ok($crate::block::BlockRet::Ok)
+            }
+        }
+    };
+}
+
+/** Version of map_block_convert_macro that supports adding tags.
+
+Output type may be different from input type.
+
+`process_one(&mut self, s: Type1, tags: []Tag) -> (Type2, []Tag)` must be implemented by the
+block.
+
+Both types are derived, so only the name of the block is needed at
+macro call.
+*/
+#[macro_export]
+macro_rules! map_block_convert_tag_macro {
+    ($name:path, $out:ident) => {
+        impl $name {
+            /// Return the output stream.
+            pub fn out(&self) -> Streamp<$out> {
+                self.dst.clone()
+            }
+        }
+
+        impl $crate::block::Block for $name {
+            fn block_name(&self) -> &'static str {
+                stringify! {$name}
+            }
+            fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
+                // Bindings, since borrow checker won't let us call
+                // mut `process_one` if we borrow `src` and `dst`.
+                let ibind = self.src.clone();
+                let obind = self.dst.clone();
+
+                // Get input and output buffers.
+                let (i, _itags) = ibind.read_buf()?;
+                let mut o = obind.write_buf()?;
+
+                // Don't process more than we have, and fit.
+                let n = std::cmp::min(i.len(), o.len());
+                if n == 0 {
+                    return Ok($crate::block::BlockRet::Noop);
+                }
+
+                let mut otags = Vec::new();
+                // Map one sample at a time. Is this really the best way?
+                for (n, (place, ival)) in o.slice().iter_mut().zip(i.iter()).enumerate() {
+                    let (t, tags) = self.process_one(*ival, &[]);
+                    *place = t;
+                    for tag in tags {
+                        otags.push(Tag::new(n, tag.key().into(), tag.val().clone()));
+                    }
+                }
+
+                if otags.len() > 0 {
+                    println!("Tags! ");
+                }
+                // Finalize.
+                o.produce(n, &otags);
                 i.consume(n);
                 Ok($crate::block::BlockRet::Ok)
             }

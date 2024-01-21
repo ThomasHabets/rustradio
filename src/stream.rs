@@ -29,7 +29,7 @@ pub enum TagValue {
 }
 
 /// Tags associated with a stream.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Tag {
     pos: TagPos,
     key: String,
