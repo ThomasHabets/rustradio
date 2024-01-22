@@ -83,7 +83,15 @@ impl CorrelateAccessCodeTag {
             .count();
         let mut tags = tags.to_vec();
         if diffs <= self.allowed_diffs {
-            tags.push(Tag::new(0, self.tag.clone(), TagValue::Bool(true)));
+            tags.push(Tag::new(
+                0,
+                self.tag.clone(),
+                TagValue::U64(
+                    diffs
+                        .try_into()
+                        .expect("can't happen: usize doesn't fit in u64"),
+                ),
+            ));
         }
         (a, tags)
     }
