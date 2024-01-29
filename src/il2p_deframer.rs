@@ -56,7 +56,7 @@ fn bits_to_bytes(bits: &[u8]) -> Vec<u8> {
 
 enum State {
     Unsynced,
-    //Header(Vec<u8>),
+    Header(Vec<u8>),
     //Data(Vec<u8>, usize),
 }
 
@@ -94,46 +94,50 @@ impl Block for Il2pDeframer {
         }
         let header_size = 15 * 8;
         let tags: Vec<Tag> = tags.into_iter().filter(|t| t.key() == "sync").collect();
-        let (mut partial, size) = match &self.state {
-            State::Unsynced => {
-                let n = if tags.is_empty() {
-                    input.len()
-                } else {
-                    tags[0].pos()
-                };
-                if n > 0 {
-                    input.consume(n);
-                    return Ok(BlockRet::Ok);
-                }
-                (Vec::new(), header_size)
-            }
-            //State::Header(partial) => (partial.to_vec(), header_size),
-            //State::Data(partial, size) => (partial.to_vec(), *size),
-        };
-        let mut n = 0;
-        for bit in input.iter() {
-            if partial.len() == size + 1 {
-                break;
-            }
-            partial.push(*bit);
-            n += 1;
-        }
-        if partial.len() == size + 1 {
-            let header_bytes = bits_to_bytes(&decode(&partial[1..]));
-            // TODO: run FEC
 
-            info!("header bytes: {:?}", &header_bytes);
-            let header = Header::parse(&header_bytes[..header_bytes.len() - 2])?;
+        let (header, newstate) = match &mut self.state {
+            State::Unsynced => {
+                if tags.is_empty() {
+                    let n = input.len();
+                    input.consume(n);
+                    (None as Option<Result<Header>>, State::Unsynced)
+                } else {
+                    input.consume(tags[0].pos() + 1);
+                    (None, State::Header(Vec::new()))
+                }
+            }
+            State::Header(inpartial) => {
+                let mut partial = Vec::new();
+                std::mem::swap(&mut partial, inpartial);
+                let remaining = header_size - partial.len();
+                let get = std::cmp::min(input.len(), remaining);
+                for bit in input.iter().take(get) {
+                    partial.push(*bit);
+                }
+                input.consume(get);
+                if partial.len() == header_size {
+                    let header_bytes = bits_to_bytes(&decode(&partial[..]));
+                    // TODO: run FEC
+                    let header = Header::parse(&header_bytes[..header_bytes.len() - 2]);
+                    (Some(header), State::Unsynced)
+                } else {
+                    (None, State::Header(partial))
+                }
+            }
+        };
+        self.state = newstate;
+
+        if let Some(Ok(header)) = header {
+            info!("Got header");
             info!("  {:?}", &header);
             info!("  {} => {}", header.src, header.dst);
             info!("  control: 0x{:x}", header.control);
             info!("  describe: {}", header.describe());
             info!("  fec: {}", header.fec);
             info!("  payload_size: {}", header.payload_size);
-
-            self.state = State::Unsynced;
+        } else if let Some(Err(e)) = header {
+            info!("Failed to parse header: {}", e);
         }
-        input.consume(n);
         Ok(BlockRet::Ok)
     }
 }
