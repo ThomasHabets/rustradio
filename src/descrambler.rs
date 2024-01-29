@@ -7,6 +7,10 @@ anyway.
 use crate::map_block_convert_macro;
 use crate::stream::{new_streamp, Streamp};
 
+/// LFSR as used by G3RUH.
+///
+/// Input bit is added to the beginning of the shift register, and the
+/// output is taken from the mask.
 struct Lfsr {
     mask: u64,
     len: u8,
@@ -14,6 +18,7 @@ struct Lfsr {
 }
 
 impl Lfsr {
+    /// Create new LFSR.
     fn new(mask: u64, seed: u64, len: u8) -> Self {
         assert!(len < 64);
         Self {
@@ -22,6 +27,7 @@ impl Lfsr {
             shift_reg: seed,
         }
     }
+    /// Clock the LFSR.
     fn next(&mut self, i: u8) -> u8 {
         assert!(i <= 1);
         let ret = 1 & (self.shift_reg & self.mask).count_ones() as u8 ^ i;
@@ -43,6 +49,15 @@ impl Descrambler {
             src,
             dst: new_streamp(),
             lfsr: Lfsr::new(mask, seed, len),
+        }
+    }
+
+    /// Create a descrambler with G3RUH parameters.
+    pub fn new_g3ruh(src: Streamp<u8>) -> Self {
+        Self {
+            src,
+            dst: new_streamp(),
+            lfsr: Lfsr::new(0x21, 0, 16),
         }
     }
 
