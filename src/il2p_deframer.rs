@@ -7,6 +7,11 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{Streamp, Tag};
 use crate::{Error, Result};
 
+struct Pids {}
+impl Pids {
+    pub const AX25_UNNUMBERED: u8 = 1;
+}
+
 /// LFSR as used by IL2P.
 ///
 /// Input is XORed into the masked positions of the shift register,
@@ -114,16 +119,17 @@ impl Block for Il2pDeframer {
             n += 1;
         }
         if partial.len() == size + 1 {
-            let partial = &partial[1..];
-            info!("header with {} bits: {:?}", n, partial);
+            let header_bytes = bits_to_bytes(&decode(&partial[1..]));
+            // TODO: run FEC
 
-            let partial2 = decode(partial);
-            info!("unscrambled with bytes: {:?}", partial2);
-
-            let header = bits_to_bytes(&partial2);
-            info!("header with bytes: {:?}", &header[6..12]);
-            info!("destination callsign: {:?}", decode_callsign(&header[0..6]));
-            info!("source callsign: {:?}", decode_callsign(&header[6..12]));
+            info!("header bytes: {:?}", &header_bytes);
+            let header = Header::parse(&header_bytes[..header_bytes.len() - 2])?;
+            info!("  {:?}", &header);
+            info!("  {} => {}", header.src, header.dst);
+            info!("  control: 0x{:x}", header.control);
+            info!("  describe: {}", header.describe());
+            info!("  fec: {}", header.fec);
+            info!("  payload_size: {}", header.payload_size);
 
             self.state = State::Unsynced;
         }
@@ -167,4 +173,80 @@ fn decode_callsign(input: &[u8]) -> Result<String> {
             .map(|ch| ch + 0x20)
             .collect(),
     )?)
+}
+
+#[derive(Debug)]
+struct Header {
+    dst: String,
+    src: String,
+    ui: bool,
+    fec: bool,
+    pid: u8,     // 4 bits
+    control: u8, // 7 bits
+    hdrtype1: bool,
+    payload_size: u16, // 10 bits
+}
+
+impl Header {
+    fn parse(data: &[u8]) -> Result<Self> {
+        assert_eq!(data.len(), 13);
+        Ok(Self {
+            dst: format!("{}-{}", decode_callsign(&data[0..6])?, data[12] >> 4),
+            src: format!("{}-{}", decode_callsign(&data[6..12])?, data[12] & 0xf),
+            ui: (data[0] & 0x40) != 0,
+            fec: (data[0] & 0x80) != 0,
+            hdrtype1: (data[1] & 0x80) != 0,
+            pid: (data[1] & 0x40) >> 3
+                | (data[2] & 0x40) >> 4
+                | (data[3] & 0x40) >> 5
+                | (data[4] & 0x40) >> 6,
+            control: (data[5] & 0x40)
+                | (data[6] & 0x40) >> 1
+                | (data[7] & 0x40) >> 2
+                | (data[8] & 0x40) >> 3
+                | (data[9] & 0x40) >> 4
+                | (data[10] & 0x40) >> 5
+                | (data[11] & 0x40) >> 6,
+            payload_size: (data[2] as u16 & 0x80) << 2
+                | (data[3] as u16 & 0x80) << 1
+                | (data[4] as u16 & 0x80)
+                | (data[5] as u16 & 0x80) >> 1
+                | (data[6] as u16 & 0x80) >> 2
+                | (data[7] as u16 & 0x80) >> 3
+                | (data[8] as u16 & 0x80) >> 4
+                | (data[9] as u16 & 0x80) >> 5
+                | (data[10] as u16 & 0x80) >> 6
+                | (data[11] as u16 & 0x80) >> 7,
+        })
+    }
+    fn describe(&self) -> String {
+        match self.hdrtype1 {
+            true => match self.ui {
+                false => match self.pid {
+                    Pids::AX25_UNNUMBERED => match (self.control >> 2) & 0xF {
+                        0x0 => "invalid 0x00".into(),
+                        0x1 => "SABM".into(),
+                        0x2 => "invalid 0x02".into(),
+                        0x3 => "DISC".into(),
+                        0x4 => "DM".into(),
+                        0x5 => "invalid 0x05".into(),
+                        0x6 => "UA".into(),
+                        0x7 => "invalid 0x07".into(),
+                        0x8 => "FRMR".into(),
+                        0x9 => "unvalid 0x09".into(),
+                        0xA => "UI unnumbered response".into(),
+                        0xB => "UI unnumbered command".into(),
+                        0xC => "XID response".into(),
+                        0xD => "XID command".into(),
+                        0xE => "TEST response".into(),
+                        0xF => "TEST command".into(),
+                        16.. => "Can't happen".into(),
+                    },
+                    _ => "other PID".into(),
+                },
+                true => "UI".into(),
+            },
+            false => "type0 IL2P".into(),
+        }
+    }
 }
