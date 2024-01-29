@@ -7,6 +7,8 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{Streamp, Tag};
 use crate::{Error, Result};
 
+const HEADER_SIZE: usize = 15 * 8;
+
 struct Pids {}
 impl Pids {
     pub const AX25_UNNUMBERED: u8 = 1;
@@ -92,10 +94,14 @@ impl Block for Il2pDeframer {
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
-        let header_size = 15 * 8;
         let tags: Vec<Tag> = tags.into_iter().filter(|t| t.key() == "sync").collect();
 
-        let (header, newstate) = match &mut self.state {
+        // If we hit an unexpected error, then go back to our default state.
+        let mut oldstate = State::Unsynced;
+        std::mem::swap(&mut oldstate, &mut self.state);
+
+        // TODO: support delivering the payload, too.
+        let (header, newstate) = match oldstate {
             State::Unsynced => {
                 if tags.is_empty() {
                     let n = input.len();
@@ -106,19 +112,21 @@ impl Block for Il2pDeframer {
                     (None, State::Header(Vec::new()))
                 }
             }
-            State::Header(inpartial) => {
-                let mut partial = Vec::new();
-                std::mem::swap(&mut partial, inpartial);
-                let remaining = header_size - partial.len();
+            State::Header(mut partial) => {
+                let remaining = HEADER_SIZE - partial.len();
                 let get = std::cmp::min(input.len(), remaining);
                 for bit in input.iter().take(get) {
                     partial.push(*bit);
                 }
                 input.consume(get);
-                if partial.len() == header_size {
+                assert_eq![remaining == get, partial.len() == HEADER_SIZE];
+                if partial.len() == HEADER_SIZE {
                     let header_bytes = bits_to_bytes(&decode(&partial[..]));
-                    // TODO: run FEC
-                    let header = Header::parse(&header_bytes[..header_bytes.len() - 2]);
+
+                    // TODO: run FEC, instead of just stripping it off.
+                    let header_bytes = &header_bytes[..header_bytes.len() - 2];
+
+                    let header = Header::parse(header_bytes);
                     (Some(header), State::Unsynced)
                 } else {
                     (None, State::Header(partial))
