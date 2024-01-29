@@ -266,9 +266,6 @@ macro_rules! map_block_convert_tag_macro {
                     }
                 }
 
-                if otags.len() > 0 {
-                    println!("Tags! ");
-                }
                 // Finalize.
                 o.produce(n, &otags);
                 i.consume(n);
