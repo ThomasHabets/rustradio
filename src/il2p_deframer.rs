@@ -5,7 +5,7 @@ use log::info;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{Streamp, Tag};
-use crate::Error;
+use crate::{Error, Result};
 
 /// LFSR as used by IL2P.
 ///
@@ -122,6 +122,8 @@ impl Block for Il2pDeframer {
 
             let header = bits_to_bytes(&partial2);
             info!("header with bytes: {:?}", &header[6..12]);
+            info!("destination callsign: {:?}", decode_callsign(&header[0..6]));
+            info!("source callsign: {:?}", decode_callsign(&header[6..12]));
 
             self.state = State::Unsynced;
         }
@@ -154,4 +156,15 @@ fn decode(input: &[u8]) -> Vec<u8> {
         ret.push(l.next(*bit));
     }
     ret
+}
+
+fn decode_callsign(input: &[u8]) -> Result<String> {
+    Ok(String::from_utf8(
+        input
+            .iter()
+            .map(|ch| ch & 63)
+            .filter(|ch| *ch > 0)
+            .map(|ch| ch + 0x20)
+            .collect(),
+    )?)
 }
