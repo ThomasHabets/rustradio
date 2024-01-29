@@ -4,7 +4,7 @@
 use log::info;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, Tag};
+use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Streamp, Tag};
 use crate::{Error, Result};
 
 const HEADER_SIZE: usize = 15 * 8;
@@ -65,6 +65,7 @@ enum State {
 /// IL2P deframer block
 pub struct Il2pDeframer {
     src: Streamp<u8>,
+    dst: NoCopyStreamp<Vec<u8>>,
     decoded: usize,
     state: State,
 }
@@ -79,9 +80,14 @@ impl Il2pDeframer {
     pub fn new(src: Streamp<u8>) -> Self {
         Self {
             src,
+            dst: new_nocopy_streamp(),
             decoded: 0,
             state: State::Unsynced,
         }
+    }
+    /// Get output stream.
+    pub fn out(&self) -> NoCopyStreamp<Vec<u8>> {
+        self.dst.clone()
     }
 }
 
@@ -143,6 +149,9 @@ impl Block for Il2pDeframer {
             info!("  describe: {}", header.describe());
             info!("  fec: {}", header.fec);
             info!("  payload_size: {}", header.payload_size);
+
+            // TODO: push something useful.
+            self.dst.push(Vec::new(), &[]);
         } else if let Some(Err(e)) = header {
             info!("Failed to parse header: {}", e);
         }
@@ -260,5 +269,44 @@ impl Header {
             },
             false => "type0 IL2P".into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stream::streamp_from_slice;
+
+    use std::fs::File;
+    use std::io::Read;
+    use std::path::Path;
+    fn read_binary_file_as_u8<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>> {
+        let mut file = File::open(path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        Ok(buffer)
+    }
+
+    #[test]
+    fn test_header_decode() -> Result<()> {
+        let src = streamp_from_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
+        let mut cac = crate::blocks::CorrelateAccessCodeTag::new(
+            src,
+            vec![
+                1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0,
+            ],
+            "sync".into(),
+            0,
+        );
+        let mut deframer = Il2pDeframer::new(cac.out());
+        cac.work()?;
+        deframer.work()?;
+        deframer.work()?;
+        let o = deframer.out();
+        let _ = o.pop().unwrap();
+        if let Some(res) = o.pop() {
+            panic!("got a second packet: {:?}", res);
+        }
+        Ok(())
     }
 }
