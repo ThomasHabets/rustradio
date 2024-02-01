@@ -123,7 +123,7 @@ fn main() -> Result<()> {
         g,
         CorrelateAccessCodeTag::new(
             prev,
-            vec![1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0],
+            (&rustradio::il2p_deframer::SYNC_WORD).to_vec(),
             "sync".into(),
             0,
         )

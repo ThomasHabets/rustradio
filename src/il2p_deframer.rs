@@ -9,9 +9,93 @@ use crate::{Error, Result};
 
 const HEADER_SIZE: usize = 15 * 8;
 
-struct Pids {}
+/// SYNC_WORD is the pattern of bits (after the clock sync preamble) that
+/// indicate the start of an IL2P frame.
+///
+/// Another word for these bits is 0xF15E48.
+pub const SYNC_WORD: [u8; 24] = [
+    1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0,
+];
+
+/// Protocol identifier, a concept inherited from AX.25, but IL2P uses
+/// different numbers for them, and bakes in the frame type with the PID.
+pub struct Pids {}
 impl Pids {
+    /// AX.25 supervisor frames. E.g. RR, SREJ, …
+    ///
+    /// These frames don't have a PID field in AX.25.
+    pub const AX25_SUPERVISOR: u8 = 0;
+
+    /// AX.25 unnumbered frames. E.g. SABM, DM, UA, …
+    ///
+    /// These frames don't have a PID field in AX.25.
     pub const AX25_UNNUMBERED: u8 = 1;
+
+    /// AX.25 layer3.
+    ///
+    /// yy10yyyy or yy01yyyy in AX.25.
+    pub const AX25_LAYER3: u8 = 2;
+
+    /// ISO 8208/CCITT X.25 PLP.
+    ///
+    /// Whatever that is. 1 in AX.25.
+    pub const ISO_8208_CCIT_X25_PLP: u8 = 3;
+
+    /// Compressed TCP/IP
+    ///
+    /// 6 in AX.25.
+    pub const COMPRESSED_TCPIP: u8 = 4;
+
+    /// Uncompressed TCP/IP.
+    ///
+    /// 7 in AX.25.
+    pub const UNCOMPRESSED_TCPIP: u8 = 5;
+
+    /// Segmentation fragment.
+    ///
+    /// 8 in AX.25.
+    pub const SEGMENTATION_FRAGMENT: u8 = 6;
+
+    /// Reserved for future use.
+    pub const FUTURE7: u8 = 7;
+
+    /// Reserved for future use.
+    pub const FUTURE8: u8 = 8;
+
+    /// Reserved for future use.
+    pub const FUTURE9: u8 = 9;
+
+    /// Reserved for future use.
+    pub const FUTURE10: u8 = 10;
+
+    /// ARPA Internet protocol.
+    ///
+    /// 0xCC in AX.25.
+    pub const ARPA_IP: u8 = 11;
+
+    /// ARPA Address Resolution.
+    ///
+    /// 0xCD in AX.25.
+    pub const ARPA_ADDRESS_RESOLUTION: u8 = 12;
+
+    /// FlexNet
+    ///
+    /// 0xCE in AX.25.
+    pub const FLEX_NET: u8 = 13;
+
+    /// TheNET
+    ///
+    /// 0xCF in AX.25.
+    pub const THE_NET: u8 = 14;
+
+    /// No L3.
+    ///
+    /// Used by e.g. APRS. But because a type 1 header doesn't have
+    /// room for repeaters, this constant will normally not be used
+    /// for APRS over IL2P.
+    ///
+    /// 0xF0 in AX.25.
+    pub const NO_L3: u8 = 15;
 }
 
 /// LFSR as used by IL2P.
@@ -290,20 +374,15 @@ mod tests {
     #[test]
     fn test_header_decode() -> Result<()> {
         let src = streamp_from_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
-        let mut cac = crate::blocks::CorrelateAccessCodeTag::new(
-            src,
-            vec![
-                1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0,
-            ],
-            "sync".into(),
-            0,
-        );
+        let mut cac =
+            crate::blocks::CorrelateAccessCodeTag::new(src, (&SYNC_WORD).into(), "sync".into(), 0);
         let mut deframer = Il2pDeframer::new(cac.out());
         cac.work()?;
         deframer.work()?;
         deframer.work()?;
         let o = deframer.out();
         let _ = o.pop().unwrap();
+        // TODO: confirm parsing.
         if let Some(res) = o.pop() {
             panic!("got a second packet: {:?}", res);
         }
