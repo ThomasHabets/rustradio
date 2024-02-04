@@ -14,14 +14,16 @@ cargo test --all-features || {
     echo "Tests fail with features" >&2
     exit 1
 }
-cargo +nightly bench --no-run -F rtlsdr || {
-    echo "Benchmark builds fail" >&2
-    exit 1
-}
 
 # TODO: maybe add --all-targets
-cargo +nightly clippy -- -D warnings || {
-    echo "Clippy fail" >&2
-    exit 1
-}
+cargo +nightly 2>/dev/null && {
+    cargo +nightly bench --no-run -F rtlsdr || {
+	echo "Benchmark builds fail" >&2
+	exit 1
+    }
+    cargo +nightly clippy -- -D warnings || {
+	echo "Clippy fail" >&2
+	exit 1
+    }
+} || echo "Skipping nightly, because not installed"
 exit 0
