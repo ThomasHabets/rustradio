@@ -16,7 +16,7 @@ cargo test --all-features || {
 }
 
 # TODO: maybe add --all-targets
-cargo +nightly 2>/dev/null && {
+cargo +nightly 2>/dev/null > /dev/null && {
     cargo +nightly bench --no-run -F rtlsdr || {
 	echo "Benchmark builds fail" >&2
 	exit 1
