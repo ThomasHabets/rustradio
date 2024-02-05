@@ -99,7 +99,7 @@ impl RtlSdrSource {
                         .expect("Failed to send message from RTL-SDR read thread to the block");
                 }
             })?;
-        assert_eq!(rx.recv()?, vec![]);
+        assert_eq!(rx.recv()?, Vec::<u8>::new());
         Ok(Self {
             rx,
             dst: new_streamp(),
