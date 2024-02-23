@@ -196,15 +196,16 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
 
 /// SigMF file source.
 pub struct SigMFSource<T: Copy> {
+    // TODO: Can't continue to delegate reading the data, because tags.
     file_source: FileSource<T>,
 }
 
 impl<T: Default + Copy> SigMFSource<T> {
     /// Create a new SigMF source block.
-    pub fn new(filename: &str, samp_rate: u64) -> Result<Self> {
+    pub fn new(filename: &str, samp_rate: f64) -> Result<Self> {
         let meta = parse_meta(&filename)?;
         if let Some(t) = meta.global.core_sample_rate {
-            if t as u64 != samp_rate {
+            if t != samp_rate {
                 return Err(Error::new(&format!(
                     "sigmf file {} sample rate ({}) is not the expected {}",
                     filename, t, samp_rate
@@ -238,6 +239,6 @@ where
         "SigMFSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
-        Ok(BlockRet::Ok)
+        self.file_source.work()
     }
 }

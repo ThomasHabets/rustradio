@@ -12,7 +12,7 @@ struct Opt {
     verbose: usize,
 
     #[structopt(long = "sample_rate", default_value = "50000")]
-    samp_rate: u64,
+    samp_rate: f64,
 
     #[structopt(short = "r", help = "Read I/Q from file")]
     read: String,
