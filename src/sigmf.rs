@@ -194,6 +194,33 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
     Ok(())
 }
 
+/// SigMF source builder.
+pub struct SigMFSourceBuilder<T: Copy> {
+    filename: String,
+    sample_rate: Option<f64>,
+    dummy: std::marker::PhantomData<T>,
+}
+
+impl<T: Default + Copy> SigMFSourceBuilder<T> {
+    /// Create new SigMF source builder.
+    pub fn new(filename: String) -> Self {
+        Self {
+            filename,
+            sample_rate: None,
+            dummy: std::marker::PhantomData,
+        }
+    }
+    /// Force a certain sample rate.
+    pub fn sample_rate(mut self, rate: f64) -> Self {
+        self.sample_rate = Some(rate);
+        self
+    }
+    /// Build a SigMFSource.
+    pub fn build(self) -> Result<SigMFSource<T>> {
+        SigMFSource::new(&self.filename, self.sample_rate)
+    }
+}
+
 /// SigMF file source.
 pub struct SigMFSource<T: Copy> {
     // TODO: Can't continue to delegate reading the data, because tags.
@@ -202,15 +229,17 @@ pub struct SigMFSource<T: Copy> {
 
 impl<T: Default + Copy> SigMFSource<T> {
     /// Create a new SigMF source block.
-    pub fn new(filename: &str, samp_rate: f64) -> Result<Self> {
+    pub fn new(filename: &str, samp_rate: Option<f64>) -> Result<Self> {
         let meta = parse_meta(&filename)?;
-        if let Some(t) = meta.global.core_sample_rate {
-            if t != samp_rate {
-                return Err(Error::new(&format!(
-                    "sigmf file {} sample rate ({}) is not the expected {}",
-                    filename, t, samp_rate
-                ))
-                .into());
+        if let Some(samp_rate) = samp_rate {
+            if let Some(t) = meta.global.core_sample_rate {
+                if t != samp_rate {
+                    return Err(Error::new(&format!(
+                        "sigmf file {} sample rate ({}) is not the expected {}",
+                        filename, t, samp_rate
+                    ))
+                    .into());
+                }
             }
         }
         let expected_type = "ci32_le"; // TODO: support all the types.

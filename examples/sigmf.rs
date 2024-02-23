@@ -38,6 +38,11 @@ fn main() -> Result<()> {
         .init()?;
 
     let mut g = Graph::new();
-    let _prev = add_block![g, SigMFSource::<Complex>::new(&opt.read, opt.samp_rate)?];
+    let _prev = add_block![
+        g,
+        SigMFSourceBuilder::<Complex>::new(opt.read.clone())
+            .sample_rate(opt.samp_rate)
+            .build()?
+    ];
     Ok(())
 }
