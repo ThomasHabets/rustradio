@@ -1,5 +1,10 @@
 //! SigMF implementation.
 
+/*
+ * TODO:
+ * create sink block.
+ * add sigmf archive (tar) support.
+ */
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -7,10 +12,10 @@ use std::io::Write;
 const DATATYPE_CF32: &str = "cf32";
 const VERSION: &str = "1.1.0";
 
-/// SigMF file source.
-pub struct SigMFSource {}
-
-impl SigMFSource {}
+use crate::block::{Block, BlockRet};
+use crate::file_source::FileSource;
+use crate::stream::Streamp;
+use crate::{Error, Sample};
 
 /// Capture segment.
 #[allow(dead_code)]
@@ -157,6 +162,7 @@ pub struct SigMF {
 
 /// Parse metadata for SigMF file.
 pub fn parse_meta(base: &str) -> Result<SigMF> {
+    //let base = "data/1876954_7680KSPS_srsRAN_Project_gnb_short.sigmf";
     let file = std::fs::File::open(format!("{}-meta", base))?;
     let reader = std::io::BufReader::new(file);
     Ok(serde_json::from_reader(reader)?)
@@ -186,4 +192,52 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
     let mut file = std::fs::File::create(fname)?;
     file.write_all(serialized.as_bytes())?;
     Ok(())
+}
+
+/// SigMF file source.
+pub struct SigMFSource<T: Copy> {
+    file_source: FileSource<T>,
+}
+
+impl<T: Default + Copy> SigMFSource<T> {
+    /// Create a new SigMF source block.
+    pub fn new(filename: &str, samp_rate: u64) -> Result<Self> {
+        let meta = parse_meta(&filename)?;
+        if let Some(t) = meta.global.core_sample_rate {
+            if t as u64 != samp_rate {
+                return Err(Error::new(&format!(
+                    "sigmf file {} sample rate ({}) is not the expected {}",
+                    filename, t, samp_rate
+                ))
+                .into());
+            }
+        }
+        let expected_type = "ci32_le"; // TODO: support all the types.
+        if meta.global.core_datatype != expected_type {
+            return Err(Error::new(&format!(
+                "sigmf file {} data type ({}) not the expected {}",
+                filename, meta.global.core_datatype, expected_type
+            ))
+            .into());
+        }
+        Ok(Self {
+            file_source: FileSource::new(&format!["{}-data", filename], false)?,
+        })
+    }
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<T> {
+        self.file_source.out()
+    }
+}
+
+impl<T> Block for SigMFSource<T>
+where
+    T: Sample<Type = T> + Copy + std::fmt::Debug,
+{
+    fn block_name(&self) -> &'static str {
+        "SigMFSource"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        Ok(BlockRet::Ok)
+    }
 }
