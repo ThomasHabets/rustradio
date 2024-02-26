@@ -291,6 +291,42 @@ impl Sample for u32 {
     }
 }
 
+impl Sample for i32 {
+    type Type = i32;
+    fn size() -> usize {
+        4
+    }
+    fn parse(data: &[u8]) -> Result<Self::Type> {
+        if data.len() != Self::size() {
+            panic!("TODO: Float is wrong size");
+        }
+        Ok(i32::from_le_bytes(data[0..Self::size()].try_into()?))
+    }
+    fn serialize(&self) -> Vec<u8> {
+        i32::to_le_bytes(*self).to_vec()
+    }
+}
+
+impl Sample for String {
+    type Type = String;
+    fn size() -> usize {
+        // TODO: variable.
+        4
+    }
+    fn parse(_data: &[u8]) -> Result<Self::Type> {
+        Ok("TODO".into())
+    }
+    fn serialize(&self) -> Vec<u8> {
+        // TODO: there has to be a better way to do his. But I'm on a
+        // plane with no wifi, so can't google it.
+        let mut v = Vec::new();
+        for ch in self.bytes() {
+            v.push(ch);
+        }
+        v
+    }
+}
+
 /// Trivial trait for types that have .len().
 #[allow(clippy::len_without_is_empty)]
 pub trait Len {

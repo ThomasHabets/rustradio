@@ -33,6 +33,60 @@ impl FloatToU32 {
 }
 map_block_convert_macro![FloatToU32, u32];
 
+/// Convert floats to signed 32bit int, scaled if needed.
+///
+/// `i32 = Float * scale`
+pub struct FloatToI32 {
+    scale: Float,
+    src: Streamp<Float>,
+    dst: Streamp<i32>,
+}
+
+impl FloatToI32 {
+    /// Create new FloatToI32, scaled.
+    ///
+    /// Return value is the input multiplied by the scale. E.g. with a
+    /// scale of 100.0, the input 0.123 becomes 12.
+    pub fn new(src: Streamp<Float>, scale: Float) -> Self {
+        Self {
+            scale,
+            src,
+            dst: new_streamp(),
+        }
+    }
+    fn process_one(&mut self, s: Float) -> i32 {
+        (s * self.scale) as i32
+    }
+}
+map_block_convert_macro![FloatToI32, i32];
+
+/// Convert signed 32bit int to Float, scaled if needed.
+///
+/// `Float = i32 * scale`
+pub struct I32ToFloat {
+    scale: Float,
+    src: Streamp<i32>,
+    dst: Streamp<Float>,
+}
+
+impl I32ToFloat {
+    /// Create new I32ToFloat, scaled.
+    ///
+    /// Return value is the input multiplied by the scale. E.g. with a
+    /// scale of 0.01, the input 123 becomes 0.123.
+    pub fn new(src: Streamp<i32>, scale: Float) -> Self {
+        Self {
+            scale,
+            src,
+            dst: new_streamp(),
+        }
+    }
+    fn process_one(&mut self, s: i32) -> Float {
+        s as Float * self.scale
+    }
+}
+map_block_convert_macro![I32ToFloat, Float];
+
 /// Convert floats to complex.
 pub struct FloatToComplex {
     re: Streamp<Float>,

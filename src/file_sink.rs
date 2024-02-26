@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::{NoCopyStreamp, Streamp};
 use crate::{Error, Sample};
 
 /// File write mode.
@@ -74,6 +74,60 @@ where
         self.f.flush()?;
         i.consume(n);
         Ok(BlockRet::Ok)
+    }
+}
+
+/// Send stream to raw file.
+pub struct NoCopyFileSink<T> {
+    f: BufWriter<std::fs::File>,
+    src: NoCopyStreamp<T>,
+}
+
+impl<T> NoCopyFileSink<T> {
+    /// Create new NoCopyFileSink block.
+    pub fn new(src: NoCopyStreamp<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
+        debug!("Opening sink {}", filename.display());
+        let f = BufWriter::new(match mode {
+            Mode::Create => std::fs::File::options()
+                .read(false)
+                .write(true)
+                .create_new(true)
+                .open(filename)?,
+            Mode::Overwrite => std::fs::File::create(filename)?,
+            Mode::Append => std::fs::File::options()
+                .read(false)
+                .write(true)
+                .append(true)
+                .open(filename)?,
+        });
+        Ok(Self { f, src })
+    }
+
+    /// Flush the write buffer.
+    pub fn flush(&mut self) -> Result<()> {
+        Ok(self.f.flush()?)
+    }
+}
+
+impl<T> Block for NoCopyFileSink<T>
+where
+    T: Sample<Type = T> + std::fmt::Debug + Default,
+{
+    fn block_name(&self) -> &'static str {
+        "NoCopyFileSink"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        if let Some((s, _tags)) = self.src.pop() {
+            // TODO: write tags.
+            //let s2 = format!["{:?}", s].into();
+            let mut v = s.serialize();
+            v.push(10); // Newline.
+            self.f.write_all(&v)?;
+            self.f.flush()?;
+            Ok(BlockRet::Ok)
+        } else {
+            Ok(BlockRet::Noop)
+        }
     }
 }
 
