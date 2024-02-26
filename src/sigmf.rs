@@ -195,13 +195,13 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
 }
 
 /// SigMF source builder.
-pub struct SigMFSourceBuilder<T: Copy> {
+pub struct SigMFSourceBuilder<T: Copy + Type> {
     filename: String,
     sample_rate: Option<f64>,
     dummy: std::marker::PhantomData<T>,
 }
 
-impl<T: Default + Copy> SigMFSourceBuilder<T> {
+impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
     /// Create new SigMF source builder.
     pub fn new(filename: String) -> Self {
         Self {
@@ -227,7 +227,20 @@ pub struct SigMFSource<T: Copy> {
     file_source: FileSource<T>,
 }
 
-impl<T: Default + Copy> SigMFSource<T> {
+/// Trait that needs implementing for all supported SigMF data types.
+pub trait Type {
+    /// Return full type, or endianness prefix of the type.
+    fn type_string() -> &'static str;
+}
+
+impl Type for i32 {
+    fn type_string() -> &'static str {
+        // TODO: this is wrong. This is the type for complex i32.
+        "ci32"
+    }
+}
+
+impl<T: Default + Copy + Type> SigMFSource<T> {
     /// Create a new SigMF source block.
     pub fn new(filename: &str, samp_rate: Option<f64>) -> Result<Self> {
         let meta = parse_meta(&filename)?;
@@ -242,7 +255,7 @@ impl<T: Default + Copy> SigMFSource<T> {
                 }
             }
         }
-        let expected_type = "ci32_le"; // TODO: support all the types.
+        let expected_type = T::type_string().to_owned() + "_le";
         if meta.global.core_datatype != expected_type {
             return Err(Error::new(&format!(
                 "sigmf file {} data type ({}) not the expected {}",
@@ -262,7 +275,7 @@ impl<T: Default + Copy> SigMFSource<T> {
 
 impl<T> Block for SigMFSource<T>
 where
-    T: Sample<Type = T> + Copy + std::fmt::Debug,
+    T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
 {
     fn block_name(&self) -> &'static str {
         "SigMFSource"
