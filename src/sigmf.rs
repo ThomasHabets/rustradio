@@ -243,7 +243,7 @@ impl Type for i32 {
 impl<T: Default + Copy + Type> SigMFSource<T> {
     /// Create a new SigMF source block.
     pub fn new(filename: &str, samp_rate: Option<f64>) -> Result<Self> {
-        let meta = parse_meta(&filename)?;
+        let meta = parse_meta(filename)?;
         if let Some(samp_rate) = samp_rate {
             if let Some(t) = meta.global.core_sample_rate {
                 if t != samp_rate {
