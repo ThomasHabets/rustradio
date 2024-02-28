@@ -40,7 +40,6 @@ impl<T: Copy> FileSink<T> {
             Mode::Overwrite => std::fs::File::create(filename)?,
             Mode::Append => std::fs::File::options()
                 .read(false)
-                .write(true)
                 .append(true)
                 .open(filename)?,
         });
@@ -96,7 +95,6 @@ impl<T> NoCopyFileSink<T> {
             Mode::Overwrite => std::fs::File::create(filename)?,
             Mode::Append => std::fs::File::options()
                 .read(false)
-                .write(true)
                 .append(true)
                 .open(filename)?,
         });

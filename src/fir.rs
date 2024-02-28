@@ -176,7 +176,6 @@ pub fn hilbert(ntaps: usize) -> Vec<Float> {
 mod tests {
     use super::*;
     use crate::tests::assert_almost_equal_complex;
-    use crate::Complex;
 
     #[test]
     fn test_complex() {

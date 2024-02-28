@@ -458,7 +458,6 @@ mod tests {
     use super::*;
     use crate::stream::TagValue;
     use crate::Float;
-    use std::sync::Arc;
 
     #[test]
     pub fn test_no_double() -> Result<()> {
