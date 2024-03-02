@@ -34,13 +34,19 @@ impl FloatToU32 {
 map_block_convert_macro![FloatToU32, u32];
 
 /// Arbitrary mapping
-pub struct Map<In, Out> {
-    map: Box<dyn Fn(In) -> Out>,
+pub struct Map<In, Out, F>
+where
+    F: Fn(In) -> Out,
+{
+    map: F,
     src: Streamp<In>,
-    dst: Streamp<Out>,
+    dst: Streamp<F::Output>,
 }
 
-impl<In, Out> Map<In, Out> {
+impl<In, Out, F> Map<In, Out, F>
+where
+    F: Fn(In) -> Out,
+{
     /// Return the output stream.
     pub fn out(&self) -> Streamp<Out> {
         self.dst.clone()
@@ -49,7 +55,7 @@ impl<In, Out> Map<In, Out> {
     ///
     /// Return value is the input multiplied by the scale. E.g. with a
     /// scale of 100.0, the input 0.123 becomes 12.
-    pub fn new(src: Streamp<In>, map: Box<dyn Fn(In) -> Out>) -> Self {
+    pub fn new(src: Streamp<In>, map: F) -> Self {
         Self {
             map,
             src,
@@ -60,10 +66,11 @@ impl<In, Out> Map<In, Out> {
         (self.map)(s)
     }
 }
-impl<In, Out> Block for Map<In, Out>
+impl<In, Out, F> Block for Map<In, Out, F>
 where
     In: Copy,
     Out: Copy,
+    F: Fn(In) -> Out,
 {
     fn block_name(&self) -> &'static str {
         "Map"
