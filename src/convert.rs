@@ -33,6 +33,69 @@ impl FloatToU32 {
 }
 map_block_convert_macro![FloatToU32, u32];
 
+/// Arbitrary mapping
+pub struct Map<In, Out> {
+    map: Box<dyn Fn(In) -> Out>,
+    src: Streamp<In>,
+    dst: Streamp<Out>,
+}
+
+impl<In, Out> Map<In, Out> {
+    /// Return the output stream.
+    pub fn out(&self) -> Streamp<Out> {
+        self.dst.clone()
+    }
+    /// Create new FloatToU32, scaled.
+    ///
+    /// Return value is the input multiplied by the scale. E.g. with a
+    /// scale of 100.0, the input 0.123 becomes 12.
+    pub fn new(src: Streamp<In>, map: Box<dyn Fn(In) -> Out>) -> Self {
+        Self {
+            map,
+            src,
+            dst: new_streamp(),
+        }
+    }
+    fn process_one(&mut self, s: In) -> Out {
+        (self.map)(s)
+    }
+}
+impl<In, Out> Block for Map<In, Out>
+where
+    In: Copy,
+    Out: Copy,
+{
+    fn block_name(&self) -> &'static str {
+        "Map"
+    }
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        // Bindings, since borrow checker won't let us call
+        // mut `process_one` if we borrow `src` and `dst`.
+        let ibind = self.src.clone();
+        let obind = self.dst.clone();
+
+        // Get input and output buffers.
+        let (i, tags) = ibind.read_buf()?;
+        let mut o = obind.write_buf()?;
+
+        // Don't process more than we have, and fit.
+        let n = std::cmp::min(i.len(), o.len());
+        if n == 0 {
+            return Ok(BlockRet::Noop);
+        }
+
+        // Map one sample at a time. Is this really the best way?
+        for (place, ival) in o.slice().iter_mut().zip(i.iter()) {
+            *place = self.process_one(*ival);
+        }
+
+        // Finalize.
+        o.produce(n, &tags);
+        i.consume(n);
+        Ok(BlockRet::Ok)
+    }
+}
+
 /// Convert floats to signed 32bit int, scaled if needed.
 ///
 /// `i32 = Float * scale`

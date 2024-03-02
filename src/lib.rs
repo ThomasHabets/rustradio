@@ -243,6 +243,27 @@ impl Sample for Complex {
     }
 }
 
+impl Sample for num_complex::Complex<i32> {
+    type Type = num_complex::Complex<i32>;
+    fn size() -> usize {
+        std::mem::size_of::<Self>()
+    }
+    fn parse(data: &[u8]) -> Result<Self::Type> {
+        if data.len() != Self::size() {
+            panic!("TODO: Complex is wrong size");
+        }
+        let i = i32::from_le_bytes(data[0..Self::size() / 2].try_into()?);
+        let q = i32::from_le_bytes(data[Self::size() / 2..].try_into()?);
+        Ok(num_complex::Complex::new(i, q))
+    }
+    fn serialize(&self) -> Vec<u8> {
+        let mut ret = Vec::new();
+        ret.extend(i32::to_le_bytes(self.re));
+        ret.extend(i32::to_le_bytes(self.im));
+        ret
+    }
+}
+
 impl Sample for Float {
     type Type = Float;
     fn size() -> usize {

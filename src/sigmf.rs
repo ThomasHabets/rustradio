@@ -15,7 +15,7 @@ const VERSION: &str = "1.1.0";
 use crate::block::{Block, BlockRet};
 use crate::file_source::FileSource;
 use crate::stream::Streamp;
-use crate::{Error, Sample};
+use crate::{Complex, Error, Float, Sample};
 
 /// Capture segment.
 #[allow(dead_code)]
@@ -235,8 +235,29 @@ pub trait Type {
 
 impl Type for i32 {
     fn type_string() -> &'static str {
-        // TODO: this is wrong. This is the type for complex i32.
+        "ri32"
+    }
+}
+
+impl Type for num_complex::Complex<i32> {
+    fn type_string() -> &'static str {
         "ci32"
+    }
+}
+
+impl Type for Complex {
+    fn type_string() -> &'static str {
+        // TODO: support Float being 64bit.
+        assert_eq![std::mem::size_of::<Float>(), 4];
+        "cf32"
+    }
+}
+
+impl Type for Float {
+    fn type_string() -> &'static str {
+        // TODO: support Float being 64bit.
+        assert_eq![std::mem::size_of::<Float>(), 4];
+        "rf32"
     }
 }
 
@@ -255,6 +276,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 }
             }
         }
+        // TODO: support i8/u8 and _be.
         let expected_type = T::type_string().to_owned() + "_le";
         if meta.global.core_datatype != expected_type {
             return Err(Error::new(&format!(

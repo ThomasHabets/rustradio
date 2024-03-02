@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Streamp, Tag, TagPos};
-use crate::{Error, Float};
+use crate::Error;
 
 /// Nocopy version of DebugSink.
 // TODO: maybe merge with DebugSink using an enum?
@@ -75,7 +75,10 @@ where
     }
 }
 
-impl Block for DebugFilter<Float> {
+impl<T> Block for DebugFilter<T>
+where
+    T: Copy + std::fmt::Debug,
+{
     fn block_name(&self) -> &'static str {
         "DebugFilter"
     }

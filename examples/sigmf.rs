@@ -3,6 +3,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::Float;
 
 #[derive(StructOpt, Debug)]
 #[structopt()]
@@ -39,11 +40,19 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
     let prev = add_block![
         g,
-        SigMFSourceBuilder::<i32>::new(opt.read.clone())
+        SigMFSourceBuilder::<num_complex::Complex<i32>>::new(opt.read.clone())
             .sample_rate(opt.samp_rate)
             .build()?
     ];
-    let prev = add_block![g, I32ToFloat::new(prev, 1.0)];
+    let prev = add_block![
+        g,
+        Map::new(
+            prev,
+            Box::new(|x| -> num_complex::Complex<Float> {
+                num_complex::Complex::new(x.re as Float, x.im as Float)
+            })
+        )
+    ];
     let prev = add_block![g, DebugFilter::new(prev)];
     g.add(Box::new(NoCopyFileSink::new(
         prev,
