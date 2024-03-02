@@ -27,7 +27,7 @@ impl<T> VecToStream<T> {
 }
 
 impl<T: Copy> Block for VecToStream<T> {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "VecToStream"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

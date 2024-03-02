@@ -73,7 +73,7 @@ impl<T> Block for FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "FirFilter"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

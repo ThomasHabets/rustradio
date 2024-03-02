@@ -29,7 +29,7 @@ impl<T: Copy> Tee<T> {
 }
 
 impl<T: Copy> Block for Tee<T> {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "Tee"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

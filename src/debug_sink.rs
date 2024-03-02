@@ -24,7 +24,7 @@ impl<T> Block for DebugSinkNoCopy<T>
 where
     T: std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "DebugSinkNoCopy"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
@@ -79,7 +79,7 @@ impl<T> Block for DebugFilter<T>
 where
     T: Copy + std::fmt::Debug,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "DebugFilter"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
@@ -134,7 +134,7 @@ impl<T> Block for DebugSink<T>
 where
     T: Copy + std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "DebugSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

@@ -29,7 +29,7 @@ impl<T: Copy> Skip<T> {
 }
 
 impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "Skip"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

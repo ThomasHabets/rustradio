@@ -117,7 +117,7 @@ impl SoapySdrSource {
 }
 
 impl Block for SoapySdrSource {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "SoapySdrSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

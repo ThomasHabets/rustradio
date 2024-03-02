@@ -227,7 +227,7 @@ impl HdlcDeframer {
 }
 
 impl Block for HdlcDeframer {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "HDLC Deframer"
     }
 

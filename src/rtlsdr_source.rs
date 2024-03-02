@@ -113,7 +113,7 @@ impl RtlSdrSource {
 }
 
 impl Block for RtlSdrSource {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "RtlSdrSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

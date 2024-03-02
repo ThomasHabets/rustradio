@@ -52,7 +52,7 @@ impl<T: Copy> RationalResampler<T> {
 }
 
 impl<T: Copy> Block for RationalResampler<T> {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "RationalResampler"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

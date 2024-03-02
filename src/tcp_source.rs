@@ -38,7 +38,7 @@ impl<T> Block for TcpSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "TcpSource<T>"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

@@ -26,7 +26,7 @@ impl RtlSdrDecode {
 }
 
 impl Block for RtlSdrDecode {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "RtlSdrDecode"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

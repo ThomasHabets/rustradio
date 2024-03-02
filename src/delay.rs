@@ -49,7 +49,7 @@ impl<T> Block for Delay<T>
 where
     T: Copy + Default,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "Delay"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

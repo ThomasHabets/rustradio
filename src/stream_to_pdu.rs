@@ -80,7 +80,7 @@ impl<T> Block for StreamToPdu<T>
 where
     T: Copy + Sample,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "StreamToPdu"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

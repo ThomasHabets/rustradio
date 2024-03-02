@@ -176,7 +176,7 @@ impl Il2pDeframer {
 }
 
 impl Block for Il2pDeframer {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "IL2P Deframer"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

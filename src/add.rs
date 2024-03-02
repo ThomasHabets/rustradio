@@ -36,7 +36,7 @@ impl<T> Block for Add<T>
 where
     T: Copy + std::ops::Add<Output = T>,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "Add"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

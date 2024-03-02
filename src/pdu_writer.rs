@@ -48,7 +48,7 @@ impl<T> Block for PduWriter<T>
 where
     T: Sample,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "PDU Writer"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

@@ -84,8 +84,8 @@ where
     Out: Copy,
     F: Fn(In) -> Out,
 {
-    fn block_name(&self) -> &'static str {
-        "Map"
+    fn block_name(&self) -> &str {
+        &self.name
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
         // Bindings, since borrow checker won't let us call
@@ -139,7 +139,7 @@ impl FloatToComplex {
 }
 
 impl Block for FloatToComplex {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "FloatToComplex"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

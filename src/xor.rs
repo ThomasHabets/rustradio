@@ -36,7 +36,7 @@ impl<T> Block for Xor<T>
 where
     T: Copy + std::ops::BitXor<Output = T>,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "XOR"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

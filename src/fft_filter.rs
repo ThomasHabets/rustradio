@@ -102,7 +102,7 @@ impl FftFilter {
 }
 
 impl Block for FftFilter {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "FftFilter"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
@@ -225,7 +225,7 @@ impl FftFilterFloat {
 }
 
 impl Block for FftFilterFloat {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "FftFilterFloat"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

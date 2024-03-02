@@ -97,7 +97,7 @@ impl SymbolSync {
 }
 
 impl Block for SymbolSync {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "SymbolSync"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

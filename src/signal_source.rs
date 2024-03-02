@@ -46,7 +46,7 @@ impl Iterator for SignalSourceComplex {
 }
 
 impl Block for SignalSourceComplex {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "SignalSourceComplex"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

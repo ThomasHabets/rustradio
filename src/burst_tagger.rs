@@ -74,7 +74,7 @@ impl<T> Block for BurstTagger<T>
 where
     T: Copy,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "Burst Tagger"
     }
 

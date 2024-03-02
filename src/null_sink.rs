@@ -25,7 +25,7 @@ impl<T> Block for NullSink<T>
 where
     T: Copy,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "NullSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

@@ -83,7 +83,7 @@ impl<T> Block for VectorSource<T>
 where
     T: Copy,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "VectorSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

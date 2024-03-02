@@ -299,7 +299,7 @@ impl<T> Block for SigMFSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "SigMFSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

@@ -56,7 +56,7 @@ impl<T> Block for FileSink<T>
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "FileSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
@@ -111,7 +111,7 @@ impl<T> Block for NoCopyFileSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "NoCopyFileSink"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

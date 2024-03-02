@@ -46,7 +46,7 @@ impl Hilbert {
 }
 
 impl Block for Hilbert {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "Hilbert"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

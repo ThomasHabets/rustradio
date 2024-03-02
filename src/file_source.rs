@@ -41,7 +41,7 @@ impl<T> Block for FileSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "FileSource"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

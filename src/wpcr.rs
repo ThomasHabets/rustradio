@@ -60,7 +60,7 @@ impl Midpointer {
     }
 }
 impl Block for Midpointer {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "Midpointer"
     }
 
@@ -221,7 +221,7 @@ impl Wpcr {
 }
 
 impl Block for Wpcr {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "WPCR"
     }
 

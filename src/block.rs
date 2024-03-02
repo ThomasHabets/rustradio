@@ -54,7 +54,7 @@ pub trait Block {
     Not name of *instance* of block. But it may include the
     type. E.g. `FileSource<Float>`.
      */
-    fn block_name(&self) -> &'static str;
+    fn block_name(&self) -> &str;
 
     /** Block work function
 
@@ -127,7 +127,7 @@ macro_rules! map_block_macro_v2 {
         where
             T: Copy $(+$tr)*,
         {
-            fn block_name(&self) -> &'static str {
+            fn block_name(&self) -> &str {
                 stringify!{$name}
             }
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
@@ -183,7 +183,7 @@ macro_rules! map_block_convert_macro {
         }
 
         impl $crate::block::Block for $name {
-            fn block_name(&self) -> &'static str {
+            fn block_name(&self) -> &str {
                 stringify! {$name}
             }
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
@@ -237,7 +237,7 @@ macro_rules! map_block_convert_tag_macro {
         }
 
         impl $crate::block::Block for $name {
-            fn block_name(&self) -> &'static str {
+            fn block_name(&self) -> &str {
                 stringify! {$name}
             }
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {

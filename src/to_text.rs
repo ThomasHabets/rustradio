@@ -51,7 +51,7 @@ impl<T: Copy> ToText<T> {
 }
 
 impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "ToText"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

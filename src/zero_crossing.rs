@@ -67,7 +67,7 @@ impl ZeroCrossing {
 }
 
 impl Block for ZeroCrossing {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "ZeroCrossing"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {

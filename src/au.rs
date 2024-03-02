@@ -100,7 +100,7 @@ impl AuEncode {
 }
 
 impl Block for AuEncode {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "AuEncode"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
@@ -173,7 +173,7 @@ impl AuDecode {
 }
 
 impl Block for AuDecode {
-    fn block_name(&self) -> &'static str {
+    fn block_name(&self) -> &str {
         "AuDecode"
     }
     fn work(&mut self) -> Result<BlockRet, Error> {
