@@ -6,7 +6,7 @@ pub use crate::binary_slicer::BinarySlicer;
 pub use crate::burst_tagger::BurstTagger;
 pub use crate::complex_to_mag2::ComplexToMag2;
 pub use crate::constant_source::ConstantSource;
-pub use crate::convert::{FloatToComplex, FloatToI32, FloatToU32, I32ToFloat, Map};
+pub use crate::convert::{FloatToComplex, MapBuilder};
 pub use crate::correlate_access_code::{CorrelateAccessCode, CorrelateAccessCodeTag};
 pub use crate::debug_sink::{DebugFilter, DebugSink, DebugSinkNoCopy};
 pub use crate::delay::Delay;

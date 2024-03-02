@@ -46,9 +46,10 @@ fn main() -> Result<()> {
     ];
     let prev = add_block![
         g,
-        Map::new(prev, |x| {
+        MapBuilder::new(prev, |x| {
             num_complex::Complex::new(x.re as Float, x.im as Float)
         })
+        .build()
     ];
     let prev = add_block![g, DebugFilter::new(prev)];
     g.add(Box::new(NoCopyFileSink::new(

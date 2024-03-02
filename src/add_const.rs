@@ -2,6 +2,17 @@
 use crate::map_block_macro_v2;
 use crate::stream::{new_streamp, Streamp};
 
+/// Add const value, implemented in terms of Map.
+/// TODO: remove AddConst, below?
+pub fn add_const<T>(src: Streamp<T>, val: T) -> crate::convert::Map<T, T, impl Fn(T) -> T>
+where
+    T: Copy + std::ops::Add<Output = T>,
+{
+    crate::convert::MapBuilder::new(src, move |x| x + val)
+        .name("add_const".into())
+        .build()
+}
+
 /// AddConst adds a constant value to every sample.
 pub struct AddConst<T>
 where

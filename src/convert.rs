@@ -4,40 +4,47 @@ use anyhow::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp};
 use crate::Error;
-use crate::{map_block_convert_macro, Complex, Float};
+use crate::{Complex, Float};
 
-/// Convert floats to unsigned 32bit int, scaled if needed.
-///
-/// `u32 = Float * scale`
-pub struct FloatToU32 {
-    scale: Float,
-    src: Streamp<Float>,
-    dst: Streamp<u32>,
+/// Builder for Map.
+pub struct MapBuilder<In, Out, F>
+where
+    F: Fn(In) -> Out,
+{
+    map: F,
+    name: String,
+    src: Streamp<In>,
 }
 
-impl FloatToU32 {
-    /// Create new FloatToU32, scaled.
-    ///
-    /// Return value is the input multiplied by the scale. E.g. with a
-    /// scale of 100.0, the input 0.123 becomes 12.
-    pub fn new(src: Streamp<Float>, scale: Float) -> Self {
+impl<In, Out, F> MapBuilder<In, Out, F>
+where
+    F: Fn(In) -> Out,
+{
+    /// Create new MapBuilder.
+    pub fn new(src: Streamp<In>, map: F) -> Self {
         Self {
-            scale,
             src,
-            dst: new_streamp(),
+            map,
+            name: "Map".into(),
         }
     }
-    fn process_one(&mut self, s: Float) -> u32 {
-        (s * self.scale) as u32
+    /// Set name.
+    pub fn name(mut self, name: String) -> MapBuilder<In, Out, F> {
+        self.name = name;
+        self
+    }
+    /// Build Map.
+    pub fn build(self) -> Map<In, Out, F> {
+        Map::new(self.name, self.src, self.map)
     }
 }
-map_block_convert_macro![FloatToU32, u32];
 
 /// Arbitrary mapping
 pub struct Map<In, Out, F>
 where
     F: Fn(In) -> Out,
 {
+    name: String,
     map: F,
     src: Streamp<In>,
     dst: Streamp<F::Output>,
@@ -55,8 +62,9 @@ where
     ///
     /// Return value is the input multiplied by the scale. E.g. with a
     /// scale of 100.0, the input 0.123 becomes 12.
-    pub fn new(src: Streamp<In>, map: F) -> Self {
+    fn new(name: String, src: Streamp<In>, map: F) -> Self {
         Self {
+            name,
             map,
             src,
             dst: new_streamp(),
@@ -64,6 +72,10 @@ where
     }
     fn process_one(&mut self, s: In) -> Out {
         (self.map)(s)
+    }
+    /// Name of the block.
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 impl<In, Out, F> Block for Map<In, Out, F>
@@ -102,60 +114,6 @@ where
         Ok(BlockRet::Ok)
     }
 }
-
-/// Convert floats to signed 32bit int, scaled if needed.
-///
-/// `i32 = Float * scale`
-pub struct FloatToI32 {
-    scale: Float,
-    src: Streamp<Float>,
-    dst: Streamp<i32>,
-}
-
-impl FloatToI32 {
-    /// Create new FloatToI32, scaled.
-    ///
-    /// Return value is the input multiplied by the scale. E.g. with a
-    /// scale of 100.0, the input 0.123 becomes 12.
-    pub fn new(src: Streamp<Float>, scale: Float) -> Self {
-        Self {
-            scale,
-            src,
-            dst: new_streamp(),
-        }
-    }
-    fn process_one(&mut self, s: Float) -> i32 {
-        (s * self.scale) as i32
-    }
-}
-map_block_convert_macro![FloatToI32, i32];
-
-/// Convert signed 32bit int to Float, scaled if needed.
-///
-/// `Float = i32 * scale`
-pub struct I32ToFloat {
-    scale: Float,
-    src: Streamp<i32>,
-    dst: Streamp<Float>,
-}
-
-impl I32ToFloat {
-    /// Create new I32ToFloat, scaled.
-    ///
-    /// Return value is the input multiplied by the scale. E.g. with a
-    /// scale of 0.01, the input 123 becomes 0.123.
-    pub fn new(src: Streamp<i32>, scale: Float) -> Self {
-        Self {
-            scale,
-            src,
-            dst: new_streamp(),
-        }
-    }
-    fn process_one(&mut self, s: i32) -> Float {
-        s as Float * self.scale
-    }
-}
-map_block_convert_macro![I32ToFloat, Float];
 
 /// Convert floats to complex.
 pub struct FloatToComplex {
@@ -205,35 +163,3 @@ impl Block for FloatToComplex {
         Ok(BlockRet::Ok)
     }
 }
-
-/*
-struct Convert<From, To> {
-    scale_from: From,
-    scale_to: To,
-}
-impl std::convert::Into<u32> for Float {
-    fn into(t: Float) -> u32 {
-        t as u32
-    }
-}
-impl<From, To> Convert<From, To>
-where From: std::ops::Mul<Output=From> + std::convert::TryInto<To>,
-      To: std::ops::Mul<Output=To>
-{
-    fn new(scale_from: From, scale_to: To) -> Self {
-        Self{
-            scale_from,
-            scale_to,
-        }
-    }
-    pub fn work(&mut self, r: &mut Stream<From>, w: &mut Stream<To>) -> Result<()>
-    where <From as TryInto<To>>::Error: std::fmt::Debug
-    {
-        let v = r.data.iter().map(|e| {
-            //From::into(*e * self.scale_from) * self.scale_to
-            (*e * self.scale_from).try_into().unwrap() * self.scale_to
-        });
-        Ok(())
-    }
-}
-*/
