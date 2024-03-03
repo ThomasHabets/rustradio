@@ -117,7 +117,7 @@ fn get_complex_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Complex>, f32)
         {
             let samp = opt
                 .samp_rate
-                .expect("Sample rate must be provided for RTLSDR input");
+                .ok_or(Error::new("Sample rate must be provided for RTLSDR input"))?;
             let prev = add_block![g, RtlSdrSource::new(opt.freq, samp, opt.gain)?];
 
             // Decode.
