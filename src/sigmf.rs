@@ -225,6 +225,7 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
 pub struct SigMFSource<T: Copy> {
     // TODO: Can't continue to delegate reading the data, because tags.
     file_source: FileSource<T>,
+    sample_rate: Option<f64>,
 }
 
 /// Trait that needs implementing for all supported SigMF data types.
@@ -286,12 +287,17 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             .into());
         }
         Ok(Self {
+            sample_rate: meta.global.core_sample_rate,
             file_source: FileSource::new(&format!["{}-data", filename], false)?,
         })
     }
     /// Return the output stream.
     pub fn out(&self) -> Streamp<T> {
         self.file_source.out()
+    }
+    /// Get the sample rate from the meta file.
+    pub fn sample_rate(&self) -> Option<f64> {
+        self.sample_rate
     }
 }
 
