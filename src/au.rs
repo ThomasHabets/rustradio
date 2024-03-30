@@ -197,17 +197,17 @@ impl Block for AuDecode {
                 if i.len() < 4 {
                     return Ok(BlockRet::Noop);
                 }
-                let len = i.iter().take(4).copied().collect::<Vec<_>>();
-                let len = u32::from_be_bytes(len.try_into().unwrap());
+                let data_offset = i.iter().take(4).copied().collect::<Vec<_>>();
+                let data_offset = u32::from_be_bytes(data_offset.try_into().unwrap());
                 i.consume(4);
-                assert_eq!(len, 44);
-                self.state = DecodeState::WaitingHeader(len as usize);
+                self.state = DecodeState::WaitingHeader(data_offset as usize);
             }
-            DecodeState::WaitingHeader(len) => {
-                if i.len() < len {
+            DecodeState::WaitingHeader(data_offset) => {
+                let header_rest_len = data_offset - 8;
+                if i.len() < header_rest_len {
                     return Ok(BlockRet::Noop);
                 }
-                let head = i.iter().take(len).copied().collect::<Vec<_>>();
+                let head = i.iter().take(header_rest_len).copied().collect::<Vec<_>>();
                 assert_eq!(
                     Encoding::PCM16 as u32,
                     u32::from_be_bytes(head[4..8].try_into().unwrap())
