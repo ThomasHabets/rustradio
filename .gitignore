@@ -12,3 +12,5 @@ attic/
 /packets
 cd/
 examples/gr/*.py
+!testdata/*.wav
+!testdata/*.au
