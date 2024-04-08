@@ -91,6 +91,39 @@ where
     }
 }
 
+/// Create a multiband filter.
+///
+/// TODO: this is untested.
+pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &[Float]) -> Option<Vec<Complex>> {
+    if taps != window.len() {
+        return None;
+    }
+    use rustfft::FftPlanner;
+
+    let mut ideal = vec![Complex::new(0.0, 0.0); taps];
+    let scale = (taps as Float) / 2.0;
+    for (low, high) in bands {
+        let a = (low * scale).floor() as usize;
+        let b = (high * scale).ceil() as usize;
+        for n in a..b {
+            ideal[n] = Complex::new(1.0, 0.0);
+            ideal[taps - n - 1] = Complex::new(1.0, 0.0);
+        }
+    }
+    let fft_size = taps;
+    let mut planner = FftPlanner::new();
+    let ifft = planner.plan_fft_inverse(fft_size);
+    ifft.process(&mut ideal);
+    ideal.rotate_right(taps / 2);
+    Some(
+        ideal
+            .into_iter()
+            .enumerate()
+            .map(|(n, v)| v * window[n])
+            .collect(),
+    )
+}
+
 /// Create taps for a low pass filter as complex taps.
 pub fn low_pass_complex(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Complex> {
     low_pass(samp_rate, cutoff, twidth)
