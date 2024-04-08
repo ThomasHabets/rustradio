@@ -115,13 +115,7 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
         }
     };
     let mut taps = vec![Float::default(); ntaps];
-    let window: Vec<Float> = {
-        // Hamming
-        let m = (ntaps - 1) as Float;
-        (0..ntaps)
-            .map(|n| 0.54 - 0.46 * (2.0 * pi * (n as Float) / m).cos())
-            .collect()
-    };
+    let window = crate::window::hamming(ntaps);
     let m = (ntaps - 1) / 2;
     let fwt0 = 2.0 * pi * cutoff / samp_rate;
     for nm in 0..ntaps {
@@ -208,8 +202,8 @@ mod tests {
     fn test_filter_generator() {
         let taps = low_pass_complex(10000.0, 1000.0, 1000.0);
         assert_eq!(taps.len(), 25);
-        assert_eq!(
-            taps,
+        assert_almost_equal_complex(
+            &taps,
             &[
                 Complex::new(0.002010403, 0.0),
                 Complex::new(0.0016210203, 0.0),
@@ -235,8 +229,8 @@ mod tests {
                 Complex::new(-0.0044467044, 0.0),
                 Complex::new(7.851859e-10, 0.0),
                 Complex::new(0.0016210207, 0.0),
-                Complex::new(0.002010403, 0.0)
-            ]
+                Complex::new(0.002010403, 0.0),
+            ],
         );
     }
 }

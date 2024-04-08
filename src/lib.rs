@@ -160,6 +160,7 @@ pub mod circular_buffer;
 pub mod graph;
 pub mod mtgraph;
 pub mod stream;
+pub mod window;
 
 /// Float type used. Usually f32, but not guaranteed.
 pub type Float = f32;
