@@ -115,11 +115,12 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &[Float]) -> Opt
     let ifft = planner.plan_fft_inverse(fft_size);
     ifft.process(&mut ideal);
     ideal.rotate_right(taps / 2);
+    let scale = (fft_size as Float).sqrt();
     Some(
         ideal
             .into_iter()
             .enumerate()
-            .map(|(n, v)| v * window[n])
+            .map(|(n, v)| v * window[n] / Complex::new(scale, 0.0))
             .collect(),
     )
 }
