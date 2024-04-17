@@ -174,14 +174,7 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
 
 /// Generate hilbert transformer filter.
 pub fn hilbert(ntaps: usize) -> Vec<Float> {
-    let window: Vec<Float> = {
-        let pi = std::f64::consts::PI as Float;
-        // Hamming
-        let m = (ntaps - 1) as Float;
-        (0..ntaps)
-            .map(|n| 0.54 - 0.46 * (2.0 * pi * (n as Float) / m).cos())
-            .collect()
-    };
+    let window = crate::window::hamming(ntaps);
     let mid = (ntaps - 1) / 2;
     let mut gain = 0.0;
     let mut taps = vec![0.0; ntaps];

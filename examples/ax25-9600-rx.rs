@@ -90,7 +90,7 @@ fn main() -> Result<()> {
     let (prev, samp_rate) = if opt.audio {
         if let Some(read) = opt.read {
             let prev = add_block![g, FileSource::new(&read, false)?];
-            let prev = add_block![g, AuDecode::new(prev)];
+            let prev = add_block![g, AuDecode::new(prev, opt.samp_rate)];
 
             /*
             let (prev, b) = add_block![g, Tee::new(prev)];

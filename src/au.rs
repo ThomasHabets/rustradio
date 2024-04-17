@@ -155,13 +155,15 @@ pub struct AuDecode {
     src: Streamp<u8>,
     dst: Streamp<Float>,
     state: DecodeState,
+    bitrate: u32,
 }
 
 impl AuDecode {
     /// Create new AuDecode block.
-    pub fn new(src: Streamp<u8>) -> Self {
+    pub fn new(src: Streamp<u8>, bitrate: u32) -> Self {
         Self {
             src,
+            bitrate,
             dst: new_streamp(),
             state: DecodeState::WaitingMagic,
         }
@@ -213,7 +215,7 @@ impl Block for AuDecode {
                     u32::from_be_bytes(head[4..8].try_into().unwrap())
                 );
                 assert_eq!(
-                    44100u32,
+                    self.bitrate,
                     u32::from_be_bytes(head[8..12].try_into().unwrap())
                 );
                 assert_eq!(1u32, u32::from_be_bytes(head[12..16].try_into().unwrap()));

@@ -134,7 +134,13 @@ fn get_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
     if opt.audio {
         if let Some(ref read) = &opt.read {
             let prev = add_block![g, FileSource::new(&read, false)?];
-            let prev = add_block![g, AuDecode::new(prev)];
+            let prev = add_block![
+                g,
+                AuDecode::new(
+                    prev,
+                    opt.samp_rate.expect("audio source requires --sample_rate")
+                )
+            ];
             // TODO: AuDecode should be providing the bitrate.
             return Ok((
                 prev,
