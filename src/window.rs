@@ -22,8 +22,18 @@ pub enum WindowType {
     Hamming,
 }
 
+/// Alias for a vec.
+pub struct Window(Vec<Float>);
+
+impl Window {
+    /// Get a read only slice ref.
+    pub fn get(&self) -> &[Float] {
+        &self.0
+    }
+}
+
 /// Make a window of a dynamic type.
-pub fn make_window(window_type: &WindowType, ntaps: usize) -> Vec<Float> {
+pub fn make_window(window_type: &WindowType, ntaps: usize) -> Window {
     match window_type {
         WindowType::Hamming => hamming(ntaps),
     }
@@ -32,7 +42,7 @@ pub fn make_window(window_type: &WindowType, ntaps: usize) -> Vec<Float> {
 /// Create Hamming window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows
-pub fn hamming(ntaps: usize) -> Vec<Float> {
+pub fn hamming(ntaps: usize) -> Window {
     // a0 notes:
     //
     // 0.54 is commonly used, but Hamming's paper sets it as 25/46.
@@ -44,15 +54,17 @@ pub fn hamming(ntaps: usize) -> Vec<Float> {
     let a0 = 25.0 / 46.0;
     let a1 = 1.0 - a0;
     let m = (ntaps - 1) as Float;
-    (0..ntaps)
-        .map(|n| a0 - a1 * (2.0 * PI * (n as Float) / m).cos())
-        .collect()
+    Window(
+        (0..ntaps)
+            .map(|n| a0 - a1 * (2.0 * PI * (n as Float) / m).cos())
+            .collect(),
+    )
 }
 
 /// Create Blackman window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Blackman_window
-pub fn blackman(m: usize) -> Vec<Float> {
+pub fn blackman(m: usize) -> Window {
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
@@ -81,13 +93,13 @@ pub fn blackman(m: usize) -> Vec<Float> {
         let t2 = 4.0 * PI * n / m;
         b.push(a0 - a1 * t1.cos() + a2 * t2.cos());
     }
-    b
+    Window(b)
 }
 
 /// Create Blackman-Harris window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Blackman%E2%80%93Harris_window
-pub fn blackman_harris(m: usize) -> Vec<Float> {
+pub fn blackman_harris(m: usize) -> Window {
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
@@ -105,5 +117,5 @@ pub fn blackman_harris(m: usize) -> Vec<Float> {
         let t3 = 6.0 * PI * n / m;
         b.push(A0 - A1 * t1.cos() + A2 * t2.cos() - A3 * t3.cos());
     }
-    b
+    Window(b)
 }

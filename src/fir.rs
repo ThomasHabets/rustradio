@@ -8,7 +8,7 @@ Use FftFilter if many taps are used, for better performance.
  */
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp};
-use crate::window::WindowType;
+use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
 
 /// Finite impulse response filter.
@@ -95,8 +95,8 @@ where
 /// Create a multiband filter.
 ///
 /// TODO: this is untested.
-pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &[Float]) -> Option<Vec<Complex>> {
-    if taps != window.len() {
+pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Vec<Complex>> {
+    if taps != window.get().len() {
         return None;
     }
     use rustfft::FftPlanner;
@@ -117,6 +117,7 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &[Float]) -> Opt
     ifft.process(&mut ideal);
     ideal.rotate_right(taps / 2);
     let scale = (fft_size as Float).sqrt();
+    let window = window.get();
     Some(
         ideal
             .into_iter()
@@ -169,6 +170,7 @@ pub fn low_pass(
     let ntaps = compute_ntaps(samp_rate, twidth, window_type);
     let mut taps = vec![Float::default(); ntaps];
     let window = crate::window::make_window(window_type, ntaps);
+    let window = window.get();
     let m = (ntaps - 1) / 2;
     let fwt0 = 2.0 * pi * cutoff / samp_rate;
     for nm in 0..ntaps {
@@ -192,7 +194,8 @@ pub fn low_pass(
 }
 
 /// Generate hilbert transformer filter.
-pub fn hilbert(window: &[Float]) -> Vec<Float> {
+pub fn hilbert(window: &Window) -> Vec<Float> {
+    let window = window.get();
     let ntaps = window.len();
     let mid = (ntaps - 1) / 2;
     let mut gain = 0.0;
