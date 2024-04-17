@@ -8,6 +8,7 @@ Use FftFilter if many taps are used, for better performance.
  */
 use crate::block::{Block, BlockRet};
 use crate::stream::{new_streamp, Streamp};
+use crate::window::WindowType;
 use crate::{Complex, Error, Float};
 
 /// Finite impulse response filter.
@@ -126,30 +127,48 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &[Float]) -> Opt
 }
 
 /// Create taps for a low pass filter as complex taps.
-pub fn low_pass_complex(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Complex> {
-    low_pass(samp_rate, cutoff, twidth)
+pub fn low_pass_complex(
+    samp_rate: Float,
+    cutoff: Float,
+    twidth: Float,
+    window_type: &WindowType,
+) -> Vec<Complex> {
+    low_pass(samp_rate, cutoff, twidth, window_type)
         .into_iter()
         .map(|t| Complex::new(t, 0.0))
         .collect()
+}
+
+fn max_attenuation(window_type: &WindowType) -> Float {
+    match window_type {
+        WindowType::Hamming => 53.0,
+    }
+}
+
+fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> usize {
+    let a = max_attenuation(window_type);
+    let t = (a * samp_rate / (22.0 * twidth)) as usize;
+    if (t & 1) == 0 {
+        t + 1
+    } else {
+        t
+    }
 }
 
 /// Create taps for a low pass filter.
 ///
 /// TODO: this could be faster if we supported filtering a Complex by a Float.
 /// A low pass filter doesn't actually need complex taps.
-pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
+pub fn low_pass(
+    samp_rate: Float,
+    cutoff: Float,
+    twidth: Float,
+    window_type: &WindowType,
+) -> Vec<Float> {
     let pi = std::f64::consts::PI as Float;
-    let ntaps = {
-        let a: Float = 53.0; // Hamming.
-        let t = (a * samp_rate / (22.0 * twidth)) as usize;
-        if (t & 1) == 0 {
-            t + 1
-        } else {
-            t
-        }
-    };
+    let ntaps = compute_ntaps(samp_rate, twidth, window_type);
     let mut taps = vec![Float::default(); ntaps];
-    let window = crate::window::hamming(ntaps);
+    let window = crate::window::make_window(window_type, ntaps);
     let m = (ntaps - 1) / 2;
     let fwt0 = 2.0 * pi * cutoff / samp_rate;
     for nm in 0..ntaps {
@@ -227,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_filter_generator() {
-        let taps = low_pass_complex(10000.0, 1000.0, 1000.0);
+        let taps = low_pass_complex(10000.0, 1000.0, 1000.0, &WindowType::Hamming);
         assert_eq!(taps.len(), 25);
         assert_almost_equal_complex(
             &taps,

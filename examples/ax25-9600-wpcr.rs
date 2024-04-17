@@ -86,7 +86,12 @@ fn main() -> Result<()> {
     };
 
     // Filter.
-    let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
+    let taps = rustradio::fir::low_pass_complex(
+        samp_rate,
+        20_000.0,
+        100.0,
+        &rustradio::window::WindowType::Hamming,
+    );
     let prev = add_block![g, FftFilter::new(prev, &taps)];
 
     // Resample RF.

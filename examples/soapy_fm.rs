@@ -69,7 +69,12 @@ mod internal {
         ];
 
         // Filter.
-        let taps = rustradio::fir::low_pass_complex(samp_rate, 100_000.0, 1000.0);
+        let taps = rustradio::fir::low_pass_complex(
+            samp_rate,
+            100_000.0,
+            1000.0,
+            &rustradio::window::WindowType::Hamming,
+        );
         let prev = blehbleh![g, FftFilter::new(prev, &taps)];
 
         // Resample.
@@ -85,7 +90,12 @@ mod internal {
         // Quad demod.
         let prev = blehbleh![g, QuadratureDemod::new(prev, 1.0)];
 
-        let taps = rustradio::fir::low_pass(samp_rate, 44_100.0, 500.0);
+        let taps = rustradio::fir::low_pass(
+            samp_rate,
+            44_100.0,
+            500.0,
+            &rustradio::window::WindowType::Hamming,
+        );
         //let audio_filter = FIRFilter::new(prev, &taps);
         let prev = blehbleh![g, FftFilterFloat::new(prev, &taps)];
 

@@ -11,7 +11,7 @@ let mut graph = Graph::new();
 // Create taps for a 100kHz low pass filter with 1kHz transition
 // width.
 let samp_rate: Float = 1_000_000.0;
-let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0);
+let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, &rustradio::window::WindowType::Hamming);
 
 // Set up dummy source and sink.
 let src = Box::new(ConstantSource::new(Complex::new(0.0,0.0)));
@@ -264,6 +264,7 @@ mod tests {
     use super::*;
     use crate::blocks::SignalSourceComplex;
     use crate::fir::low_pass_complex;
+    use crate::window::WindowType;
 
     #[test]
     fn filter_a_signal() -> Result<()> {
@@ -276,7 +277,7 @@ mod tests {
 
         // Create blocks.
         let mut src = SignalSourceComplex::new(samp_rate, signal, amplitude);
-        let taps = low_pass_complex(samp_rate, cutoff, twidth);
+        let taps = low_pass_complex(samp_rate, cutoff, twidth, &WindowType::Hamming);
         let mut fft = FftFilter::new(src.out(), &taps);
 
         // Generate a bunch of samples from signal generator.

@@ -67,7 +67,12 @@ fn main() -> Result<()> {
     let prev = add_block![g, FileSource::new(&opt.read, false)?];
 
     // Filter.
-    let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
+    let taps = rustradio::fir::low_pass_complex(
+        samp_rate,
+        20_000.0,
+        100.0,
+        &rustradio::window::WindowType::Hamming,
+    );
     let prev = add_block![g, FftFilter::new(prev, &taps)];
 
     // Resample RF.
@@ -99,7 +104,12 @@ fn main() -> Result<()> {
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
     // Filter.
-    let taps = rustradio::fir::low_pass(samp_rate, 2400.0, 100.0);
+    let taps = rustradio::fir::low_pass(
+        samp_rate,
+        2400.0,
+        100.0,
+        &rustradio::window::WindowType::Hamming,
+    );
     let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
     // Tag.

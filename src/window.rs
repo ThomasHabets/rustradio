@@ -16,6 +16,19 @@ use crate::Float;
 
 const PI: Float = std::f64::consts::PI as Float;
 
+/// Window type.
+pub enum WindowType {
+    /// Hamming window.
+    Hamming,
+}
+
+/// Make a window of a dynamic type.
+pub fn make_window(window_type: &WindowType, ntaps: usize) -> Vec<Float> {
+    match window_type {
+        WindowType::Hamming => hamming(ntaps),
+    }
+}
+
 /// Create Hamming window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows

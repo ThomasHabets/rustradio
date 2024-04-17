@@ -153,7 +153,12 @@ fn get_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
     }
 
     let (prev, samp_rate) = get_complex_input(g, &opt)?;
-    let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0);
+    let taps = rustradio::fir::low_pass_complex(
+        samp_rate,
+        20_000.0,
+        100.0,
+        &rustradio::window::WindowType::Hamming,
+    );
     let prev = add_block![g, FftFilter::new(prev, &taps)];
     let new_samp_rate = 50_000.0;
     let prev = add_block![
@@ -189,7 +194,12 @@ fn main() -> Result<()> {
     // preemph'd input.
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
-    let taps = rustradio::fir::low_pass(samp_rate, 1100.0, 100.0);
+    let taps = rustradio::fir::low_pass(
+        samp_rate,
+        1100.0,
+        100.0,
+        &rustradio::window::WindowType::Hamming,
+    );
     let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
     let freq1 = 1200.0;
