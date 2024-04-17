@@ -50,7 +50,6 @@ g.run()?;
 */
 pub struct AuEncode {
     header: Option<Vec<u8>>,
-    encoding: Encoding,
     src: Streamp<Float>,
     dst: Streamp<u8>,
 }
@@ -62,7 +61,13 @@ impl AuEncode {
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
     pub fn new(src: Streamp<Float>, encoding: Encoding, bitrate: u32, channels: u32) -> Self {
+        assert_eq!(
+            encoding,
+            Encoding::PCM16,
+            "only encoding supported is PCM16"
+        );
         assert_eq!(channels, 1, "only mono supported at the moment");
+
         let mut v = Vec::with_capacity(28);
 
         // Magic
@@ -88,7 +93,6 @@ impl AuEncode {
 
         Self {
             header: Some(v),
-            encoding,
             src,
             dst: new_streamp(),
         }
@@ -116,7 +120,6 @@ impl Block for AuEncode {
             return Ok(BlockRet::Ok);
         }
 
-        assert_eq!(self.encoding, Encoding::PCM16);
         type S = i16;
         let scale = S::MAX as Float;
         let ss = std::mem::size_of::<S>();
@@ -192,7 +195,9 @@ impl Block for AuDecode {
                 let magic = i.iter().take(4).copied().collect::<Vec<_>>();
                 let magic = u32::from_be_bytes(magic.try_into().unwrap());
                 i.consume(4);
-                assert_eq!(magic, 0x2e736e64u32);
+                if magic != 0x2e736e64u32 {
+                    return Err(Error::new(".au magic value not found"));
+                }
                 self.state = DecodeState::WaitingSize;
             }
             DecodeState::WaitingSize => {
@@ -210,15 +215,22 @@ impl Block for AuDecode {
                     return Ok(BlockRet::Noop);
                 }
                 let head = i.iter().take(header_rest_len).copied().collect::<Vec<_>>();
-                assert_eq!(
-                    Encoding::PCM16 as u32,
-                    u32::from_be_bytes(head[4..8].try_into().unwrap())
-                );
-                assert_eq!(
-                    self.bitrate,
-                    u32::from_be_bytes(head[8..12].try_into().unwrap())
-                );
-                assert_eq!(1u32, u32::from_be_bytes(head[12..16].try_into().unwrap()));
+                if Encoding::PCM16 as u32 != u32::from_be_bytes(head[4..8].try_into().unwrap()) {
+                    return Err(Error::new("only PCM16 encoding supported"));
+                }
+                let bitrate = u32::from_be_bytes(head[8..12].try_into().unwrap());
+                if self.bitrate != bitrate {
+                    return Err(Error::new(&format![
+                        "AU block initialized with bitrate {}, got {bitrate}",
+                        self.bitrate
+                    ]));
+                }
+                let channels = u32::from_be_bytes(head[12..16].try_into().unwrap());
+                if channels != 1 {
+                    return Err(Error::new(
+                        "AU block only supports one channel currently, got {channels}",
+                    ));
+                }
                 self.state = DecodeState::Data;
             }
             DecodeState::Data => {
