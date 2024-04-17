@@ -29,8 +29,9 @@ pub struct Hilbert {
 impl Hilbert {
     /// Create new hilber transformer with this many taps.
     pub fn new(src: Streamp<Float>, ntaps: usize) -> Self {
+        // TODO: take window function.
         assert!(ntaps & 1 == 1, "hilbert filter len must be odd");
-        let taps = crate::fir::hilbert(ntaps); // TODO: provide window function.
+        let taps = crate::fir::hilbert(&crate::window::hamming(ntaps));
         Self {
             src,
             ntaps,

@@ -173,8 +173,8 @@ pub fn low_pass(samp_rate: Float, cutoff: Float, twidth: Float) -> Vec<Float> {
 }
 
 /// Generate hilbert transformer filter.
-pub fn hilbert(ntaps: usize) -> Vec<Float> {
-    let window = crate::window::hamming(ntaps);
+pub fn hilbert(window: &[Float]) -> Vec<Float> {
+    let ntaps = window.len();
     let mid = (ntaps - 1) / 2;
     let mut gain = 0.0;
     let mut taps = vec![0.0; ntaps];
