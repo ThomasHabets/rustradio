@@ -167,19 +167,23 @@ pub fn low_pass(
 ) -> Vec<Float> {
     let pi = std::f64::consts::PI as Float;
     let ntaps = compute_ntaps(samp_rate, twidth, window_type);
-    let mut taps = vec![Float::default(); ntaps];
     let window = crate::window::Window::new(window_type, ntaps);
     let m = (ntaps - 1) / 2;
     let fwt0 = 2.0 * pi * cutoff / samp_rate;
-    for (nm, (tap, win)) in taps.iter_mut().zip(window.0.iter()).enumerate() {
-        let n = nm as i64 - m as i64;
-        let nf = n as Float;
-        *tap = if n == 0 {
-            fwt0 / pi * win
-        } else {
-            ((nf * fwt0).sin() / (nf * pi)) * win
-        };
-    }
+    let taps: Vec<_> = window
+        .0
+        .iter()
+        .enumerate()
+        .map(|(nm, win)| {
+            let n = nm as i64 - m as i64;
+            let nf = n as Float;
+            if n == 0 {
+                fwt0 / pi * win
+            } else {
+                ((nf * fwt0).sin() / (nf * pi)) * win
+            }
+        })
+        .collect();
     let gain = {
         let gain: Float = 1.0;
         let mut fmax = taps[m];
