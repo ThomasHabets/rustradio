@@ -23,19 +23,14 @@ pub enum WindowType {
 }
 
 /// Alias for a vec.
-pub struct Window(Vec<Float>);
+pub struct Window(pub Vec<Float>);
 
 impl Window {
-    /// Get a read only slice ref.
-    pub fn get(&self) -> &[Float] {
-        &self.0
-    }
-}
-
-/// Make a window of a dynamic type.
-pub fn make_window(window_type: &WindowType, ntaps: usize) -> Window {
-    match window_type {
-        WindowType::Hamming => hamming(ntaps),
+    /// Make a window of a dynamic type.
+    pub fn new(window_type: &WindowType, ntaps: usize) -> Window {
+        match window_type {
+            WindowType::Hamming => hamming(ntaps),
+        }
     }
 }
 

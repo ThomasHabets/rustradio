@@ -96,7 +96,7 @@ where
 ///
 /// TODO: this is untested.
 pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Vec<Complex>> {
-    if taps != window.get().len() {
+    if taps != window.0.len() {
         return None;
     }
     use rustfft::FftPlanner;
@@ -117,12 +117,11 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Opti
     ifft.process(&mut ideal);
     ideal.rotate_right(taps / 2);
     let scale = (fft_size as Float).sqrt();
-    let window = window.get();
     Some(
         ideal
             .into_iter()
             .enumerate()
-            .map(|(n, v)| v * window[n] / Complex::new(scale, 0.0))
+            .map(|(n, v)| v * window.0[n] / Complex::new(scale, 0.0))
             .collect(),
     )
 }
@@ -169,17 +168,16 @@ pub fn low_pass(
     let pi = std::f64::consts::PI as Float;
     let ntaps = compute_ntaps(samp_rate, twidth, window_type);
     let mut taps = vec![Float::default(); ntaps];
-    let window = crate::window::make_window(window_type, ntaps);
-    let window = window.get();
+    let window = crate::window::Window::new(window_type, ntaps);
     let m = (ntaps - 1) / 2;
     let fwt0 = 2.0 * pi * cutoff / samp_rate;
-    for nm in 0..ntaps {
+    for (nm, (tap, win)) in taps.iter_mut().zip(window.0.iter()).enumerate() {
         let n = nm as i64 - m as i64;
         let nf = n as Float;
-        taps[nm] = if n == 0 {
-            fwt0 / pi * window[nm]
+        *tap = if n == 0 {
+            fwt0 / pi * win
         } else {
-            ((nf * fwt0).sin() / (nf * pi)) * window[nm]
+            ((nf * fwt0).sin() / (nf * pi)) * win
         };
     }
     let gain = {
@@ -195,16 +193,15 @@ pub fn low_pass(
 
 /// Generate hilbert transformer filter.
 pub fn hilbert(window: &Window) -> Vec<Float> {
-    let window = window.get();
-    let ntaps = window.len();
+    let ntaps = window.0.len();
     let mid = (ntaps - 1) / 2;
     let mut gain = 0.0;
     let mut taps = vec![0.0; ntaps];
     for i in 1..=mid {
         if i & 1 == 1 {
             let x = 1.0 / (i as Float);
-            taps[mid + i] = x * window[mid + i];
-            taps[mid - i] = -x * window[mid - i];
+            taps[mid + i] = x * window.0[mid + i];
+            taps[mid - i] = -x * window.0[mid - i];
             gain = taps[mid + i] - gain;
         } else {
             taps[mid + i] = 0.0;
