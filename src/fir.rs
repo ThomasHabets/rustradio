@@ -141,7 +141,9 @@ pub fn low_pass_complex(
 
 fn max_attenuation(window_type: &WindowType) -> Float {
     match window_type {
+        // TODO: what is this magic number?
         WindowType::Hamming => 53.0,
+        WindowType::HammingParm(_) => 53.0,
     }
 }
 

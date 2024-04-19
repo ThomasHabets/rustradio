@@ -16,20 +16,36 @@ use crate::Float;
 
 const PI: Float = std::f64::consts::PI as Float;
 
+// 0.54 is commonly used, but Hamming's paper sets it as 25/46.
+const DEFAULT_HAMMING_PARM: Float = 25.0 / 46.0;
+
 /// Window type.
 pub enum WindowType {
     /// Hamming window.
     Hamming,
+
+    /// Hamming window with a specific a0.
+    /// 0.54 is commonly used, but Hamming's paper sets it as 25/46.
+    ///
+    /// "In the equiripple sense, the optimal values for the
+    /// coefficients are a0 = 0.53836 and a1 = 0.46164".
+    ///
+    /// See wikipedia.
+    HammingParm(Float),
 }
 
-/// Alias for a vec.
+/// Window functions are "weights" used for applying filters and other
+/// operations.
+///
+/// https://en.wikipedia.org/wiki/Window_function
 pub struct Window(pub Vec<Float>);
 
 impl Window {
     /// Make a window of a dynamic type.
     pub fn new(window_type: &WindowType, ntaps: usize) -> Window {
         match window_type {
-            WindowType::Hamming => hamming(ntaps),
+            WindowType::Hamming => hamming(ntaps, DEFAULT_HAMMING_PARM),
+            WindowType::HammingParm(parm) => hamming(ntaps, *parm),
         }
     }
 }
@@ -37,16 +53,7 @@ impl Window {
 /// Create Hamming window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows
-pub fn hamming(ntaps: usize) -> Window {
-    // a0 notes:
-    //
-    // 0.54 is commonly used, but Hamming's paper sets it as 25/46.
-    //
-    // "In the equiripple sense, the optimal values for the
-    // coefficients are a0 = 0.53836 and a1 = 0.46164".
-    //
-    // See wikipedia.
-    let a0 = 25.0 / 46.0;
+pub fn hamming(ntaps: usize, a0: Float) -> Window {
     let a1 = 1.0 - a0;
     let m = (ntaps - 1) as Float;
     Window(
