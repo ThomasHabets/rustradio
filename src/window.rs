@@ -37,15 +37,17 @@ const PI: Float = std::f64::consts::PI as Float;
 const DEFAULT_HAMMING_PARM: Float = 25.0 / 46.0;
 
 /// Window type.
+///
+/// See https://en.wikipedia.org/wiki/Window_function
 pub enum WindowType {
-    /// Hamming window.
-    Hamming,
-
     /// Blackman window.
     Blackman,
 
     /// Blackman-Harris window.
     BlackmanHarris,
+
+    /// Hamming window.
+    Hamming,
 
     /// Hamming window with a specific a0.
     /// 0.54 is commonly used, but Hamming's paper sets it as 25/46.
@@ -105,13 +107,13 @@ fn hamming(ntaps: usize, a0: Float) -> Window {
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Blackman_window
 fn blackman(m: usize) -> Window {
+    // Blackman's "not very serious proposal" magic value: 0.16.
+    const A: Float = 0.16;
+
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
         let m = m as Float;
-
-        // Blackman's "not very serious proposal" magic value: 0.16.
-        const A: Float = 0.16;
 
         // Parameters.
         //
@@ -140,16 +142,16 @@ fn blackman(m: usize) -> Window {
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Blackman%E2%80%93Harris_window
 fn blackman_harris(m: usize) -> Window {
+    // Parameters.
+    const A0: Float = 0.35875;
+    const A1: Float = 0.48829;
+    const A2: Float = 0.14128;
+    const A3: Float = 0.01168;
+
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
         let m = m as Float;
-
-        // Parameters.
-        const A0: Float = 0.35875;
-        const A1: Float = 0.48829;
-        const A2: Float = 0.14128;
-        const A3: Float = 0.01168;
 
         // Formula.
         let t1 = 2.0 * PI * n / m;
