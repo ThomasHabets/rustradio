@@ -41,6 +41,7 @@ use structopt::StructOpt;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::stream::Streamp;
+use rustradio::window::WindowType;
 use rustradio::Error;
 use rustradio::{Complex, Float};
 
@@ -188,7 +189,7 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     let (prev, samp_rate) = get_input(&mut g, &opt)?;
-    let prev = add_block![g, Hilbert::new(prev, 65)];
+    let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
 
     // Can't use FastFM here, because it doesn't work well with
     // preemph'd input.

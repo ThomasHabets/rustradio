@@ -15,6 +15,7 @@ This implementation is a pretty inefficient.
 use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
 use crate::stream::{new_streamp, Streamp};
+use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
 
 /// Hilbert transformer block.
@@ -28,10 +29,10 @@ pub struct Hilbert {
 
 impl Hilbert {
     /// Create new hilber transformer with this many taps.
-    pub fn new(src: Streamp<Float>, ntaps: usize) -> Self {
+    pub fn new(src: Streamp<Float>, ntaps: usize, window_type: &WindowType) -> Self {
         // TODO: take window function.
         assert!(ntaps & 1 == 1, "hilbert filter len must be odd");
-        let taps = crate::fir::hilbert(&crate::window::hamming(ntaps));
+        let taps = crate::fir::hilbert(&Window::new(window_type, ntaps));
         Self {
             src,
             ntaps,

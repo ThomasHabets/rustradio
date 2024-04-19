@@ -16,6 +16,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::window::WindowType;
 use rustradio::{Error, Float};
 
 #[derive(StructOpt, Debug)]
@@ -100,7 +101,7 @@ fn main() -> Result<()> {
 
     // Demod.
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-    let prev = add_block![g, Hilbert::new(prev, 65)];
+    let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
     // Filter.

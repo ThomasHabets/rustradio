@@ -14,6 +14,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::window::WindowType;
 use rustradio::{Complex, Float};
 
 #[derive(StructOpt, Debug)]
@@ -64,12 +65,7 @@ fn main() -> Result<()> {
     let samp_rate = opt.samp_rate as Float;
 
     // Filter RF.
-    let taps = rustradio::fir::low_pass_complex(
-        samp_rate,
-        20_000.0,
-        100.0,
-        &rustradio::window::WindowType::Hamming,
-    );
+    let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0, &WindowType::Hamming);
     let prev = add_block![g, FftFilter::new(prev, &taps)];
 
     // Resample RF.
@@ -81,18 +77,13 @@ fn main() -> Result<()> {
     let samp_rate = new_samp_rate;
 
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-    let prev = add_block![g, Hilbert::new(prev, 65)];
+    let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
 
     // Can't use FastFM here, because it doesn't work well with
     // preemph'd input.
     let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
 
-    let taps = rustradio::fir::low_pass(
-        samp_rate,
-        1100.0,
-        100.0,
-        &rustradio::window::WindowType::Hamming,
-    );
+    let taps = rustradio::fir::low_pass(samp_rate, 1100.0, 100.0, &WindowType::Hamming);
     let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
     let freq1 = 1200.0;
