@@ -140,7 +140,7 @@ pub fn low_pass_complex(
 }
 
 fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> usize {
-    let a = Window::max_attenuation(window_type);
+    let a = window_type.max_attenuation();
     let t = (a * samp_rate / (22.0 * twidth)) as usize;
     if (t & 1) == 0 {
         t + 1
@@ -161,7 +161,7 @@ pub fn low_pass(
 ) -> Vec<Float> {
     let pi = std::f64::consts::PI as Float;
     let ntaps = compute_ntaps(samp_rate, twidth, window_type);
-    let window = crate::window::Window::new(window_type, ntaps);
+    let window = window_type.make_window(ntaps);
     let m = (ntaps - 1) / 2;
     let fwt0 = 2.0 * pi * cutoff / samp_rate;
     let taps: Vec<_> = window

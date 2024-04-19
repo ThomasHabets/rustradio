@@ -1,17 +1,34 @@
-//! Window functions
-//!
-//! All functions are periodic, not symmetric.(?)
-//!
-//! https://en.wikipedia.org/wiki/Window_function
-//! https://en.wikipedia.org/wiki/Spectral_leakage
-//!
-//! Notable missing window functions:
-//! * Hann
-//! * Rectangular
-//! * Triangular
-//! * Flat top
-//! * Gaussian
-//! * Taylor
+/*! Window functions
+
+All functions are periodic, not symmetric.(?)
+
+https://en.wikipedia.org/wiki/Window_function
+https://en.wikipedia.org/wiki/Spectral_leakage
+
+Notable missing window functions:
+ * Hann
+ * Rectangular
+ * Triangular
+ * Flat top
+ * Gaussian
+ * Taylor
+
+# Example
+
+```
+use rustradio::window::WindowType;
+let window_type = WindowType::Hamming;
+let ntaps = 3;
+let taps = window_type.make_window(ntaps).0;
+assert_eq!(taps.len(), ntaps);
+
+let correct = [0.0869565, 1.0, 0.0869565];
+assert_eq!(correct.len(), taps.len());
+for (x,y) in taps.iter().zip(correct) {
+  assert!((x-y).abs() < 0.1);
+}
+```
+h */
 use crate::Float;
 
 const PI: Float = std::f64::consts::PI as Float;
@@ -23,6 +40,9 @@ const DEFAULT_HAMMING_PARM: Float = 25.0 / 46.0;
 pub enum WindowType {
     /// Hamming window.
     Hamming,
+
+    /// Blackman window.
+    Blackman,
 
     /// Blackman-Harris window.
     BlackmanHarris,
@@ -37,39 +57,41 @@ pub enum WindowType {
     HammingParm(Float),
 }
 
+impl WindowType {
+    /// Return max attenuation.
+    ///
+    /// TODO: More description.
+    pub fn max_attenuation(&self) -> Float {
+        match self {
+            // TODO: what are these magic numbers?
+            WindowType::Blackman => 74.0,
+            WindowType::BlackmanHarris => 92.0,
+            WindowType::Hamming => 53.0,
+            WindowType::HammingParm(_) => 53.0,
+        }
+    }
+
+    /// Make a window of a dynamic type.
+    pub fn make_window(&self, ntaps: usize) -> Window {
+        match self {
+            WindowType::Blackman => blackman(ntaps),
+            WindowType::BlackmanHarris => blackman_harris(ntaps),
+            WindowType::Hamming => hamming(ntaps, DEFAULT_HAMMING_PARM),
+            WindowType::HammingParm(parm) => hamming(ntaps, *parm),
+        }
+    }
+}
+
 /// Window functions are "weights" used for applying filters and other
 /// operations.
 ///
 /// https://en.wikipedia.org/wiki/Window_function
 pub struct Window(pub Vec<Float>);
 
-impl Window {
-    /// Make a window of a dynamic type.
-    pub fn new(window_type: &WindowType, ntaps: usize) -> Window {
-        match window_type {
-            WindowType::BlackmanHarris => blackman_harris(ntaps),
-            WindowType::Hamming => hamming(ntaps, DEFAULT_HAMMING_PARM),
-            WindowType::HammingParm(parm) => hamming(ntaps, *parm),
-        }
-    }
-
-    /// Return max attenuation.
-    ///
-    /// TODO: More description.
-    pub fn max_attenuation(window_type: &WindowType) -> Float {
-        match window_type {
-            // TODO: what are these magic numbers?
-            WindowType::BlackmanHarris => 92.0,
-            WindowType::Hamming => 53.0,
-            WindowType::HammingParm(_) => 53.0,
-        }
-    }
-}
-
 /// Create Hamming window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows
-pub fn hamming(ntaps: usize, a0: Float) -> Window {
+fn hamming(ntaps: usize, a0: Float) -> Window {
     let a1 = 1.0 - a0;
     let m = (ntaps - 1) as Float;
     Window(
@@ -82,7 +104,7 @@ pub fn hamming(ntaps: usize, a0: Float) -> Window {
 /// Create Blackman window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Blackman_window
-pub fn blackman(m: usize) -> Window {
+fn blackman(m: usize) -> Window {
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
@@ -117,7 +139,7 @@ pub fn blackman(m: usize) -> Window {
 /// Create Blackman-Harris window.
 ///
 /// https://en.wikipedia.org/wiki/Window_function#Blackman%E2%80%93Harris_window
-pub fn blackman_harris(m: usize) -> Window {
+fn blackman_harris(m: usize) -> Window {
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
