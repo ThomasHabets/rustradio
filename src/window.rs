@@ -24,6 +24,9 @@ pub enum WindowType {
     /// Hamming window.
     Hamming,
 
+    /// Blackman-Harris window.
+    BlackmanHarris,
+
     /// Hamming window with a specific a0.
     /// 0.54 is commonly used, but Hamming's paper sets it as 25/46.
     ///
@@ -44,8 +47,21 @@ impl Window {
     /// Make a window of a dynamic type.
     pub fn new(window_type: &WindowType, ntaps: usize) -> Window {
         match window_type {
+            WindowType::BlackmanHarris => blackman_harris(ntaps),
             WindowType::Hamming => hamming(ntaps, DEFAULT_HAMMING_PARM),
             WindowType::HammingParm(parm) => hamming(ntaps, *parm),
+        }
+    }
+
+    /// Return max attenuation.
+    ///
+    /// TODO: More description.
+    pub fn max_attenuation(window_type: &WindowType) -> Float {
+        match window_type {
+            // TODO: what are these magic numbers?
+            WindowType::BlackmanHarris => 92.0,
+            WindowType::Hamming => 53.0,
+            WindowType::HammingParm(_) => 53.0,
         }
     }
 }

@@ -139,16 +139,8 @@ pub fn low_pass_complex(
         .collect()
 }
 
-fn max_attenuation(window_type: &WindowType) -> Float {
-    match window_type {
-        // TODO: what is this magic number?
-        WindowType::Hamming => 53.0,
-        WindowType::HammingParm(_) => 53.0,
-    }
-}
-
 fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> usize {
-    let a = max_attenuation(window_type);
+    let a = Window::max_attenuation(window_type);
     let t = (a * samp_rate / (22.0 * twidth)) as usize;
     if (t & 1) == 0 {
         t + 1
