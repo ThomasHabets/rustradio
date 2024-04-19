@@ -111,7 +111,7 @@ fn blackman(m: usize) -> Window {
         let m = m as Float;
 
         // Blackman's "not very serious proposal" magic value: 0.16.
-        let a = 0.16;
+        const A: Float = 0.16;
 
         // Parameters.
         //
@@ -124,9 +124,9 @@ fn blackman(m: usize) -> Window {
         // well, but have an improved 18 dB/oct fall-off (compared do
         // 6dB for exact).
 
-        let a0 = (1.0 - a) / 2.0;
+        let a0 = (1.0 - A) / 2.0;
         let a1 = 0.5;
-        let a2 = a / 2.0;
+        let a2 = A / 2.0;
 
         // Formula.
         let t1 = 2.0 * PI * n / m;
