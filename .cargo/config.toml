@@ -1,0 +1,3 @@
+[target.'cfg(target_arch="mips")']
+linker = "mips-linux-gnu-gcc"
+rustflags = ["-C", "link-arg=-lm"]
