@@ -14,3 +14,5 @@ cd/
 examples/gr/*.py
 !testdata/*.wav
 !testdata/*.au
+data/
+wb2osz/
