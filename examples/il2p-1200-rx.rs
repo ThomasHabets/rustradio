@@ -124,7 +124,7 @@ fn main() -> Result<()> {
         g,
         CorrelateAccessCodeTag::new(
             prev,
-            (&rustradio::il2p_deframer::SYNC_WORD).to_vec(),
+            rustradio::il2p_deframer::SYNC_WORD.to_vec(),
             "sync".into(),
             0,
         )

@@ -16,3 +16,4 @@ examples/gr/*.py
 !testdata/*.au
 data/
 wb2osz/
+*.swp

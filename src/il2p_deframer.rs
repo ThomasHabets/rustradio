@@ -374,12 +374,8 @@ mod tests {
     #[test]
     fn test_header_decode() -> Result<()> {
         let src = streamp_from_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
-        let mut cac = crate::blocks::CorrelateAccessCodeTag::new(
-            src,
-            (*(&SYNC_WORD)).into(),
-            "sync".into(),
-            0,
-        );
+        let mut cac =
+            crate::blocks::CorrelateAccessCodeTag::new(src, SYNC_WORD.into(), "sync".into(), 0);
         let mut deframer = Il2pDeframer::new(cac.out());
         cac.work()?;
         deframer.work()?;

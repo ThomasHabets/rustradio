@@ -134,7 +134,7 @@ fn get_complex_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Complex>, f32)
 fn get_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
     if opt.audio {
         if let Some(ref read) = &opt.read {
-            let prev = add_block![g, FileSource::new(&read, false)?];
+            let prev = add_block![g, FileSource::new(read, false)?];
             let prev = add_block![
                 g,
                 AuDecode::new(
@@ -153,7 +153,7 @@ fn get_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
         panic!("Audio can only be read from file");
     }
 
-    let (prev, samp_rate) = get_complex_input(g, &opt)?;
+    let (prev, samp_rate) = get_complex_input(g, opt)?;
     let taps = rustradio::fir::low_pass_complex(
         samp_rate,
         20_000.0,
