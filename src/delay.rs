@@ -93,13 +93,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::streamp_from_slice;
 
     // TODO: test tag propagation.
 
     #[test]
     fn delay_zero() -> Result<()> {
-        let s = streamp_from_slice(&[1.0f32, 2.0, 3.0]);
+        let s = Stream::fromp_slice(&[1.0f32, 2.0, 3.0]);
         let mut delay = Delay::new(s, 0);
 
         delay.work()?;
@@ -111,7 +110,7 @@ mod tests {
 
     #[test]
     fn delay_one() -> Result<()> {
-        let s = streamp_from_slice(&[1.0f32, 2.0, 3.0]);
+        let s = Stream::fromp_slice(&[1.0f32, 2.0, 3.0]);
         let mut delay = Delay::new(s, 1);
 
         delay.work()?;
@@ -123,7 +122,7 @@ mod tests {
 
     #[test]
     fn delay_change() -> Result<()> {
-        let s = streamp_from_slice(&[1u32, 2]);
+        let s = Stream::fromp_slice(&[1u32, 2]);
         let mut delay = Delay::new(s.clone(), 1);
 
         delay.work()?;

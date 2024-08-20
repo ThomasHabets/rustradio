@@ -4,7 +4,7 @@
 use log::info;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Streamp, Tag};
+use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag};
 use crate::{Error, Result};
 
 const HEADER_SIZE: usize = 15 * 8;
@@ -164,7 +164,7 @@ impl Il2pDeframer {
     pub fn new(src: Streamp<u8>) -> Self {
         Self {
             src,
-            dst: new_nocopy_streamp(),
+            dst: NoCopyStream::newp(),
             decoded: 0,
             state: State::Unsynced,
         }
@@ -359,11 +359,12 @@ impl Header {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::streamp_from_slice;
+    use crate::Stream;
 
     use std::fs::File;
     use std::io::Read;
     use std::path::Path;
+
     fn read_binary_file_as_u8<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>> {
         let mut file = File::open(path)?;
         let mut buffer = Vec::new();
@@ -373,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_header_decode() -> Result<()> {
-        let src = streamp_from_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
+        let src = Stream::fromp_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
         let mut cac =
             crate::blocks::CorrelateAccessCodeTag::new(src, SYNC_WORD.into(), "sync".into(), 0);
         let mut deframer = Il2pDeframer::new(cac.out());

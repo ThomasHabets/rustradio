@@ -132,8 +132,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::streamp_from_slice;
-    use crate::{Complex, Float};
+    use crate::{Complex, Float, Stream};
 
     #[test]
     fn sink_f32() -> Result<()> {
@@ -141,7 +140,7 @@ mod tests {
         let tmpfn = tmpd.path().join("delme.bin");
         {
             #[allow(clippy::approx_constant)]
-            let ssrc = streamp_from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
+            let ssrc = Stream::fromp_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
             let mut sink = FileSink::<Float>::new(ssrc, tmpfn.clone(), Mode::Create)?;
             sink.work()?;
             sink.flush()?;
@@ -160,7 +159,7 @@ mod tests {
         let tmpfn = tmpd.path().join("delme.bin");
         {
             #[allow(clippy::approx_constant)]
-            let ssrc = streamp_from_slice(&[Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
+            let ssrc = Stream::fromp_slice(&[Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
             let mut sink = FileSink::<Complex>::new(ssrc, tmpfn.clone(), Mode::Create)?;
             sink.work()?;
             sink.flush()?;

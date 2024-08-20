@@ -38,7 +38,7 @@ Drawbacks of this method:
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Tag, TagValue};
+use crate::stream::{NoCopyStream, NoCopyStreamp, Tag, TagValue};
 use crate::{Complex, Error, Float};
 
 /// Midpointer is a block re-center a NRZ burst around 0.
@@ -51,7 +51,7 @@ impl Midpointer {
     pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
         Self {
             src,
-            dst: new_nocopy_streamp(),
+            dst: NoCopyStream::newp(),
         }
     }
     /// Get output stream.
@@ -124,7 +124,7 @@ impl Wpcr {
     pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
         Self {
             src,
-            dst: new_nocopy_streamp(),
+            dst: NoCopyStream::newp(),
             samp_rate: None,
         }
     }

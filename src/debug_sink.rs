@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Streamp, Tag, TagPos};
+use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos};
 use crate::Error;
 
 /// Nocopy version of DebugSink.
@@ -66,7 +66,7 @@ where
     pub fn new(src: Streamp<T>) -> Self {
         Self {
             src,
-            dst: new_nocopy_streamp(),
+            dst: NoCopyStream::newp(),
         }
     }
     /// Return the output stream.

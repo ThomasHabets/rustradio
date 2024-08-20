@@ -10,7 +10,7 @@ therefore [APRS][aprs].
 use log::{debug, info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Streamp, Tag, TagValue};
+use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagValue};
 use crate::{Error, Result};
 
 enum State {
@@ -99,7 +99,7 @@ impl HdlcDeframer {
     pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
-            dst: new_nocopy_streamp(),
+            dst: NoCopyStream::newp(),
             min_size,
             max_size,
             state: State::Unsynced(0xff),
@@ -307,7 +307,7 @@ fn calc_crc(data: &[u8]) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::streamp_from_slice;
+    use crate::Stream;
 
     fn str2bits(s: &str) -> Vec<u8> {
         s.chars()
@@ -328,7 +328,7 @@ mod tests {
             "01111110011111100101011111100101010111100000011111100101",
             "01111110010101011110000001111110",
         ] {
-            let s = streamp_from_slice(&str2bits(bits));
+            let s = Stream::fromp_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -350,7 +350,7 @@ mod tests {
                 + "01011"
                 + "01111110010101011010101001111110"),
         ] {
-            let s = streamp_from_slice(&str2bits(bits));
+            let s = Stream::fromp_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -367,7 +367,7 @@ mod tests {
     fn bitstuffed1() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = streamp_from_slice(&str2bits(bits));
+            let s = Stream::fromp_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -382,7 +382,7 @@ mod tests {
     fn bitstuffed2() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = streamp_from_slice(&str2bits(bits));
+            let s = Stream::fromp_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -396,7 +396,7 @@ mod tests {
     fn too_short() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = streamp_from_slice(&str2bits(bits));
+            let s = Stream::fromp_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 3, 10);
             b.set_checksum(false);
             b.work()?;
@@ -410,7 +410,7 @@ mod tests {
     fn too_long() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = streamp_from_slice(&str2bits(bits));
+            let s = Stream::fromp_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 1);
             b.set_checksum(false);
             b.work()?;
@@ -424,7 +424,7 @@ mod tests {
     fn check_crc() -> Result<()> {
         {
             let bits = &"0111111010101010000010101010111101111110";
-            let s = streamp_from_slice(&str2bits(bits));
+            let s = Stream::fromp_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.work()?;
             let o = b.out();

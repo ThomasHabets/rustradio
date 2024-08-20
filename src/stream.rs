@@ -75,16 +75,6 @@ pub struct NoCopyStream<T> {
 /// Convenience type for a "pointer to a stream".
 pub type NoCopyStreamp<T> = Arc<NoCopyStream<T>>;
 
-/// Create a new Streamp.
-pub fn new_nocopy_streamp<T>() -> NoCopyStreamp<T> {
-    Arc::new(NoCopyStream::new())
-}
-
-/// Create a new Streamp with contents.
-pub fn streamp_from_slice<T: Copy>(data: &[T]) -> Streamp<T> {
-    Arc::new(Stream::from_slice(data))
-}
-
 const DEFAULT_STREAM_SIZE: usize = 409600;
 
 impl<T> Stream<T> {
@@ -106,6 +96,11 @@ impl<T> NoCopyStream<T> {
         Self {
             s: Mutex::new(VecDeque::new()),
         }
+    }
+
+    /// Create new streamp.
+    pub fn newp() -> NoCopyStreamp<T> {
+        Arc::new(Self::new())
     }
 
     /// Push one sample, handing off ownership.
@@ -145,6 +140,11 @@ impl<T: Copy> Stream<T> {
         wb.fill_from_slice(data);
         wb.produce(data.len(), &[]);
         Self { circ }
+    }
+
+    /// Create a new Arc<Streamp> with contents.
+    pub fn fromp_slice(data: &[T]) -> Streamp<T> {
+        Arc::new(Stream::from_slice(data))
     }
 
     /// Return total length of underlying circular buffer (before the

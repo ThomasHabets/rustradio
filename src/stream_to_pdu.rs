@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_nocopy_streamp, NoCopyStreamp, Streamp, Tag, TagPos, TagValue};
+use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos, TagValue};
 use crate::{Error, Sample};
 
 /// Stream to PDU block.
@@ -52,7 +52,7 @@ impl<T> StreamToPdu<T> {
         Self {
             src,
             tag,
-            dst: new_nocopy_streamp(),
+            dst: NoCopyStream::newp(),
             buf: Vec::with_capacity(max_size),
             endcounter: None,
             max_size,

@@ -85,13 +85,13 @@ map_block_macro_v2![
 mod tests {
     use super::*;
     use crate::block::Block;
-    use crate::stream::streamp_from_slice;
+    use crate::stream::Stream;
     use crate::{Complex, Error};
 
     #[test]
     fn iir_ff() -> Result<()> {
         // TODO: create an actual test.
-        let src = streamp_from_slice(&[0.1, 0.2]);
+        let src = Stream::fromp_slice(&[0.1, 0.2]);
         let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn iir_cc() -> Result<()> {
         // TODO: create an actual test.
-        let src = streamp_from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
+        let src = Stream::fromp_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
         let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn reject_bad_alpha() -> Result<()> {
-        let src = streamp_from_slice(&[0.1, 0.2]);
+        let src = Stream::fromp_slice(&[0.1, 0.2]);
         SinglePoleIIRFilter::new(src.clone(), 0.0).ok_or(Error::new("should accept 0.0"))?;
         SinglePoleIIRFilter::new(src.clone(), 0.1).ok_or(Error::new("should accept 0.1"))?;
         SinglePoleIIRFilter::new(src.clone(), 1.0).ok_or(Error::new("should accept 1.0"))?;
