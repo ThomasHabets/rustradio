@@ -435,7 +435,7 @@ impl<T: Copy> Buffer<T> {
         }
         tags.sort_by_key(|a| a.pos());
         Ok((
-            BufferReader::new(unsafe { std::mem::transmute(buf) }, self),
+            BufferReader::new(unsafe { std::mem::transmute::<&mut [T], &[T]>(buf) }, self),
             tags,
         ))
     }
@@ -449,7 +449,10 @@ impl<T: Copy> Buffer<T> {
         s.write_borrow = true;
         let (start, end) = s.write_range();
         let buf = self.circ.full_buffer::<T>(start, end);
-        Ok(BufferWriter::new(unsafe { std::mem::transmute(buf) }, self))
+        Ok(BufferWriter::new(
+            unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
+            self,
+        ))
     }
 }
 
