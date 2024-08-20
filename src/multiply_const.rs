@@ -1,6 +1,6 @@
 //! Multiply stream by a constant value.
 use crate::map_block_macro_v2;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 
 /// Multiply stream by a constant value.
 pub struct MultiplyConst<T: Copy> {
@@ -18,7 +18,7 @@ where
         Self {
             val,
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
 

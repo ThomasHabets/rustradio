@@ -19,7 +19,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 const CHUNK_SIZE: usize = 8192;
@@ -102,7 +102,7 @@ impl RtlSdrSource {
         assert_eq!(rx.recv()?, Vec::<u8>::new());
         Ok(Self {
             rx,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             buf: Vec::new(),
         })
     }

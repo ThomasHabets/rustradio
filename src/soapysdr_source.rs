@@ -3,7 +3,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error};
 
 impl From<soapysdr::Error> for Error {
@@ -91,7 +91,7 @@ impl SoapySdrSourceBuilder {
         stream.activate(None)?;
         Ok(SoapySdrSource {
             stream,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         })
     }
 }

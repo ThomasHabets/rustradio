@@ -1,6 +1,6 @@
 //! Xor two streams.
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Xors a constant value to every sample.
@@ -22,7 +22,7 @@ where
         Self {
             a,
             b,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
 

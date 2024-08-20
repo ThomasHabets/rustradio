@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::trace;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 fn gcd(mut a: usize, mut b: usize) -> usize {
@@ -41,7 +41,7 @@ impl<T: Copy> RationalResampler<T> {
             deci: i64::try_from(deci)?,
             counter: 0,
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         })
     }
 

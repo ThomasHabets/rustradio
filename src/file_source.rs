@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Error, Sample};
 
 /// Read stream from raw file.
@@ -28,7 +28,7 @@ impl<T: Default + Copy> FileSource<T> {
             f,
             repeat,
             buf: Vec::new(),
-            dst: new_streamp(),
+            dst: Stream::newp(),
         })
     }
     /// Return the output stream.

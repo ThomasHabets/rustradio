@@ -7,7 +7,7 @@ Use FftFilter if many taps are used, for better performance.
  * * Only handles case where input, output, and tap type are all the same.
  */
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
 
@@ -59,7 +59,7 @@ where
     pub fn new(src: Streamp<T>, taps: &[T]) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             ntaps: taps.len(),
             fir: FIR::new(taps),
         }

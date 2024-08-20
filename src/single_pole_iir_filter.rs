@@ -1,7 +1,7 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{map_block_macro_v2, Float};
 
 struct SinglePoleIIR<Tout> {
@@ -63,7 +63,7 @@ where
     pub fn new(src: Streamp<T>, alpha: Float) -> Option<Self> {
         Some(Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             iir: SinglePoleIIR::<T>::new(alpha)?,
         })
     }

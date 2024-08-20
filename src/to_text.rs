@@ -23,7 +23,7 @@ g.add(Box::new(sink));
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Turn samples into text.
@@ -40,7 +40,7 @@ impl<T: Copy> ToText<T> {
     pub fn new(srcs: Vec<Streamp<T>>) -> Self {
         Self {
             srcs,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
 

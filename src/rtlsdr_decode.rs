@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
@@ -16,7 +16,7 @@ impl RtlSdrDecode {
     pub fn new(src: Streamp<u8>) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
     /// Return the output stream.

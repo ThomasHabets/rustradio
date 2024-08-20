@@ -8,7 +8,7 @@ use anyhow::Result;
 use log::warn;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Error, Sample};
 
 /// TCP Source, connecting to a server and streaming the data.
@@ -24,7 +24,7 @@ impl<T: Copy + Default> TcpSource<T> {
         Ok(Self {
             stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
             buf: Vec::new(),
-            dst: new_streamp(),
+            dst: Stream::newp(),
         })
     }
 

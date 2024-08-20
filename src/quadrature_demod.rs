@@ -26,7 +26,7 @@ QuadratureDemod by about 4x.
  */
 use anyhow::Result;
 
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{map_block_convert_macro, Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
@@ -45,7 +45,7 @@ impl QuadratureDemod {
     pub fn new(src: Streamp<Complex>, gain: Float) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             gain,
             last: Complex::default(),
         }
@@ -103,7 +103,7 @@ impl FastFM {
     pub fn new(src: Streamp<Complex>) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             q1: Complex::default(),
             q2: Complex::default(),
         }

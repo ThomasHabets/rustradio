@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 use crate::{Complex, Float};
 
@@ -67,7 +67,7 @@ where
             name,
             map,
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
     fn process_one(&mut self, s: In) -> Out {
@@ -128,7 +128,7 @@ impl FloatToComplex {
         Self {
             re,
             im,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
 

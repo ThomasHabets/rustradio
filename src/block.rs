@@ -94,7 +94,7 @@ E.g.:
 
 ```
 use rustradio::block::Block;
-use rustradio::stream::{Streamp, new_streamp};
+use rustradio::stream::{Streamp, Stream};
 struct Noop<T: Copy>{
   src: Streamp<T>,
   dst: Streamp<T>,
@@ -103,7 +103,7 @@ impl<T: Copy> Noop<T> {
   fn new(src: Streamp<T>) -> Self {
     Self {
       src,
-      dst: new_streamp(),
+      dst: Stream::newp(),
     }
   }
   fn process_one(&self, a: &T) -> T { *a }

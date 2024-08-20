@@ -67,11 +67,6 @@ pub struct Stream<T> {
 /// Convenience type for a "pointer to a stream".
 pub type Streamp<T> = Arc<Stream<T>>;
 
-/// Create a new Streamp.
-pub fn new_streamp<T>() -> Streamp<T> {
-    Arc::new(Stream::new())
-}
-
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NoCopyStream<T> {
     s: Mutex<VecDeque<T>>,
@@ -98,6 +93,10 @@ impl<T> Stream<T> {
         Self {
             circ: circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(),
         }
+    }
+    /// Create a new Arc<Stream>.
+    pub fn newp() -> Arc<Self> {
+        Arc::new(Self::new())
     }
 }
 

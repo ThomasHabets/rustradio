@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Turn samples into text.
@@ -17,7 +17,7 @@ impl<T: Copy> Skip<T> {
     pub fn new(src: Streamp<T>, skip: usize) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             skip,
         }
     }

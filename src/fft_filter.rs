@@ -34,7 +34,7 @@ use log::trace;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -85,7 +85,7 @@ impl FftFilter {
 
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             fft_size,
             taps_fft,
             tail: vec![Complex::default(); taps.len()],
@@ -207,12 +207,12 @@ impl FftFilterFloat {
     /// Create a new FftFilterFloat block.
     pub fn new(src: Streamp<Float>, taps: &[Float]) -> Self {
         let ctaps: Vec<Complex> = taps.iter().copied().map(|f| Complex::new(f, 0.0)).collect();
-        let inner_in = new_streamp();
+        let inner_in = Stream::newp();
         let complex = FftFilter::new(inner_in.clone(), &ctaps);
         let inner_out = complex.out();
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             complex,
             inner_in,
             inner_out,

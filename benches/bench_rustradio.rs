@@ -4,7 +4,7 @@ extern crate rustradio;
 extern crate test;
 use rustradio::block::Block;
 use rustradio::blocks::*;
-use rustradio::stream::new_streamp;
+use rustradio::stream::Stream;
 use rustradio::window::WindowType;
 use rustradio::Complex;
 
@@ -18,7 +18,7 @@ fn bench_fft_filter(b: &mut Bencher) {
         a.resize(a.len() * 2, Complex::default());
         a
     };
-    let s = new_streamp();
+    let s = Stream::newp();
     let mut filter = FftFilter::new(s.clone(), &taps);
     b.iter(|| {
         // Empty input buffer.
@@ -52,7 +52,7 @@ fn bench_fir_filter(b: &mut Bencher) {
         a.resize(a.len() * 2, Complex::default());
         a
     };
-    let s = new_streamp();
+    let s = Stream::newp();
     let mut filter = FIRFilter::new(s.clone(), &taps);
     b.iter(|| {
         // Empty input buffer.

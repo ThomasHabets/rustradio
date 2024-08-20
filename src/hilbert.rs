@@ -14,7 +14,7 @@ This implementation is a pretty inefficient.
 
 use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::window::WindowType;
 use crate::{Complex, Error, Float};
 
@@ -36,7 +36,7 @@ impl Hilbert {
         Self {
             src,
             ntaps,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             history: vec![0.0; ntaps],
             filter: FIR::new(&taps),
         }

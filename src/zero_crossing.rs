@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
 /** Very simple clock recovery by looking at zero crossings.
@@ -44,7 +44,7 @@ impl ZeroCrossing {
         assert!(sps > 1.0);
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             sps,
             clock: sps,
             max_deviation,
@@ -62,7 +62,7 @@ impl ZeroCrossing {
 
     /// Return clock stream.
     pub fn out_clock(&mut self) -> Streamp<Float> {
-        self.out_clock.get_or_insert(new_streamp()).clone()
+        self.out_clock.get_or_insert(Stream::newp()).clone()
     }
 }
 

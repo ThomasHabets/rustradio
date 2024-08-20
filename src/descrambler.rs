@@ -5,7 +5,7 @@ by the time the packet arrives the original seed will be shifted out
 anyway.
  */
 use crate::map_block_convert_macro;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 
 /// LFSR as used by G3RUH.
 ///
@@ -47,7 +47,7 @@ impl Descrambler {
     pub fn new(src: Streamp<u8>, mask: u64, seed: u64, len: u8) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             lfsr: Lfsr::new(mask, seed, len),
         }
     }
@@ -56,7 +56,7 @@ impl Descrambler {
     pub fn new_g3ruh(src: Streamp<u8>) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             lfsr: Lfsr::new(0x21, 0, 16),
         }
     }

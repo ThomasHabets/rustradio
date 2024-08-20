@@ -1,6 +1,6 @@
 //! Xor a constant value with every sample.
 use crate::map_block_macro_v2;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 
 /// XorConst xors a constant value to every sample.
 pub struct XorConst<T>
@@ -21,7 +21,7 @@ where
         Self {
             val,
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
 

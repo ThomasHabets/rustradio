@@ -9,7 +9,7 @@ use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::iir_filter::CappedFilter;
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
 /// Timing Error Detector.
@@ -71,7 +71,7 @@ impl SymbolSync {
         clock_filter.fill(sps);
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             sps,
             clock: sps,
             _ted: ted,
@@ -92,7 +92,7 @@ impl SymbolSync {
 
     /// Return clock stream.
     pub fn out_clock(&mut self) -> Streamp<Float> {
-        self.out_clock.get_or_insert(new_streamp()).clone()
+        self.out_clock.get_or_insert(Stream::newp()).clone()
     }
 }
 

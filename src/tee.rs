@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Tee
@@ -18,8 +18,8 @@ impl<T: Copy> Tee<T> {
     pub fn new(src: Streamp<T>) -> Self {
         Self {
             src,
-            dst1: new_streamp(),
-            dst2: new_streamp(),
+            dst1: Stream::newp(),
+            dst2: Stream::newp(),
         }
     }
     /// Return the output streams.

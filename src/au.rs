@@ -12,7 +12,7 @@ It's also much simpler.
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
 /// Au support several encodings. This code currently only one.
@@ -94,7 +94,7 @@ impl AuEncode {
         Self {
             header: Some(v),
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
     /// Return the output stream.
@@ -167,7 +167,7 @@ impl AuDecode {
         Self {
             src,
             bitrate,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             state: DecodeState::WaitingMagic,
         }
     }

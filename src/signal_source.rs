@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Generate a pure complex sine wave.
@@ -19,7 +19,7 @@ impl SignalSourceComplex {
     /// Create new SignalSourceComplex block.
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> Self {
         Self {
-            dst: new_streamp(),
+            dst: Stream::newp(),
             current: 0.0,
             amplitude,
             rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),

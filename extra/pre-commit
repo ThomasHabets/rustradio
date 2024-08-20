@@ -6,16 +6,20 @@ cargo fmt -- --check || {
     echo "Run: cargo fmt" >&2
     exit 1
 }
+
+export CARGO_TARGET_DIR="target/test.normal"
 cargo test || {
     echo "Tests fail without features" >&2
     exit 1
 }
+export CARGO_TARGET_DIR="target/test.all"
 cargo test --all-features || {
     echo "Tests fail with features" >&2
     exit 1
 }
 
 # TODO: maybe add --all-targets
+export CARGO_TARGET_DIR="target/nightly"
 cargo +nightly 2>/dev/null > /dev/null && {
     cargo +nightly bench --no-run -F rtlsdr || {
 	echo "Benchmark builds fail" >&2

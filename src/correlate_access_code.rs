@@ -4,7 +4,7 @@ For now an initial yes/no bit block. Future work should add tagging.
 */
 use crate::map_block_convert_macro;
 use crate::map_block_convert_tag_macro;
-use crate::stream::{new_streamp, Streamp, Tag, TagValue};
+use crate::stream::{Stream, Streamp, Tag, TagValue};
 
 /// CorrelateAccessCode outputs 1 if CAC matches.
 pub struct CorrelateAccessCode {
@@ -20,7 +20,7 @@ impl CorrelateAccessCode {
     pub fn new(src: Streamp<u8>, code: Vec<u8>, allowed_diffs: usize) -> Self {
         Self {
             src,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             slide: vec![0; code.len()],
             code,
             allowed_diffs,
@@ -63,7 +63,7 @@ impl CorrelateAccessCodeTag {
         Self {
             src,
             tag,
-            dst: new_streamp(),
+            dst: Stream::newp(),
             slide: vec![0; code.len()],
             code,
             allowed_diffs,

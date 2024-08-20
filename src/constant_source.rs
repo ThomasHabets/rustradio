@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{new_streamp, Streamp};
+use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Generate the same value, forever.
@@ -16,7 +16,7 @@ impl<T: Copy> ConstantSource<T> {
     pub fn new(val: T) -> Self {
         Self {
             val,
-            dst: new_streamp(),
+            dst: Stream::newp(),
         }
     }
     /// Return the output stream.
