@@ -1,4 +1,3 @@
-#![warn(missing_docs)]
 /*! This create provides a framework for running SDR (software defined
 radio) applications.
 
