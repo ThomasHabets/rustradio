@@ -39,6 +39,10 @@ rtlsdr = ["dep:rtlsdr"]
 soapysdr = ["dep:soapysdr"]
 fast-math = ["dep:fast-math"]
 
+[[example]]
+name = "bell202"
+required-features = ["soapysdr"]
+
 [profile.release]
 overflow-checks = true
 #lto = true

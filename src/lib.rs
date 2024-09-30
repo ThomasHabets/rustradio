@@ -151,6 +151,9 @@ pub mod zero_crossing;
 pub mod rtlsdr_source;
 
 #[cfg(feature = "soapysdr")]
+pub mod soapysdr_sink;
+
+#[cfg(feature = "soapysdr")]
 pub mod soapysdr_source;
 
 pub mod block;

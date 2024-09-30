@@ -45,37 +45,37 @@ impl SoapySdrSourceBuilder {
     /// Build the source object.
     pub fn build(self) -> Result<SoapySdrSource> {
         let dev = soapysdr::Device::new(&*self.dev)?;
-        debug!("SoapySDR driver: {}", dev.driver_key()?);
-        debug!("SoapySDR hardware: {}", dev.hardware_key()?);
-        debug!("SoapySDR hardware info: {}", dev.hardware_info()?);
+        debug!("SoapySDR RX driver: {}", dev.driver_key()?);
+        debug!("SoapySDR RX hardware: {}", dev.hardware_key()?);
+        debug!("SoapySDR RX hardware info: {}", dev.hardware_info()?);
         debug!(
-            "SoapySDR frontend mapping: {}",
+            "SoapySDR RX frontend mapping: {}",
             dev.frontend_mapping(soapysdr::Direction::Rx)?
         );
         let chans = dev.num_channels(soapysdr::Direction::Rx)?;
         debug!("SoapySDR RX channels : {}", chans);
         for channel in 0..chans {
             debug!(
-                "SoapySDR channel {channel} antennas: {:?}",
+                "SoapySDR RX channel {channel} antennas: {:?}",
                 dev.antennas(soapysdr::Direction::Rx, channel)?
             );
             debug!(
-                "SoapySDR channel {channel} gains: {:?}",
+                "SoapySDR RX channel {channel} gains: {:?}",
                 dev.list_gains(soapysdr::Direction::Rx, channel)?
             );
             debug!(
-                "SoapySDR channel {channel} frequency range: {:?}",
+                "SoapySDR RX channel {channel} frequency range: {:?}",
                 dev.frequency_range(soapysdr::Direction::Rx, channel)?
             );
             for ai in dev.stream_args_info(soapysdr::Direction::Rx, channel)? {
-                debug!("SoapySDR channel {channel} arg info: {}", ai_string(&ai));
+                debug!("SoapySDR RX channel {channel} arg info: {}", ai_string(&ai));
             }
             debug!(
-                "SoapySDR channel {channel} stream formats: {:?}",
+                "SoapySDR RX channel {channel} stream formats: {:?}",
                 dev.stream_formats(soapysdr::Direction::Rx, channel)?
             );
             debug!(
-                "SoapySDR channel {channel} info: {}",
+                "SoapySDR RX channel {channel} info: {}",
                 dev.channel_info(soapysdr::Direction::Rx, channel)?
             );
         }
