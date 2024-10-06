@@ -3,32 +3,40 @@ Example broadcast FM receiver, sending output to an Au file.
  */
 use anyhow::Result;
 use log::warn;
-use rustradio::audio_sink::AudioSink;
 use structopt::StructOpt;
 
+use rustradio::audio_sink::AudioSink;
 use rustradio::blocks::*;
+use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
 use rustradio::{Complex, Float};
 
 #[derive(StructOpt, Debug)]
 #[structopt()]
 struct Opt {
+    /// Read capture file instead of live from RTL SDR.
     #[structopt(short = "r")]
     filename: Option<String>,
 
-    // Unused if rtlsdr feature not enabled.
+    /// Output file. If unset, use sound card for output.
+    #[structopt(short = "o")]
+    output: Option<std::path::PathBuf>,
+
+    /// Tuned frequency, if reading from RTL SDR.
     #[allow(dead_code)]
     #[structopt(long = "freq", default_value = "100000000")]
     freq: u64,
 
-    // Unused if rtlsdr feature not enabled.
+    /// Input gain, if reading from RTL SDR.
     #[allow(dead_code)]
     #[structopt(long = "gain", default_value = "20")]
     gain: i32,
 
+    /// Verbosity of debug messages.
     #[structopt(short = "v", default_value = "0")]
     verbose: usize,
 
+    /// Audio volume.
     #[structopt(long = "volume", default_value = "1.0")]
     volume: Float,
 }
@@ -116,7 +124,23 @@ fn main() -> Result<()> {
     // Change volume.
     let prev = blehbleh![g, MultiplyConst::new(prev, opt.volume)];
 
-    g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)));
+    if let Some(out) = opt.output {
+        // Convert to .au.
+        let prev = blehbleh![
+            g,
+            AuEncode::new(
+                prev,
+                rustradio::au::Encoding::PCM16,
+                new_samp_rate as u32,
+                1
+            )
+        ];
+        // Save to file.
+        g.add(Box::new(FileSink::new(prev, out, Mode::Overwrite)?));
+    } else {
+        // Play live.
+        g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)));
+    }
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
