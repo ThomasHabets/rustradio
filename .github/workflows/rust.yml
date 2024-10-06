@@ -21,7 +21,7 @@ jobs:
     - name: Build examples
       run: cargo build --verbose --examples
     - name: Dependencies
-      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev
+      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev
     - name: Build all features
       run: cargo build --all-features --verbose
     - name: Build examples, all features
