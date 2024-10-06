@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use log::debug;
+use soapysdr::Direction;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::Streamp;
@@ -42,43 +43,45 @@ impl SoapySdrSinkBuilder {
         debug!("SoapySDR TX hardware info: {}", dev.hardware_info()?);
         debug!(
             "SoapySDR TX frontend mapping: {}",
-            dev.frontend_mapping(soapysdr::Direction::Tx)?
+            dev.frontend_mapping(Direction::Tx)?
         );
-        let chans = dev.num_channels(soapysdr::Direction::Tx)?;
+        debug!("SoapySDR TX clock sources: {:?}", dev.list_clock_sources()?);
+        let chans = dev.num_channels(Direction::Tx)?;
         debug!("SoapySDR TX channels : {}", chans);
         for channel in 0..chans {
             debug!(
                 "SoapySDR TX channel {channel} antennas: {:?}",
-                dev.antennas(soapysdr::Direction::Tx, channel)?
+                dev.antennas(Direction::Tx, channel)?
             );
             debug!(
                 "SoapySDR TX channel {channel} gains: {:?}",
-                dev.list_gains(soapysdr::Direction::Tx, channel)?
+                dev.list_gains(Direction::Tx, channel)?
             );
             debug!(
                 "SoapySDR TX channel {channel} frequency range: {:?}",
-                dev.frequency_range(soapysdr::Direction::Tx, channel)?
+                dev.frequency_range(Direction::Tx, channel)?
             );
-            for ai in dev.stream_args_info(soapysdr::Direction::Tx, channel)? {
+            for ai in dev.stream_args_info(Direction::Tx, channel)? {
                 debug!("SoapySDR TX channel {channel} arg info: {}", ai_string(&ai));
             }
             debug!(
-                "SoapySDR TX channel {channel} stream formats: {:?}",
-                dev.stream_formats(soapysdr::Direction::Tx, channel)?
+                "SoapySDR TX channel {channel} stream formats: {:?}. Native: {:?}",
+                dev.stream_formats(Direction::Tx, channel)?,
+                dev.native_stream_format(Direction::Tx, channel)?,
             );
             debug!(
                 "SoapySDR TX channel {channel} info: {}",
-                dev.channel_info(soapysdr::Direction::Tx, channel)?
+                dev.channel_info(Direction::Tx, channel)?
             );
         }
         dev.set_frequency(
-            soapysdr::Direction::Tx,
+            Direction::Tx,
             self.channel,
             self.freq,
             soapysdr::Args::new(),
         )?;
-        dev.set_sample_rate(soapysdr::Direction::Tx, self.channel, self.samp_rate)?;
-        dev.set_gain(soapysdr::Direction::Tx, self.channel, self.ogain)?;
+        dev.set_sample_rate(Direction::Tx, self.channel, self.samp_rate)?;
+        dev.set_gain(Direction::Tx, self.channel, self.ogain)?;
         let mut stream = dev.tx_stream(&[self.channel])?;
         stream.activate(None)?;
         Ok(SoapySdrSink { src, stream })
