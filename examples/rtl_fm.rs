@@ -142,7 +142,7 @@ fn main() -> Result<()> {
         #[cfg(feature = "audio")]
         {
             // Play live.
-            g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)));
+            g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)?));
         }
     }
 

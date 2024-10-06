@@ -15,24 +15,24 @@ struct CpalOutput {
 }
 
 impl CpalOutput {
-    fn new(sample_rate: u32) -> Self {
+    fn new(sample_rate: u32) -> Result<Self> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
             .expect("failed to find output device");
-        info!("Output device: {}", device.name().unwrap());
+        info!("Output device: {}", device.name()?);
 
-        let config = device.default_output_config().unwrap();
+        let config = device.default_output_config()?;
 
         let mut config: cpal::StreamConfig = config.into();
 
         config.sample_rate = cpal::SampleRate(sample_rate);
         config.channels = 1;
 
-        Self { device, config }
+        Ok(Self { device, config })
     }
 
-    fn start(&self) -> SyncSender<f32> {
+    fn start(&self) -> Result<(SyncSender<f32>, cpal::Stream)> {
         let (sender, receiver) = sync_channel::<f32>(self.config.sample_rate.0 as usize * 3); // 3 seconds buffer
 
         let channels = self.config.channels as usize;
@@ -41,50 +41,50 @@ impl CpalOutput {
         let device = self.device.clone();
         let config = self.config.clone();
 
-        std::thread::spawn(move || {
-            info!("Starting output stream {:?}", config);
-            let stream = device
-                .build_output_stream(
-                    &config,
-                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                        for frame in data.chunks_mut(channels) {
-                            let v = receiver.recv();
-                            if v.is_err() {
-                                return;
-                            }
-                            let value = f32::from_sample(v.unwrap());
+        info!("Starting output stream {:?}", config);
+        let stream = device.build_output_stream(
+            &config,
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                for frame in data.chunks_mut(channels) {
+                    match receiver.recv() {
+                        Err(e) => {
+                            info!("Failed to read audio samples: {e:?}");
+                        }
+                        Ok(v) => {
+                            let value = f32::from_sample(v);
                             for sample in frame.iter_mut() {
                                 *sample = value;
                             }
                         }
-                    },
-                    err_fn,
-                    None,
-                )
-                .unwrap();
-            stream.play().unwrap();
-
-            //wait forever
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(1000));
-            }
-        });
-
-        sender
+                    }
+                }
+            },
+            err_fn,
+            None,
+        )?;
+        stream.play()?;
+        Ok((sender, stream))
     }
 }
 
 pub struct AudioSink {
     src: Streamp<Float>,
     sender: SyncSender<f32>,
+
+    // Needs to be kept around, but linter thinks it's unused.
+    _stream: cpal::Stream,
 }
 
 impl AudioSink {
-    pub fn new(src: Streamp<Float>, sample_rate: u64) -> Self {
-        let output = CpalOutput::new(sample_rate as u32);
-        let sender = output.start();
+    pub fn new(src: Streamp<Float>, sample_rate: u64) -> Result<Self> {
+        let output = CpalOutput::new(sample_rate as u32)?;
+        let (sender, stream) = output.start()?;
 
-        Self { src, sender }
+        Ok(Self {
+            src,
+            sender,
+            _stream: stream,
+        })
     }
 }
 
@@ -95,8 +95,11 @@ impl Block for AudioSink {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
-        for x in i.iter() {
-            self.sender.send(*x).unwrap();
+        for (pos, x) in i.iter().enumerate() {
+            if let Err(e) = self.sender.send(*x) {
+                i.consume(pos);
+                return Err(e.into());
+            }
         }
         i.consume(n);
 
