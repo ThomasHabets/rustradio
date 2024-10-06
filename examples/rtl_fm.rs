@@ -136,9 +136,14 @@ fn main() -> Result<()> {
         ];
         // Save to file.
         g.add(Box::new(FileSink::new(prev, out, Mode::Overwrite)?));
+    } else if !cfg!(feature = "audio") {
+        panic!("Rustradio build without feature 'audio'. Can only write to file with -o, not play live.");
     } else {
-        // Play live.
-        g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)));
+        #[cfg(feature = "audio")]
+        {
+            // Play live.
+            g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)));
+        }
     }
 
     let cancel = g.cancel_token();

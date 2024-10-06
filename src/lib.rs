@@ -107,7 +107,6 @@ use stream::Stream;
 pub mod add;
 pub mod add_const;
 pub mod au;
-pub mod audio_sink;
 pub mod binary_slicer;
 pub mod burst_tagger;
 pub mod complex_to_mag2;
@@ -147,6 +146,9 @@ pub mod wpcr;
 pub mod xor;
 pub mod xor_const;
 pub mod zero_crossing;
+
+#[cfg(feature = "audio")]
+pub mod audio_sink;
 
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;

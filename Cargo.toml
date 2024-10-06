@@ -24,7 +24,7 @@ libc = "0.2.149"
 soapysdr = {version = "0.4.0", optional=true}
 serde_json = "1.0.113"
 serde = {version = "1.0.196", features = ["derive"]}
-cpal = { version = "0.15.3", features = ["jack"] }
+cpal = { version = "0.15.3", features = ["jack"], optional=true }
 
 [dev-dependencies]
 structopt = "0.3.26"
@@ -39,6 +39,7 @@ path = "src/lib.rs"
 rtlsdr = ["dep:rtlsdr"]
 soapysdr = ["dep:soapysdr"]
 fast-math = ["dep:fast-math"]
+audio = ["dep:cpal"]
 
 [[example]]
 name = "bell202"
