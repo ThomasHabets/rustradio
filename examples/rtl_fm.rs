@@ -3,10 +3,10 @@ Example broadcast FM receiver, sending output to an Au file.
  */
 use anyhow::Result;
 use log::warn;
+use rustradio::audio_sink::AudioSink;
 use structopt::StructOpt;
 
 use rustradio::blocks::*;
-use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
 use rustradio::{Complex, Float};
 
@@ -15,9 +15,6 @@ use rustradio::{Complex, Float};
 struct Opt {
     #[structopt(short = "r")]
     filename: Option<String>,
-
-    #[structopt(short = "o")]
-    output: std::path::PathBuf,
 
     // Unused if rtlsdr feature not enabled.
     #[allow(dead_code)]
@@ -115,19 +112,11 @@ fn main() -> Result<()> {
         g,
         RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
     ];
-    let _samp_rate = new_samp_rate;
 
     // Change volume.
     let prev = blehbleh![g, MultiplyConst::new(prev, opt.volume)];
 
-    // Convert to .au.
-    let prev = blehbleh![
-        g,
-        AuEncode::new(prev, rustradio::au::Encoding::PCM16, 48000, 1)
-    ];
-
-    // Save to file.
-    g.add(Box::new(FileSink::new(prev, opt.output, Mode::Overwrite)?));
+    g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
