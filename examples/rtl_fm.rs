@@ -5,7 +5,6 @@ use anyhow::Result;
 use log::warn;
 use structopt::StructOpt;
 
-use rustradio::audio_sink::AudioSink;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;

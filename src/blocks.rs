@@ -2,6 +2,7 @@
 pub use crate::add::Add;
 pub use crate::add_const::{add_const, AddConst};
 pub use crate::au::{AuDecode, AuEncode};
+pub use crate::audio_sink::AudioSink;
 pub use crate::binary_slicer::BinarySlicer;
 pub use crate::burst_tagger::BurstTagger;
 pub use crate::complex_to_mag2::ComplexToMag2;
