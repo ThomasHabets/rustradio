@@ -38,6 +38,10 @@ struct Opt {
     /// Audio volume.
     #[structopt(long = "volume", default_value = "1.0")]
     volume: Float,
+
+    /// Audio output rate.
+    #[structopt(default_value = "48000")]
+    audio_rate: u32,
 }
 
 macro_rules! blehbleh {
@@ -114,7 +118,7 @@ fn main() -> Result<()> {
     let prev = blehbleh![g, FftFilterFloat::new(prev, &taps)];
 
     // Resample audio.
-    let new_samp_rate = 48_000.0;
+    let new_samp_rate = opt.audio_rate as f32;
     let prev = blehbleh![
         g,
         RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
