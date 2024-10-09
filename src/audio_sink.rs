@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Sample;
-use log::{error, info};
+use log::{debug, error, info, trace};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::Streamp;
@@ -16,13 +16,31 @@ struct CpalOutput {
 
 impl CpalOutput {
     fn new(sample_rate: u32) -> Result<Self> {
+        for host in cpal::platform::ALL_HOSTS {
+            debug!("Audio sink host: {host:?}, name: {}", host.name());
+        }
         let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .expect("failed to find output device");
-        info!("Output device: {}", device.name()?);
+        // let host = cpal::host_from_id(cpal::platform::ALL_HOSTS[0])?;
+        debug!("Audio sink chose default host {}", host.id().name());
+        if false {
+            // Printing device names spews a bunch of ALSA errors to stderr.
+            // https://github.com/RustAudio/cpal/issues/384
+            for dev in host.devices()? {
+                debug!("Audio sink device: {:?}", dev.name()?);
+            }
+        }
+        let device = host.default_output_device().ok_or(anyhow::Error::msg(
+            "audio sink: failed to find output device",
+        ))?;
+        info!("Audio sink output device: {}", device.name()?);
+
+        trace!("Audio sink supported output configs:");
+        for conf in device.supported_output_configs()? {
+            trace!("  {conf:?}");
+        }
 
         let config = device.default_output_config()?;
+        debug!("Audio sink using default output config {config:?}");
 
         let mut config: cpal::StreamConfig = config.into();
 
