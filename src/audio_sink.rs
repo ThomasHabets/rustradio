@@ -116,7 +116,7 @@ impl Block for AudioSink {
         for (pos, x) in i.iter().enumerate() {
             if let Err(e) = self.sender.send(*x) {
                 i.consume(pos);
-                return Err(e.into());
+                return Err(Error::new(&format!("audio error: {e}")));
             }
         }
         i.consume(n);
