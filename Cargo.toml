@@ -45,6 +45,10 @@ audio = ["dep:cpal"]
 name = "bell202"
 required-features = ["soapysdr"]
 
+[[example]]
+name = "tone"
+required-features = ["audio"]
+
 [profile.release]
 overflow-checks = true
 #lto = true
