@@ -51,10 +51,25 @@ fn main() -> Result<()> {
         .init()?;
 
     let mut g = Graph::new();
-    let prev = add_block![
-        g,
-        SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)
-    ];
+
+    // Two ways of getting a real sine wave, just as examples.
+    let prev = if false {
+        add_block![
+            g,
+            SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)
+        ]
+    } else {
+        let prev = add_block![
+            g,
+            SignalSourceComplex::new(opt.audio_rate as Float, opt.freq, opt.volume)
+        ];
+        add_block![
+            g,
+            MapBuilder::new(prev, |x| x.re)
+                .name("ComplexToReal".to_owned())
+                .build()
+        ]
+    };
 
     g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));
 
