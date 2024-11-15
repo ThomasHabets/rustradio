@@ -6,108 +6,95 @@ use std::os::fd::AsRawFd;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use libc::{c_int, c_uchar, c_void, off_t, size_t};
-use libc::{MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
-use log::{debug, trace};
+use libc::{c_uchar, c_void, size_t};
+use libc::{MAP_FAILED, MAP_FIXED, MAP_SHARED, PROT_READ, PROT_WRITE};
 
 use crate::stream::{Tag, TagPos};
 use crate::Error;
 
-extern "C" {
-    fn mmap(
-        addr: *const c_void,
-        len: size_t,
-        prot: c_int,
-        flags: c_int,
-        fd: c_int,
-        offset: off_t,
-    ) -> *mut c_void;
-    fn munmap(addr: *const c_void, length: size_t) -> c_int;
+#[derive(Debug)]
+struct Map {
+    base: *mut c_uchar,
+    len: usize,
+}
+
+impl Map {
+    fn new(f: &std::fs::File, len: usize) -> Result<Self> {
+        Self::with_addr(f, len, std::ptr::null_mut())
+    }
+    // TODO: change ptr to be Option<*mut c_void>.
+    // Null pointer enum optimization.
+    fn with_addr(f: &std::fs::File, len: usize, ptr: *mut c_void) -> Result<Self> {
+        let fd = f.as_raw_fd();
+        let flags = MAP_SHARED | if ptr.is_null() { 0 } else { MAP_FIXED };
+        let buf = unsafe { libc::mmap(ptr, len as size_t, PROT_READ | PROT_WRITE, flags, fd, 0) };
+        if buf == MAP_FAILED {
+            let e = errno::errno();
+            return Err(Error::new(&format!(
+                "mmap(){}: {e}",
+                if ptr.is_null() {
+                    ""
+                } else {
+                    " at fixed address"
+                }
+            ))
+            .into());
+        }
+        assert!(!buf.is_null());
+        if !ptr.is_null() && ptr != buf {
+            let rc = unsafe { libc::munmap(buf, len as size_t) };
+            if rc != 0 {
+                let e = errno::errno();
+                panic!("Failed to unmap buffer just mapped in the failure path: {e}");
+            }
+            return Err(Error::new("mmap() allocated in the wrong place").into());
+        }
+        Ok(Self {
+            base: buf as *mut c_uchar,
+            len,
+        })
+    }
+}
+
+impl Drop for Map {
+    fn drop(&mut self) {
+        let rc = unsafe { libc::munmap(self.base as *mut c_void, self.len) };
+        if rc != 0 {
+            let e = errno::errno();
+            panic!("munmap() failed on circular buffer: {e}");
+        }
+    }
 }
 
 /// Circular buffer dealing in bytes.
 #[derive(Debug)]
 pub struct Circ {
-    buf: *mut c_uchar,
     len: usize,
+    map: Map,
+    _map2: Map, // Held on to for the Drop.
 }
 
 impl Circ {
-    fn create(size: usize) -> Result<Self> {
-        let len = size;
-        let len2 = len * 2;
-        let f = tempfile::tempfile()?;
-        f.set_len(len2 as u64)?;
-        let fd = f.as_raw_fd();
-
-        // Map first.
-        let buf = {
-            let buf = unsafe {
-                mmap(
-                    std::ptr::null::<c_void>(),
-                    len2 as size_t,
-                    PROT_READ | PROT_WRITE,
-                    MAP_SHARED, // flags
-                    fd,         // fd
-                    0,          // offset
-                )
-            };
-            if buf == MAP_FAILED {
-                return Err(Error::new("Initial mmap() failed").into());
-            }
-            buf as *mut c_uchar
-        };
-        let second = (buf as libc::uintptr_t + len as libc::uintptr_t) as *const c_void;
-
-        // Unmap second half.
-        let rc = unsafe { munmap(second, len) };
-        if rc != 0 {
-            panic!("munmap() failed on second half of circular buffer");
-        }
-
-        // Re-map second half.
-        let buf2 = unsafe {
-            mmap(
-                second,
-                len as size_t,
-                PROT_READ | PROT_WRITE,
-                MAP_SHARED, // flags
-                fd,         // fd
-                0,          // offset
-            )
-        };
-        if buf2 == MAP_FAILED {
-            return Err(Error::new("second mmap did not succeed").into());
-        }
-        if buf2 as *const c_void != second {
-            let rc = unsafe { munmap(buf as *const c_void, len) };
-            if rc != 0 {
-                panic!("munmap() failed on buffer that we *definitely* allocated. Something is seriously broken!");
-            }
-            return Err(Error::new("second mmap did not end up where we wanted it").into());
-        }
-        Ok(Self { len: len2, buf })
-    }
-
     /// Create a new circular buffer.
-    ///
-    /// TODO:
-    /// * don't leak memory on error.
-    /// * release memory on drop.
-    pub fn new(size: usize) -> Result<Self> {
-        for attempt in 0..10 {
-            trace!("Creating circular buffer, attempt {attempt}");
-            match Circ::create(size) {
-                Ok(x) => return Ok(x),
-                Err(e) => {
-                    debug!(
-                        "Failed to create circular buffer in attempt {attempt}: {:?}",
-                        e
-                    );
-                }
-            }
-        }
-        Err(Error::new("failed to allocate circular buffer").into())
+    fn new(size: usize) -> Result<Self> {
+        let f = tempfile::tempfile()?;
+        f.set_len(size as u64)?;
+        let len2 = size * 2;
+
+        // Map first half.
+        let mut map = Map::new(&f, len2)?;
+
+        // Remap second half to be same as the first.
+        // Be very careful with the order, here.
+        let second = (map.base as libc::uintptr_t + size as libc::uintptr_t) as *mut c_void;
+        let map2 = Map::with_addr(&f, size, second)?;
+        map.len = size;
+
+        Ok(Self {
+            len: len2,
+            map,
+            _map2: map2,
+        })
     }
 
     /// Return length of buffer, *before* the double mapping, in bytes.
@@ -127,7 +114,10 @@ impl Circ {
     fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         assert!(self.len % std::mem::size_of::<T>() == 0);
         let buf = unsafe {
-            std::slice::from_raw_parts_mut(self.buf as *mut T, self.len / std::mem::size_of::<T>())
+            std::slice::from_raw_parts_mut(
+                self.map.base as *mut T,
+                self.len / std::mem::size_of::<T>(),
+            )
         };
         &mut buf[start..end]
     }
@@ -695,3 +685,5 @@ mod tests {
         Ok(())
     }
 }
+/* vim: textwidth=80
+ */
