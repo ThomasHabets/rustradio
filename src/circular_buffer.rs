@@ -110,9 +110,21 @@ impl Circ {
     //
     // Possibly the compiler sees something UB, and breaks things with
     // a strange optimization, but let's hope not. :-)
+    //
+    // The reason this function asserts instead of returns error is that it's
+    // only called from this module, and "cannot" be called with invalid
+    // arguments.
     #[allow(clippy::mut_from_ref)]
     fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
-        assert!(self.len % std::mem::size_of::<T>() == 0);
+        let ez = std::mem::size_of::<T>();
+        assert!(self.len % ez == 0);
+        assert!(
+            end - start <= self.len / ez / 2,
+            "requested {start} to {end} ({} entries) of {} but len is {}",
+            end - start,
+            ez,
+            self.len
+        );
         let buf = unsafe {
             std::slice::from_raw_parts_mut(
                 self.map.base as *mut T,
@@ -453,7 +465,63 @@ mod tests {
     use crate::Float;
 
     #[test]
-    pub fn test_no_double() -> Result<()> {
+    fn circ_reqlen() -> Result<()> {
+        let circ = Circ::new(4096)?;
+        assert_eq!(circ.total_size(), 4096);
+        assert!(circ.full_buffer::<u32>(0, 0).is_empty());
+        assert_eq!(circ.full_buffer::<u32>(0, 1).len(), 1);
+        assert_eq!(circ.full_buffer::<u32>(0, 1024).len(), 1024);
+        assert_eq!(circ.full_buffer::<u32>(1000, 1200).len(), 200);
+        assert_eq!(circ.full_buffer::<u32>(2040, 2048).len(), 8);
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic]
+    fn circ_reqlen_too_big_beginning() {
+        if let Ok(circ) = Circ::new(4096) {
+            circ.full_buffer::<u32>(0, 1025);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn circ_reqlen_too_big_middle() {
+        if let Ok(circ) = Circ::new(4096) {
+            circ.full_buffer::<u32>(10, 1024 + 11);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn circ_past_end() {
+        if let Ok(circ) = Circ::new(4096) {
+            circ.full_buffer::<u32>(2040, 2049);
+        }
+    }
+
+    #[test]
+    fn circ_circular() -> Result<()> {
+        let circ = Circ::new(4096)?;
+        assert_eq!(circ.total_size(), 4096);
+        let buf = circ.full_buffer::<u32>(0, 4);
+        let buf2 = circ.full_buffer::<u32>(1024, 1028);
+        assert_eq!(buf, [0, 0, 0, 0]);
+        assert_eq!(buf2, [0, 0, 0, 0]);
+        buf[0] = 3;
+        buf[1] = 2;
+        buf[2] = 1;
+        buf[3] = 42;
+        // Not sure if compiler fence is enough here, or we need a full `fence`.
+        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(buf, [3, 2, 1, 42]);
+        assert_eq!(buf2, [3, 2, 1, 42]);
+        assert_ne!(buf.as_ptr(), buf2.as_ptr());
+        Ok(())
+    }
+
+    #[test]
+    fn no_double() -> Result<()> {
         let b = Arc::new(Buffer::<u8>::new(4096)?);
         {
             let _i1 = b.read_buf()?;
@@ -469,7 +537,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_typical() -> Result<()> {
+    fn typical() -> Result<()> {
         let b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
@@ -563,7 +631,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_two_writes() -> Result<()> {
+    fn two_writes() -> Result<()> {
         let b: Buffer<u8> = Buffer::new(4096)?;
 
         // Write 10 bytes.
@@ -610,7 +678,7 @@ mod tests {
     }
 
     #[test]
-    pub fn exact_overflow() -> Result<()> {
+    fn exact_overflow() -> Result<()> {
         let b: Buffer<u8> = Buffer::new(4096)?;
 
         // Initial.
@@ -630,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_float() -> Result<()> {
+    fn with_float() -> Result<()> {
         let b: Buffer<Float> = Buffer::new(4096)?;
 
         // Initial.
