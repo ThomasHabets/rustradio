@@ -98,6 +98,7 @@ impl Circ {
     }
 
     /// Return length of buffer, *before* the double mapping, in bytes.
+    #[must_use]
     pub fn total_size(&self) -> usize {
         // self.len is number of bytes in the entire buffer. The
         // mapping is 2x the writable size when the buffer is empty,
@@ -115,6 +116,7 @@ impl Circ {
     // only called from this module, and "cannot" be called with invalid
     // arguments.
     #[allow(clippy::mut_from_ref)]
+    #[must_use]
     fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         let ez = std::mem::size_of::<T>();
         assert!(self.len % ez == 0);
@@ -152,28 +154,33 @@ struct BufferState {
 
 impl BufferState {
     // Return write range, in samples.
+    #[must_use]
     fn write_range(&self) -> (usize, usize) {
         //eprintln!("Write range: {} {}", self.rpos, self.wpos);
         (self.wpos, self.wpos + self.free())
     }
 
     // Read range, in samples
+    #[must_use]
     fn read_range(&self) -> (usize, usize) {
         (self.rpos, self.rpos + self.used)
     }
 
     // In samples.
+    #[must_use]
     fn capacity(&self) -> usize {
         self.circ_len / self.member_size
     }
 
     // Write capacity, in samples.
+    #[must_use]
     fn write_capacity(&self) -> usize {
         let (a, b) = self.write_range();
         b - a
     }
 
     // Free space, in samples
+    #[must_use]
     fn free(&self) -> usize {
         self.capacity() - self.used
     }
@@ -186,11 +193,13 @@ pub struct BufferReader<'a, T: Copy> {
 }
 
 impl<'a, T: Copy> BufferReader<'a, T> {
+    #[must_use]
     fn new(slice: &'a [T], parent: &'a Buffer<T>) -> BufferReader<'a, T> {
         Self { slice, parent }
     }
 
     /// Return slice to read from.
+    #[must_use]
     pub fn slice(&self) -> &[T] {
         self.slice
     }
@@ -206,11 +215,13 @@ impl<'a, T: Copy> BufferReader<'a, T> {
     }
 
     /// len convenience function.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.slice.len()
     }
 
     /// is_empty convenience function.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.slice.is_empty()
     }
@@ -237,11 +248,13 @@ pub struct BufferWriter<'a, T: Copy> {
 }
 
 impl<'a, T: Copy> BufferWriter<'a, T> {
+    #[must_use]
     fn new(slice: &'a mut [T], parent: &'a Buffer<T>) -> BufferWriter<'a, T> {
         Self { slice, parent }
     }
 
     /// Return the slice to write to.
+    #[must_use]
     pub fn slice(&mut self) -> &mut [T] {
         self.slice
     }
@@ -268,11 +281,13 @@ impl<'a, T: Copy> BufferWriter<'a, T> {
     }
 
     /// len convenience function.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.slice.len()
     }
 
     /// is_empty convenience function.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.slice.is_empty()
     }
@@ -315,6 +330,7 @@ impl<T> Buffer<T> {
 
     /// Return length of buffer, ignoring how much is in use, and the
     /// double buffer.
+    #[must_use]
     pub fn total_size(&self) -> usize {
         self.circ.total_size() / self.member_size
     }
@@ -480,7 +496,7 @@ mod tests {
     #[should_panic]
     fn circ_reqlen_too_big_beginning() {
         if let Ok(circ) = Circ::new(4096) {
-            circ.full_buffer::<u32>(0, 1025);
+            let _ = circ.full_buffer::<u32>(0, 1025);
         }
     }
 
@@ -488,7 +504,7 @@ mod tests {
     #[should_panic]
     fn circ_reqlen_too_big_middle() {
         if let Ok(circ) = Circ::new(4096) {
-            circ.full_buffer::<u32>(10, 1024 + 11);
+            let _ = circ.full_buffer::<u32>(10, 1024 + 11);
         }
     }
 
@@ -496,7 +512,7 @@ mod tests {
     #[should_panic]
     fn circ_past_end() {
         if let Ok(circ) = Circ::new(4096) {
-            circ.full_buffer::<u32>(2040, 2049);
+            let _ = circ.full_buffer::<u32>(2040, 2049);
         }
     }
 
