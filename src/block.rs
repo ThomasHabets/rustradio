@@ -1,6 +1,6 @@
 /*! RustRadio Block implementation
 
-Blocks are the main buildingblocks of rustradio. They each do one
+Blocks are the main building blocks of rustradio. They each do one
 thing, and you connect them together with streams to process the data.
 
 */
@@ -39,40 +39,23 @@ pub enum BlockRet {
     /// * Head block reached its max.
     EOF,
 
-    /// Internal state for two-phase done detection.
+    /// Internal state for two-phase done-detection.
     InternalAwaiting,
 }
 
-/**
-Block trait, that must be implemented for all blocks.
-
-Simpler blocks can use macros to avoid needing to implement `work()`.
-*/
+/// Block trait, that must be implemented for all blocks.
+///
+/// Simpler blocks can use macros to avoid needing to implement `work()`.
 pub trait Block {
-    /** Name of block
-
-    Not name of *instance* of block. But it may include the
-    type. E.g. `FileSource<Float>`.
-     */
+    /// Name of block
+    ///
+    /// Not name of *instance* of block. But it may include the type. E.g.
+    /// `FileSource<Float>`.
     fn block_name(&self) -> &str;
 
-    /** Block work function
-
-    # Args
-    * `r`: Object representing all input streams to read from.
-    * `w`: Object representing all output streams to write to.
-
-    A pure Source block will not use `r`, and a pure Sink block won't
-    use `w`.
-
-    Consuming data from `r` involves first reading it, and then
-    "consuming" from the stream. If a `consume()` (or `clear()`) is
-    not called on the stream, the same data will continue to be read
-    forever.
-
-    Writing data to streams in `w` only involves calling `.write()` on
-    the stream.
-     */
+    /// Block work function
+    ///
+    /// A block implementation keeps track of its own inputs and outputs.
     fn work(&mut self) -> Result<BlockRet, Error>;
 }
 
