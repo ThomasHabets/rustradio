@@ -56,6 +56,7 @@ impl Graph {
         let st = Instant::now();
         self.times
             .resize(self.blocks.len(), std::time::Duration::default());
+        let mut eof = vec![false; self.blocks.len()];
         loop {
             let mut done = true;
             let mut all_idle = true;
@@ -63,6 +64,9 @@ impl Graph {
                 break;
             }
             for (n, b) in self.blocks.iter_mut().enumerate() {
+                if eof[n] {
+                    continue;
+                }
                 let st = Instant::now();
                 let ret = b.work()?;
                 self.times[n] += st.elapsed();
@@ -77,7 +81,9 @@ impl Graph {
                         done = false;
                     }
                     BlockRet::Noop => {}
-                    BlockRet::EOF => {}
+                    BlockRet::EOF => {
+                        eof[n] = true;
+                    }
                     BlockRet::InternalAwaiting => {
                         panic!("blocks must never return InternalAwaiting")
                     }
