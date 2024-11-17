@@ -127,12 +127,7 @@ impl Circ {
             ez,
             self.len
         );
-        let buf = unsafe {
-            std::slice::from_raw_parts_mut(
-                self.map.base as *mut T,
-                self.len / std::mem::size_of::<T>(),
-            )
-        };
+        let buf = unsafe { std::slice::from_raw_parts_mut(self.map.base as *mut T, self.len / ez) };
         &mut buf[start..end]
     }
 }
