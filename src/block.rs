@@ -18,8 +18,13 @@ TODO: Add state for "don't call me unless there's more input".
  */
 #[derive(Debug, Clone)]
 pub enum BlockRet {
-    /// The normal return. More data may be produced only if more data
-    /// comes in.
+    /// At least one sample was produced.
+    ///
+    /// More data may be produced only if more data comes in.
+    ///
+    /// Ideally the difference between Noop and Ok would be inferred, but since
+    /// the input and output streams are owned by the block, we don't yet see
+    /// that.
     Ok,
 
     /// Block didn't produce anything this time, but has a background
@@ -27,6 +32,9 @@ pub enum BlockRet {
     Pending,
 
     /// Produced nothing, because not enough input.
+    ///
+    /// When all nodes in a graph produce either EOF or Noop, the graph is
+    /// considered done, and the `g.run()` returns.
     Noop,
 
     // More data may be produced even if no more data comes in.
@@ -257,3 +265,5 @@ macro_rules! map_block_convert_tag_macro {
         }
     };
 }
+/* vim: textwidth=80
+ */
