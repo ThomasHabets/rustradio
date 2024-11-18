@@ -1,15 +1,21 @@
 //! Add two streams.
-use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
-use crate::Error;
+use crate::stream::Streamp;
 
 /// Adds two streams, sample wise.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, out, sync)]
 pub struct Add<T>
 where
-    T: Copy,
+    T: Copy + std::ops::Add<Output = T>,
 {
+    /// Hello world.
+    #[rustradio(in)]
     a: Streamp<T>,
+
+    #[rustradio(in)]
     b: Streamp<T>,
+
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -17,44 +23,35 @@ impl<T> Add<T>
 where
     T: Copy + std::ops::Add<Output = T>,
 {
-    /// Create a new AddConst, providing the constant to be added.
-    pub fn new(a: Streamp<T>, b: Streamp<T>) -> Self {
-        Self {
-            a,
-            b,
-            dst: Stream::newp(),
-        }
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
+    fn process_sync(&self, a: T, b: T) -> T {
+        a + b
     }
 }
 
-impl<T> Block for Add<T>
-where
-    T: Copy + std::ops::Add<Output = T>,
-{
-    fn block_name(&self) -> &str {
-        "Add"
-    }
-    fn work(&mut self) -> Result<BlockRet, Error> {
-        let (a, tags) = self.a.read_buf()?;
-        let (b, _tags) = self.b.read_buf()?;
-        let n = std::cmp::min(a.len(), b.len());
-        if n == 0 {
-            return Ok(BlockRet::Noop);
-        }
-        let mut o = self.dst.write_buf()?;
-        let n = std::cmp::min(n, o.len());
-        let it = a.iter().zip(b.iter()).map(|(x, y)| *x + *y);
-        for (w, samp) in o.slice().iter_mut().take(n).zip(it) {
-            *w = samp;
-        }
-        a.consume(n);
-        b.consume(n);
-        o.produce(n, &tags);
-        Ok(BlockRet::Ok)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+    use crate::blocks::VectorSource;
+    use crate::Float;
+
+    #[test]
+    fn add_float() -> crate::Result<()> {
+        let input_a: Vec<_> = (0..10).map(|i| i as Float).collect();
+        let mut a = VectorSource::new(input_a);
+        a.work()?;
+
+        let input_b: Vec<_> = (0..20).map(|i| 2.0 * (i as Float)).collect();
+        let mut b = VectorSource::new(input_b);
+        b.work()?;
+
+        let mut add = Add::new(a.out(), b.out());
+        add.work()?;
+        let os = add.out();
+        let (res, _) = os.read_buf()?;
+        let want: Vec<_> = (0..10).map(|i| 3 * i).collect();
+        let got: Vec<_> = res.slice().iter().map(|f| *f as usize).collect();
+        assert_eq!(got, want);
+        Ok(())
     }
 }

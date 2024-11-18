@@ -3,35 +3,23 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 use crate::Error;
 
 /// Tee
+// TODO: make sync
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, out)]
 pub struct Tee<T: Copy> {
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst1: Streamp<T>,
+    #[rustradio(out)]
     dst2: Streamp<T>,
 }
 
-impl<T: Copy> Tee<T> {
-    /// Create new Tee block.
-    pub fn new(src: Streamp<T>) -> Self {
-        Self {
-            src,
-            dst1: Stream::newp(),
-            dst2: Stream::newp(),
-        }
-    }
-    /// Return the output streams.
-    pub fn out(&self) -> (Streamp<T>, Streamp<T>) {
-        (self.dst1.clone(), self.dst2.clone())
-    }
-}
-
 impl<T: Copy> Block for Tee<T> {
-    fn block_name(&self) -> &str {
-        "Tee"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
         let mut o1 = self.dst1.write_buf()?;

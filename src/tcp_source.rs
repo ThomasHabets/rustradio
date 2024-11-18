@@ -12,9 +12,12 @@ use crate::stream::{Stream, Streamp};
 use crate::{Error, Sample};
 
 /// TCP Source, connecting to a server and streaming the data.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct TcpSource<T: Copy> {
     stream: std::net::TcpStream,
     buf: Vec<u8>,
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -38,9 +41,6 @@ impl<T> Block for TcpSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
-    fn block_name(&self) -> &str {
-        "TcpSource<T>"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         let size = T::size();

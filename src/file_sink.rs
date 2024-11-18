@@ -22,8 +22,11 @@ pub enum Mode {
 }
 
 /// Send stream to raw file.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct FileSink<T: Copy> {
     f: BufWriter<std::fs::File>,
+    #[rustradio(in)]
     src: Streamp<T>,
 }
 
@@ -56,9 +59,6 @@ impl<T> Block for FileSink<T>
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &str {
-        "FileSink"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
@@ -77,8 +77,11 @@ where
 }
 
 /// Send stream to raw file.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct NoCopyFileSink<T> {
     f: BufWriter<std::fs::File>,
+    #[rustradio(in)]
     src: NoCopyStreamp<T>,
 }
 
@@ -111,9 +114,6 @@ impl<T> Block for NoCopyFileSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &str {
-        "NoCopyFileSink"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         if let Some((s, _tags)) = self.src.pop() {
             // TODO: write tags.

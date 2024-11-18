@@ -2,33 +2,20 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, out)]
 pub struct RtlSdrDecode {
+    #[rustradio(in)]
     src: Streamp<u8>,
+    #[rustradio(out)]
     dst: Streamp<Complex>,
 }
 
-impl RtlSdrDecode {
-    /// Create new RTL SDR Decode block.
-    pub fn new(src: Streamp<u8>) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-        }
-    }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Complex> {
-        self.dst.clone()
-    }
-}
-
 impl Block for RtlSdrDecode {
-    fn block_name(&self) -> &str {
-        "RtlSdrDecode"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: handle tags.
         let (input, _tags) = self.src.read_buf()?;

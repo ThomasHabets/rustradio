@@ -19,11 +19,17 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 }
 
 /// Resample by a fractional amount.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct RationalResampler<T: Copy> {
     deci: i64,
     interp: i64,
     counter: i64,
+
+    #[rustradio(in)]
     src: Streamp<T>,
+
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -44,17 +50,9 @@ impl<T: Copy> RationalResampler<T> {
             dst: Stream::newp(),
         })
     }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
 impl<T: Copy> Block for RationalResampler<T> {
-    fn block_name(&self) -> &str {
-        "RationalResampler"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let mut o = self.dst.write_buf()?;

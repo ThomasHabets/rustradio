@@ -85,7 +85,10 @@ impl CpalOutput {
     }
 }
 
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct AudioSink {
+    #[rustradio(in)]
     src: Streamp<Float>,
     sender: SyncSender<f32>,
 
@@ -107,9 +110,6 @@ impl AudioSink {
 }
 
 impl Block for AudioSink {
-    fn block_name(&self) -> &str {
-        "AudioSink"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();

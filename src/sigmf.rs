@@ -222,6 +222,8 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
 }
 
 /// SigMF file source.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct SigMFSource<T: Copy> {
     // TODO: Can't continue to delegate reading the data, because tags.
     file_source: FileSource<T>,
@@ -305,9 +307,6 @@ impl<T> Block for SigMFSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
 {
-    fn block_name(&self) -> &str {
-        "SigMFSource"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         self.file_source.work()
     }

@@ -36,8 +36,12 @@ use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos, TagValue}
 use crate::{Error, Sample};
 
 /// Stream to PDU block.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct StreamToPdu<T> {
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: NoCopyStreamp<Vec<T>>,
     tag: String,
     buf: Vec<T>,
@@ -80,9 +84,6 @@ impl<T> Block for StreamToPdu<T>
 where
     T: Copy + Sample,
 {
-    fn block_name(&self) -> &str {
-        "StreamToPdu"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {

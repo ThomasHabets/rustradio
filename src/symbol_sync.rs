@@ -38,7 +38,11 @@ impl TED for TEDZeroCrossing {}
 /** Pluggable clock recovery block.
 
 Under development.
+
+TODO: handle EOF.
 */
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct SymbolSync {
     sps: Float,
     max_deviation: Float,
@@ -49,8 +53,11 @@ pub struct SymbolSync {
     stream_pos: Float,
     last_sym_boundary_pos: Float,
     next_sym_middle: Float,
+    #[rustradio(in)]
     src: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
+    #[rustradio(out)]
     out_clock: Option<Streamp<Float>>,
 }
 
@@ -97,9 +104,6 @@ impl SymbolSync {
 }
 
 impl Block for SymbolSync {
-    fn block_name(&self) -> &str {
-        "SymbolSync"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {

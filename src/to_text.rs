@@ -30,8 +30,11 @@ use crate::Error;
 ///
 /// Read from one or more streams, and produce a text file where each
 /// line is one sample per stream, separated by spaces.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct ToText<T: Copy> {
     srcs: Vec<Streamp<T>>,
+    #[rustradio(out)]
     dst: Streamp<u8>,
 }
 
@@ -43,17 +46,9 @@ impl<T: Copy> ToText<T> {
             dst: Stream::newp(),
         }
     }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<u8> {
-        self.dst.clone()
-    }
 }
 
 impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
-    fn block_name(&self) -> &str {
-        "ToText"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: This implementation locks and unlocks a lot, as it
         // aquires samples.  Ideally it should process

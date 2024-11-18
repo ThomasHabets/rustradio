@@ -10,11 +10,14 @@ use crate::stream::{Stream, Streamp};
 use crate::{Error, Sample};
 
 /// Read stream from raw file.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct FileSource<T: Copy> {
     filename: String,
     f: BufReader<std::fs::File>,
     repeat: bool,
     buf: Vec<u8>,
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -31,19 +34,12 @@ impl<T: Default + Copy> FileSource<T> {
             dst: Stream::newp(),
         })
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
 impl<T> Block for FileSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
-    fn block_name(&self) -> &str {
-        "FileSource"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         let sample_size = T::size();

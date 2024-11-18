@@ -134,6 +134,7 @@ impl<T: Len> NoCopyStream<T> {
 
 impl<T: Copy> Stream<T> {
     /// Create a new stream with initial data in it.
+    #[cfg(test)]
     pub fn from_slice(data: &[T]) -> Self {
         let circ = circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(); // TODO
         let mut wb = circ.write_buf().unwrap();
@@ -143,6 +144,7 @@ impl<T: Copy> Stream<T> {
     }
 
     /// Create a new Arc<Streamp> with contents.
+    #[cfg(test)]
     pub fn fromp_slice(data: &[T]) -> Streamp<T> {
         Arc::new(Stream::from_slice(data))
     }

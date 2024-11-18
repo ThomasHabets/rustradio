@@ -37,16 +37,21 @@ use crate::stream::{Stream, Streamp, Tag, TagValue};
 use crate::{Error, Float};
 
 /// Burst tagger:
-pub struct BurstTagger<T> {
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
+pub struct BurstTagger<T: Copy> {
+    #[rustradio(in)]
     src: Streamp<T>,
     threshold: Float,
+    #[rustradio(in)]
     trigger: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<T>,
     tag: String,
     last: bool,
 }
 
-impl<T> BurstTagger<T> {
+impl<T: Copy> BurstTagger<T> {
     /// Create new burst tagger.
     ///
     /// * src: Source data stream, will pass through and get tags.
@@ -63,21 +68,9 @@ impl<T> BurstTagger<T> {
             last: false,
         }
     }
-
-    /// Get output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
-impl<T> Block for BurstTagger<T>
-where
-    T: Copy,
-{
-    fn block_name(&self) -> &str {
-        "Burst Tagger"
-    }
-
+impl<T: Copy> Block for BurstTagger<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, mut tags) = self.src.read_buf()?;
         let (trigger, _) = self.trigger.read_buf()?;

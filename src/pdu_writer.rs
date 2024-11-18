@@ -21,7 +21,10 @@ use crate::{Error, Sample};
 This block takes PDUs (as Vec<u8>), and writes them to an output
 directory, named as microseconds since epoch.
 */
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct PduWriter<T> {
+    #[rustradio(in)]
     src: NoCopyStreamp<Vec<T>>,
     dir: PathBuf,
     files_written: usize,
@@ -48,9 +51,6 @@ impl<T> Block for PduWriter<T>
 where
     T: Sample,
 {
-    fn block_name(&self) -> &str {
-        "PDU Writer"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let packet = match self.src.pop() {
             None => return Ok(BlockRet::Noop),

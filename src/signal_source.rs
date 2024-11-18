@@ -6,7 +6,10 @@ use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
 /// Generate a pure complex sine wave.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct SignalSourceComplex {
+    #[rustradio(out)]
     dst: Streamp<Complex>,
 
     amplitude: Float,
@@ -46,9 +49,6 @@ impl Iterator for SignalSourceComplex {
 }
 
 impl Block for SignalSourceComplex {
-    fn block_name(&self) -> &str {
-        "SignalSourceComplex"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let obind = self.dst.clone();
         let mut o = obind.write_buf()?;
@@ -65,7 +65,10 @@ impl Block for SignalSourceComplex {
 ///
 /// TODO: not an efficient implementation, and duplicates code with the Complex
 /// version.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct SignalSourceFloat {
+    #[rustradio(out)]
     dst: Streamp<Float>,
     amplitude: Float,
     rad_per_sample: f64,
@@ -98,9 +101,6 @@ impl Iterator for SignalSourceFloat {
 }
 
 impl Block for SignalSourceFloat {
-    fn block_name(&self) -> &str {
-        "SignalSourceFloat"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let obind = self.dst.clone();
         let mut o = obind.write_buf()?;

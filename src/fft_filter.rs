@@ -38,6 +38,8 @@ use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct FftFilter {
     buf: Vec<Complex>,
     taps_fft: Vec<Complex>,
@@ -46,7 +48,9 @@ pub struct FftFilter {
     tail: Vec<Complex>,
     fft: Arc<dyn rustfft::Fft<Float>>,
     ifft: Arc<dyn rustfft::Fft<Float>>,
+    #[rustradio(in)]
     src: Streamp<Complex>,
+    #[rustradio(out)]
     dst: Streamp<Complex>,
 }
 
@@ -95,16 +99,9 @@ impl FftFilter {
             nsamples,
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Complex> {
-        self.dst.clone()
-    }
 }
 
 impl Block for FftFilter {
-    fn block_name(&self) -> &str {
-        "FftFilter"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut produced = false;
         loop {
@@ -195,9 +192,13 @@ impl Block for FftFilter {
 /// FftFilter hiding under a trenchcoat. Counter intuitively
 /// therefore, this Float version of the FftFilter has a little worse
 /// performance than the Complex filter.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct FftFilterFloat {
     complex: FftFilter,
+    #[rustradio(in)]
     src: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
     inner_in: Streamp<Complex>,
     inner_out: Streamp<Complex>,
@@ -218,16 +219,9 @@ impl FftFilterFloat {
             inner_out,
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Float> {
-        self.dst.clone()
-    }
 }
 
 impl Block for FftFilterFloat {
-    fn block_name(&self) -> &str {
-        "FftFilterFloat"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         // Convert input to Complex.
         {

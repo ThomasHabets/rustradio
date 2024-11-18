@@ -7,6 +7,8 @@ use crate::stream::{NoCopyStreamp, Stream, Streamp};
 use crate::Error;
 
 /// Block for vector to stream.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct VecToStream<T> {
     src: NoCopyStreamp<Vec<T>>,
     dst: Streamp<T>,
@@ -27,9 +29,6 @@ impl<T> VecToStream<T> {
 }
 
 impl<T: Copy> Block for VecToStream<T> {
-    fn block_name(&self) -> &str {
-        "VecToStream"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let n = match self.src.peek_size() {
             None => return Ok(BlockRet::Noop),

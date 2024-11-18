@@ -27,30 +27,23 @@ QuadratureDemod by about 4x.
 use anyhow::Result;
 
 use crate::stream::{Stream, Streamp};
-use crate::{map_block_convert_macro, Complex, Float};
+use crate::{Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, new, sync)]
 pub struct QuadratureDemod {
     gain: Float,
+    #[rustradio(default)]
     last: Complex,
+    #[rustradio(in)]
     src: Streamp<Complex>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
 }
 
 impl QuadratureDemod {
-    /// Create new QuadratureDemod block.
-    ///
-    /// Gain is just used to scale the value, and can be set to 1.0 if
-    /// you don't care about the scale.
-    pub fn new(src: Streamp<Complex>, gain: Float) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            gain,
-            last: Complex::default(),
-        }
-    }
-    fn process_one(&mut self, s: Complex) -> Float {
+    fn process_sync(&mut self, s: Complex) -> Float {
         let t = s * self.last.conj();
         self.last = s;
 
@@ -61,7 +54,6 @@ impl QuadratureDemod {
         return self.gain * t.im.atan2(t.re);
     }
 }
-map_block_convert_macro![QuadratureDemod, Float];
 
 /// A faster version of FM demodulation, that makes some assumptions.
 ///
@@ -91,8 +83,12 @@ map_block_convert_macro![QuadratureDemod, Float];
 ///
 /// Lyons has an more general version of this algorithm, also on page
 /// 760, but it's not implemented here.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, sync)]
 pub struct FastFM {
+    #[rustradio(in)]
     src: Streamp<Complex>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
     q1: Complex,
     q2: Complex,
@@ -109,7 +105,7 @@ impl FastFM {
         }
     }
 
-    fn process_one(&mut self, s: Complex) -> Float {
+    fn process_sync(&mut self, s: Complex) -> Float {
         let top = (s.im - self.q2.im) * self.q1.re;
         let bottom = (s.re - self.q2.re) * self.q1.im;
         self.q2 = self.q1;
@@ -117,4 +113,3 @@ impl FastFM {
         top - bottom
     }
 }
-map_block_convert_macro![FastFM, Float];

@@ -147,8 +147,12 @@ enum State {
 }
 
 /// IL2P deframer block
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct Il2pDeframer {
+    #[rustradio(in)]
     src: Streamp<u8>,
+    #[rustradio(out)]
     dst: NoCopyStreamp<Vec<u8>>,
     decoded: usize,
     state: State,
@@ -176,9 +180,6 @@ impl Il2pDeframer {
 }
 
 impl Block for Il2pDeframer {
-    fn block_name(&self) -> &str {
-        "IL2P Deframer"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {

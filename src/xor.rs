@@ -1,44 +1,28 @@
 //! Xor two streams.
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 use crate::Error;
 
 /// Xors a constant value to every sample.
+// TODO: make this sync
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, out)]
 pub struct Xor<T>
 where
     T: Copy,
 {
+    #[rustradio(in)]
     a: Streamp<T>,
+    #[rustradio(in)]
     b: Streamp<T>,
+    #[rustradio(out)]
     dst: Streamp<T>,
-}
-
-impl<T> Xor<T>
-where
-    T: Copy + std::ops::BitXor<Output = T>,
-{
-    /// Create a new XorConst, providing the constant to be xored.
-    pub fn new(a: Streamp<T>, b: Streamp<T>) -> Self {
-        Self {
-            a,
-            b,
-            dst: Stream::newp(),
-        }
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
 impl<T> Block for Xor<T>
 where
     T: Copy + std::ops::BitXor<Output = T>,
 {
-    fn block_name(&self) -> &str {
-        "XOR"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (a, tags) = self.a.read_buf()?;
         let (b, _tags) = self.b.read_buf()?;

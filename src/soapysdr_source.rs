@@ -97,8 +97,11 @@ impl SoapySdrSourceBuilder {
 }
 
 /// SoapySDR source.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct SoapySdrSource {
     stream: soapysdr::RxStream<Complex>,
+    #[rustradio(out)]
     dst: Streamp<Complex>,
 }
 
@@ -109,17 +112,7 @@ fn ai_string(ai: &soapysdr::ArgInfo) -> String {
     )
 }
 
-impl SoapySdrSource {
-    /// Get output stream.
-    pub fn out(&self) -> Streamp<Complex> {
-        self.dst.clone()
-    }
-}
-
 impl Block for SoapySdrSource {
-    fn block_name(&self) -> &str {
-        "SoapySdrSource"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let timeout_us = 10_000;
         let mut o = self.dst.write_buf()?;

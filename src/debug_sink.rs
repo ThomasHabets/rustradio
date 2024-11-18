@@ -9,24 +9,17 @@ use crate::Error;
 
 /// Nocopy version of DebugSink.
 // TODO: maybe merge with DebugSink using an enum?
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
 pub struct DebugSinkNoCopy<T> {
+    #[rustradio(in)]
     src: NoCopyStreamp<T>,
-}
-
-impl<T> DebugSinkNoCopy<T> {
-    /// Create new debug block.
-    pub fn new(src: NoCopyStreamp<T>) -> Self {
-        Self { src }
-    }
 }
 
 impl<T> Block for DebugSinkNoCopy<T>
 where
     T: std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &str {
-        "DebugSinkNoCopy"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (v, _tags) = match self.src.pop() {
             None => return Ok(BlockRet::Noop),
@@ -50,14 +43,19 @@ where
 }
 
 /// Debug filter turning samples into strings.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct DebugFilter<T>
 where
     T: Copy,
 {
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: NoCopyStreamp<String>,
 }
 
+// TODO: fix derive macro so that new() can be generated.
 impl<T> DebugFilter<T>
 where
     T: Copy,
@@ -69,19 +67,12 @@ where
             dst: NoCopyStream::newp(),
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> NoCopyStreamp<String> {
-        self.dst.clone()
-    }
 }
 
 impl<T> Block for DebugFilter<T>
 where
     T: Copy + std::fmt::Debug,
 {
-    fn block_name(&self) -> &str {
-        "DebugFilter"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
 
@@ -112,31 +103,22 @@ where
 }
 
 /// Print values to stdout, for debugging.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
 pub struct DebugSink<T>
 where
     T: Copy,
 {
+    #[rustradio(in)]
     src: Streamp<T>,
 }
 
-#[allow(clippy::new_without_default)]
-impl<T> DebugSink<T>
-where
-    T: Copy,
-{
-    /// Create new debug block.
-    pub fn new(src: Streamp<T>) -> Self {
-        Self { src }
-    }
-}
+//#[allow(clippy::new_without_default)]
 
 impl<T> Block for DebugSink<T>
 where
     T: Copy + std::fmt::Debug + Default,
 {
-    fn block_name(&self) -> &str {
-        "DebugSink"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
 

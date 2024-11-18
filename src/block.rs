@@ -51,16 +51,18 @@ pub enum BlockRet {
     InternalAwaiting,
 }
 
-/// Block trait, that must be implemented for all blocks.
-///
-/// Simpler blocks can use macros to avoid needing to implement `work()`.
-pub trait Block {
+pub trait BlockName {
     /// Name of block
     ///
     /// Not name of *instance* of block. But it may include the type. E.g.
     /// `FileSource<Float>`.
     fn block_name(&self) -> &str;
+}
 
+/// Block trait, that must be implemented for all blocks.
+///
+/// Simpler blocks can use macros to avoid needing to implement `work()`.
+pub trait Block: BlockName {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.
@@ -114,13 +116,18 @@ macro_rules! map_block_macro_v2 {
                 self.dst.clone()
             }
         }
-        impl<T> $crate::block::Block for $name
+        impl<T> $crate::block::BlockName for $name
         where
             T: Copy $(+$tr)*,
         {
             fn block_name(&self) -> &str {
                 stringify!{$name}
             }
+        }
+        impl<T> $crate::block::Block for $name
+        where
+            T: Copy $(+$tr)*,
+        {
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
                 // Bindings, since borrow checker won't let us call
                 // mut `process_one` if we borrow `src` and `dst`.
@@ -173,10 +180,12 @@ macro_rules! map_block_convert_macro {
             }
         }
 
-        impl $crate::block::Block for $name {
+        impl $crate::block::BlockName for $name {
             fn block_name(&self) -> &str {
                 stringify! {$name}
             }
+        }
+        impl $crate::block::Block for $name {
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
                 // Bindings, since borrow checker won't let us call
                 // mut `process_one` if we borrow `src` and `dst`.
@@ -227,10 +236,12 @@ macro_rules! map_block_convert_tag_macro {
             }
         }
 
-        impl $crate::block::Block for $name {
+        impl $crate::block::BlockName for $name {
             fn block_name(&self) -> &str {
                 stringify! {$name}
             }
+        }
+        impl $crate::block::Block for $name {
             fn work(&mut self) -> Result<$crate::block::BlockRet, $crate::Error> {
                 // Bindings, since borrow checker won't let us call
                 // mut `process_one` if we borrow `src` and `dst`.

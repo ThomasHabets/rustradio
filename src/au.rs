@@ -48,9 +48,15 @@ g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
 */
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct AuEncode {
     header: Option<Vec<u8>>,
+
+    #[rustradio(in)]
     src: Streamp<Float>,
+
+    #[rustradio(out)]
     dst: Streamp<u8>,
 }
 
@@ -97,16 +103,9 @@ impl AuEncode {
             dst: Stream::newp(),
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<u8> {
-        self.dst.clone()
-    }
 }
 
 impl Block for AuEncode {
-    fn block_name(&self) -> &str {
-        "AuEncode"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         if let Some(h) = &self.header {
@@ -154,8 +153,12 @@ enum DecodeState {
 ///
 /// Currently only accepts a very narrow header format of PCM16, mono,
 /// 44100 Hz.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct AuDecode {
+    #[rustradio(in)]
     src: Streamp<u8>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
     state: DecodeState,
     bitrate: u32,
@@ -171,16 +174,9 @@ impl AuDecode {
             state: DecodeState::WaitingMagic,
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Float> {
-        self.dst.clone()
-    }
 }
 
 impl Block for AuDecode {
-    fn block_name(&self) -> &str {
-        "AuDecode"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {

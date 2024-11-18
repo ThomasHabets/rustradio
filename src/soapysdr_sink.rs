@@ -88,15 +88,15 @@ impl SoapySdrSinkBuilder {
     }
 }
 
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct SoapySdrSink {
+    #[rustradio(in)]
     src: Streamp<Complex>,
     stream: soapysdr::TxStream<Complex>,
 }
 
 impl Block for SoapySdrSink {
-    fn block_name(&self) -> &str {
-        "SoapySdrSink"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let timeout_us = 10_000;
         let (i, _tags) = self.src.read_buf()?;

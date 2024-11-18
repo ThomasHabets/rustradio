@@ -44,10 +44,14 @@ where
 }
 
 /// Finite impulse response filter block.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -64,19 +68,12 @@ where
             fir: FIR::new(taps),
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
 impl<T> Block for FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    fn block_name(&self) -> &str {
-        "FirFilter"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;
         let mut out = self.dst.write_buf()?;
