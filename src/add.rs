@@ -1,15 +1,24 @@
 //! Add two streams.
-use crate::block::{Block, BlockRet};
+use crate::block::{AutoBlock, Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
+use rustradio_macros::Eof;
+
 /// Adds two streams, sample wise.
+#[derive(Eof)]
 pub struct Add<T>
 where
     T: Copy,
 {
+    /// Hello world.
+    #[rustradio(in)]
     a: Streamp<T>,
+
+    #[rustradio(in)]
     b: Streamp<T>,
+
+    #[rustradio(in)]
     dst: Streamp<T>,
 }
 

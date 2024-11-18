@@ -67,6 +67,14 @@ pub trait Block {
     fn work(&mut self) -> Result<BlockRet, Error>;
 }
 
+pub trait AutoBlock {
+    /// Return EOF status.
+    ///
+    /// Mutable because if eof, also set eof on output streams.
+    fn eof(&mut self) -> bool;
+    fn name(&self) -> &str;
+}
+
 /** Macro to make it easier to write one-for-one blocks.
 
 Output type must be the same as the input type.
