@@ -1,8 +1,35 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Data, Fields, Meta};
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
-#[proc_macro_derive(Eof, attributes(rustradio))]
+fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(attrs: I, name: &str) -> bool {
+    attrs.into_iter().any(|attr| {
+        let meta_list = match &attr.meta {
+            Meta::List(meta_list) => meta_list,
+            _ => return false,
+        };
+        //eprintln!("  {:?}", attr.meta);
+        if !meta_list.path.is_ident("rustradio") {
+            return false;
+        }
+        //eprintln!(" -> {:?}", meta_list.tokens);
+        for meta in meta_list.tokens.clone().into_iter() {
+            //eprintln!("meta: {:?}", meta);
+            match meta {
+                proc_macro2::TokenTree::Ident(ident) => {
+                    //eprintln!("ident! {ident:?}"),
+                    if ident.to_string() == name {
+                        return true;
+                    }
+                }
+                m => panic!("Unknown meta {m:?}"),
+            }
+        }
+        false
+    })
+}
+
+#[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_eof(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -21,60 +48,60 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     };
 
     let mut set_eofs = vec![];
+    let mut eof_checks = vec![];
+    let mut extra = vec![];
 
-    let checks = fields_named.named.into_iter().filter_map(|field| {
-        let field_name = field.ident?;
-        //eprintln!("{field_name}");
-        let has_in_attr = field.attrs.iter().any(|attr| {
-            let meta_list = match &attr.meta {
-                Meta::List(meta_list) => meta_list,
-                _ => return false,
-            };
-            //eprintln!("  {:?}", attr.meta);
-            if !meta_list.path.is_ident("rustradio") {
-                return false;
+    let mut ins = vec![];
+    let mut outs = vec![];
+    fields_named.named.into_iter().for_each(|field| {
+        let field_name = field.ident.clone().unwrap();
+        let found_in = has_attr(&field.attrs, "in");
+        let found_out = has_attr(&field.attrs, "out");
+        match (found_in, found_out) {
+            (true, true) => panic!("Field {field_name} marked both as input and output stream."),
+            (false, false) => panic!("Field {field_name} marked neither input nor output"),
+            (false, true) => {
+                set_eofs.push(quote! { self.#field_name.set_eof(); });
+                outs.push(field_name.clone());
             }
-            //eprintln!(" -> {:?}", meta_list.tokens);
-            let mut found_in = false;
-            let mut found_out = false;
-            for meta in meta_list.tokens.clone().into_iter() {
-                //eprintln!("meta: {:?}", meta);
-                match meta {
-                    proc_macro2::TokenTree::Ident(ident) => {
-                        //eprintln!("ident! {ident:?}"),
-                        match ident.to_string().as_str() {
-                            "in" => found_in = true,
-                            "out" => found_out = true,
-                            x => panic!("unknown attribute {x}"),
-                        }
-                    },
-                    m => panic!("Unknown meta {m:?}"),
-                }
+            (true, false) => {
+                eof_checks.push(quote! { self.#field_name.eof() });
+                ins.push(field_name);
             }
-            if found_out && found_in {
-                panic!("Field {field_name} marked both as input and output stream.");
-            }
-            if found_out {
-                set_eofs.push(quote! {
-                    self.#field_name.set_eof();
-                })
-            }
-            // TODO: if type stream and not in nor out, panic.
-            found_in
-        });
-        //eprintln!("has in attr? {has_in_attr}");
-        if has_in_attr {
-            Some(quote! {
-                self.#field_name.eof()
-            })
-        } else {
-            None
-        }
+        };
     });
     let fields_check = quote! {
-        true #(&& #checks)*
+        true #(&& #eof_checks)*
     };
     //eprintln!("check: {fields_check:?}");
+
+    if has_attr(&input.attrs, "new") {
+        extra.push(quote! {
+            impl<T> #struct_name<T>
+            where
+                T: Copy,
+            {
+                pub fn new(#(#ins: Streamp<T>),*) -> Self {
+                    Self {
+                    #(#ins),*,
+                    #(#outs: Stream::newp()),* }
+                }
+            }
+        });
+    }
+    if has_attr(&input.attrs, "new") {
+        let rval = (0..outs.len()).map(|_| quote! { Streamp<T> });
+        extra.push(quote! {
+            impl<T> #struct_name<T>
+            where
+                T: Copy,
+            {
+                pub fn out(&self) -> (#(#rval),*) {
+                    (#(self.#outs.clone()),*)
+                }
+            }
+        });
+    }
 
     // Generate the implementation of the `eof` function
     let expanded = quote! {
@@ -94,8 +121,8 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
                 }
             }
         }
+        #(#extra)*
     };
 
     TokenStream::from(expanded)
 }
-

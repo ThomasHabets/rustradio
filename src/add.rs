@@ -3,10 +3,9 @@ use crate::block::{AutoBlock, Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
-use rustradio_macros::Eof;
-
 /// Adds two streams, sample wise.
-#[derive(Eof)]
+#[derive(rustradio_macros::Block)]
+#[rustradio(new, out)]
 pub struct Add<T>
 where
     T: Copy,
@@ -18,27 +17,8 @@ where
     #[rustradio(in)]
     b: Streamp<T>,
 
-    #[rustradio(in)]
+    #[rustradio(out)]
     dst: Streamp<T>,
-}
-
-impl<T> Add<T>
-where
-    T: Copy + std::ops::Add<Output = T>,
-{
-    /// Create a new AddConst, providing the constant to be added.
-    pub fn new(a: Streamp<T>, b: Streamp<T>) -> Self {
-        Self {
-            a,
-            b,
-            dst: Stream::newp(),
-        }
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
 impl<T> Block for Add<T>
