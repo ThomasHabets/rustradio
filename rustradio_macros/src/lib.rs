@@ -1,3 +1,5 @@
+//! Derive macros for rustradio.
+//!
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
@@ -29,6 +31,10 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(attrs: I, name: &str) -> 
     })
 }
 
+/// TODO:
+/// * Support non-stream member variables in generated new()
+/// * Support all kings of type annotations (or none!)
+/// * Panic if given invalid attributes.
 #[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_eof(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -59,7 +65,9 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         let found_out = has_attr(&field.attrs, "out");
         match (found_in, found_out) {
             (true, true) => panic!("Field {field_name} marked both as input and output stream."),
-            (false, false) => panic!("Field {field_name} marked neither input nor output"),
+            (false, false) => {
+                // panic!("Field {field:?} marked neither input nor output");
+            }
             (false, true) => {
                 set_eofs.push(quote! { self.#field_name.set_eof(); });
                 outs.push(field_name.clone());
@@ -70,10 +78,6 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             }
         };
     });
-    let fields_check = quote! {
-        true #(&& #eof_checks)*
-    };
-    //eprintln!("check: {fields_check:?}");
 
     if has_attr(&input.attrs, "new") {
         extra.push(quote! {
@@ -103,7 +107,6 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         });
     }
 
-    // Generate the implementation of the `eof` function
     let expanded = quote! {
         impl<T> AutoBlock for #struct_name<T>
         where
@@ -113,7 +116,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
                 #name_str
             }
             fn eof(&mut self) -> bool {
-                if #fields_check {
+                if #(#eof_checks)&&* {
                     #(#set_eofs)*
                     true
                 } else {
@@ -123,6 +126,5 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         }
         #(#extra)*
     };
-
     TokenStream::from(expanded)
 }
