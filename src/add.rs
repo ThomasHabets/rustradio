@@ -3,7 +3,7 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
-/// Adds a constant value to every sample.
+/// Adds two streams, sample wise.
 pub struct Add<T>
 where
     T: Copy,
