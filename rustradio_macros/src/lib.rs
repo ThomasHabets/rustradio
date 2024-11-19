@@ -15,19 +15,13 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(attrs: I, name: &str) -> 
             return false;
         }
         //eprintln!(" -> {:?}", meta_list.tokens);
-        for meta in meta_list.tokens.clone().into_iter() {
+        meta_list.tokens.clone().into_iter().any(|meta| {
             //eprintln!("meta: {:?}", meta);
             match meta {
-                proc_macro2::TokenTree::Ident(ident) => {
-                    //eprintln!("ident! {ident:?}"),
-                    if ident.to_string() == name {
-                        return true;
-                    }
-                }
+                proc_macro2::TokenTree::Ident(ident) => ident.to_string() == name,
                 m => panic!("Unknown meta {m:?}"),
             }
-        }
-        false
+        })
     })
 }
 
