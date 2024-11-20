@@ -4,8 +4,10 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
+// See example at https://docs.rs/syn/latest/syn/struct.Attribute.html#method.parse_nested_meta and https://docs.rs/syn/latest/syn/meta/fn.parser.html
 fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(attrs: I, name: &str) -> bool {
     attrs.into_iter().any(|attr| {
+        //eprintln!("{:?}", attr);
         let meta_list = match &attr.meta {
             Meta::List(meta_list) => meta_list,
             _ => return false,
@@ -14,25 +16,24 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(attrs: I, name: &str) -> 
         if !meta_list.path.is_ident("rustradio") {
             return false;
         }
-        //eprintln!(" -> {:?}", meta_list.tokens);
-        meta_list.tokens.clone().into_iter().any(|meta| {
-            //eprintln!("meta: {:?}", meta);
-            match meta {
-                proc_macro2::TokenTree::Ident(ident) => ident.to_string() == name,
-                m => panic!("Unknown meta {m:?}"),
-            }
+        let mut found = false;
+        attr.parse_nested_meta(|meta| {
+            found |= meta.path.is_ident(name);
+            Ok(())
         })
+        .unwrap();
+        found
     })
 }
 
 /// TODO:
 /// * Support non-stream member variables in generated new()
-/// * Support all kings of type annotations (or none!)
+/// * Support all kinds of type annotations (or none!)
 /// * Panic if given invalid attributes.
 #[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_eof(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-
+    //eprintln!("{input:?}");
     let struct_name = input.ident;
     //eprintln!("struct name: {struct_name}");
     let name_str = struct_name.to_string();
@@ -52,7 +53,9 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     let mut extra = vec![];
 
     let mut ins = vec![];
+    let mut insty = vec![];
     let mut outs = vec![];
+    let mut outsty = vec![];
     fields_named.named.into_iter().for_each(|field| {
         let field_name = field.ident.clone().unwrap();
         let found_in = has_attr(&field.attrs, "in");
@@ -65,10 +68,14 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             (false, true) => {
                 set_eofs.push(quote! { self.#field_name.set_eof(); });
                 outs.push(field_name.clone());
+                let ty = field.ty;
+                outsty.push(quote! { #ty });
             }
             (true, false) => {
                 eof_checks.push(quote! { self.#field_name.eof() });
-                ins.push(field_name);
+                ins.push(field_name.clone());
+                let ty = field.ty;
+                insty.push(quote! { #field_name: #ty });
             }
         };
     });
@@ -79,7 +86,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             where
                 T: Copy,
             {
-                pub fn new(#(#ins: Streamp<T>),*) -> Self {
+                pub fn new(#(#insty),*) -> Self {
                     Self {
                     #(#ins),*,
                     #(#outs: Stream::newp()),* }
@@ -87,18 +94,19 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             }
         });
     }
-    if has_attr(&input.attrs, "new") {
-        let rval = (0..outs.len()).map(|_| quote! { Streamp<T> });
+    if has_attr(&input.attrs, "out") {
         extra.push(quote! {
             impl<T> #struct_name<T>
             where
                 T: Copy,
             {
-                pub fn out(&self) -> (#(#rval),*) {
+                pub fn out(&self) -> (#(#outsty),*) {
                     (#(self.#outs.clone()),*)
                 }
             }
         });
+    } else {
+        panic!("bleh");
     }
 
     let expanded = quote! {
@@ -110,7 +118,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
                 #name_str
             }
             fn eof(&mut self) -> bool {
-                if #(#eof_checks)&&* {
+                if true #(&&#eof_checks)* {
                     #(#set_eofs)*
                     true
                 } else {
