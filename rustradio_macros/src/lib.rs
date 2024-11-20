@@ -39,13 +39,12 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
     })
 }
 
-/// TODO:
-/// * Support all kinds of generic annotations (or none!)
-/// * Panic if given invalid attributes.
 #[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_eof(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    //eprintln!("{input:?}");
+    // eprintln!("{:?}", input.generics.split_for_impl());
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
     let struct_name = input.ident;
     //eprintln!("struct name: {struct_name}");
     let name_str = struct_name.to_string();
@@ -100,7 +99,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
 
     if has_attr(&input.attrs, "new", STRUCT_ATTRS) {
         extra.push(quote! {
-            impl<T: Copy> #struct_name<T> {
+            impl #impl_generics #struct_name #ty_generics #where_clause {
                 pub fn new(#(#insty),*,#(#otherty),*) -> Self {
                     Self {
                     #(#ins),*,
@@ -113,7 +112,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     }
     if has_attr(&input.attrs, "out", STRUCT_ATTRS) {
         extra.push(quote! {
-            impl<T: Copy> #struct_name<T> {
+            impl #impl_generics #struct_name #ty_generics #where_clause {
                 pub fn out(&self) -> (#(#outsty),*) {
                     (#(self.#outs.clone()),*)
                 }
@@ -126,12 +125,12 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     };
 
     let expanded = quote! {
-        impl<T: Copy> #path::BlockName for #struct_name<T> {
+        impl #impl_generics #path::BlockName for #struct_name #ty_generics #where_clause {
             fn block_name(&self) -> &str {
                 #name_str
             }
         }
-        impl<T: Copy> #path::BlockEOF for #struct_name<T> {
+        impl #impl_generics #path::BlockEOF for #struct_name #ty_generics #where_clause {
             fn eof(&mut self) -> bool {
                 if true #(&&#eof_checks)* {
                     #(#set_eofs)*

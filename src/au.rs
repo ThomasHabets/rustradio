@@ -11,7 +11,7 @@ It's also much simpler.
 
 use anyhow::Result;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
@@ -48,15 +48,15 @@ g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
 */
-// #[derive(rustradio_macros::Block)]
-// #[rustradio(crate)]
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct AuEncode {
     header: Option<Vec<u8>>,
 
-    // #[rustradio(in)]
+    #[rustradio(in)]
     src: Streamp<Float>,
 
-    // #[rustradio(out)]
+    #[rustradio(out)]
     dst: Streamp<u8>,
 }
 
@@ -109,11 +109,6 @@ impl AuEncode {
     }
 }
 
-impl BlockName for AuEncode {
-    fn block_name(&self) -> &str {
-        "AuEncode"
-    }
-}
 impl Block for AuEncode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
@@ -162,8 +157,12 @@ enum DecodeState {
 ///
 /// Currently only accepts a very narrow header format of PCM16, mono,
 /// 44100 Hz.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct AuDecode {
+    #[rustradio(in)]
     src: Streamp<u8>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
     state: DecodeState,
     bitrate: u32,
@@ -179,17 +178,8 @@ impl AuDecode {
             state: DecodeState::WaitingMagic,
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Float> {
-        self.dst.clone()
-    }
 }
 
-impl BlockName for AuDecode {
-    fn block_name(&self) -> &str {
-        "AuDecode"
-    }
-}
 impl Block for AuDecode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
