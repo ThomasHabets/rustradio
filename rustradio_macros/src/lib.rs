@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
-static STRUCT_ATTRS: &[&str] = &["new", "out", "crate"];
+static STRUCT_ATTRS: &[&str] = &["new", "out", "crate", "sync"];
 static FIELD_ATTRS: &[&str] = &["in", "out"];
 
 // See example at:
@@ -120,17 +120,49 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         });
     }
     let path = match has_attr(&input.attrs, "crate", STRUCT_ATTRS) {
-        true => quote! { crate::block },
-        false => quote! { rustradio::block },
+        true => quote! { crate },
+        false => quote! { rustradio },
     };
 
+    // Support sync blocks.
+    // TODO: no way this works with anything other than two inputs, and one output.
+    if has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
+        let first = ins[0].clone();
+        let ins = &ins[1..];
+        extra.push(quote! {
+            impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
+                fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
+                    let (#first, tags) = self.#first.read_buf()?;
+                    #(let (#ins, _) = self.#ins.read_buf()?;)*
+                    let n = std::cmp::min(#first.len(), #(#ins.len()),*);
+                    if n ==  0 {
+                        return Ok(#path::block::BlockRet::Noop);
+                    }
+                    #(let mut #outs = self.#outs.write_buf()?;)*
+                    let n = std::cmp::min(n, #(#outs.len()),*);
+                    let it = #first.iter().take(n)#(.zip(#ins.iter()))*.map(|x| {
+                        let (#first,#(#ins),*) = x;
+                        self.process_sync(*#first, #(*#ins),*)
+                    });
+                    for (samp, w) in it.zip(#(#outs.slice().iter_mut())*) {
+                        *w = samp;
+                    }
+                    #first.consume(n);
+                    #(#ins.consume(n);)*
+                    #(#outs.produce(n, &tags);)*
+                    Ok(#path::block::BlockRet::Ok)
+                }
+            }
+        });
+    }
+
     let expanded = quote! {
-        impl #impl_generics #path::BlockName for #struct_name #ty_generics #where_clause {
+        impl #impl_generics #path::block::BlockName for #struct_name #ty_generics #where_clause {
             fn block_name(&self) -> &str {
                 #name_str
             }
         }
-        impl #impl_generics #path::BlockEOF for #struct_name #ty_generics #where_clause {
+        impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
             fn eof(&mut self) -> bool {
                 if true #(&&#eof_checks)* {
                     #(#set_eofs)*
