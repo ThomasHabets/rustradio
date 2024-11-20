@@ -49,7 +49,7 @@ g.run()?;
 ```
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, out)]
 pub struct AuEncode {
     header: Option<Vec<u8>>,
 
@@ -102,10 +102,6 @@ impl AuEncode {
             src,
             dst: Stream::newp(),
         }
-    }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<u8> {
-        self.dst.clone()
     }
 }
 
