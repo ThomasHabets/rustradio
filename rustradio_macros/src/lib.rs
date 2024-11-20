@@ -39,6 +39,9 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
     })
 }
 
+// TODO:
+// * Allow specifying default value for non-streams in generated constructor.
+//   * Unlocks: AuDecode
 #[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_eof(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
