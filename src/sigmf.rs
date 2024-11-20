@@ -12,7 +12,7 @@ use std::io::Write;
 const DATATYPE_CF32: &str = "cf32";
 const VERSION: &str = "1.1.0";
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::file_source::FileSource;
 use crate::stream::Streamp;
 use crate::{Complex, Error, Float, Sample};
@@ -301,13 +301,18 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
     }
 }
 
-impl<T> Block for SigMFSource<T>
+impl<T> BlockName for SigMFSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
 {
     fn block_name(&self) -> &str {
         "SigMFSource"
     }
+}
+impl<T> Block for SigMFSource<T>
+where
+    T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         self.file_source.work()
     }

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos};
 use crate::Error;
 
@@ -20,13 +20,18 @@ impl<T> DebugSinkNoCopy<T> {
     }
 }
 
-impl<T> Block for DebugSinkNoCopy<T>
+impl<T> BlockName for DebugSinkNoCopy<T>
 where
     T: std::fmt::Debug + Default,
 {
     fn block_name(&self) -> &str {
         "DebugSinkNoCopy"
     }
+}
+impl<T> Block for DebugSinkNoCopy<T>
+where
+    T: std::fmt::Debug + Default,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (v, _tags) = match self.src.pop() {
             None => return Ok(BlockRet::Noop),
@@ -75,13 +80,18 @@ where
     }
 }
 
-impl<T> Block for DebugFilter<T>
+impl<T> BlockName for DebugFilter<T>
 where
     T: Copy + std::fmt::Debug,
 {
     fn block_name(&self) -> &str {
         "DebugFilter"
     }
+}
+impl<T> Block for DebugFilter<T>
+where
+    T: Copy + std::fmt::Debug,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
 
@@ -130,13 +140,18 @@ where
     }
 }
 
-impl<T> Block for DebugSink<T>
+impl<T> BlockName for DebugSink<T>
 where
     T: Copy + std::fmt::Debug + Default,
 {
     fn block_name(&self) -> &str {
         "DebugSink"
     }
+}
+impl<T> Block for DebugSink<T>
+where
+    T: Copy + std::fmt::Debug + Default,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
 

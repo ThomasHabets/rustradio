@@ -11,7 +11,7 @@ It's also much simpler.
 
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
@@ -48,9 +48,15 @@ g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
 */
+// #[derive(rustradio_macros::Block)]
+// #[rustradio(crate)]
 pub struct AuEncode {
     header: Option<Vec<u8>>,
+
+    // #[rustradio(in)]
     src: Streamp<Float>,
+
+    // #[rustradio(out)]
     dst: Streamp<u8>,
 }
 
@@ -103,10 +109,12 @@ impl AuEncode {
     }
 }
 
-impl Block for AuEncode {
+impl BlockName for AuEncode {
     fn block_name(&self) -> &str {
         "AuEncode"
     }
+}
+impl Block for AuEncode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         if let Some(h) = &self.header {
@@ -177,10 +185,12 @@ impl AuDecode {
     }
 }
 
-impl Block for AuDecode {
+impl BlockName for AuDecode {
     fn block_name(&self) -> &str {
         "AuDecode"
     }
+}
+impl Block for AuDecode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {

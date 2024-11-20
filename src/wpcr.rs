@@ -37,7 +37,7 @@ Drawbacks of this method:
  */
 use log::{debug, trace, warn};
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Tag, TagValue};
 use crate::{Complex, Error, Float};
 
@@ -59,11 +59,12 @@ impl Midpointer {
         self.dst.clone()
     }
 }
-impl Block for Midpointer {
+impl BlockName for Midpointer {
     fn block_name(&self) -> &str {
         "Midpointer"
     }
-
+}
+impl Block for Midpointer {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let v = match self.src.pop() {
             None => return Ok(BlockRet::Noop),
@@ -220,11 +221,12 @@ impl Wpcr {
     }
 }
 
-impl Block for Wpcr {
+impl BlockName for Wpcr {
     fn block_name(&self) -> &str {
         "WPCR"
     }
-
+}
+impl Block for Wpcr {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: handle tags.
         let x = match self.src.pop() {

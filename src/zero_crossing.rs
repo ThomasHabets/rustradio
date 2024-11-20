@@ -1,7 +1,7 @@
 //! Very simple clock recovery.
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
@@ -66,10 +66,12 @@ impl ZeroCrossing {
     }
 }
 
-impl Block for ZeroCrossing {
+impl BlockName for ZeroCrossing {
     fn block_name(&self) -> &str {
         "ZeroCrossing"
     }
+}
+impl Block for ZeroCrossing {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {

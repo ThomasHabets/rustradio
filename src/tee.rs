@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
@@ -28,10 +28,12 @@ impl<T: Copy> Tee<T> {
     }
 }
 
-impl<T: Copy> Block for Tee<T> {
+impl<T: Copy> BlockName for Tee<T> {
     fn block_name(&self) -> &str {
         "Tee"
     }
+}
+impl<T: Copy> Block for Tee<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
         let mut o1 = self.dst1.write_buf()?;

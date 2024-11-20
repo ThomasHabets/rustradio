@@ -12,7 +12,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::NoCopyStreamp;
 use crate::{Error, Sample};
 
@@ -44,13 +44,18 @@ impl<T> PduWriter<T> {
     }
 }
 
-impl<T> Block for PduWriter<T>
+impl<T> BlockName for PduWriter<T>
 where
     T: Sample,
 {
     fn block_name(&self) -> &str {
         "PDU Writer"
     }
+}
+impl<T> Block for PduWriter<T>
+where
+    T: Sample,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let packet = match self.src.pop() {
             None => return Ok(BlockRet::Noop),

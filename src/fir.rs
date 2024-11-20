@@ -6,7 +6,7 @@ Use FftFilter if many taps are used, for better performance.
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
@@ -70,13 +70,18 @@ where
     }
 }
 
-impl<T> Block for FIRFilter<T>
+impl<T> BlockName for FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     fn block_name(&self) -> &str {
         "FirFilter"
     }
+}
+impl<T> Block for FIRFilter<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;
         let mut out = self.dst.write_buf()?;

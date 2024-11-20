@@ -1,7 +1,7 @@
 //! Generate values from a fixed vector.
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp, Tag, TagValue};
 use crate::Error;
 
@@ -79,13 +79,15 @@ impl<T: Copy> VectorSource<T> {
     }
 }
 
+impl<T: Copy> BlockName for VectorSource<T> {
+    fn block_name(&self) -> &str {
+        "VectorSource"
+    }
+}
 impl<T> Block for VectorSource<T>
 where
     T: Copy,
 {
-    fn block_name(&self) -> &str {
-        "VectorSource"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         if let Repeat::Finite(repeat) = self.repeat {
             if self.repeat_count == repeat {

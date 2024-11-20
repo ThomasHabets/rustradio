@@ -5,7 +5,7 @@ use std::io::Write;
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{NoCopyStreamp, Streamp};
 use crate::{Error, Sample};
 
@@ -52,13 +52,18 @@ impl<T: Copy> FileSink<T> {
     }
 }
 
-impl<T> Block for FileSink<T>
+impl<T> BlockName for FileSink<T>
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {
     fn block_name(&self) -> &str {
         "FileSink"
     }
+}
+impl<T> Block for FileSink<T>
+where
+    T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
@@ -107,13 +112,18 @@ impl<T> NoCopyFileSink<T> {
     }
 }
 
-impl<T> Block for NoCopyFileSink<T>
+impl<T> BlockName for NoCopyFileSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Default,
 {
     fn block_name(&self) -> &str {
         "NoCopyFileSink"
     }
+}
+impl<T> Block for NoCopyFileSink<T>
+where
+    T: Sample<Type = T> + std::fmt::Debug + Default,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         if let Some((s, _tags)) = self.src.pop() {
             // TODO: write tags.

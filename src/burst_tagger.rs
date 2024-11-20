@@ -32,7 +32,7 @@ let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
 
  */
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp, Tag, TagValue};
 use crate::{Error, Float};
 
@@ -70,14 +70,19 @@ impl<T> BurstTagger<T> {
     }
 }
 
-impl<T> Block for BurstTagger<T>
+impl<T> BlockName for BurstTagger<T>
 where
     T: Copy,
 {
     fn block_name(&self) -> &str {
         "Burst Tagger"
     }
+}
 
+impl<T> Block for BurstTagger<T>
+where
+    T: Copy,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, mut tags) = self.src.read_buf()?;
         let (trigger, _) = self.trigger.read_buf()?;

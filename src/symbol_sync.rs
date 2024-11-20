@@ -7,7 +7,7 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::iir_filter::CappedFilter;
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
@@ -96,10 +96,12 @@ impl SymbolSync {
     }
 }
 
-impl Block for SymbolSync {
+impl BlockName for SymbolSync {
     fn block_name(&self) -> &str {
         "SymbolSync"
     }
+}
+impl Block for SymbolSync {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {

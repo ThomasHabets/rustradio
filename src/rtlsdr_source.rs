@@ -18,7 +18,7 @@ use std::thread;
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
@@ -112,10 +112,12 @@ impl RtlSdrSource {
     }
 }
 
-impl Block for RtlSdrSource {
+impl BlockName for RtlSdrSource {
     fn block_name(&self) -> &str {
         "RtlSdrSource"
     }
+}
+impl Block for RtlSdrSource {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {

@@ -1,7 +1,7 @@
 //! Generate a pure signal.
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
@@ -45,10 +45,12 @@ impl Iterator for SignalSourceComplex {
     }
 }
 
-impl Block for SignalSourceComplex {
+impl BlockName for SignalSourceComplex {
     fn block_name(&self) -> &str {
         "SignalSourceComplex"
     }
+}
+impl Block for SignalSourceComplex {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let obind = self.dst.clone();
         let mut o = obind.write_buf()?;
@@ -97,10 +99,12 @@ impl Iterator for SignalSourceFloat {
     }
 }
 
-impl Block for SignalSourceFloat {
+impl BlockName for SignalSourceFloat {
     fn block_name(&self) -> &str {
         "SignalSourceFloat"
     }
+}
+impl Block for SignalSourceFloat {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let obind = self.dst.clone();
         let mut o = obind.write_buf()?;

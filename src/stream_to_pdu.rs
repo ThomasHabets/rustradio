@@ -31,7 +31,7 @@ use std::collections::HashMap;
 
 use log::{debug, trace};
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos, TagValue};
 use crate::{Error, Sample};
 
@@ -76,13 +76,18 @@ fn get_tag_val_bool(tags: &HashMap<(TagPos, String), Tag>, pos: TagPos, key: &st
     }
 }
 
-impl<T> Block for StreamToPdu<T>
+impl<T> BlockName for StreamToPdu<T>
 where
     T: Copy + Sample,
 {
     fn block_name(&self) -> &str {
         "StreamToPdu"
     }
+}
+impl<T> Block for StreamToPdu<T>
+where
+    T: Copy + Sample,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {

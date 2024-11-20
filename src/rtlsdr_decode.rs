@@ -1,7 +1,7 @@
 //! Decode RTL-SDR's byte based format into Complex I/Q.
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
@@ -25,10 +25,12 @@ impl RtlSdrDecode {
     }
 }
 
-impl Block for RtlSdrDecode {
+impl BlockName for RtlSdrDecode {
     fn block_name(&self) -> &str {
         "RtlSdrDecode"
     }
+}
+impl Block for RtlSdrDecode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: handle tags.
         let (input, _tags) = self.src.read_buf()?;

@@ -1,16 +1,15 @@
 //! Add two streams.
-use crate::block::{AutoBlock, Block, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Adds two streams, sample wise.
 #[derive(rustradio_macros::Block)]
-#[rustradio(new, out)]
+#[rustradio(crate, new, out)]
 pub struct Add<T>
 where
     T: Copy,
 {
-    //t: u32,
     /// Hello world.
     #[rustradio(in)]
     a: Streamp<T>,
@@ -26,9 +25,6 @@ impl<T> Block for Add<T>
 where
     T: Copy + std::ops::Add<Output = T>,
 {
-    fn block_name(&self) -> &str {
-        "Add"
-    }
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (a, tags) = self.a.read_buf()?;
         let (b, _tags) = self.b.read_buf()?;

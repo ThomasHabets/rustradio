@@ -22,7 +22,7 @@ g.add(Box::new(sink));
 */
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
@@ -50,10 +50,12 @@ impl<T: Copy> ToText<T> {
     }
 }
 
-impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
+impl<T: Copy + std::fmt::Debug> BlockName for ToText<T> {
     fn block_name(&self) -> &str {
         "ToText"
     }
+}
+impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: This implementation locks and unlocks a lot, as it
         // aquires samples.  Ideally it should process

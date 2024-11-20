@@ -1,5 +1,5 @@
 //! Xor two streams.
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
@@ -32,13 +32,18 @@ where
     }
 }
 
-impl<T> Block for Xor<T>
+impl<T> BlockName for Xor<T>
 where
     T: Copy + std::ops::BitXor<Output = T>,
 {
     fn block_name(&self) -> &str {
         "XOR"
     }
+}
+impl<T> Block for Xor<T>
+where
+    T: Copy + std::ops::BitXor<Output = T>,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (a, tags) = self.a.read_buf()?;
         let (b, _tags) = self.b.read_buf()?;

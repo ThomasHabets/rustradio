@@ -9,7 +9,7 @@ therefore [APRS][aprs].
  */
 use log::{debug, info, trace};
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagValue};
 use crate::{Error, Result};
 
@@ -226,11 +226,12 @@ impl HdlcDeframer {
     }
 }
 
-impl Block for HdlcDeframer {
+impl BlockName for HdlcDeframer {
     fn block_name(&self) -> &str {
         "HDLC Deframer"
     }
-
+}
+impl Block for HdlcDeframer {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let ti = self.src.clone();
         let (input, _tags) = ti.read_buf()?;

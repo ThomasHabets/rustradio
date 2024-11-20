@@ -12,7 +12,7 @@ This implementation is a pretty inefficient.
 [wiki]: https://en.wikipedia.org/wiki/Hilbert_transform
 */
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::fir::FIR;
 use crate::stream::{Stream, Streamp};
 use crate::window::WindowType;
@@ -47,10 +47,12 @@ impl Hilbert {
     }
 }
 
-impl Block for Hilbert {
+impl BlockName for Hilbert {
     fn block_name(&self) -> &str {
         "Hilbert"
     }
+}
+impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet, Error> {
         assert_eq!(self.ntaps, self.history.len());
         let (i, tags) = self.src.read_buf()?;

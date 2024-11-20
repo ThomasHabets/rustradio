@@ -1,7 +1,7 @@
 //! Blocks for converting from one type to another.
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 use crate::{Complex, Float};
@@ -78,7 +78,7 @@ where
         &self.name
     }
 }
-impl<In, Out, F> Block for Map<In, Out, F>
+impl<In, Out, F> BlockName for Map<In, Out, F>
 where
     In: Copy,
     Out: Copy,
@@ -87,6 +87,13 @@ where
     fn block_name(&self) -> &str {
         &self.name
     }
+}
+impl<In, Out, F> Block for Map<In, Out, F>
+where
+    In: Copy,
+    Out: Copy,
+    F: Fn(In) -> Out,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         // Bindings, since borrow checker won't let us call
         // mut `process_one` if we borrow `src` and `dst`.
@@ -138,10 +145,12 @@ impl FloatToComplex {
     }
 }
 
-impl Block for FloatToComplex {
+impl BlockName for FloatToComplex {
     fn block_name(&self) -> &str {
         "FloatToComplex"
     }
+}
+impl Block for FloatToComplex {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (a, tags) = self.re.read_buf()?;
         let (b, _) = self.im.read_buf()?;

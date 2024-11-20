@@ -7,7 +7,7 @@ use std::io::Read;
 use anyhow::Result;
 use log::warn;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Sample};
 
@@ -34,13 +34,18 @@ impl<T: Copy + Default> TcpSource<T> {
     }
 }
 
-impl<T> Block for TcpSource<T>
+impl<T> BlockName for TcpSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
     fn block_name(&self) -> &str {
         "TcpSource<T>"
     }
+}
+impl<T> Block for TcpSource<T>
+where
+    T: Sample<Type = T> + Copy + std::fmt::Debug,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         let size = T::size();

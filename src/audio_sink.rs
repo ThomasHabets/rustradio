@@ -3,7 +3,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Sample;
 use log::{debug, error, info, trace};
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::Streamp;
 use crate::{Error, Float};
 
@@ -106,10 +106,12 @@ impl AudioSink {
     }
 }
 
-impl Block for AudioSink {
+impl BlockName for AudioSink {
     fn block_name(&self) -> &str {
         "AudioSink"
     }
+}
+impl Block for AudioSink {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();

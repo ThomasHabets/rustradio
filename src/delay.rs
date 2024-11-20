@@ -2,7 +2,7 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
@@ -45,13 +45,18 @@ impl<T: Copy> Delay<T> {
     }
 }
 
-impl<T> Block for Delay<T>
+impl<T> BlockName for Delay<T>
 where
     T: Copy + Default,
 {
     fn block_name(&self) -> &str {
         "Delay"
     }
+}
+impl<T> Block for Delay<T>
+where
+    T: Copy + Default,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         {
             let o = self.dst.write_buf()?;

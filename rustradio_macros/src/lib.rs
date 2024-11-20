@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
-static STRUCT_ATTRS: &[&str] = &["new", "out"];
+static STRUCT_ATTRS: &[&str] = &["new", "out", "crate"];
 static FIELD_ATTRS: &[&str] = &["in", "out"];
 
 // See example at:
@@ -100,10 +100,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
 
     if has_attr(&input.attrs, "new", STRUCT_ATTRS) {
         extra.push(quote! {
-            impl<T> #struct_name<T>
-            where
-                T: Copy,
-            {
+            impl<T: Copy> #struct_name<T> {
                 pub fn new(#(#insty),*,#(#otherty),*) -> Self {
                     Self {
                     #(#ins),*,
@@ -116,25 +113,25 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     }
     if has_attr(&input.attrs, "out", STRUCT_ATTRS) {
         extra.push(quote! {
-            impl<T> #struct_name<T>
-            where
-                T: Copy,
-            {
+            impl<T: Copy> #struct_name<T> {
                 pub fn out(&self) -> (#(#outsty),*) {
                     (#(self.#outs.clone()),*)
                 }
             }
         });
     }
+    let path = match has_attr(&input.attrs, "crate", STRUCT_ATTRS) {
+        true => quote! { crate::block },
+        false => quote! { rustradio::block },
+    };
 
     let expanded = quote! {
-        impl<T> AutoBlock for #struct_name<T>
-        where
-            T: Copy,
-        {
-            fn name(&self) -> &str {
+        impl<T: Copy> #path::BlockName for #struct_name<T> {
+            fn block_name(&self) -> &str {
                 #name_str
             }
+        }
+        impl<T: Copy> #path::BlockEOF for #struct_name<T> {
             fn eof(&mut self) -> bool {
                 if true #(&&#eof_checks)* {
                     #(#set_eofs)*

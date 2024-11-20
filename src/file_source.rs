@@ -5,7 +5,7 @@ use std::io::Read;
 use anyhow::Result;
 use log::{debug, trace, warn};
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Sample};
 
@@ -37,13 +37,18 @@ impl<T: Default + Copy> FileSource<T> {
     }
 }
 
-impl<T> Block for FileSource<T>
+impl<T> BlockName for FileSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
     fn block_name(&self) -> &str {
         "FileSource"
     }
+}
+impl<T> Block for FileSource<T>
+where
+    T: Sample<Type = T> + Copy + std::fmt::Debug,
+{
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         let sample_size = T::size();

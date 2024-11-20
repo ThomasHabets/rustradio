@@ -2,7 +2,7 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error};
 
@@ -116,10 +116,12 @@ impl SoapySdrSource {
     }
 }
 
-impl Block for SoapySdrSource {
+impl BlockName for SoapySdrSource {
     fn block_name(&self) -> &str {
         "SoapySdrSource"
     }
+}
+impl Block for SoapySdrSource {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let timeout_us = 10_000;
         let mut o = self.dst.write_buf()?;

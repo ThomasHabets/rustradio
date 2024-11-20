@@ -4,7 +4,7 @@ use anyhow::Result;
 use log::debug;
 use soapysdr::Direction;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::Streamp;
 use crate::{Complex, Error};
 
@@ -93,10 +93,12 @@ pub struct SoapySdrSink {
     stream: soapysdr::TxStream<Complex>,
 }
 
-impl Block for SoapySdrSink {
+impl BlockName for SoapySdrSink {
     fn block_name(&self) -> &str {
         "SoapySdrSink"
     }
+}
+impl Block for SoapySdrSink {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let timeout_us = 10_000;
         let (i, _tags) = self.src.read_buf()?;

@@ -33,7 +33,7 @@ use anyhow::Result;
 use log::trace;
 use rustfft::FftPlanner;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error, Float};
 
@@ -101,10 +101,12 @@ impl FftFilter {
     }
 }
 
-impl Block for FftFilter {
+impl BlockName for FftFilter {
     fn block_name(&self) -> &str {
         "FftFilter"
     }
+}
+impl Block for FftFilter {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut produced = false;
         loop {
@@ -224,10 +226,12 @@ impl FftFilterFloat {
     }
 }
 
-impl Block for FftFilterFloat {
+impl BlockName for FftFilterFloat {
     fn block_name(&self) -> &str {
         "FftFilterFloat"
     }
+}
+impl Block for FftFilterFloat {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // Convert input to Complex.
         {

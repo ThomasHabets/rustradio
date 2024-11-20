@@ -2,7 +2,7 @@
 
 Turn stream of e.g. `Vec<u8>` to stream of `u8`.
  */
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{NoCopyStreamp, Stream, Streamp};
 use crate::Error;
 
@@ -26,10 +26,12 @@ impl<T> VecToStream<T> {
     }
 }
 
-impl<T: Copy> Block for VecToStream<T> {
+impl<T: Copy> BlockName for VecToStream<T> {
     fn block_name(&self) -> &str {
         "VecToStream"
     }
+}
+impl<T: Copy> Block for VecToStream<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let n = match self.src.peek_size() {
             None => return Ok(BlockRet::Noop),

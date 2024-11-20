@@ -3,7 +3,7 @@
 */
 use log::info;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag};
 use crate::{Error, Result};
 
@@ -175,10 +175,12 @@ impl Il2pDeframer {
     }
 }
 
-impl Block for Il2pDeframer {
+impl BlockName for Il2pDeframer {
     fn block_name(&self) -> &str {
         "IL2P Deframer"
     }
+}
+impl Block for Il2pDeframer {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {

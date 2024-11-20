@@ -1,7 +1,7 @@
 //! Skip samples, then stream at full speed.
 use anyhow::Result;
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockName, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
@@ -28,10 +28,12 @@ impl<T: Copy> Skip<T> {
     }
 }
 
-impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
+impl<T: Copy + std::fmt::Debug> BlockName for Skip<T> {
     fn block_name(&self) -> &str {
         "Skip"
     }
+}
+impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
         if i.is_empty() {
