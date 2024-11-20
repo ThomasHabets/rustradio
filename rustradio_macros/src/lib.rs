@@ -128,29 +128,33 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     };
 
     // Support sync blocks.
-    // TODO: no way this works with anything other than two inputs, and one output.
+    // TODO: no way this works with anything more than two inputs, and one output.
     if has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
         let first = ins[0].clone();
-        let ins = &ins[1..];
+        let rest = &ins[1..];
+        let it = if ins.len() == 1 {
+            quote! { #first.iter().take(n) }
+        } else {
+            quote! { #first.iter().take(n)#(.zip(#rest.iter()))* }
+        };
         extra.push(quote! {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
-                    let (#first, tags) = self.#first.read_buf()?;
-                    #(let (#ins, _) = self.#ins.read_buf()?;)*
-                    let n = std::cmp::min(#first.len(), #(#ins.len()),*);
+                    #(let #ins = self.#ins.read_buf()?;)*
+                    let tags = #first.1;
+                    #(let #ins = #ins.0;)*
+                    let n = [#(#ins.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
                     if n ==  0 {
                         return Ok(#path::block::BlockRet::Noop);
                     }
                     #(let mut #outs = self.#outs.write_buf()?;)*
-                    let n = std::cmp::min(n, #(#outs.len()),*);
-                    let it = #first.iter().take(n)#(.zip(#ins.iter()))*.map(|x| {
-                        let (#first,#(#ins),*) = x;
-                        self.process_sync(*#first, #(*#ins),*)
+                    let n = [n, #(#outs.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));;
+                    let it = #it.map(|(#(#ins),*)| {
+                        self.process_sync(#(*#ins),*)
                     });
                     for (samp, w) in it.zip(#(#outs.slice().iter_mut())*) {
                         *w = samp;
                     }
-                    #first.consume(n);
                     #(#ins.consume(n);)*
                     #(#outs.produce(n, &tags);)*
                     Ok(#path::block::BlockRet::Ok)

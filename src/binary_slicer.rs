@@ -1,25 +1,23 @@
 //! Turn positive Float values into binary `1u8`, and negative into `0u8`.
+//!
+//! TODO: should this be replaced with a MapBuilder, like in add_const?
 use anyhow::Result;
 
 use crate::stream::{Stream, Streamp};
-use crate::{map_block_convert_macro, Float};
+use crate::Float;
 
 /// Turn positive Float values into binary `1u8`, and negative into `0u8`.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, out, sync)]
 pub struct BinarySlicer {
+    #[rustradio(in)]
     src: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<u8>,
 }
 
 impl BinarySlicer {
-    /// Create new binary slicer.
-    pub fn new(src: Streamp<Float>) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-        }
-    }
-
-    fn process_one(&self, a: Float) -> u8 {
+    fn process_sync(&self, a: Float) -> u8 {
         if a > 0.0 {
             1
         } else {
@@ -27,5 +25,3 @@ impl BinarySlicer {
         }
     }
 }
-
-map_block_convert_macro![BinarySlicer, u8];
