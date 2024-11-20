@@ -10,6 +10,7 @@ pub struct Add<T>
 where
     T: Copy,
 {
+    //t: u32,
     /// Hello world.
     #[rustradio(in)]
     a: Streamp<T>,

@@ -7,7 +7,9 @@ use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 static STRUCT_ATTRS: &[&str] = &["new", "out"];
 static FIELD_ATTRS: &[&str] = &["in", "out"];
 
-// See example at https://docs.rs/syn/latest/syn/struct.Attribute.html#method.parse_nested_meta and https://docs.rs/syn/latest/syn/meta/fn.parser.html
+// See example at:
+// * https://docs.rs/syn/latest/syn/struct.Attribute.html#method.parse_nested_meta
+// * https://docs.rs/syn/latest/syn/meta/fn.parser.html
 fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
     attrs: I,
     name: &str,
@@ -38,8 +40,7 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 }
 
 /// TODO:
-/// * Support non-stream member variables in generated new()
-/// * Support all kinds of type annotations (or none!)
+/// * Support all kinds of generic annotations (or none!)
 /// * Panic if given invalid attributes.
 #[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_eof(input: TokenStream) -> TokenStream {
@@ -63,10 +64,13 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     let mut eof_checks = vec![];
     let mut extra = vec![];
 
+    // TODO: surely there's a cleaner way.
     let mut ins = vec![];
     let mut insty = vec![];
     let mut outs = vec![];
     let mut outsty = vec![];
+    let mut other = vec![];
+    let mut otherty = vec![];
     fields_named.named.into_iter().for_each(|field| {
         let field_name = field.ident.clone().unwrap();
         let found_in = has_attr(&field.attrs, "in", FIELD_ATTRS);
@@ -75,6 +79,9 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             (true, true) => panic!("Field {field_name} marked both as input and output stream."),
             (false, false) => {
                 // panic!("Field {field:?} marked neither input nor output");
+                let ty = field.ty;
+                other.push(field_name.clone());
+                otherty.push(quote! { #field_name: #ty});
             }
             (false, true) => {
                 set_eofs.push(quote! { self.#field_name.set_eof(); });
@@ -97,10 +104,12 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             where
                 T: Copy,
             {
-                pub fn new(#(#insty),*) -> Self {
+                pub fn new(#(#insty),*,#(#otherty),*) -> Self {
                     Self {
                     #(#ins),*,
-                    #(#outs: Stream::newp()),* }
+                    #(#outs: Stream::newp()),*,
+                    #(#other: #other),*
+                    }
                 }
             }
         });
