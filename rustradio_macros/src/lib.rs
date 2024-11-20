@@ -4,8 +4,15 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
+static STRUCT_ATTRS: &[&str] = &["new", "out"];
+static FIELD_ATTRS: &[&str] = &["in", "out"];
+
 // See example at https://docs.rs/syn/latest/syn/struct.Attribute.html#method.parse_nested_meta and https://docs.rs/syn/latest/syn/meta/fn.parser.html
-fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(attrs: I, name: &str) -> bool {
+fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
+    attrs: I,
+    name: &str,
+    valid: &[&str],
+) -> bool {
     attrs.into_iter().any(|attr| {
         //eprintln!("{:?}", attr);
         let meta_list = match &attr.meta {
@@ -18,6 +25,10 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(attrs: I, name: &str) -> 
         }
         let mut found = false;
         attr.parse_nested_meta(|meta| {
+            let s = meta.path.get_ident().unwrap();
+            if !valid.iter().any(|v| s == v) {
+                panic!("Invalid attr {s}");
+            }
             found |= meta.path.is_ident(name);
             Ok(())
         })
@@ -58,8 +69,8 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     let mut outsty = vec![];
     fields_named.named.into_iter().for_each(|field| {
         let field_name = field.ident.clone().unwrap();
-        let found_in = has_attr(&field.attrs, "in");
-        let found_out = has_attr(&field.attrs, "out");
+        let found_in = has_attr(&field.attrs, "in", FIELD_ATTRS);
+        let found_out = has_attr(&field.attrs, "out", FIELD_ATTRS);
         match (found_in, found_out) {
             (true, true) => panic!("Field {field_name} marked both as input and output stream."),
             (false, false) => {
@@ -80,7 +91,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         };
     });
 
-    if has_attr(&input.attrs, "new") {
+    if has_attr(&input.attrs, "new", STRUCT_ATTRS) {
         extra.push(quote! {
             impl<T> #struct_name<T>
             where
@@ -94,7 +105,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             }
         });
     }
-    if has_attr(&input.attrs, "out") {
+    if has_attr(&input.attrs, "out", STRUCT_ATTRS) {
         extra.push(quote! {
             impl<T> #struct_name<T>
             where
@@ -105,8 +116,6 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
                 }
             }
         });
-    } else {
-        panic!("bleh");
     }
 
     let expanded = quote! {
