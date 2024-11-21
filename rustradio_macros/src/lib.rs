@@ -5,7 +5,7 @@ use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
 static STRUCT_ATTRS: &[&str] = &["new", "out", "crate", "sync"];
-static FIELD_ATTRS: &[&str] = &["in", "out"];
+static FIELD_ATTRS: &[&str] = &["in", "out", "default"];
 
 // See example at:
 // * https://docs.rs/syn/latest/syn/struct.Attribute.html#method.parse_nested_meta
@@ -62,6 +62,19 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         x => panic!("Fields is what? {x:?}"),
     };
 
+    let mut fields_defaulted_ty = vec![];
+    let fields_defaulted: std::collections::HashSet<String> = fields_named
+        .named
+        .iter()
+        .filter(|field| has_attr(&field.attrs, "default", FIELD_ATTRS))
+        .map(|field| {
+            let field_name = field.ident.clone().unwrap();
+            let ty = field.ty.clone();
+            fields_defaulted_ty.push(quote! { #field_name: #ty::default() });
+            field_name.to_string()
+        })
+        .collect();
+
     let mut set_eofs = vec![];
     let mut eof_checks = vec![];
     let mut extra = vec![];
@@ -73,7 +86,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     let mut outsty = vec![];
     let mut other = vec![];
     let mut otherty = vec![];
-    fields_named.named.into_iter().for_each(|field| {
+    fields_named.named.iter().for_each(|field| {
         let field_name = field.ident.clone().unwrap();
         let found_in = has_attr(&field.attrs, "in", FIELD_ATTRS);
         let found_out = has_attr(&field.attrs, "out", FIELD_ATTRS);
@@ -81,20 +94,22 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             (true, true) => panic!("Field {field_name} marked both as input and output stream."),
             (false, false) => {
                 // panic!("Field {field:?} marked neither input nor output");
-                let ty = field.ty;
-                other.push(field_name.clone());
-                otherty.push(quote! { #field_name: #ty});
+                if !fields_defaulted.contains(&field_name.to_string()) {
+                    let ty = field.ty.clone();
+                    other.push(field_name.clone());
+                    otherty.push(quote! { #field_name: #ty});
+                }
             }
             (false, true) => {
                 set_eofs.push(quote! { self.#field_name.set_eof(); });
                 outs.push(field_name.clone());
-                let ty = field.ty;
+                let ty = field.ty.clone();
                 outsty.push(quote! { #ty });
             }
             (true, false) => {
                 eof_checks.push(quote! { self.#field_name.eof() });
                 ins.push(field_name.clone());
-                let ty = field.ty;
+                let ty = field.ty.clone();
                 insty.push(quote! { #field_name: #ty });
             }
         };
@@ -105,9 +120,10 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             impl #impl_generics #struct_name #ty_generics #where_clause {
                 pub fn new(#(#insty),*,#(#otherty),*) -> Self {
                     Self {
-                    #(#ins),*,
-                    #(#outs: Stream::newp()),*,
-                    #(#other: #other),*
+                    #(#ins,)*
+                    #(#outs: Stream::newp(),)*
+                    #(#other,)*
+                    #(#fields_defaulted_ty,)*
                     }
                 }
             }

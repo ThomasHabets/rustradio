@@ -31,9 +31,10 @@ use crate::{Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, sync)]
+#[rustradio(crate, out, new, sync)]
 pub struct QuadratureDemod {
     gain: Float,
+    #[rustradio(default)]
     last: Complex,
     #[rustradio(in)]
     src: Streamp<Complex>,
@@ -42,18 +43,6 @@ pub struct QuadratureDemod {
 }
 
 impl QuadratureDemod {
-    /// Create new QuadratureDemod block.
-    ///
-    /// Gain is just used to scale the value, and can be set to 1.0 if
-    /// you don't care about the scale.
-    pub fn new(src: Streamp<Complex>, gain: Float) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            gain,
-            last: Complex::default(),
-        }
-    }
     fn process_sync(&mut self, s: Complex) -> Float {
         let t = s * self.last.conj();
         self.last = s;
