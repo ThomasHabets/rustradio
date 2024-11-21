@@ -91,8 +91,12 @@ map_block_convert_macro![QuadratureDemod, Float];
 ///
 /// Lyons has an more general version of this algorithm, also on page
 /// 760, but it's not implemented here.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, sync)]
 pub struct FastFM {
+    #[rustradio(in)]
     src: Streamp<Complex>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
     q1: Complex,
     q2: Complex,
@@ -109,7 +113,7 @@ impl FastFM {
         }
     }
 
-    fn process_one(&mut self, s: Complex) -> Float {
+    fn process_sync(&mut self, s: Complex) -> Float {
         let top = (s.im - self.q2.im) * self.q1.re;
         let bottom = (s.re - self.q2.re) * self.q1.im;
         self.q2 = self.q1;
@@ -117,4 +121,3 @@ impl FastFM {
         top - bottom
     }
 }
-map_block_convert_macro![FastFM, Float];

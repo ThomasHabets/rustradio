@@ -140,14 +140,16 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         extra.push(quote! {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
-                    #(let #ins = self.#ins.read_buf()?;)*
+                    #(let #ins = self.#ins.clone();
+                      let #ins = #ins.read_buf()?;)*
                     let tags = #first.1;
                     #(let #ins = #ins.0;)*
                     let n = [#(#ins.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
                     if n ==  0 {
                         return Ok(#path::block::BlockRet::Noop);
                     }
-                    #(let mut #outs = self.#outs.write_buf()?;)*
+                    #(let #outs = self.#outs.clone();
+                      let mut #outs = #outs.write_buf()?;)*
                     let n = [n, #(#outs.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));;
                     let it = #it.map(|(#(#ins),*)| {
                         self.process_sync(#(*#ins),*)
