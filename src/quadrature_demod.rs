@@ -27,13 +27,17 @@ QuadratureDemod by about 4x.
 use anyhow::Result;
 
 use crate::stream::{Stream, Streamp};
-use crate::{map_block_convert_macro, Complex, Float};
+use crate::{Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, sync)]
 pub struct QuadratureDemod {
     gain: Float,
     last: Complex,
+    #[rustradio(in)]
     src: Streamp<Complex>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
 }
 
@@ -50,7 +54,7 @@ impl QuadratureDemod {
             last: Complex::default(),
         }
     }
-    fn process_one(&mut self, s: Complex) -> Float {
+    fn process_sync(&mut self, s: Complex) -> Float {
         let t = s * self.last.conj();
         self.last = s;
 
@@ -61,7 +65,6 @@ impl QuadratureDemod {
         return self.gain * t.im.atan2(t.re);
     }
 }
-map_block_convert_macro![QuadratureDemod, Float];
 
 /// A faster version of FM demodulation, that makes some assumptions.
 ///
