@@ -5,7 +5,7 @@ use std::io::Write;
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{NoCopyStreamp, Streamp};
 use crate::{Error, Sample};
 
@@ -77,8 +77,11 @@ where
 }
 
 /// Send stream to raw file.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct NoCopyFileSink<T> {
     f: BufWriter<std::fs::File>,
+    #[rustradio(in)]
     src: NoCopyStreamp<T>,
 }
 
@@ -107,14 +110,6 @@ impl<T> NoCopyFileSink<T> {
     }
 }
 
-impl<T> BlockName for NoCopyFileSink<T>
-where
-    T: Sample<Type = T> + std::fmt::Debug + Default,
-{
-    fn block_name(&self) -> &str {
-        "NoCopyFileSink"
-    }
-}
 impl<T> Block for NoCopyFileSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Default,
