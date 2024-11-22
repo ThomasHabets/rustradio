@@ -2,16 +2,20 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Delay stream. Good for syncing up streams.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct Delay<T: Copy> {
     delay: usize,
     current_delay: usize,
     skip: usize,
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -27,11 +31,6 @@ impl<T: Copy> Delay<T> {
         }
     }
 
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
-
     /// Change the delay.
     pub fn set_delay(&mut self, delay: usize) {
         if delay > self.delay {
@@ -45,14 +44,6 @@ impl<T: Copy> Delay<T> {
     }
 }
 
-impl<T> BlockName for Delay<T>
-where
-    T: Copy + Default,
-{
-    fn block_name(&self) -> &str {
-        "Delay"
-    }
-}
 impl<T> Block for Delay<T>
 where
     T: Copy + Default,

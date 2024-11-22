@@ -6,7 +6,7 @@ Use FftFilter if many taps are used, for better performance.
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
@@ -44,10 +44,14 @@ where
 }
 
 /// Finite impulse response filter block.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -64,20 +68,8 @@ where
             fir: FIR::new(taps),
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
-impl<T> BlockName for FIRFilter<T>
-where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
-{
-    fn block_name(&self) -> &str {
-        "FirFilter"
-    }
-}
 impl<T> Block for FIRFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
