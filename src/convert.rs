@@ -1,7 +1,7 @@
 //! Blocks for converting from one type to another.
 use anyhow::Result;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 use crate::{Complex, Float};
@@ -18,6 +18,8 @@ where
 
 impl<In, Out, F> MapBuilder<In, Out, F>
 where
+    In: Copy,
+    Out: Copy,
     F: Fn(In) -> Out,
 {
     /// Create new MapBuilder.
@@ -40,24 +42,29 @@ where
 }
 
 /// Arbitrary mapping
+// TODO: make sync.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, custom_name)]
 pub struct Map<In, Out, F>
 where
+    In: Copy,
+    Out: Copy,
     F: Fn(In) -> Out,
 {
     name: String,
     map: F,
+    #[rustradio(in)]
     src: Streamp<In>,
+    #[rustradio(out)]
     dst: Streamp<F::Output>,
 }
 
 impl<In, Out, F> Map<In, Out, F>
 where
+    In: Copy,
+    Out: Copy,
     F: Fn(In) -> Out,
 {
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Out> {
-        self.dst.clone()
-    }
     /// Create new FloatToU32, scaled.
     ///
     /// Return value is the input multiplied by the scale. E.g. with a
@@ -70,24 +77,15 @@ where
             dst: Stream::newp(),
         }
     }
-    fn process_one(&mut self, s: In) -> Out {
+    fn process_sync(&mut self, s: In) -> Out {
         (self.map)(s)
     }
     /// Name of the block.
-    pub fn name(&self) -> &str {
+    pub fn custom_name(&self) -> &str {
         &self.name
     }
 }
-impl<In, Out, F> BlockName for Map<In, Out, F>
-where
-    In: Copy,
-    Out: Copy,
-    F: Fn(In) -> Out,
-{
-    fn block_name(&self) -> &str {
-        &self.name
-    }
-}
+
 impl<In, Out, F> Block for Map<In, Out, F>
 where
     In: Copy,
@@ -112,7 +110,7 @@ where
 
         // Map one sample at a time. Is this really the best way?
         for (place, ival) in o.slice().iter_mut().zip(i.iter()) {
-            *place = self.process_one(*ival);
+            *place = self.process_sync(*ival);
         }
 
         // Finalize.
@@ -123,33 +121,18 @@ where
 }
 
 /// Convert floats to complex.
+// TODO: make sync.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, new)]
 pub struct FloatToComplex {
+    #[rustradio(in)]
     re: Streamp<Float>,
+    #[rustradio(in)]
     im: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<Complex>,
 }
 
-impl FloatToComplex {
-    /// Create new block.
-    pub fn new(re: Streamp<Float>, im: Streamp<Float>) -> Self {
-        Self {
-            re,
-            im,
-            dst: Stream::newp(),
-        }
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Complex> {
-        self.dst.clone()
-    }
-}
-
-impl BlockName for FloatToComplex {
-    fn block_name(&self) -> &str {
-        "FloatToComplex"
-    }
-}
 impl Block for FloatToComplex {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (a, tags) = self.re.read_buf()?;
