@@ -1,38 +1,21 @@
 //! Skip samples, then stream at full speed.
 use anyhow::Result;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Turn samples into text.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, new)]
 pub struct Skip<T: Copy> {
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: Streamp<T>,
     skip: usize,
 }
 
-impl<T: Copy> Skip<T> {
-    /// Create new Skip block.
-    pub fn new(src: Streamp<T>, skip: usize) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            skip,
-        }
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
-}
-
-impl<T: Copy + std::fmt::Debug> BlockName for Skip<T> {
-    fn block_name(&self) -> &str {
-        "Skip"
-    }
-}
 impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;

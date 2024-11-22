@@ -1,7 +1,7 @@
 //! Very simple clock recovery.
 use anyhow::Result;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
@@ -21,6 +21,8 @@ looping.
 But for now it's "good enough" to get simple 2FSK decoded pretty
 reliably.
 */
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,
@@ -28,8 +30,11 @@ pub struct ZeroCrossing {
     last_sign: bool,
     last_cross: f32,
     counter: u64,
+    #[rustradio(in)]
     src: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
+    // TODO: should this also be tagged `out`?
     out_clock: Option<Streamp<Float>>,
 }
 
@@ -55,22 +60,12 @@ impl ZeroCrossing {
         }
     }
 
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Float> {
-        self.dst.clone()
-    }
-
     /// Return clock stream.
     pub fn out_clock(&mut self) -> Streamp<Float> {
         self.out_clock.get_or_insert(Stream::newp()).clone()
     }
 }
 
-impl BlockName for ZeroCrossing {
-    fn block_name(&self) -> &str {
-        "ZeroCrossing"
-    }
-}
 impl Block for ZeroCrossing {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;

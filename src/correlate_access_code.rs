@@ -2,15 +2,19 @@
 
 For now an initial yes/no bit block. Future work should add tagging.
 */
-use crate::map_block_convert_macro;
 use crate::map_block_convert_tag_macro;
 use crate::stream::{Stream, Streamp, Tag, TagValue};
 
 /// CorrelateAccessCode outputs 1 if CAC matches.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, sync)]
 pub struct CorrelateAccessCode {
-    code: Vec<u8>,
+    #[rustradio(in)]
     src: Streamp<u8>,
+    #[rustradio(out)]
     dst: Streamp<u8>,
+
+    code: Vec<u8>,
     slide: Vec<u8>,
     allowed_diffs: usize,
 }
@@ -26,7 +30,7 @@ impl CorrelateAccessCode {
             allowed_diffs,
         }
     }
-    fn process_one(&mut self, a: u8) -> u8 {
+    fn process_sync(&mut self, a: u8) -> u8 {
         self.slide.push(a);
 
         if self.slide.len() > self.code.len() {
@@ -45,7 +49,6 @@ impl CorrelateAccessCode {
         }
     }
 }
-map_block_convert_macro![CorrelateAccessCode, u8];
 
 /// CorrelateAccessCode outputs 1 if CAC matches.
 pub struct CorrelateAccessCodeTag {

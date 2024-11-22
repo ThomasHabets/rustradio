@@ -18,7 +18,7 @@ use std::thread;
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
@@ -49,8 +49,11 @@ impl<T> From<SendError<T>> for Error {
 }
 
 /// RTL SDR Source block.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,
+    #[rustradio(out)]
     dst: Streamp<u8>,
     buf: Vec<u8>,
 }
@@ -106,17 +109,8 @@ impl RtlSdrSource {
             buf: Vec::new(),
         })
     }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<u8> {
-        self.dst.clone()
-    }
 }
 
-impl BlockName for RtlSdrSource {
-    fn block_name(&self) -> &str {
-        "RtlSdrSource"
-    }
-}
 impl Block for RtlSdrSource {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;

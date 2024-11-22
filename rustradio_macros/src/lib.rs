@@ -118,7 +118,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
     if has_attr(&input.attrs, "new", STRUCT_ATTRS) {
         extra.push(quote! {
             impl #impl_generics #struct_name #ty_generics #where_clause {
-                pub fn new(#(#insty),*,#(#otherty),*) -> Self {
+                pub fn new(#(#insty,)*#(#otherty),*) -> Self {
                     Self {
                     #(#ins,)*
                     #(#outs: Stream::newp(),)*

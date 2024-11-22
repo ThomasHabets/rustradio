@@ -12,15 +12,19 @@ This implementation is a pretty inefficient.
 [wiki]: https://en.wikipedia.org/wiki/Hilbert_transform
 */
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
 use crate::stream::{Stream, Streamp};
 use crate::window::WindowType;
 use crate::{Complex, Error, Float};
 
 /// Hilbert transformer block.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct Hilbert {
+    #[rustradio(in)]
     src: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<Complex>,
     history: Vec<Float>,
     filter: FIR<Float>,
@@ -41,17 +45,8 @@ impl Hilbert {
             filter: FIR::new(&taps),
         }
     }
-    /// Get the output stream.
-    pub fn out(&self) -> Streamp<Complex> {
-        self.dst.clone()
-    }
 }
 
-impl BlockName for Hilbert {
-    fn block_name(&self) -> &str {
-        "Hilbert"
-    }
-}
 impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet, Error> {
         assert_eq!(self.ntaps, self.history.len());

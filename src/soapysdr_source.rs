@@ -2,7 +2,7 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::{Complex, Error};
 
@@ -97,8 +97,11 @@ impl SoapySdrSourceBuilder {
 }
 
 /// SoapySDR source.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct SoapySdrSource {
     stream: soapysdr::RxStream<Complex>,
+    #[rustradio(out)]
     dst: Streamp<Complex>,
 }
 
@@ -109,18 +112,6 @@ fn ai_string(ai: &soapysdr::ArgInfo) -> String {
     )
 }
 
-impl SoapySdrSource {
-    /// Get output stream.
-    pub fn out(&self) -> Streamp<Complex> {
-        self.dst.clone()
-    }
-}
-
-impl BlockName for SoapySdrSource {
-    fn block_name(&self) -> &str {
-        "SoapySdrSource"
-    }
-}
 impl Block for SoapySdrSource {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let timeout_us = 10_000;

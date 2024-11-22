@@ -4,7 +4,7 @@ use anyhow::Result;
 use log::debug;
 use soapysdr::Direction;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::Streamp;
 use crate::{Complex, Error};
 
@@ -88,16 +88,14 @@ impl SoapySdrSinkBuilder {
     }
 }
 
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct SoapySdrSink {
+    #[rustradio(in)]
     src: Streamp<Complex>,
     stream: soapysdr::TxStream<Complex>,
 }
 
-impl BlockName for SoapySdrSink {
-    fn block_name(&self) -> &str {
-        "SoapySdrSink"
-    }
-}
 impl Block for SoapySdrSink {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let timeout_us = 10_000;

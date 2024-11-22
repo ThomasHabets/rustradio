@@ -1,38 +1,19 @@
 //! Generate the same value, forever.
 use anyhow::Result;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp};
 use crate::Error;
 
 /// Generate the same value, forever.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, new)]
 pub struct ConstantSource<T: Copy> {
+    #[rustradio(out)]
     dst: Streamp<T>,
     val: T,
 }
 
-impl<T: Copy> ConstantSource<T> {
-    /// Create a new ConstantSource block, providing the constant value.
-    pub fn new(val: T) -> Self {
-        Self {
-            val,
-            dst: Stream::newp(),
-        }
-    }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
-}
-
-impl<T> BlockName for ConstantSource<T>
-where
-    T: Copy,
-{
-    fn block_name(&self) -> &str {
-        "ConstantSource"
-    }
-}
 impl<T> Block for ConstantSource<T>
 where
     T: Copy,

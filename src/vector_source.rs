@@ -1,7 +1,7 @@
 //! Generate values from a fixed vector.
 use anyhow::Result;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{Stream, Streamp, Tag, TagValue};
 use crate::Error;
 
@@ -43,10 +43,13 @@ impl<T: Copy> VectorSourceBuilder<T> {
 }
 
 /// Generate values from a fixed vector.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct VectorSource<T>
 where
     T: Copy,
 {
+    #[rustradio(out)]
     dst: Streamp<T>,
     data: Vec<T>,
     repeat: Repeat,
@@ -72,18 +75,8 @@ impl<T: Copy> VectorSource<T> {
     pub fn set_repeat(&mut self, r: Repeat) {
         self.repeat = r;
     }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
-    }
 }
 
-impl<T: Copy> BlockName for VectorSource<T> {
-    fn block_name(&self) -> &str {
-        "VectorSource"
-    }
-}
 impl<T> Block for VectorSource<T>
 where
     T: Copy,
