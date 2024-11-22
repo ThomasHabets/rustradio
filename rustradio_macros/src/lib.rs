@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
-static STRUCT_ATTRS: &[&str] = &["new", "out", "crate", "sync", "custom_name"];
+static STRUCT_ATTRS: &[&str] = &["new", "out", "crate", "sync", "custom_name", "noeof"];
 static FIELD_ATTRS: &[&str] = &["in", "out", "default"];
 
 // See example at:
@@ -197,7 +197,8 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         });
     }
 
-    let expanded = quote! {
+    if !has_attr(&input.attrs, "noeof", STRUCT_ATTRS) {
+        extra.push(quote! {
         impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
             fn eof(&mut self) -> bool {
                 if true #(&&#eof_checks)* {
@@ -208,7 +209,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
                 }
             }
         }
-        #(#extra)*
+        });
     };
-    TokenStream::from(expanded)
+    TokenStream::from(quote! { #(#extra)* })
 }
