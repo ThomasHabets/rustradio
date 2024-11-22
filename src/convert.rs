@@ -42,9 +42,8 @@ where
 }
 
 /// Arbitrary mapping
-// TODO: make sync.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, custom_name)]
+#[rustradio(crate, out, custom_name, sync)]
 pub struct Map<In, Out, F>
 where
     In: Copy,
@@ -83,40 +82,6 @@ where
     /// Name of the block.
     pub fn custom_name(&self) -> &str {
         &self.name
-    }
-}
-
-impl<In, Out, F> Block for Map<In, Out, F>
-where
-    In: Copy,
-    Out: Copy,
-    F: Fn(In) -> Out,
-{
-    fn work(&mut self) -> Result<BlockRet, Error> {
-        // Bindings, since borrow checker won't let us call
-        // mut `process_one` if we borrow `src` and `dst`.
-        let ibind = self.src.clone();
-        let obind = self.dst.clone();
-
-        // Get input and output buffers.
-        let (i, tags) = ibind.read_buf()?;
-        let mut o = obind.write_buf()?;
-
-        // Don't process more than we have, and fit.
-        let n = std::cmp::min(i.len(), o.len());
-        if n == 0 {
-            return Ok(BlockRet::Noop);
-        }
-
-        // Map one sample at a time. Is this really the best way?
-        for (place, ival) in o.slice().iter_mut().zip(i.iter()) {
-            *place = self.process_sync(*ival);
-        }
-
-        // Finalize.
-        o.produce(n, &tags);
-        i.consume(n);
-        Ok(BlockRet::Ok)
     }
 }
 

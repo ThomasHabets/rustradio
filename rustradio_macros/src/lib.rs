@@ -181,13 +181,12 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         });
     }
 
-
     {
         let nameval = if has_attr(&input.attrs, "custom_name", STRUCT_ATTRS) {
-                   quote! { self.custom_name() }
-               } else {
-                   quote! { #name_str }
-               };
+            quote! { self.custom_name() }
+        } else {
+            quote! { #name_str }
+        };
         extra.push(quote! {
             impl #impl_generics #path::block::BlockName for #struct_name #ty_generics #where_clause {
             fn block_name(&self) -> &str {
