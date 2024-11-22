@@ -3,31 +3,19 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos};
 use crate::Error;
 
 /// Nocopy version of DebugSink.
 // TODO: maybe merge with DebugSink using an enum?
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
 pub struct DebugSinkNoCopy<T> {
+    #[rustradio(in)]
     src: NoCopyStreamp<T>,
 }
 
-impl<T> DebugSinkNoCopy<T> {
-    /// Create new debug block.
-    pub fn new(src: NoCopyStreamp<T>) -> Self {
-        Self { src }
-    }
-}
-
-impl<T> BlockName for DebugSinkNoCopy<T>
-where
-    T: std::fmt::Debug + Default,
-{
-    fn block_name(&self) -> &str {
-        "DebugSinkNoCopy"
-    }
-}
 impl<T> Block for DebugSinkNoCopy<T>
 where
     T: std::fmt::Debug + Default,
@@ -55,14 +43,19 @@ where
 }
 
 /// Debug filter turning samples into strings.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out)]
 pub struct DebugFilter<T>
 where
     T: Copy,
 {
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: NoCopyStreamp<String>,
 }
 
+// TODO: fix derive macro so that new() can be generated.
 impl<T> DebugFilter<T>
 where
     T: Copy,
@@ -74,20 +67,8 @@ where
             dst: NoCopyStream::newp(),
         }
     }
-    /// Return the output stream.
-    pub fn out(&self) -> NoCopyStreamp<String> {
-        self.dst.clone()
-    }
 }
 
-impl<T> BlockName for DebugFilter<T>
-where
-    T: Copy + std::fmt::Debug,
-{
-    fn block_name(&self) -> &str {
-        "DebugFilter"
-    }
-}
 impl<T> Block for DebugFilter<T>
 where
     T: Copy + std::fmt::Debug,
@@ -122,32 +103,18 @@ where
 }
 
 /// Print values to stdout, for debugging.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
 pub struct DebugSink<T>
 where
     T: Copy,
 {
+    #[rustradio(in)]
     src: Streamp<T>,
 }
 
-#[allow(clippy::new_without_default)]
-impl<T> DebugSink<T>
-where
-    T: Copy,
-{
-    /// Create new debug block.
-    pub fn new(src: Streamp<T>) -> Self {
-        Self { src }
-    }
-}
+//#[allow(clippy::new_without_default)]
 
-impl<T> BlockName for DebugSink<T>
-where
-    T: Copy + std::fmt::Debug + Default,
-{
-    fn block_name(&self) -> &str {
-        "DebugSink"
-    }
-}
 impl<T> Block for DebugSink<T>
 where
     T: Copy + std::fmt::Debug + Default,

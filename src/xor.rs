@@ -1,6 +1,6 @@
 //! Xor two streams.
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 use crate::Error;
 
 /// Xors a constant value to every sample.

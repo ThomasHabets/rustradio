@@ -1,5 +1,5 @@
 //! Multiply stream by a constant value.
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 
 /// Multiply stream by a constant value.
 ///

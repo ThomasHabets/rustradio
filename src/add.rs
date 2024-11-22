@@ -1,5 +1,5 @@
 //! Add two streams.
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 
 /// Adds two streams, sample wise.
 #[derive(rustradio_macros::Block)]

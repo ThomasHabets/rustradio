@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 use crate::Error;
 
 /// Tee

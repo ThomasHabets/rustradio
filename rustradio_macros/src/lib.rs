@@ -62,6 +62,11 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         x => panic!("Fields is what? {x:?}"),
     };
 
+    let path = match has_attr(&input.attrs, "crate", STRUCT_ATTRS) {
+        true => quote! { crate },
+        false => quote! { rustradio },
+    };
+
     let mut fields_defaulted_ty = vec![];
     let fields_defaulted: std::collections::HashSet<String> = fields_named
         .named
@@ -121,7 +126,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
                 pub fn new(#(#insty,)*#(#otherty),*) -> Self {
                     Self {
                     #(#ins,)*
-                    #(#outs: Stream::newp(),)*
+                    #(#outs: #path::Stream::newp(),)*
                     #(#other,)*
                     #(#fields_defaulted_ty,)*
                     }
@@ -138,10 +143,6 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
             }
         });
     }
-    let path = match has_attr(&input.attrs, "crate", STRUCT_ATTRS) {
-        true => quote! { crate },
-        false => quote! { rustradio },
-    };
 
     // Support sync blocks.
     // TODO: no way this works with anything more than two inputs, and one output.
