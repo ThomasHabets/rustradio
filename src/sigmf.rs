@@ -223,7 +223,7 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
 
 /// SigMF file source.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, noeof)]
+#[rustradio(crate)]
 pub struct SigMFSource<T: Copy> {
     // TODO: Can't continue to delegate reading the data, because tags.
     file_source: FileSource<T>,

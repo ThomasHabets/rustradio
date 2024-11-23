@@ -197,7 +197,7 @@ pub fn derive_eof(input: TokenStream) -> TokenStream {
         });
     }
 
-    if !has_attr(&input.attrs, "noeof", STRUCT_ATTRS) {
+    if !ins.is_empty() && !has_attr(&input.attrs, "noeof", STRUCT_ATTRS) {
         extra.push(quote! {
         impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
             fn eof(&mut self) -> bool {
