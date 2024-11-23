@@ -37,11 +37,13 @@ Drawbacks of this method:
  */
 use log::{debug, trace, warn};
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Tag, TagValue};
 use crate::{Complex, Error, Float};
 
 /// Midpointer is a block re-center a NRZ burst around 0.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct Midpointer {
     src: NoCopyStreamp<Vec<Float>>,
     dst: NoCopyStreamp<Vec<Float>>,
@@ -57,11 +59,6 @@ impl Midpointer {
     /// Get output stream.
     pub fn out(&self) -> NoCopyStreamp<Vec<Float>> {
         self.dst.clone()
-    }
-}
-impl BlockName for Midpointer {
-    fn block_name(&self) -> &str {
-        "Midpointer"
     }
 }
 impl Block for Midpointer {
@@ -114,6 +111,8 @@ impl WpcrBuilder {
 }
 
 /// Whole packet clock recovery block.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct Wpcr {
     src: NoCopyStreamp<Vec<Float>>,
     dst: NoCopyStreamp<Vec<Float>>,
@@ -221,11 +220,6 @@ impl Wpcr {
     }
 }
 
-impl BlockName for Wpcr {
-    fn block_name(&self) -> &str {
-        "WPCR"
-    }
-}
 impl Block for Wpcr {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: handle tags.

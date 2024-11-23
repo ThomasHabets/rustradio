@@ -7,7 +7,7 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::iir_filter::CappedFilter;
 use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
@@ -38,7 +38,11 @@ impl TED for TEDZeroCrossing {}
 /** Pluggable clock recovery block.
 
 Under development.
+
+TODO: handle EOF.
 */
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, noeof)]
 pub struct SymbolSync {
     sps: Float,
     max_deviation: Float,
@@ -49,8 +53,11 @@ pub struct SymbolSync {
     stream_pos: Float,
     last_sym_boundary_pos: Float,
     next_sym_middle: Float,
+    #[rustradio(in)]
     src: Streamp<Float>,
+    #[rustradio(out)]
     dst: Streamp<Float>,
+    #[rustradio(out)]
     out_clock: Option<Streamp<Float>>,
 }
 
@@ -96,11 +103,6 @@ impl SymbolSync {
     }
 }
 
-impl BlockName for SymbolSync {
-    fn block_name(&self) -> &str {
-        "SymbolSync"
-    }
-}
 impl Block for SymbolSync {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
