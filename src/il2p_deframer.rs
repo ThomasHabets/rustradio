@@ -3,7 +3,7 @@
 */
 use log::info;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag};
 use crate::{Error, Result};
 
@@ -147,8 +147,12 @@ enum State {
 }
 
 /// IL2P deframer block
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct Il2pDeframer {
+    #[rustradio(in)]
     src: Streamp<u8>,
+    #[rustradio(out)]
     dst: NoCopyStreamp<Vec<u8>>,
     decoded: usize,
     state: State,
@@ -175,11 +179,6 @@ impl Il2pDeframer {
     }
 }
 
-impl BlockName for Il2pDeframer {
-    fn block_name(&self) -> &str {
-        "IL2P Deframer"
-    }
-}
 impl Block for Il2pDeframer {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;

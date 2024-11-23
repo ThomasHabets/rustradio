@@ -12,7 +12,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::NoCopyStreamp;
 use crate::{Error, Sample};
 
@@ -21,7 +21,10 @@ use crate::{Error, Sample};
 This block takes PDUs (as Vec<u8>), and writes them to an output
 directory, named as microseconds since epoch.
 */
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate)]
 pub struct PduWriter<T> {
+    #[rustradio(in)]
     src: NoCopyStreamp<Vec<T>>,
     dir: PathBuf,
     files_written: usize,
@@ -44,14 +47,6 @@ impl<T> PduWriter<T> {
     }
 }
 
-impl<T> BlockName for PduWriter<T>
-where
-    T: Sample,
-{
-    fn block_name(&self) -> &str {
-        "PDU Writer"
-    }
-}
 impl<T> Block for PduWriter<T>
 where
     T: Sample,
