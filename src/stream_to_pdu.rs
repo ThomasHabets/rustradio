@@ -31,13 +31,17 @@ use std::collections::HashMap;
 
 use log::{debug, trace};
 
-use crate::block::{Block, BlockName, BlockRet};
+use crate::block::{Block, BlockRet};
 use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos, TagValue};
 use crate::{Error, Sample};
 
 /// Stream to PDU block.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, noeof)]
 pub struct StreamToPdu<T> {
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: NoCopyStreamp<Vec<T>>,
     tag: String,
     buf: Vec<T>,
@@ -76,14 +80,6 @@ fn get_tag_val_bool(tags: &HashMap<(TagPos, String), Tag>, pos: TagPos, key: &st
     }
 }
 
-impl<T> BlockName for StreamToPdu<T>
-where
-    T: Copy + Sample,
-{
-    fn block_name(&self) -> &str {
-        "StreamToPdu"
-    }
-}
 impl<T> Block for StreamToPdu<T>
 where
     T: Copy + Sample,
