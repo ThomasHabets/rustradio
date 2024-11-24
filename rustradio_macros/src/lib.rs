@@ -109,7 +109,7 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
 ///
 /// Field attributes:
 /// * `in`: Input stream.
-/// * `out`: Create `out()` function.
+/// * `out`: Output stream.
 /// * `default`: Skip this field as arg for the `new()` function, and instead
 ///   default it.
 ///
