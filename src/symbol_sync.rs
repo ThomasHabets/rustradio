@@ -39,10 +39,10 @@ impl TED for TEDZeroCrossing {}
 
 Under development.
 
-TODO: handle EOF.
+TODO: implement real EOF handling.
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, noeof)]
+#[rustradio(crate, nevereof)]
 pub struct SymbolSync {
     sps: Float,
     max_deviation: Float,

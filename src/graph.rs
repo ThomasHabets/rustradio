@@ -80,7 +80,11 @@ impl Graph {
                     BlockRet::Pending => {
                         done = false;
                     }
-                    BlockRet::Noop => {}
+                    BlockRet::Noop => {
+                        if b.eof() {
+                            eof[n] = true;
+                        }
+                    }
                     BlockRet::EOF => {
                         eof[n] = true;
                     }

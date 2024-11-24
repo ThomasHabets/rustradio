@@ -36,8 +36,9 @@ use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos, TagValue}
 use crate::{Error, Sample};
 
 /// Stream to PDU block.
+// TODO: implement proper EOF.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, noeof)]
+#[rustradio(crate, nevereof)]
 pub struct StreamToPdu<T> {
     #[rustradio(in)]
     src: Streamp<T>,

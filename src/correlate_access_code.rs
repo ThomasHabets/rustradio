@@ -60,6 +60,9 @@ pub struct CorrelateAccessCodeTag {
     tag: String,
 }
 
+// TODO: generate proper from macro.
+impl crate::block::BlockEOF for CorrelateAccessCodeTag {}
+
 impl CorrelateAccessCodeTag {
     /// Create new correlate access block.
     pub fn new(src: Streamp<u8>, code: Vec<u8>, tag: String, allowed_diffs: usize) -> Self {

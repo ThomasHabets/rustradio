@@ -4,7 +4,6 @@ AX.25 G3RUH uses mask 0x21 and length 16. Seed doesn't matter, since
 by the time the packet arrives the original seed will be shifted out
 anyway.
  */
-use crate::map_block_convert_macro;
 use crate::stream::{Stream, Streamp};
 
 /// LFSR as used by G3RUH.
@@ -37,13 +36,18 @@ impl Lfsr {
 }
 
 /// Descrambler uses an LFSR to descramble bits.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, sync)]
 pub struct Descrambler {
+    #[rustradio(in)]
     src: Streamp<u8>,
+    #[rustradio(out)]
     dst: Streamp<u8>,
     lfsr: Lfsr,
 }
 impl Descrambler {
     /// Create new descrambler.
+    // TODO: take an lfsr, partly so that we can generate this new()
     pub fn new(src: Streamp<u8>, mask: u64, seed: u64, len: u8) -> Self {
         Self {
             src,
@@ -61,9 +65,7 @@ impl Descrambler {
         }
     }
 
-    fn process_one(&mut self, bit: u8) -> u8 {
+    fn process_sync(&mut self, bit: u8) -> u8 {
         self.lfsr.next(bit)
     }
 }
-
-map_block_convert_macro![Descrambler, u8];

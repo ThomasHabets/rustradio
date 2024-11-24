@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::stream::{Stream, Streamp};
-use crate::{map_block_macro_v2, Float};
+use crate::Float;
 
 struct SinglePoleIIR<Tout> {
     alpha: Float, // TODO: GNURadio uses double
@@ -42,12 +42,20 @@ where
 }
 
 /// Infinite Impulse Response (IIR) filter.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, out, sync)]
 pub struct SinglePoleIIRFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Copy
+        + Default
+        + std::ops::Mul<Float, Output = T>
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>,
 {
     iir: SinglePoleIIR<T>,
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -60,6 +68,7 @@ where
         + std::ops::Add<T, Output = T>,
 {
     /// Create new IIR filter.
+    // TODO: have it take IIR, so that we can generate new()?
     pub fn new(src: Streamp<T>, alpha: Float) -> Option<Self> {
         Some(Self {
             src,
@@ -67,19 +76,10 @@ where
             iir: SinglePoleIIR::<T>::new(alpha)?,
         })
     }
-    fn process_one(&mut self, a: &T) -> T {
-        self.iir.filter(*a)
+    fn process_sync(&mut self, a: T) -> T {
+        self.iir.filter(a)
     }
 }
-
-map_block_macro_v2![
-    SinglePoleIIRFilter<T>,
-    Default,
-    std::ops::Add<Output = T>,
-    std::ops::Mul<T, Output = T>,
-    std::ops::Mul<Float, Output = T>,
-    std::ops::Add<T, Output = T>
-];
 
 #[cfg(test)]
 mod tests {

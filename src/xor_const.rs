@@ -1,14 +1,17 @@
 //! Xor a constant value with every sample.
-use crate::map_block_macro_v2;
-use crate::stream::{Stream, Streamp};
+use crate::stream::Streamp;
 
 /// XorConst xors a constant value to every sample.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, out, sync)]
 pub struct XorConst<T>
 where
-    T: Copy,
+    T: Copy + std::ops::BitXor<Output = T>,
 {
     val: T,
+    #[rustradio(in)]
     src: Streamp<T>,
+    #[rustradio(out)]
     dst: Streamp<T>,
 }
 
@@ -16,17 +19,7 @@ impl<T> XorConst<T>
 where
     T: Copy + std::ops::BitXor<Output = T>,
 {
-    /// Create a new XorConst, providing the constant to be xored.
-    pub fn new(src: Streamp<T>, val: T) -> Self {
-        Self {
-            val,
-            src,
-            dst: Stream::newp(),
-        }
-    }
-
-    fn process_one(&self, a: &T) -> T {
-        *a ^ self.val
+    fn process_sync(&mut self, a: T) -> T {
+        a ^ self.val
     }
 }
-map_block_macro_v2![XorConst<T>, std::ops::BitXor<Output = T>];

@@ -72,7 +72,7 @@ pub trait BlockEOF {
 /// Block trait, that must be implemented for all blocks.
 ///
 /// Simpler blocks can use macros to avoid needing to implement `work()`.
-pub trait Block: BlockName {
+pub trait Block: BlockName + BlockEOF {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.
@@ -96,7 +96,7 @@ E.g.:
 # Example
 
 ```
-use rustradio::block::Block;
+use rustradio::block::{Block, BlockEOF};
 use rustradio::stream::{Streamp, Stream};
 struct Noop<T: Copy>{
   src: Streamp<T>,
@@ -111,6 +111,7 @@ impl<T: Copy> Noop<T> {
   }
   fn process_one(&self, a: &T) -> T { *a }
 }
+impl<T: Copy> BlockEOF for Noop<T> {}
 rustradio::map_block_macro_v2![Noop<T>, std::ops::Add<Output = T>];
 ```
 
