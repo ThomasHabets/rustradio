@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "anyhow",
  "cpal",
@@ -872,7 +872,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "proc-macro2",
  "quote",

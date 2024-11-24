@@ -1,6 +1,6 @@
 [package]
 name = "rustradio_macros"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 license = "MIT"
 authors = ["Thomas Habets <thomas@habets.se>"]
