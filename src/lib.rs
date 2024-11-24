@@ -103,6 +103,9 @@ g.run()?;
 use anyhow::Result;
 use stream::Stream;
 
+// Macro.
+pub use rustradio_macros;
+
 // Blocks.
 pub mod add;
 pub mod add_const;
