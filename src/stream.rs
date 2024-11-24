@@ -62,6 +62,7 @@ impl Tag {
 #[derive(Debug)]
 pub struct Stream<T> {
     circ: circular_buffer::Buffer<T>,
+    eof: std::sync::atomic::AtomicBool,
 }
 
 /// Convenience type for a "pointer to a stream".
@@ -70,6 +71,7 @@ pub type Streamp<T> = Arc<Stream<T>>;
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NoCopyStream<T> {
     s: Mutex<VecDeque<T>>,
+    eof: std::sync::atomic::AtomicBool,
 }
 
 /// Convenience type for a "pointer to a stream".
@@ -82,6 +84,7 @@ impl<T> Stream<T> {
     pub fn new() -> Self {
         Self {
             circ: circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(),
+            eof: false.into(),
         }
     }
     /// Create a new Arc<Stream>.
@@ -95,6 +98,7 @@ impl<T> NoCopyStream<T> {
     pub fn new() -> Self {
         Self {
             s: Mutex::new(VecDeque::new()),
+            eof: false.into(),
         }
     }
 
@@ -116,6 +120,18 @@ impl<T> NoCopyStream<T> {
     pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
         // TODO: attach tags.
         self.s.lock().unwrap().pop_front().map(|v| (v, Vec::new()))
+    }
+
+    /// Set EOF status on stream.
+    ///
+    /// Stream won't really be EOF until all data is also read.
+    pub fn set_eof(&self) {
+        self.eof.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Return stream EOF status.
+    pub fn eof(&self) -> bool {
+        self.s.lock().unwrap().is_empty() && self.eof.load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 
@@ -140,7 +156,10 @@ impl<T: Copy> Stream<T> {
         let mut wb = circ.write_buf().unwrap();
         wb.fill_from_slice(data);
         wb.produce(data.len(), &[]);
-        Self { circ }
+        Self {
+            circ,
+            eof: false.into(),
+        }
     }
 
     /// Create a new Arc<Streamp> with contents.
@@ -171,6 +190,21 @@ impl<T: Copy> Stream<T> {
     pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
         // TODO: not sure why I need to use both Ok and ?. Should it not be From'd?
         Ok(self.circ.read_buf()?)
+    }
+
+    /// Set EOF status on stream.
+    ///
+    /// Stream won't really be EOF until all data is also read.
+    pub fn set_eof(&self) {
+        self.eof.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Return stream EOF status.
+    pub fn eof(&self) -> bool {
+        match self.read_buf() {
+            Ok((b, _)) => b.is_empty() && self.eof.load(std::sync::atomic::Ordering::SeqCst),
+            Err(_) => false,
+        }
     }
 }
 impl<T> Default for Stream<T> {

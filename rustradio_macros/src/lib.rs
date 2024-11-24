@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
-static STRUCT_ATTRS: &[&str] = &["new", "out", "crate", "sync", "custom_name"];
+static STRUCT_ATTRS: &[&str] = &["new", "out", "crate", "sync", "custom_name", "noeof"];
 static FIELD_ATTRS: &[&str] = &["in", "out", "default"];
 
 /// Check if named attribute is in the list of attributes.
@@ -72,6 +72,7 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 ///   `work()`.
 /// * `custom_name`: Call `custom_name()` instead of using the struct name, as
 ///   name.
+/// * `noeof`: Don't generate `eof()` logic.
 ///
 /// Field attributes:
 /// * `in`: Input stream.
@@ -117,6 +118,8 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         })
         .collect();
 
+    let mut set_eofs = vec![];
+    let mut eof_checks = vec![];
     let mut extra = vec![];
 
     // TODO: surely there's a cleaner way.
@@ -141,11 +144,13 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                 }
             }
             (false, true) => {
+                set_eofs.push(quote! { self.#field_name.set_eof(); });
                 outs.push(field_name.clone());
                 let ty = field.ty.clone();
                 outsty.push(quote! { #ty });
             }
             (true, false) => {
+                eof_checks.push(quote! { self.#field_name.eof() });
                 ins.push(field_name.clone());
                 let ty = field.ty.clone();
                 insty.push(quote! { #field_name: #ty });
@@ -230,5 +235,19 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         });
     }
 
+    if !ins.is_empty() && !has_attr(&input.attrs, "noeof", STRUCT_ATTRS) {
+        extra.push(quote! {
+        impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
+            fn eof(&mut self) -> bool {
+                if true #(&&#eof_checks)* {
+                    #(#set_eofs)*
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        });
+    };
     TokenStream::from(quote! { #(#extra)* })
 }

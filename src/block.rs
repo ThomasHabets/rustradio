@@ -59,6 +59,16 @@ pub trait BlockName {
     fn block_name(&self) -> &str;
 }
 
+pub trait BlockEOF {
+    /// Return EOF status.
+    ///
+    /// Mutable because if eof, the block is also responsible setting EOF on its
+    /// output streams.
+    fn eof(&mut self) -> bool {
+        false
+    }
+}
+
 /// Block trait, that must be implemented for all blocks.
 ///
 /// Simpler blocks can use macros to avoid needing to implement `work()`.

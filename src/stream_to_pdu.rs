@@ -37,7 +37,7 @@ use crate::{Error, Sample};
 
 /// Stream to PDU block.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, noeof)]
 pub struct StreamToPdu<T> {
     #[rustradio(in)]
     src: Streamp<T>,
