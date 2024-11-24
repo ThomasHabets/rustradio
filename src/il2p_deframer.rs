@@ -383,7 +383,7 @@ mod tests {
         deframer.work()?;
         deframer.work()?;
         let o = deframer.out();
-        let _ = o.pop().unwrap();
+        let _ = o.pop().expect("expected to get a parsed packet");
         // TODO: confirm parsing.
         if let Some(res) = o.pop() {
             panic!("got a second packet: {:?}", res);

@@ -10,6 +10,7 @@ static STRUCT_ATTRS: &[&str] = &[
     "out",
     "crate",
     "sync",
+    "sync_tag",
     "custom_name",
     "noeof",
     "nevereof",
@@ -51,6 +52,27 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
     })
 }
 
+/// Return the inner type of a generic type.
+///
+/// E.g. given Streamp<Float>, return Float.
+fn inner_type(ty: &syn::Type) -> &syn::Type {
+    if let syn::Type::Path(p) = &ty {
+        let segment = p.path.segments.last().unwrap();
+        // assert_eq!(segment.ident, "Streamp");
+        if let syn::PathArguments::AngleBracketed(angle_bracketed_args) = &segment.arguments {
+            for arg in &angle_bracketed_args.args {
+                if let syn::GenericArgument::Type(ty) = arg {
+                    return ty;
+                }
+            }
+        }
+    }
+    panic!(
+        "Tried to get the inner type of a non-generic, probably non-Streamp: {}",
+        quote! { #ty }.to_string()
+    )
+}
+
 /// Block derive macro.
 ///
 /// Most blocks should derive from `Block`. Example use:
@@ -78,6 +100,8 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 /// * `crate`: Block is in the main Rustradio crate.
 /// * `sync`: Block is "one in, one out" via `process_sync()` instead of
 ///   `work()`.
+/// * `sync_tag`: Same as `sync`, but allow tag processing using
+///   `process_sync_tags()`.
 /// * `custom_name`: Call `custom_name()` instead of using the struct name, as
 ///   name.
 /// * `noeof`: Don't generate `eof()` logic.
@@ -132,10 +156,13 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     let mut extra = vec![];
 
     // TODO: surely there's a cleaner way.
-    let mut ins = vec![];
-    let mut insty = vec![];
-    let mut outs = vec![];
-    let mut outsty = vec![];
+    let mut ins = vec![]; // E.g. `src`.
+    let mut insty = vec![]; // E.g. `src: Streamp<Complex>`
+    let mut outs = vec![]; // E.g. `dst`.
+    let mut outsty = vec![]; // E.g. Stream<Float>
+    let mut in_types = vec![]; // E.g. Complex.
+    let mut in_name_types = vec![]; // E.g. `a: Complex`.
+    let mut out_types = vec![]; // E.g. Float.
     let mut other = vec![];
     let mut otherty = vec![];
     fields_named.named.iter().for_each(|field| {
@@ -157,12 +184,17 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                 outs.push(field_name.clone());
                 let ty = field.ty.clone();
                 outsty.push(quote! { #ty });
+                let inner = inner_type(&ty);
+                out_types.push(quote! { #inner });
             }
             (true, false) => {
                 eof_checks.push(quote! { self.#field_name.eof() });
                 ins.push(field_name.clone());
                 let ty = field.ty.clone();
                 insty.push(quote! { #field_name: #ty });
+                let inner = inner_type(&ty);
+                in_types.push(quote! { #inner });
+                in_name_types.push(quote! { #field_name: #inner });
             }
         };
     });
@@ -193,7 +225,9 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
 
     // Support sync blocks.
     // TODO: no way this works with anything more than two inputs, and one output.
-    if has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
+    if has_attr(&input.attrs, "sync", STRUCT_ATTRS)
+        || has_attr(&input.attrs, "sync_tag", STRUCT_ATTRS)
+    {
         let first = ins[0].clone();
         let rest = &ins[1..];
         let it = if ins.len() == 1 {
@@ -201,28 +235,47 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         } else {
             quote! { #first.iter().take(n)#(.zip(#rest.iter()))* }
         };
+        if has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
+            extra.push(quote! {
+                impl #impl_generics #struct_name #ty_generics #where_clause {
+                    fn process_sync_tags(&mut self, #(#in_name_types,)* tags: &[#path::stream::Tag]) -> (#(#out_types,)* Vec<#path::stream::Tag>) {
+                        (self.process_sync(#(#ins,)*), tags.to_vec())
+                    }
+                }
+            });
+        }
         extra.push(quote! {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
                     #(let #ins = self.#ins.clone();
                       let #ins = #ins.read_buf()?;)*
-                    let tags = #first.1;
+                    let mut tags = #first.1;
                     #(let #ins = #ins.0;)*
+
+                    // Clamp n to be no more than the input available.
                     let n = [#(#ins.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
                     if n ==  0 {
                         return Ok(#path::block::BlockRet::Noop);
                     }
                     #(let #outs = self.#outs.clone();
                       let mut #outs = #outs.write_buf()?;)*
-                    let n = [n, #(#outs.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));;
-                    let it = #it.map(|(#(#ins),*)| {
-                        self.process_sync(#(*#ins),*)
+
+                    // Clamp n to be no more than output space.
+                    let n = [#(#outs.len()),*].iter().fold(n, |min, &x|min.min(x));
+                    let mut otags = Vec::new();
+                    let it = #it.enumerate().map(|(pos, (#(#ins),*))| {
+                        // let (s, ts) = self.process_sync_tags(#(*#ins),*,&tags);
+                        let (s, ts) = self.process_sync_tags(#(*#ins),*,&[]);
+                        for tag in ts {
+                            otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
+                        }
+                        s
                     });
                     for (samp, w) in it.zip(#(#outs.slice().iter_mut())*) {
                         *w = samp;
                     }
                     #(#ins.consume(n);)*
-                    #(#outs.produce(n, &tags);)*
+                    #(#outs.produce(n, &otags);)*
                     Ok(#path::block::BlockRet::Ok)
                 }
             }
@@ -269,3 +322,5 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
 
     TokenStream::from(quote! { #(#extra)* })
 }
+/* vim: textwidth=80
+ */
