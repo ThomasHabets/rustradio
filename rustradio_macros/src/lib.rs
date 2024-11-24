@@ -81,6 +81,7 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 /// * `custom_name`: Call `custom_name()` instead of using the struct name, as
 ///   name.
 /// * `noeof`: Don't generate `eof()` logic.
+/// * `nevereof`: Generate `eof()` that always returns false.
 ///
 /// Field attributes:
 /// * `in`: Input stream.
