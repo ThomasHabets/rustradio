@@ -79,3 +79,42 @@ impl<T: Copy> BurstTagger<T> {
         (s, tags)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+    use crate::blocks::VectorSource;
+    use crate::Result;
+
+    #[test]
+    fn tag_it() -> Result<()> {
+        let mut src = VectorSource::new((0..100).map(|i| i as u32).collect());
+        let mut trigger = VectorSource::new(
+            (0..100)
+                .map(|i| match i as u32 {
+                    0..80 => 0.1,
+                    80..90 => 0.3,
+                    90.. => 0.2,
+                })
+                .collect(),
+        );
+        let mut b = BurstTagger::new(src.out(), trigger.out(), 0.25, "burst".to_string());
+        src.work()?;
+        trigger.work()?;
+        b.work()?;
+        let os = b.out();
+        let (res, tags) = os.read_buf()?;
+        let want: Vec<_> = (0..100).map(|i| i as u32).collect();
+        let got: Vec<_> = res.slice().iter().map(|f| *f as u32).collect();
+        assert_eq!(got, want);
+        assert_eq!(
+            tags,
+            &[
+                Tag::new(80, "burst".to_string(), TagValue::Bool(true)),
+                Tag::new(90, "burst".to_string(), TagValue::Bool(false)),
+            ]
+        );
+        Ok(())
+    }
+}
