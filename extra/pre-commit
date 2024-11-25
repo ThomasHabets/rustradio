@@ -3,25 +3,42 @@
 set -ueo pipefail
 
 export RUSTFLAGS="--deny warnings"
+TEMP_DIR="$(mktemp -d)"
+MAIN_DIR="$(pwd)"
 
+cleanup() {
+        rm -fr "$TEMP_DIR"
+}
+trap cleanup EXIT
+
+# Set up directory with only what's being committed, and go there.
+git archive HEAD | tar -x -C "$TEMP_DIR"
+git diff --cached --binary | (cd "$TEMP_DIR" && git apply)
+cd "$TEMP_DIR"
+
+# Regular fmt check.
 cargo fmt -- --check || {
     echo "Run: cargo fmt" >&2
     exit 1
 }
 
-export CARGO_TARGET_DIR="target/test.normal"
+# Test.
+export CARGO_TARGET_DIR="$MAIN_DIR/target/test.normal"
 cargo test || {
     echo "Tests fail without features" >&2
     exit 1
 }
-export CARGO_TARGET_DIR="target/test.all"
+
+# Test with all features.
+export CARGO_TARGET_DIR="$MAIN_DIR/target/test.all"
 cargo test --all-features || {
     echo "Tests fail with features" >&2
     exit 1
 }
 
+# Build with nightly.
 # TODO: maybe add --all-targets
-export CARGO_TARGET_DIR="target/nightly"
+export CARGO_TARGET_DIR="$MAIN_DIR/target/nightly"
 cargo +nightly 2>/dev/null > /dev/null && {
     cargo +nightly bench --no-run -F rtlsdr || {
 	echo "Benchmark builds fail" >&2
@@ -46,4 +63,3 @@ if [[ ${AI_REVIEW:-} = true ]]; then
         fi
     fi
 fi
-exit 0
