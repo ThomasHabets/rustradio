@@ -30,44 +30,35 @@ let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
 # Ok::<(), anyhow::Error>(())
 ```
 
+## Constructor arguments
+
+* `src`: Source data stream, will pass through and get tags.
+* `trigger: Trigger stream.
+* `threshold`: Threshold on trigger stream.
+* `tag`: Tag name to add.
+
  */
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp, Tag, TagValue};
+use crate::stream::{Streamp, Tag, TagValue};
 use crate::{Error, Float};
 
 /// Burst tagger:
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate, out, new)]
 pub struct BurstTagger<T: Copy> {
     #[rustradio(in)]
     src: Streamp<T>,
-    threshold: Float,
     #[rustradio(in)]
     trigger: Streamp<Float>,
     #[rustradio(out)]
     dst: Streamp<T>,
-    tag: String,
-    last: bool,
-}
 
-impl<T: Copy> BurstTagger<T> {
-    /// Create new burst tagger.
-    ///
-    /// * src: Source data stream, will pass through and get tags.
-    /// * trigger: Trigger stream.
-    /// * threshold: Threshold on trigger stream.
-    /// * tag: Tag name to add.
-    pub fn new(src: Streamp<T>, trigger: Streamp<Float>, threshold: Float, tag: String) -> Self {
-        Self {
-            src,
-            trigger,
-            threshold,
-            tag,
-            dst: Stream::newp(),
-            last: false,
-        }
-    }
+    threshold: Float,
+    tag: String,
+
+    #[rustradio(default)]
+    last: bool,
 }
 
 impl<T: Copy> Block for BurstTagger<T> {
