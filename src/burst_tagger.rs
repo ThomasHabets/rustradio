@@ -39,13 +39,12 @@ let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
 
  */
 
-use crate::block::{Block, BlockRet};
 use crate::stream::{Streamp, Tag, TagValue};
-use crate::{Error, Float};
+use crate::Float;
 
 /// Burst tagger:
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, new)]
+#[rustradio(crate, out, new, sync_tag)]
 pub struct BurstTagger<T: Copy> {
     #[rustradio(in)]
     src: Streamp<T>,
@@ -61,41 +60,22 @@ pub struct BurstTagger<T: Copy> {
     last: bool,
 }
 
-impl<T: Copy> Block for BurstTagger<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
-        let (input, mut tags) = self.src.read_buf()?;
-        let (trigger, _) = self.trigger.read_buf()?;
-        let mut o = self.dst.write_buf()?;
-        let n = std::cmp::min(input.len(), trigger.len());
-        if n == 0 {
-            return Ok(BlockRet::Noop);
+impl<T: Copy> BurstTagger<T> {
+    fn process_sync_tags(&mut self, s: T, tv: Float, tags: &[Tag]) -> (T, Vec<Tag>) {
+        let mut tags = tags.to_vec();
+        let cur = tv > self.threshold;
+        if cur != self.last {
+            tags.push(Tag::new(
+                0,
+                self.tag.clone(),
+                if cur {
+                    TagValue::Bool(true)
+                } else {
+                    TagValue::Bool(false)
+                },
+            ));
         }
-        let n = std::cmp::min(n, o.len());
-        if n == 0 {
-            return Ok(BlockRet::Ok);
-        }
-
-        let mut v = Vec::with_capacity(input.len());
-        for (i, (s, tv)) in input.iter().zip(trigger.iter()).enumerate().take(n) {
-            let cur = *tv > self.threshold;
-            if cur != self.last {
-                tags.push(Tag::new(
-                    i,
-                    self.tag.clone(),
-                    if cur {
-                        TagValue::Bool(true)
-                    } else {
-                        TagValue::Bool(false)
-                    },
-                ));
-            }
-            self.last = cur;
-            v.push(*s);
-        }
-        o.fill_from_iter(v);
-        o.produce(n, &tags);
-        input.consume(n);
-        trigger.consume(n);
-        Ok(BlockRet::Ok)
+        self.last = cur;
+        (s, tags)
     }
 }
