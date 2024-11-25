@@ -15,12 +15,10 @@ pub struct VectorSink<T: Copy> {
     src: Streamp<T>,
 
     #[rustradio(default)]
-    #[rustfmt::skip]
-    storage: Vec::<T>,
+    storage: Vec<T>,
 
     #[rustradio(default)]
-    #[rustfmt::skip]
-    tags: Vec::<Tag>,
+    tags: Vec<Tag>,
 
     /// Max number of samples and/or tags to store.
     max_size: usize,

@@ -73,6 +73,24 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
     )
 }
 
+/// Return the outer type of a generic type.
+///
+/// E.g. given Vec<Float>, return Vec.
+///
+/// Since a type can be a bit complicated, maybe it's fair to clarify that the
+/// last part of the type path has its path arguments removed.
+fn outer_type(ty: &syn::Type) -> syn::Type {
+    //eprintln!("Finding outer type of {}", quote! { #ty }.to_string());
+    //eprintln!("  {:?}", ty);
+    let mut ty = ty.clone();
+    if let syn::Type::Path(p) = &mut ty {
+        let n = p.path.segments.len();
+        let segment: &mut syn::PathSegment = &mut p.path.segments[n - 1];
+        segment.arguments = syn::PathArguments::None;
+    }
+    return ty;
+}
+
 /// Block derive macro.
 ///
 /// Most blocks should derive from `Block`. Example use:
@@ -145,7 +163,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         .filter(|field| has_attr(&field.attrs, "default", FIELD_ATTRS))
         .map(|field| {
             let field_name = field.ident.clone().unwrap();
-            let ty = field.ty.clone();
+            let ty = outer_type(&field.ty);
             fields_defaulted_ty.push(quote! { #field_name: #ty::default() });
             field_name.to_string()
         })
