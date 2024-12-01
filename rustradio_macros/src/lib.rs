@@ -1,7 +1,9 @@
 //! Derive macros for rustradio.
 //!
 //! Most blocks should derive from this macro.
+use std::collections::HashSet;
 use proc_macro::TokenStream;
+
 use quote::quote;
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
 
@@ -156,18 +158,18 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         false => quote! { rustradio },
     };
 
-    let mut fields_defaulted_ty = vec![];
-    let fields_defaulted: std::collections::HashSet<String> = fields_named
+    // fields_defaulted: Just the names of the fields that should be defaulted.
+    // fields_defaulted_ty: The initializer expression for the field.
+    let (fields_defaulted, fields_defaulted_ty): (HashSet<String>, Vec<_>) = fields_named
         .named
         .iter()
         .filter(|field| has_attr(&field.attrs, "default", FIELD_ATTRS))
         .map(|field| {
             let field_name = field.ident.clone().unwrap();
             let ty = outer_type(&field.ty);
-            fields_defaulted_ty.push(quote! { #field_name: #ty::default() });
-            field_name.to_string()
+            (field_name.to_string(), quote! { #field_name: #ty::default() })
         })
-        .collect();
+        .unzip();
 
     let mut set_eofs = vec![];
     let mut eof_checks = vec![];
