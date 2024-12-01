@@ -9,6 +9,7 @@ repository = "https://github.com/ThomasHabets/rustradio"
 keywords = ["SDR", "radio"]
 
 [dependencies]
+paste = "1.0.15"
 proc-macro2 = "1.0.89"
 #proc-macro2 = "1.0.89"
 quote = "1.0.37"
