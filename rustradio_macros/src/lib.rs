@@ -239,7 +239,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         assert!(
             !(has_attr(&field.attrs, "in", FIELD_ATTRS)
                 && has_attr(&field.attrs, "out", FIELD_ATTRS)),
-            "Field {} marked as bot hinput and output stream",
+            "Field {} marked as both input and output stream",
             field.ident.clone().unwrap()
         );
     }
