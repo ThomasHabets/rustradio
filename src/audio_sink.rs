@@ -4,6 +4,7 @@ use cpal::Sample;
 use log::{debug, error, info, trace};
 
 use crate::block::{Block, BlockRet};
+use crate::graph::CancellationToken;
 use crate::stream::Streamp;
 use crate::{Error, Float};
 
@@ -90,22 +91,71 @@ impl CpalOutput {
 pub struct AudioSink {
     #[rustradio(in)]
     src: Streamp<Float>,
-    sender: SyncSender<f32>,
+    sender: Option<SyncSender<f32>>,
 
-    // Needs to be kept around, but linter thinks it's unused.
-    _stream: cpal::Stream,
+    // The cpal::Stream is not Send, but needs to be kept alive for the duration
+    // of this block's lifetime. So we spawn a thread just to own that stream.
+    //
+    // This way we can make AudioSink Send.
+    cancel: CancellationToken,
+    audio_thread: Option<std::thread::JoinHandle<Result<()>>>,
 }
 
 impl AudioSink {
     pub fn new(src: Streamp<Float>, sample_rate: u64) -> Result<Self> {
         let output = CpalOutput::new(sample_rate as u32)?;
-        let (sender, stream) = output.start()?;
-
+        let (tx, rx) = std::sync::mpsc::channel();
+        let cancel = CancellationToken::new();
+        let c2 = cancel.clone();
+        let audio_thread = std::thread::Builder::new()
+            .name("audio_sink_stream".into())
+            .spawn(move || {
+                let _stream = match output.start() {
+                    Err(e) => {
+                        tx.send(Err(e)).expect("sending error");
+                        return Ok(());
+                    }
+                    Ok((sender, stream)) => {
+                        tx.send(Ok(sender)).expect("sending sender");
+                        stream
+                    }
+                };
+                while !c2.is_canceled() {
+                    std::thread::park();
+                }
+                Ok(())
+            })?;
+        // Try to receive sender.
+        let sender = {
+            let s = match rx.recv() {
+                Ok(s) => s,
+                Err(e) => return Err(e.into()),
+            };
+            // Ensure stream started ok.
+            match s {
+                Ok(s) => Some(s),
+                Err(e) => return Err(e),
+            }
+        };
         Ok(Self {
             src,
             sender,
-            _stream: stream,
+            cancel,
+            audio_thread: Some(audio_thread),
         })
+    }
+}
+
+impl Drop for AudioSink {
+    fn drop(&mut self) {
+        self.cancel.cancel(); // Allows the thread to end.
+        self.sender.take(); // Ends the stream to cpal.
+        if let Some(handle) = self.audio_thread.take() {
+            handle.thread().unpark();
+            if let Err(e) = handle.join().expect("audio stream thread failed") {
+                error!("Audio stream thread failed: {e}");
+            }
+        }
     }
 }
 
@@ -114,7 +164,7 @@ impl Block for AudioSink {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
         for (pos, x) in i.iter().enumerate() {
-            if let Err(e) = self.sender.send(*x) {
+            if let Err(e) = self.sender.as_ref().unwrap().send(*x) {
                 i.consume(pos);
                 return Err(Error::new(&format!("audio error: {e}")));
             }
