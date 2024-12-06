@@ -7,6 +7,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
 use rustradio::Float;
 
 #[derive(StructOpt, Debug)]

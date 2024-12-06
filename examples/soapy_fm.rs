@@ -10,6 +10,7 @@ mod internal {
     use rustradio::blocks::*;
     use rustradio::file_sink::Mode;
     use rustradio::graph::Graph;
+    use rustradio::graph::GraphRunner;
     use rustradio::Float;
 
     #[derive(StructOpt, Debug)]

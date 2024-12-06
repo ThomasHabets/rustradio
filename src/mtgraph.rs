@@ -16,6 +16,7 @@ other" via streams.
 # Example
 
 ```
+use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
@@ -47,14 +48,16 @@ impl MTGraph {
             cancel_token: CancellationToken::new(),
         }
     }
+}
 
+impl crate::graph::GraphRunner for MTGraph {
     /// Add a block to the flowgraph.
-    pub fn add(&mut self, b: Box<dyn Block + Send>) {
+    fn add(&mut self, b: Box<dyn Block + Send>) {
         self.blocks.push(b);
     }
 
     /// Run the graph until completion.
-    pub fn run(&mut self) -> Result<()> {
+    fn run(&mut self) -> Result<()> {
         let (exit_monitor, em_tx) = {
             let cancel_token = self.cancel_token.clone();
             let block_count = self.blocks.len();
@@ -202,7 +205,7 @@ impl MTGraph {
     }
 
     /// Return a string with stats about where time went.
-    pub fn generate_stats(&self, elapsed: std::time::Duration) -> String {
+    fn generate_stats(&self, elapsed: std::time::Duration) -> String {
         let total = self
             .times
             .values()
@@ -263,6 +266,7 @@ impl MTGraph {
     /// # Example
     ///
     /// ```no_run
+    /// use rustradio::graph::GraphRunner;
     /// let mut g = rustradio::mtgraph::MTGraph::new();
     /// let cancel = g.cancel_token();
     /// ctrlc::set_handler(move || {
@@ -271,7 +275,7 @@ impl MTGraph {
     /// g.run()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn cancel_token(&self) -> CancellationToken {
+    fn cancel_token(&self) -> CancellationToken {
         self.cancel_token.clone()
     }
 }

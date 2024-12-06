@@ -40,6 +40,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
 use rustradio::stream::Streamp;
 use rustradio::window::WindowType;
 use rustradio::Error;

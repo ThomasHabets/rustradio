@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
 use rustradio::Complex;
 use structopt::StructOpt;
 

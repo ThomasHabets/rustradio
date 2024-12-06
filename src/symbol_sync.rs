@@ -13,7 +13,7 @@ use crate::stream::{Stream, Streamp};
 use crate::{Error, Float};
 
 /// Timing Error Detector.
-pub trait TED {}
+pub trait TED: Send {}
 
 /// ZeroCrossing TED.
 pub struct TEDZeroCrossing {}

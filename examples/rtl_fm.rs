@@ -8,6 +8,7 @@ use structopt::StructOpt;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
 use rustradio::{Complex, Float};
 
 #[derive(StructOpt, Debug)]

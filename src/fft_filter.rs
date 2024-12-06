@@ -2,7 +2,7 @@
 
 ```
 use rustradio::{Complex, Float};
-use rustradio::graph::Graph;
+use rustradio::graph::{Graph, GraphRunner};
 use rustradio::fir::low_pass_complex;
 use rustradio::blocks::{ConstantSource, FftFilter, NullSink};
 

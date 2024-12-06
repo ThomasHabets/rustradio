@@ -3,7 +3,7 @@
 ## Example
 
 ```
-use rustradio::graph::Graph;
+use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{ToText, ConstantSource, FileSink};
 use rustradio::file_sink::Mode;
 use rustradio::Float;

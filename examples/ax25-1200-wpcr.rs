@@ -15,7 +15,6 @@ use anyhow::Result;
 use structopt::StructOpt;
 
 use rustradio::blocks::*;
-use rustradio::graph::Graph;
 use rustradio::window::WindowType;
 use rustradio::{Error, Float};
 
@@ -39,6 +38,9 @@ struct Opt {
 
     #[structopt(long = "iir_alpha", default_value = "0.01")]
     iir_alpha: Float,
+
+    #[structopt(long)]
+    multithreaded: bool,
 }
 
 macro_rules! add_block {
@@ -62,7 +64,11 @@ fn main() -> Result<()> {
         .unwrap();
 
     let samp_rate = opt.sample_rate;
-    let mut g = Graph::new();
+    let mut g: Box<dyn rustradio::graph::GraphRunner> = if opt.multithreaded {
+        Box::new(rustradio::mtgraph::MTGraph::new())
+    } else {
+        Box::new(rustradio::graph::Graph::new())
+    };
 
     // Read file.
     let prev = add_block![g, FileSource::new(&opt.read, false)?];

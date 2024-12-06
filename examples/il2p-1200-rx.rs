@@ -14,6 +14,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
 use rustradio::window::WindowType;
 use rustradio::{Complex, Float};
 

@@ -71,7 +71,7 @@ Here's a simple example that creates a couple of blocks, connects them
 with streams, and runs the graph.
 
 ```
-use rustradio::graph::Graph;
+use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{AddConst, VectorSource, DebugSink};
 use rustradio::Complex;
 let src = Box::new(VectorSource::new(

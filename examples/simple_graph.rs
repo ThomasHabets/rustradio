@@ -3,6 +3,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::{AddConst, DebugSink, PduWriter, StreamToPdu, VectorSourceBuilder};
 use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
 use rustradio::Complex;
 
 #[derive(StructOpt, Debug)]

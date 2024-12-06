@@ -25,7 +25,7 @@ impl MinMax for Float {
 /// General filter.
 ///
 /// TODO: also add filter_n.
-pub trait Filter<T: Copy + Default> {
+pub trait Filter<T: Copy + Default>: Send {
     /// Filter from one input sample.
     fn filter(&mut self, input: T) -> T;
 
@@ -62,7 +62,7 @@ where
 
 impl<T> Filter<T> for IIRFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + Send,
 {
     fn filter(&mut self, sample: T) -> T {
         let mut ret = self.taps[0] * sample;
@@ -85,7 +85,7 @@ where
 
 impl<T> CappedFilter<T> for IIRFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + MinMax,
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + MinMax + Send,
 {
     fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
         let mut ret = self.taps[0] * sample;

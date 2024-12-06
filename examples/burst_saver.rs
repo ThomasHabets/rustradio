@@ -10,6 +10,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
 use rustradio::{Complex, Error, Float};
 
 #[derive(StructOpt, Debug)]

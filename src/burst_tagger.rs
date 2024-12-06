@@ -16,7 +16,7 @@ into burst PDUs.
 Also see `examples/wpcr.rs`.
 
 ```
-use rustradio::graph::Graph;
+use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIIRFilter,BurstTagger,StreamToPdu};
 use rustradio::Complex;
 let src = FileSource::new("/dev/null", false)?;

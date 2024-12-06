@@ -8,13 +8,48 @@ use log::{info, trace};
 use crate::block::{Block, BlockRet};
 
 /**
+Abstraction over graph executors.
+*/
+pub trait GraphRunner {
+    /// Add a block to the graph.
+    fn add(&mut self, b: Box<dyn Block + Send>);
+
+    /// Run the graph.
+    ///
+    /// Runs the graph until all the blocks are "done", or until the graph is
+    /// cancelled.
+    fn run(&mut self) -> Result<()>;
+
+    /// Return a string with stats about where time went.
+    fn generate_stats(&self, elapsed: std::time::Duration) -> String;
+
+    /// Return a cancellation token, for asynchronously stopping the
+    /// graph, for example if the user presses Ctrl-C.
+    ///
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rustradio::graph::GraphRunner;
+    /// let mut g = rustradio::graph::Graph::new();
+    /// let cancel = g.cancel_token();
+    /// ctrlc::set_handler(move || {
+    ///     cancel.cancel();
+    /// }).expect("failed to set Ctrl-C handler");
+    /// g.run()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    fn cancel_token(&self) -> CancellationToken;
+}
+
+/**
 A graph is a thing that RustRadio runs, to let blocks "talk to each
 other" via streams.
 
 # Example
 
 ```
-use rustradio::graph::Graph;
+use rustradio::graph::{Graph, GraphRunner};
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
 let src = Box::new(FileSource::<u8>::new("/dev/null", false)?);
@@ -45,14 +80,16 @@ impl Graph {
             cancel_token: CancellationToken::new(),
         }
     }
+}
 
+impl GraphRunner for Graph {
     /// Add a block to the flowgraph.
-    pub fn add(&mut self, b: Box<dyn Block>) {
+    fn add(&mut self, b: Box<dyn Block + Send>) {
         self.blocks.push(b);
     }
 
     /// Run the graph until completion.
-    pub fn run(&mut self) -> Result<()> {
+    fn run(&mut self) -> Result<()> {
         let st = Instant::now();
         self.times
             .resize(self.blocks.len(), std::time::Duration::default());
@@ -111,7 +148,7 @@ impl Graph {
     }
 
     /// Return a string with stats about where time went.
-    pub fn generate_stats(&self, elapsed: std::time::Duration) -> String {
+    fn generate_stats(&self, elapsed: std::time::Duration) -> String {
         let total = self
             .times
             .iter()
@@ -172,6 +209,7 @@ impl Graph {
     /// # Example
     ///
     /// ```no_run
+    /// use rustradio::graph::GraphRunner;
     /// let mut g = rustradio::graph::Graph::new();
     /// let cancel = g.cancel_token();
     /// ctrlc::set_handler(move || {
@@ -180,7 +218,7 @@ impl Graph {
     /// g.run()?;
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn cancel_token(&self) -> CancellationToken {
+    fn cancel_token(&self) -> CancellationToken {
         self.cancel_token.clone()
     }
 }
@@ -245,3 +283,5 @@ impl Default for CancellationToken {
         Self::new()
     }
 }
+/* vim: textwidth=80
+ */
