@@ -8,7 +8,11 @@ set -ueo pipefail
 }
 
 CURRENT="$(awk '/^version/ {print $3}' Cargo.toml | sed 's/"//g')"
-NEW="$(echo $CURRENT | awk -F. '{print $1 "." $2 "." $3+1}')"
+if [[ "$1" = "" ]]; then
+    NEW="$(echo $CURRENT | awk -F. '{print $1 "." $2 "." $3+1}')"
+else
+    NEW="$1"
+fi
 echo "Current: '$CURRENT', New: '$NEW'"
 sed -i "s/^version = \"${CURRENT?}\"/version = \"${NEW?}\"/" Cargo.toml
 sed -i -r 's/^(rustradio_macros.*version = ")[0-9.]+(".*)/\1'"${NEW}"'\2/' Cargo.toml
