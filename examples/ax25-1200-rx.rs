@@ -39,11 +39,11 @@ use anyhow::Result;
 use structopt::StructOpt;
 
 use rustradio::blocks::*;
-use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::stream::Streamp;
 use rustradio::window::WindowType;
 use rustradio::Error;
+use rustradio::{graph::Graph, mtgraph::MTGraph};
 use rustradio::{Complex, Float};
 
 #[derive(StructOpt, Debug)]
@@ -89,6 +89,10 @@ struct Opt {
 
     #[structopt(long, default_value = "0.5")]
     symbol_max_deviation: Float,
+
+    /// Run multithreaded.
+    #[structopt(long)]
+    multithread: bool,
 }
 
 macro_rules! add_block {
@@ -100,7 +104,7 @@ macro_rules! add_block {
     }};
 }
 
-fn get_complex_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Complex>, f32)> {
+fn get_complex_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(Streamp<Complex>, f32)> {
     if let Some(ref read) = opt.read {
         let mut b = SigMFSourceBuilder::new(read.clone());
         if let Some(s) = opt.samp_rate {
@@ -132,7 +136,7 @@ fn get_complex_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Complex>, f32)
     panic!("not read, not rtlsdr");
 }
 
-fn get_input(g: &mut Graph, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
+fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
     if opt.audio {
         if let Some(ref read) = &opt.read {
             let prev = add_block![g, FileSource::new(read, false)?];
@@ -187,7 +191,11 @@ fn main() -> Result<()> {
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
 
-    let mut g = Graph::new();
+    let mut g: Box<dyn GraphRunner> = if opt.multithread {
+        Box::new(MTGraph::new())
+    } else {
+        Box::new(Graph::new())
+    };
 
     let (prev, samp_rate) = get_input(&mut g, &opt)?;
     let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
