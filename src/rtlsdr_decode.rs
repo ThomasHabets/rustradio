@@ -30,13 +30,13 @@ impl Block for RtlSdrDecode {
             return Ok(BlockRet::OutputFull);
         }
 
-        // TODO: needless copy.
-        out.fill_from_iter((0..isamples).step_by(2).map(|e| {
-            Complex::new(
-                ((input[e] as Float) - 127.0) * 0.008,
-                ((input[e + 1] as Float) - 127.0) * 0.008,
-            )
-        }));
+        out.fill_from_iter(
+            input
+                .slice()
+                .chunks_exact(2)
+                .map(|e| ((e[0] as Float), (e[1] as Float)))
+                .map(|(a, b)| Complex::new((a - 127.0) * 0.008, (b - 127.0) * 0.008)),
+        );
         input.consume(isamples);
         out.produce(osamples, &[]);
         Ok(BlockRet::Ok)
