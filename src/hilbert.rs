@@ -56,7 +56,7 @@ impl Block for Hilbert {
         }
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::OutputFull);
         }
 
         let inout = std::cmp::min(i.len(), o.len());
