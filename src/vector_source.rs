@@ -82,6 +82,9 @@ where
     T: Copy,
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
+        if self.data.is_empty() {
+            return Ok(BlockRet::EOF);
+        }
         if let Repeat::Finite(repeat) = self.repeat {
             if self.repeat_count == repeat {
                 return Ok(BlockRet::EOF);
