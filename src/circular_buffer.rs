@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use libc::{c_uchar, c_void, size_t};
 use libc::{MAP_FAILED, MAP_FIXED, MAP_SHARED, PROT_READ, PROT_WRITE};
+use log::error;
 
 use crate::stream::{Tag, TagPos};
 use crate::Error;
@@ -376,7 +377,13 @@ impl<T: Copy> Buffer<T> {
     /// Will only be called from the write buffer.
     pub(in crate::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
         if n == 0 {
-            assert!(tags.is_empty());
+            debug_assert!(tags.is_empty());
+            if !tags.is_empty() {
+                error!(
+                    "produce() called on a stream with 0 entries, but non-empty tags: {:?}",
+                    tags
+                );
+            }
             return;
         }
         let mut s = self.state.lock().unwrap();
