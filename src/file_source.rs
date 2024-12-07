@@ -78,7 +78,7 @@ where
 
         let have = self.buf.len() / sample_size;
         if have == 0 {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::Pending);
         }
 
         // TODO: remove needless copy.
