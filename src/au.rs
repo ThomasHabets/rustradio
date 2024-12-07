@@ -232,6 +232,9 @@ impl Block for AuDecode {
             DecodeState::Data => {
                 let n = std::cmp::min(i.len(), o.len() * 2); // Bytes.
                 let n = n - (n & 1);
+                if n == 0 {
+                    return Ok(BlockRet::Noop);
+                }
                 let v = i
                     .iter()
                     .take(n)
