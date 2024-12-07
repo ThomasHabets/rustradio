@@ -19,12 +19,16 @@ impl Block for RtlSdrDecode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: handle tags.
         let (input, _tags) = self.src.read_buf()?;
-        let isamples = input.len() - input.len() % 2;
-        let osamples = isamples / 2;
-        if isamples == 0 || osamples == 0 {
+        let isamples = input.len() & !1;
+        let mut out = self.dst.write_buf()?;
+        if isamples == 0 {
             return Ok(BlockRet::Noop);
         }
-        let mut out = self.dst.write_buf()?;
+        let isamples = std::cmp::min(isamples, out.len() * 2);
+        let osamples = isamples / 2;
+        if osamples == 0 {
+            return Ok(BlockRet::OutputFull);
+        }
 
         // TODO: needless copy.
         out.fill_from_iter((0..isamples).step_by(2).map(|e| {
@@ -97,6 +101,26 @@ mod tests {
         let os = dec.out();
         let (res, _) = os.read_buf()?;
         assert_eq!(res.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn overflow() -> crate::Result<()> {
+        // Input is pairs of bytes. Output is complex, meaning a 4x increase. That won't fit.
+        let mut src = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE]);
+        assert_eq!(src.work()?, BlockRet::Ok);
+        assert_eq!(src.work()?, BlockRet::EOF);
+        let mut dec = RtlSdrDecode::new(src.out());
+        for n in 0..4 {
+            eprintln!("loop iter: {n}");
+            assert_eq!(dec.work()?, BlockRet::Ok);
+            let os = dec.out();
+            let (res, _) = os.read_buf()?;
+            assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE / 8);
+            res.consume(crate::stream::DEFAULT_STREAM_SIZE / 8);
+        }
+        // Finally there's no more input bytes to process.
+        assert_eq!(dec.work()?, BlockRet::Noop);
         Ok(())
     }
 }
