@@ -8,7 +8,7 @@ set -ueo pipefail
 }
 
 CURRENT="$(awk '/^version/ {print $3}' Cargo.toml | sed 's/"//g')"
-if [[ "$1" = "" ]]; then
+if [[ "${1:-}" = "" ]]; then
     NEW="$(echo $CURRENT | awk -F. '{print $1 "." $2 "." $3+1}')"
 else
     NEW="$1"
