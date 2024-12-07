@@ -375,6 +375,10 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the write buffer.
     pub(in crate::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
+        if n == 0 {
+            assert!(tags.is_empty());
+            return;
+        }
         let mut s = self.state.lock().unwrap();
         assert!(
             s.free() >= n,
