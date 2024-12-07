@@ -72,7 +72,7 @@ impl crate::graph::GraphRunner for MTGraph {
                      // We'll skip deeper checks if we already by the
                      // received message know that we're not done.
                      let mut maybe_done = match s {
-                         BlockRet::Ok | BlockRet::Pending => {
+                         BlockRet::Ok | BlockRet::Pending |BlockRet::OutputFull => {
                              // Bump down to first phase, if not already there.
                              first_phase = true;
                              false
@@ -91,7 +91,7 @@ impl crate::graph::GraphRunner for MTGraph {
                      // Don't bother checking all states if we already know we're not done.
                      for si in &status {
                          match si {
-                             BlockRet::Ok | BlockRet::Pending => {
+                             BlockRet::Ok | BlockRet::Pending |BlockRet::OutputFull=> {
                                  trace!("MTGraph exit monitor: index {index} not done, has state {:?}", si);
                                  first_phase = true;
                                  maybe_done = false;
@@ -160,7 +160,7 @@ impl crate::graph::GraphRunner for MTGraph {
                             BlockRet::EOF => {
                                 return Ok(tt);
                             }
-                            BlockRet::Noop => {
+                            BlockRet::Noop | BlockRet::OutputFull => {
                                 std::thread::sleep(idle_sleep);
                             }
                             BlockRet::Pending => {

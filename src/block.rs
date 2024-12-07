@@ -37,6 +37,9 @@ pub enum BlockRet {
     /// considered done, and the `g.run()` returns.
     Noop,
 
+    /// Produced nothing, because not enough output space.
+    OutputFull,
+
     // More data may be produced even if no more data comes in.
     // Currently not used.
     // Background,

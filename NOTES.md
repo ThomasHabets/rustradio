@@ -11,3 +11,5 @@
 ### Internal
 
 * Do we really need refcounted streams?
+* Multithreaded graphs should condvar sleep if they need more input, or more
+  output space.

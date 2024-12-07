@@ -114,7 +114,7 @@ impl GraphRunner for Graph {
                         done = false;
                         all_idle = false;
                     }
-                    BlockRet::Pending => {
+                    BlockRet::Pending | BlockRet::OutputFull => {
                         done = false;
                     }
                     BlockRet::Noop => {

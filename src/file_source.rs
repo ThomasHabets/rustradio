@@ -47,7 +47,7 @@ where
         let want = o.len();
         if want == 0 {
             trace!("FileSource: no space left in output stream");
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::OutputFull);
         }
 
         if have < want {
