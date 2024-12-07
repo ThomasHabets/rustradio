@@ -77,7 +77,7 @@ pub struct NoCopyStream<T> {
 /// Convenience type for a "pointer to a stream".
 pub type NoCopyStreamp<T> = Arc<NoCopyStream<T>>;
 
-const DEFAULT_STREAM_SIZE: usize = 409600;
+pub(crate) const DEFAULT_STREAM_SIZE: usize = 409600;
 
 impl<T> Stream<T> {
     /// Create a new stream.
