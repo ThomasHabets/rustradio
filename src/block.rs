@@ -16,7 +16,7 @@ it should just never bother calling it again.
 
 TODO: Add state for "don't call me unless there's more input".
  */
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlockRet {
     /// At least one sample was produced.
     ///
