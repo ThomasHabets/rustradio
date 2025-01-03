@@ -78,21 +78,26 @@ pub struct Circ {
 impl Circ {
     /// Create a new circular buffer.
     fn new(size: usize) -> Result<Self> {
+        let size_x2 = size * 2;
         let f = tempfile::tempfile()?;
-        f.set_len(size as u64)?;
-        let len2 = size * 2;
+        f.set_len(size_x2 as u64)?;
 
         // Map first half.
-        let mut map = Map::new(&f, len2)?;
+        let mut map = Map::new(&f, size_x2)?;
 
         // Remap second half to be same as the first.
         // Be very careful with the order, here.
         let second = (map.base as libc::uintptr_t + size as libc::uintptr_t) as *mut c_void;
         let map2 = Map::with_addr(&f, size, second)?;
+
+        // First map is now just `size`.
         map.len = size;
 
+        // Shrink file.
+        f.set_len(size as u64)?;
+
         Ok(Self {
-            len: len2,
+            len: size_x2,
             map,
             _map2: map2,
         })
