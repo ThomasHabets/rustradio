@@ -6,12 +6,12 @@ https://en.wikipedia.org/wiki/Window_function
 https://en.wikipedia.org/wiki/Spectral_leakage
 
 Notable missing window functions:
- * Hann
- * Rectangular
- * Triangular
- * Flat top
- * Gaussian
- * Taylor
+* Hann
+* Rectangular
+* Triangular
+* Flat top
+* Gaussian
+* Taylor
 
 # Example
 
@@ -28,7 +28,7 @@ for (x,y) in taps.iter().zip(correct) {
   assert!((x-y).abs() < 0.1);
 }
 ```
-h */
+*/
 use crate::Float;
 
 const PI: Float = std::f64::consts::PI as Float;
