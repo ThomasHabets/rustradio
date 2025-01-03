@@ -22,28 +22,18 @@ This block takes PDUs (as Vec<u8>), and writes them to an output
 directory, named as microseconds since epoch.
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct PduWriter<T> {
     #[rustradio(in)]
     src: NoCopyStreamp<Vec<T>>,
     dir: PathBuf,
+    #[rustradio(default)]
     files_written: usize,
 }
 
 impl<T> Drop for PduWriter<T> {
     fn drop(&mut self) {
         info!("PDU Writer: wrote {}", self.files_written);
-    }
-}
-
-impl<T> PduWriter<T> {
-    /// Create new PduWriter that'll write to `dir`.
-    pub fn new(src: NoCopyStreamp<Vec<T>>, dir: PathBuf) -> Self {
-        Self {
-            src,
-            dir,
-            files_written: 0,
-        }
     }
 }
 
