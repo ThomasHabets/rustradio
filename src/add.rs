@@ -1,5 +1,5 @@
 //! Add two streams.
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 
 /// Adds two streams, sample wise.
 #[derive(rustradio_macros::Block)]
@@ -10,13 +10,13 @@ where
 {
     /// Hello world.
     #[rustradio(in)]
-    a: Streamp<T>,
+    a: ReadStream<T>,
 
     #[rustradio(in)]
-    b: Streamp<T>,
+    b: ReadStream<T>,
 
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T> Add<T>
