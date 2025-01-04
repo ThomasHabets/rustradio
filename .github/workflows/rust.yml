@@ -20,6 +20,8 @@ jobs:
       run: cargo build --verbose
     - name: Build examples
       run: cargo build --verbose --examples
+    - name: apt-get update
+      run:  sudo apt-get update
     - name: Dependencies
       run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev
     - name: Build all features
