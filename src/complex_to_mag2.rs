@@ -1,5 +1,5 @@
 //! Convert Complex numbers to square of their magnitude.
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 
 /// Convert Complex numbers to square of their magnitude.
@@ -7,9 +7,9 @@ use crate::{Complex, Float};
 #[rustradio(crate, new, out, sync)]
 pub struct ComplexToMag2 {
     #[rustradio(in)]
-    src: Streamp<Complex>,
+    src: ReadStream<Complex>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
+    dst: WriteStream<Float>,
 }
 
 impl ComplexToMag2 {

@@ -5,7 +5,7 @@ use log::debug;
 use soapysdr::Direction;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::ReadStream;
 use crate::{Complex, Error};
 
 fn ai_string(ai: &soapysdr::ArgInfo) -> String {
@@ -36,7 +36,7 @@ impl SoapySdrSinkBuilder {
         }
     }
     /// Build block.
-    pub fn build(self, src: Streamp<Complex>) -> Result<SoapySdrSink> {
+    pub fn build(self, src: ReadStream<Complex>) -> Result<SoapySdrSink> {
         let dev = soapysdr::Device::new(&*self.dev)?;
         debug!("SoapySDR TX driver: {}", dev.driver_key()?);
         debug!("SoapySDR TX hardware: {}", dev.hardware_key()?);
@@ -92,7 +92,7 @@ impl SoapySdrSinkBuilder {
 #[rustradio(crate, out)]
 pub struct SoapySdrSink {
     #[rustradio(in)]
-    src: Streamp<Complex>,
+    src: ReadStream<Complex>,
     stream: soapysdr::TxStream<Complex>,
 }
 

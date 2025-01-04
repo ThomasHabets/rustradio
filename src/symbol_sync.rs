@@ -9,7 +9,7 @@ use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::iir_filter::CappedFilter;
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Float};
 
 /// Timing Error Detector.
@@ -54,11 +54,11 @@ pub struct SymbolSync {
     last_sym_boundary_pos: Float,
     next_sym_middle: Float,
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
+    dst: WriteStream<Float>,
     #[rustradio(out)]
-    out_clock: Option<Streamp<Float>>,
+    out_clock: Option<WriteStream<Float>>,
 }
 
 impl SymbolSync {
@@ -68,38 +68,38 @@ impl SymbolSync {
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
      */
     pub fn new(
-        src: Streamp<Float>,
+        src: ReadStream<Float>,
         sps: Float,
         max_deviation: Float,
         ted: Box<dyn TED>,
         mut clock_filter: Box<dyn CappedFilter<Float>>,
-    ) -> Self {
+    ) -> (Self, ReadStream<Float>) {
         assert!(sps > 1.0);
         clock_filter.fill(sps);
-        Self {
-            src,
-            dst: Stream::newp(),
-            sps,
-            clock: sps,
-            _ted: ted,
-            clock_filter,
-            max_deviation,
-            last_sign: false,
-            stream_pos: 0.0,
-            last_sym_boundary_pos: 0.0,
-            next_sym_middle: 0.0,
-            out_clock: None,
-        }
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Float> {
-        self.dst.clone()
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                sps,
+                clock: sps,
+                _ted: ted,
+                clock_filter,
+                max_deviation,
+                last_sign: false,
+                stream_pos: 0.0,
+                last_sym_boundary_pos: 0.0,
+                next_sym_middle: 0.0,
+                out_clock: None,
+            },
+            dr,
+        )
     }
 
     /// Return clock stream.
-    pub fn out_clock(&mut self) -> Streamp<Float> {
-        self.out_clock.get_or_insert(Stream::newp()).clone()
+    pub fn out_clock(&mut self) -> Option<ReadStream<Float>> {
+        //self.out_clock.get_or_insert(Stream::newp()).clone()
+        todo!()
     }
 }
 

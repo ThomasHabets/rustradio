@@ -10,7 +10,7 @@ therefore [APRS][aprs].
 use log::{debug, info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagValue};
+use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag, TagValue};
 use crate::{Error, Result};
 
 enum State {
@@ -73,7 +73,7 @@ found as Vec<u8>.
 #[rustradio(crate)]
 pub struct HdlcDeframer {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
     dst: NoCopyStreamp<Vec<u8>>,
     state: State,
@@ -100,7 +100,7 @@ impl HdlcDeframer {
     /// Create new HdlcDeframer.
     ///
     /// min_size and max_size is size in bytes.
-    pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
+    pub fn new(src: ReadStream<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
             dst: NoCopyStream::newp(),
@@ -232,8 +232,7 @@ impl HdlcDeframer {
 
 impl Block for HdlcDeframer {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let ti = self.src.clone();
-        let (input, _tags) = ti.read_buf()?;
+        let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
@@ -307,7 +306,7 @@ fn calc_crc(data: &[u8]) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Stream;
+    use crate::stream::ReadStream;
 
     fn str2bits(s: &str) -> Vec<u8> {
         s.chars()
@@ -328,7 +327,7 @@ mod tests {
             "01111110011111100101011111100101010111100000011111100101",
             "01111110010101011110000001111110",
         ] {
-            let s = Stream::fromp_slice(&str2bits(bits));
+            let s = ReadStream::from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -350,7 +349,7 @@ mod tests {
                 + "01011"
                 + "01111110010101011010101001111110"),
         ] {
-            let s = Stream::fromp_slice(&str2bits(bits));
+            let s = ReadStream::from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -367,7 +366,7 @@ mod tests {
     fn bitstuffed1() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = Stream::fromp_slice(&str2bits(bits));
+            let s = ReadStream::from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -382,7 +381,7 @@ mod tests {
     fn bitstuffed2() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = Stream::fromp_slice(&str2bits(bits));
+            let s = ReadStream::from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.set_checksum(false);
             b.work()?;
@@ -396,7 +395,7 @@ mod tests {
     fn too_short() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = Stream::fromp_slice(&str2bits(bits));
+            let s = ReadStream::from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 3, 10);
             b.set_checksum(false);
             b.work()?;
@@ -410,7 +409,7 @@ mod tests {
     fn too_long() -> Result<()> {
         {
             let bits = &"01111110111110111110111110101111110";
-            let s = Stream::fromp_slice(&str2bits(bits));
+            let s = ReadStream::from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 1);
             b.set_checksum(false);
             b.work()?;
@@ -424,7 +423,7 @@ mod tests {
     fn check_crc() -> Result<()> {
         {
             let bits = &"0111111010101010000010101010111101111110";
-            let s = Stream::fromp_slice(&str2bits(bits));
+            let s = ReadStream::from_slice(&str2bits(bits));
             let mut b = HdlcDeframer::new(s, 1, 10);
             b.work()?;
             let o = b.out();

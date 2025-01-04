@@ -1,5 +1,8 @@
 //! Test implementation of circular buffers.
 //! Full of unsafe. Full of ugly code.
+//!
+// TODO:
+// * Make Circ typed?
 
 use std::collections::BTreeMap;
 use std::os::fd::AsRawFd;
@@ -125,8 +128,8 @@ impl Circ {
     #[must_use]
     fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         let ez = std::mem::size_of::<T>();
-        assert!(self.len % ez == 0);
-        assert!(
+        debug_assert!(self.len % ez == 0);
+        debug_assert!(
             end - start <= self.len / ez / 2,
             "requested {start} to {end} ({} entries) of {} but len is {}",
             end - start,
@@ -148,8 +151,6 @@ struct BufferState {
     used: usize,        // In samples.
     circ_len: usize,    // In bytes.
     member_size: usize, // In bytes.
-    read_borrow: bool,
-    write_borrow: bool,
     tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 
@@ -188,26 +189,27 @@ impl BufferState {
 }
 
 /// BufferReader is an RAII'd read slice with some helper functions.
-pub struct BufferReader<'a, T: Copy> {
-    slice: &'a [T],
-    parent: &'a Buffer<T>,
+pub struct BufferReader<T: Copy> {
+    parent: Arc<Buffer<T>>,
+    start: usize,
+    end: usize,
 }
 
-impl<'a, T: Copy> BufferReader<'a, T> {
+impl<T: Copy> BufferReader<T> {
     #[must_use]
-    fn new(slice: &'a [T], parent: &'a Buffer<T>) -> BufferReader<'a, T> {
-        Self { slice, parent }
+    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> Self {
+        Self { parent, start, end }
     }
 
     /// Return slice to read from.
     #[must_use]
     pub fn slice(&self) -> &[T] {
-        self.slice
+        self.parent.slice(self.start, self.end)
     }
 
     /// Helper function to iterate over input instead.
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
-        self.slice.iter()
+        self.slice().iter()
     }
 
     /// We're done with the buffer. Consume `n` samples.
@@ -218,52 +220,47 @@ impl<'a, T: Copy> BufferReader<'a, T> {
     /// len convenience function.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.slice.len()
+        self.end - self.start
     }
 
     /// is_empty convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.slice.is_empty()
+        self.end == self.start
     }
 }
 
-impl<T: Copy> std::ops::Index<usize> for BufferReader<'_, T> {
+impl<T: Copy> std::ops::Index<usize> for BufferReader<T> {
     type Output = T;
 
     fn index(&self, n: usize) -> &Self::Output {
-        &self.slice[n]
-    }
-}
-
-impl<T: Copy> Drop for BufferReader<'_, T> {
-    fn drop(&mut self) {
-        self.parent.return_read_buf();
+        &self.slice()[n]
     }
 }
 
 /// BufferWriter is an RAII slice with some helper functions.
-pub struct BufferWriter<'a, T: Copy> {
-    slice: &'a mut [T],
-    parent: &'a Buffer<T>,
+pub struct BufferWriter<T: Copy> {
+    parent: Arc<Buffer<T>>,
+    start: usize,
+    end: usize,
 }
 
-impl<'a, T: Copy> BufferWriter<'a, T> {
+impl<T: Copy> BufferWriter<T> {
     #[must_use]
-    fn new(slice: &'a mut [T], parent: &'a Buffer<T>) -> BufferWriter<'a, T> {
-        Self { slice, parent }
+    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> BufferWriter<T> {
+        Self { parent, start, end }
     }
 
     /// Return the slice to write to.
     #[must_use]
     pub fn slice(&mut self) -> &mut [T] {
-        self.slice
+        self.parent.slice_mut(self.start, self.end)
     }
 
     /// Shortcut to save typing for the common operation of copying
     /// from an iterator.
     pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
-        for (place, item) in self.slice.iter_mut().zip(src) {
+        for (place, item) in self.slice().iter_mut().zip(src) {
             *place = item;
         }
     }
@@ -271,7 +268,7 @@ impl<'a, T: Copy> BufferWriter<'a, T> {
     /// Shortcut to save typing for the common operation of copying
     /// from an iterator.
     pub fn fill_from_slice(&mut self, src: &[T]) {
-        self.slice[..src.len()].copy_from_slice(src);
+        self.slice()[..src.len()].copy_from_slice(src);
     }
 
     /// Having written into the write buffer, now tell the buffer
@@ -284,19 +281,13 @@ impl<'a, T: Copy> BufferWriter<'a, T> {
     /// len convenience function.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.slice.len()
+        self.end - self.start
     }
 
     /// is_empty convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.slice.is_empty()
-    }
-}
-
-impl<T: Copy> Drop for BufferWriter<'_, T> {
-    fn drop(&mut self) {
-        self.parent.return_write_buf();
+        self.end == self.start
     }
 }
 
@@ -314,8 +305,6 @@ impl<T> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             state: Arc::new(Mutex::new(BufferState {
-                read_borrow: false,
-                write_borrow: false,
                 rpos: 0,
                 wpos: 0,
                 used: 0,
@@ -413,30 +402,19 @@ impl<T: Copy> Buffer<T> {
         s.used += n;
     }
 
-    /// Will only be called from the read buffer, as it gets destroyed.
-    pub(in crate::circular_buffer) fn return_read_buf(&self) {
-        let mut s = self.state.lock().unwrap();
-        assert!(s.read_borrow);
-        s.read_borrow = false;
+    pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
+        self.circ.full_buffer::<T>(start, end)
     }
 
-    /// Will only be called from the write buffer, as it gets destroyed.
-    pub(in crate::circular_buffer) fn return_write_buf(&self) {
-        let mut s = self.state.lock().unwrap();
-        assert!(s.write_borrow);
-        s.write_borrow = false;
+    pub(crate) fn slice_mut(&self, start: usize, end: usize) -> &mut [T] {
+        self.circ.full_buffer::<T>(start, end)
     }
 
     /// Get the read slice.
-    pub fn read_buf(&self) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let mut s = self.state.lock().unwrap();
-        if s.read_borrow {
-            return Err(Error::new("read buf already borrowed").into());
-        }
-        s.read_borrow = true;
+    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
+        let s = self.state.lock().unwrap();
         let (start, end) = s.read_range();
-        let buf = self.circ.full_buffer::<T>(start, end);
-        let mut tags = Vec::new();
+        let mut tags = Vec::with_capacity(s.tags.len());
 
         // TODO: range scan the tags.
         for (n, ts) in &s.tags {
@@ -462,25 +440,19 @@ impl<T: Copy> Buffer<T> {
                 ));
             }
         }
+        drop(s);
         tags.sort_by_key(|a| a.pos());
-        Ok((
-            BufferReader::new(unsafe { std::mem::transmute::<&mut [T], &[T]>(buf) }, self),
-            tags,
-        ))
+        Ok((BufferReader::new(self, start, end), tags))
     }
 
     /// Get the write slice.
-    pub fn write_buf(&self) -> Result<BufferWriter<T>> {
-        let mut s = self.state.lock().unwrap();
-        if s.write_borrow {
-            return Err(Error::new("write buf already borrowed").into());
-        }
-        s.write_borrow = true;
+    pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
+        let s = self.state.lock().unwrap();
         let (start, end) = s.write_range();
-        let buf = self.circ.full_buffer::<T>(start, end);
+        drop(s);
         Ok(BufferWriter::new(
-            unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
-            self,
+            //unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
+            self, start, end,
         ))
     }
 }
@@ -548,52 +520,36 @@ mod tests {
     }
 
     #[test]
-    fn no_double() -> Result<()> {
-        let b = Arc::new(Buffer::<u8>::new(4096)?);
-        {
-            let _i1 = b.read_buf()?;
-            assert!(b.read_buf().is_err());
-        }
-        let _i2 = b.read_buf()?;
-        {
-            let _w1 = b.write_buf()?;
-            assert!(b.write_buf().is_err());
-        }
-        let _w2 = b.write_buf()?;
-        Ok(())
-    }
-
-    #[test]
     fn typical() -> Result<()> {
-        let b: Buffer<u8> = Buffer::new(4096)?;
+        let b = Arc::new(Buffer::new(4096)?);
 
         // Initial.
-        assert!(b.read_buf()?.0.is_empty());
-        assert_eq!(b.write_buf()?.len(), 4096);
+        assert!(b.clone().read_buf()?.0.is_empty());
+        assert_eq!(b.clone().write_buf()?.len(), 4096);
 
         // Write a byte.
         {
-            let mut buf = b.write_buf()?;
+            let mut buf = b.clone().write_buf()?;
             buf.slice()[0] = 123;
             buf.produce(1, &[Tag::new(0, "start".into(), TagValue::Bool(true))]);
-            assert_eq!(b.read_buf()?.0.slice(), vec![123]);
+            assert_eq!(b.clone().read_buf()?.0.slice(), vec![123]);
             assert_eq!(
-                b.read_buf()?.1,
+                b.clone().read_buf()?.1,
                 vec![Tag::new(0, "start".into(), TagValue::Bool(true))]
             );
-            assert_eq!(b.write_buf()?.len(), 4095);
+            assert_eq!(b.clone().write_buf()?.len(), 4095);
         }
 
         // Consume the byte.
         b.consume(1);
-        assert!(b.read_buf()?.0.is_empty());
-        assert!(b.read_buf()?.1.is_empty());
-        assert_eq!(b.write_buf()?.len(), 4096);
+        assert!(b.clone().read_buf()?.0.is_empty());
+        assert!(b.clone().read_buf()?.1.is_empty());
+        assert_eq!(b.clone().write_buf()?.len(), 4096);
 
         // Write towards the end bytes.
         {
             let n = 4000;
-            let mut wb = b.write_buf()?;
+            let mut wb = b.clone().write_buf()?;
             for i in 0..n {
                 wb.slice()[i] = (i & 0xff) as u8;
             }
@@ -601,7 +557,7 @@ mod tests {
                 n,
                 &[Tag::new(1, "foo".into(), TagValue::String("bar".into()))],
             );
-            let (rb, rt) = b.read_buf()?;
+            let (rb, rt) = b.clone().read_buf()?;
             assert_eq!(rb.len(), n);
             for i in 0..n {
                 assert_eq!(rb.slice()[i], (i & 0xff) as u8);
@@ -610,14 +566,14 @@ mod tests {
                 rt,
                 vec![Tag::new(1, "foo".into(), TagValue::String("bar".into()))]
             );
-            assert_eq!(b.write_buf()?.len(), 4096 - n);
+            assert_eq!(b.clone().write_buf()?.len(), 4096 - n);
         }
         b.consume(4000);
 
         // Write 100 bytes.
         {
             let n = 100;
-            let mut wb = b.write_buf()?;
+            let mut wb = b.clone().write_buf()?;
             for i in 0..n {
                 wb.slice()[i] = ((n - i) & 0xff) as u8;
             }
@@ -628,7 +584,7 @@ mod tests {
                     Tag::new(99, "last".into(), TagValue::Bool(false)),
                 ],
             );
-            let (rb, rt) = b.read_buf()?;
+            let (rb, rt) = b.clone().read_buf()?;
             assert_eq!(rb.len(), n);
             for i in 0..n {
                 assert_eq!(rb.slice()[i], ((n - i) & 0xff) as u8);
@@ -641,142 +597,142 @@ mod tests {
                 ]
             );
             drop(rb);
-            assert_eq!(b.read_buf()?.0.len(), 100);
-            assert_eq!(b.write_buf()?.len(), 3996);
+            assert_eq!(b.clone().read_buf()?.0.len(), 100);
+            assert_eq!(b.clone().write_buf()?.len(), 3996);
         }
 
         // Clear it.
         {
-            let (rb, _) = b.read_buf()?;
+            let (rb, _) = b.clone().read_buf()?;
             let n = rb.len();
             rb.consume(n);
-            assert_eq!(b.read_buf()?.0.len(), 0);
-            assert!(b.read_buf()?.1.is_empty());
-            assert_eq!(b.write_buf()?.len(), 4096);
+            assert_eq!(b.clone().read_buf()?.0.len(), 0);
+            assert!(b.clone().read_buf()?.1.is_empty());
+            assert_eq!(b.clone().write_buf()?.len(), 4096);
         }
         Ok(())
     }
 
     #[test]
     fn two_writes() -> Result<()> {
-        let b: Buffer<u8> = Buffer::new(4096)?;
+        let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(4096)?);
 
         // Write 10 bytes.
         {
-            let mut buf = b.write_buf()?;
+            let mut buf = b.clone().write_buf()?;
             buf.slice()[1] = 123;
             buf.produce(10, &[Tag::new(1, "first".into(), TagValue::Bool(true))]);
             assert_eq!(
-                b.read_buf()?.0.slice(),
+                b.clone().read_buf()?.0.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0]
             );
             assert_eq!(
-                b.read_buf()?.1,
+                b.clone().read_buf()?.1,
                 vec![Tag::new(1, "first".into(), TagValue::Bool(true))]
             );
-            assert_eq!(b.write_buf()?.len(), 4086);
+            assert_eq!(b.clone().write_buf()?.len(), 4086);
         }
 
         // Write 5 more bytes.
         {
-            let mut buf = b.write_buf()?;
+            let mut buf = b.clone().write_buf()?;
             buf.slice()[2] = 42;
             buf.produce(5, &[Tag::new(2, "second".into(), TagValue::Bool(false))]);
             assert_eq!(
-                b.read_buf()?.0.slice(),
+                b.clone().read_buf()?.0.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42, 0, 0]
             );
             assert_eq!(
-                b.read_buf()?.1,
+                b.clone().read_buf()?.1,
                 vec![
                     Tag::new(1, "first".into(), TagValue::Bool(true)),
                     Tag::new(12, "second".into(), TagValue::Bool(false))
                 ]
             );
-            assert_eq!(b.write_buf()?.len(), 4081);
+            assert_eq!(b.clone().write_buf()?.len(), 4081);
         }
 
         // Consume the byte.
         b.consume(15);
-        assert!(b.read_buf()?.0.is_empty());
-        assert!(b.read_buf()?.1.is_empty());
-        assert_eq!(b.write_buf()?.len(), 4096);
+        assert!(b.clone().read_buf()?.0.is_empty());
+        assert!(b.clone().read_buf()?.1.is_empty());
+        assert_eq!(b.clone().write_buf()?.len(), 4096);
         Ok(())
     }
 
     #[test]
     fn exact_overflow() -> Result<()> {
-        let b: Buffer<u8> = Buffer::new(4096)?;
+        let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(4096)?);
 
         // Initial.
-        assert!(b.read_buf()?.0.is_empty());
-        assert_eq!(b.write_buf()?.len(), 4096);
+        assert!(b.clone().read_buf()?.0.is_empty());
+        assert_eq!(b.clone().write_buf()?.len(), 4096);
 
         // Full.
-        b.write_buf()?.produce(4096, &[]);
-        assert_eq!(b.read_buf()?.0.len(), 4096);
-        assert_eq!(b.write_buf()?.len(), 0);
+        b.clone().write_buf()?.produce(4096, &[]);
+        assert_eq!(b.clone().read_buf()?.0.len(), 4096);
+        assert_eq!(b.clone().write_buf()?.len(), 0);
 
         // Empty again.
-        b.read_buf()?.0.consume(4096);
-        assert!(b.read_buf()?.0.is_empty());
-        assert_eq!(b.write_buf()?.len(), 4096);
+        b.clone().read_buf()?.0.consume(4096);
+        assert!(b.clone().read_buf()?.0.is_empty());
+        assert_eq!(b.clone().write_buf()?.len(), 4096);
         Ok(())
     }
 
     #[test]
     fn with_float() -> Result<()> {
-        let b: Buffer<Float> = Buffer::new(4096)?;
+        let b: Arc<Buffer<Float>> = Arc::new(Buffer::new(4096)?);
 
         // Initial.
-        assert!(b.read_buf()?.0.is_empty());
-        assert_eq!(b.write_buf()?.len(), 1024);
+        assert!(b.clone().read_buf()?.0.is_empty());
+        assert_eq!(b.clone().write_buf()?.len(), 1024);
 
         // Write a sample.
         {
-            let mut wb = b.write_buf()?;
+            let mut wb = b.clone().write_buf()?;
             wb.slice()[0] = 123.321;
             wb.produce(1, &[]);
         }
-        assert_eq!(b.read_buf()?.0.slice(), vec![123.321]);
-        assert_eq!(b.write_buf()?.len(), 1023);
+        assert_eq!(b.clone().read_buf()?.0.slice(), vec![123.321]);
+        assert_eq!(b.clone().write_buf()?.len(), 1023);
 
         // Consume the sample.
-        b.read_buf()?.0.consume(1);
-        assert!(b.read_buf()?.0.is_empty());
-        assert_eq!(b.write_buf()?.len(), 1024);
+        b.clone().read_buf()?.0.consume(1);
+        assert!(b.clone().read_buf()?.0.is_empty());
+        assert_eq!(b.clone().write_buf()?.len(), 1024);
 
         // Write towards the end bytes.
         {
             let n = 1000;
-            let mut wb = b.write_buf()?;
+            let mut wb = b.clone().write_buf()?;
             for i in 0..n {
                 wb.slice()[i] = i as Float;
             }
             wb.produce(n, &[]);
-            assert_eq!(b.read_buf()?.0.len(), n);
+            assert_eq!(b.clone().read_buf()?.0.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()?.0.slice()[i], i as Float);
+                assert_eq!(b.clone().read_buf()?.0.slice()[i], i as Float);
             }
-            assert_eq!(b.write_buf()?.len(), 24);
+            assert_eq!(b.clone().write_buf()?.len(), 24);
         }
-        b.read_buf()?.0.consume(1000);
+        b.clone().read_buf()?.0.consume(1000);
 
         // Write 100 bytes.
         {
             let n = 100;
-            let mut wb = b.write_buf()?;
+            let mut wb = b.clone().write_buf()?;
             for i in 0..n {
                 wb.slice()[i] = (n - i) as Float;
             }
             wb.produce(n, &[]);
-            assert_eq!(b.read_buf()?.0.len(), n);
+            assert_eq!(b.clone().read_buf()?.0.len(), n);
             for i in 0..n {
-                assert_eq!(b.read_buf()?.0.slice()[i], (n - i) as Float);
+                assert_eq!(b.clone().read_buf()?.0.slice()[i], (n - i) as Float);
             }
         }
-        assert_eq!(b.read_buf()?.0.len(), 100);
-        assert_eq!(b.write_buf()?.len(), 1024 - 100);
+        assert_eq!(b.clone().read_buf()?.0.len(), 100);
+        assert_eq!(b.clone().write_buf()?.len(), 1024 - 100);
         Ok(())
     }
 }

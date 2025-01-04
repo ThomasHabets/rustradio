@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::ReadStream;
 use crate::Error;
 
 /// Discard anything written to this block.
@@ -13,12 +13,12 @@ pub struct NullSink<T>
 where
     T: Copy,
 {
-    src: Streamp<T>,
+    src: ReadStream<T>,
 }
 
 impl<T: Default + Copy> NullSink<T> {
     /// Create new NullSink block.
-    pub fn new(src: Streamp<T>) -> Self {
+    pub fn new(src: ReadStream<T>) -> Self {
         Self { src }
     }
 }

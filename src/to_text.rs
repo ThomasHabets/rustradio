@@ -7,10 +7,10 @@ use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{ToText, ConstantSource, FileSink};
 use rustradio::file_sink::Mode;
 use rustradio::Float;
-let src1 = ConstantSource::new(1.0);
-let src2 = ConstantSource::new(-1.0);
-let to_text = ToText::new(vec![src1.out(), src2.out()]);
-let sink = FileSink::new(to_text.out(), "/dev/null".into(), Mode::Append)?;
+let (src1, src1_out) = ConstantSource::new(1.0);
+let (src2, src2_out) = ConstantSource::new(-1.0);
+let (to_text, to_text_out) = ToText::new(vec![src1_out, src2_out]);
+let sink = FileSink::new(to_text_out, "/dev/null".into(), Mode::Append)?;
 let mut g = Graph::new();
 g.add(Box::new(src1));
 g.add(Box::new(src2));
@@ -23,7 +23,7 @@ g.add(Box::new(sink));
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 
 /// Turn samples into text.
@@ -33,18 +33,16 @@ use crate::Error;
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, out, noeof)]
 pub struct ToText<T: Copy> {
-    srcs: Vec<Streamp<T>>,
+    srcs: Vec<ReadStream<T>>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
 }
 
 impl<T: Copy> ToText<T> {
     /// Create new ToText block.
-    pub fn new(srcs: Vec<Streamp<T>>) -> Self {
-        Self {
-            srcs,
-            dst: Stream::newp(),
-        }
+    pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (Self { srcs, dst }, dr)
     }
 }
 

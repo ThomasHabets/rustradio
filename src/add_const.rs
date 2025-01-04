@@ -1,9 +1,12 @@
 //! Add a constant value to every sample.
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 
 /// Add const value, implemented in terms of Map.
 /// TODO: remove AddConst, below?
-pub fn add_const<T>(src: Streamp<T>, val: T) -> crate::convert::Map<T, T, impl Fn(T) -> T>
+pub fn add_const<T>(
+    src: ReadStream<T>,
+    val: T,
+) -> (crate::convert::Map<T, T, impl Fn(T) -> T>, ReadStream<T>)
 where
     T: Copy + std::ops::Add<Output = T>,
 {
@@ -18,9 +21,9 @@ where
 pub struct AddConst<T: Copy + std::ops::Add<Output = T>> {
     val: T,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T> AddConst<T>

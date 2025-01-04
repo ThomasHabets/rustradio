@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Sample};
 
 /// Read stream from raw file.
@@ -18,21 +18,25 @@ pub struct FileSource<T: Copy> {
     repeat: bool,
     buf: Vec<u8>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
-    pub fn new(filename: &str, repeat: bool) -> Result<Self> {
+    pub fn new(filename: &str, repeat: bool) -> Result<(Self, ReadStream<T>)> {
         let f = BufReader::new(std::fs::File::open(filename)?);
         debug!("Opening source {filename}");
-        Ok(Self {
-            filename: filename.to_string(),
-            f,
-            repeat,
-            buf: Vec::new(),
-            dst: Stream::newp(),
-        })
+        let (dst, dr) = crate::stream::new_stream();
+        Ok((
+            Self {
+                filename: filename.to_string(),
+                f,
+                repeat,
+                buf: Vec::new(),
+                dst,
+            },
+            dr,
+        ))
     }
 }
 
@@ -113,10 +117,10 @@ mod tests {
             ],
         )?;
 
-        let mut src = FileSource::<Float>::new(&tmpfn, false)?;
+        let (mut src, src_out) = FileSource::<Float>::new(&tmpfn, false)?;
         src.work()?;
 
-        let (res, _) = src.dst.read_buf()?;
+        let (res, _) = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
         assert_eq!(res.slice(), correct);
@@ -132,10 +136,10 @@ mod tests {
             vec![0, 0, 0, 0, 0, 0, 0, 0, 195, 245, 72, 64, 205, 204, 44, 192],
         )?;
 
-        let mut src = FileSource::<Complex>::new(&tmpfn, false)?;
+        let (mut src, src_out) = FileSource::<Complex>::new(&tmpfn, false)?;
         src.work()?;
 
-        let (res, _) = src.dst.read_buf()?;
+        let (res, _) = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)];
         assert_eq!(res.slice(), correct);

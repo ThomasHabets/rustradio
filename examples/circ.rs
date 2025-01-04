@@ -9,8 +9,7 @@ fn main() -> Result<()> {
 
     let b2 = b.clone();
     std::thread::spawn(move || loop {
-        let (rb, _) = b2.read_buf().unwrap();
-        assert!(b2.read_buf().is_err());
+        let (rb, _) = Arc::clone(&b2).read_buf().unwrap();
         println!("read buf: {:?}", rb.slice());
         let l = rb.slice().len();
         rb.consume(l);
@@ -19,8 +18,7 @@ fn main() -> Result<()> {
 
     let mut n = 0;
     loop {
-        let mut wb = b.write_buf().unwrap();
-        assert!(b.write_buf().is_err());
+        let mut wb = Arc::clone(&b).write_buf().unwrap();
         if !wb.slice().is_empty() {
             wb.slice()[0] = n;
             n += 1;

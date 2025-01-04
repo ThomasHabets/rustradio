@@ -2,9 +2,9 @@
 
 extern crate rustradio;
 extern crate test;
-use rustradio::block::Block;
+use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
-use rustradio::stream::Stream;
+use rustradio::stream::new_stream;
 use rustradio::window::WindowType;
 use rustradio::Complex;
 
@@ -18,29 +18,23 @@ fn bench_fft_filter(b: &mut Bencher) {
         a.resize(a.len() * 2, Complex::default());
         a
     };
-    let s = Stream::newp();
-    let mut filter = FftFilter::new(s.clone(), &taps);
+    let (sw, sr) = new_stream();
+    let (mut filter, out) = FftFilter::new(sr, &taps);
     b.iter(|| {
-        // Empty input buffer.
-        {
-            let (i, _) = s.read_buf().unwrap();
-            let n = i.len();
-            i.consume(n);
-        }
         // Fill input buffer.
         {
-            let o = s.write_buf().unwrap();
+            let o = sw.write_buf().unwrap();
             //o.slice()[..input.len()].clone_from_slice(&input);
             o.produce(input.len(), &[]);
         }
         // Empty output buffer.
         {
-            let obind = filter.out();
-            let (out, _) = obind.read_buf().unwrap();
+            let (out, _) = out.read_buf().unwrap();
             let n = out.len();
             out.consume(n);
         }
-        filter.work().unwrap();
+        assert_eq!(BlockRet::Ok, filter.work().unwrap());
+        assert_eq!(BlockRet::Noop, filter.work().unwrap());
     });
 }
 
@@ -52,28 +46,27 @@ fn bench_fir_filter(b: &mut Bencher) {
         a.resize(a.len() * 2, Complex::default());
         a
     };
-    let s = Stream::newp();
-    let mut filter = FIRFilter::new(s.clone(), &taps);
+    let (sw, sr) = new_stream();
+    let (mut filter, out) = FIRFilter::new(sr, &taps);
     b.iter(|| {
-        // Empty input buffer.
-        {
-            let (i, _) = s.read_buf().unwrap();
-            let n = i.len();
-            i.consume(n);
-        }
         // Fill input buffer.
         {
-            let o = s.write_buf().unwrap();
+            let o = sw.write_buf().unwrap();
             //o.slice()[..input.len()].clone_from_slice(&input);
             o.produce(input.len(), &[]);
         }
         // Empty output buffer.
         {
-            let obind = filter.out();
-            let (out, _) = obind.read_buf().unwrap();
+            let (out, _) = out.read_buf().unwrap();
             let n = out.len();
             out.consume(n);
         }
-        filter.work().unwrap();
+        loop {
+            match filter.work().unwrap() {
+                BlockRet::Ok => continue,
+                BlockRet::Noop => break,
+                other => panic!("FIRFilter returned {other:?}"),
+            }
+        }
     });
 }

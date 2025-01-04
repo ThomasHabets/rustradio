@@ -21,9 +21,8 @@ struct Opt {
 
 macro_rules! add_block {
     ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
-        $g.add(block);
+        let (block, prev) = $cons;
+        $g.add(Box::new(block));
         prev
     }};
 }
@@ -52,7 +51,9 @@ fn main() -> Result<()> {
         })
         .build()
     ];
-    let prev = add_block![g, DebugFilter::new(prev)];
+    let dbg = DebugFilter::new(prev);
+    let prev = dbg.out();
+    g.add(Box::new(dbg));
     g.add(Box::new(NoCopyFileSink::new(
         prev,
         "out.txt".into(),

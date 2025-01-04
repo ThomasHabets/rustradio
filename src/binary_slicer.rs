@@ -3,7 +3,7 @@
 //! TODO: should this be replaced with a MapBuilder, like in add_const?
 use anyhow::Result;
 
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 use crate::Float;
 
 /// Turn positive Float values into binary `1u8`, and negative into `0u8`.
@@ -11,9 +11,9 @@ use crate::Float;
 #[rustradio(crate, new, out, sync)]
 pub struct BinarySlicer {
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
 }
 
 impl BinarySlicer {

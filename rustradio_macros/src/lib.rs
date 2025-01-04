@@ -25,7 +25,7 @@ macro_rules! unzip_n {
 
 static STRUCT_ATTRS: &[&str] = &[
     "new",
-    "out",
+    "out", // TODO: remove this attr
     "crate",
     "sync",
     "sync_tag",
@@ -72,7 +72,7 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 
 /// Return the inner type of a generic type.
 ///
-/// E.g. given Streamp<Float>, return Float.
+/// E.g. given ReadStream<Float>, return Float.
 fn inner_type(ty: &syn::Type) -> &syn::Type {
     if let syn::Type::Path(p) = &ty {
         let segment = p.path.segments.last().unwrap();
@@ -86,7 +86,7 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
         }
     }
     panic!(
-        "Tried to get the inner type of a non-generic, probably non-Streamp: {}",
+        "Tried to get the inner type of a non-generic, probably non-Stream: {}",
         quote! { #ty }.to_string()
     )
 }
@@ -118,9 +118,9 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 /// #[rustradio(new, out)]
 /// pub struct MyBlock<T: Copy> {
 ///   #[rustradio(in)]
-///   src: Streamp<T>,
+///   src: ReadStream<T>,
 ///   #[rustradio(out)]
-///   dst: Streamp<T>,
+///   dst: WriteStream<T>,
 ///
 ///   other_parameter: u32,
 /// }
@@ -190,7 +190,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     //
     // Elements are of the form:
     // * in_names:          src
-    // * in_name_types:     src: Streamp<Complex>
+    // * in_name_types:     src: ReadStream<Complex>
     // * inval_name_types:  src: Complex
     let (in_names, in_name_types, inval_name_types) = unzip_n![
         fields_named
@@ -216,9 +216,9 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     //
     // Elements are of the form:
     // * out_names:          dst
-    // * out_types_types:    Streamp<Complex>
+    // * out_types_types:    WriteStream<Complex>
     // * outval_types:       Complex
-    let (out_names, out_types, outval_types) = unzip_n![
+    let (out_names, _out_types, outval_types) = unzip_n![
         fields_named
             .named
             .iter()
@@ -267,24 +267,14 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     if has_attr(&input.attrs, "new", STRUCT_ATTRS) {
         extra.push(quote! {
             impl #impl_generics #struct_name #ty_generics #where_clause {
-                pub fn new(#(#in_name_types,)*#(#other_name_types),*) -> Self {
-                    Self {
+                pub fn new(#(#in_name_types,)*#(#other_name_types),*) -> (Self #(,#path::stream::ReadStream<#outval_types>)*) {
+                    #(let #out_names = #path::stream::new_stream();)*
+                    (Self {
                     #(#in_names,)*
-                    #(#out_names: #path::Stream::newp(),)*
+                    #(#out_names: #out_names.0,)*
                     #(#other_names,)*
                     #(#fields_defaulted_ty,)*
-                    }
-                }
-            }
-        });
-    }
-
-    // Create out(), if requested.
-    if has_attr(&input.attrs, "out", STRUCT_ATTRS) {
-        extra.push(quote! {
-            impl #impl_generics #struct_name #ty_generics #where_clause {
-                pub fn out(&self) -> (#(#out_types),*) {
-                    (#(self.#out_names.clone()),*)
+                    }#(,#out_names.1)*)
                 }
             }
         });
@@ -314,8 +304,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         extra.push(quote! {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
-                    #(let #in_names = self.#in_names.clone();
-                      let #in_names = #in_names.read_buf()?;)*
+                    #( let #in_names = self.#in_names.read_buf()?;)*
                     let mut tags = #first.1;
                     #(let #in_names = #in_names.0;)*
 
@@ -324,8 +313,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     if n ==  0 {
                         return Ok(#path::block::BlockRet::Noop);
                     }
-                    #(let #out_names = self.#out_names.clone();
-                      let mut #out_names = #out_names.write_buf()?;)*
+                    #( let mut #out_names = self.#out_names.write_buf()?;)*
 
                     // Clamp n to be no more than output space.
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
@@ -372,7 +360,6 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                  impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
                     fn eof(&mut self) -> bool {
                         if true #(&&self.#in_names.eof())* {
-                            #(self.#out_names.set_eof();)*
                             true
                         } else {
                             false

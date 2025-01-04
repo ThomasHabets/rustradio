@@ -1,5 +1,5 @@
 //! Xor a constant value with every sample.
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 
 /// XorConst xors a constant value to every sample.
 #[derive(rustradio_macros::Block)]
@@ -10,9 +10,9 @@ where
 {
     val: T,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T> XorConst<T>

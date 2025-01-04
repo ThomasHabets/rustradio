@@ -1,5 +1,5 @@
 //! Multiply stream by a constant value.
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 
 /// Multiply stream by a constant value.
 ///
@@ -9,9 +9,9 @@ use crate::stream::Streamp;
 pub struct MultiplyConst<T: Copy + std::ops::Mul<Output = T>> {
     val: T,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T> MultiplyConst<T>

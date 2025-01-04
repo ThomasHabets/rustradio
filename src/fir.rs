@@ -7,7 +7,7 @@ Use FftFilter if many taps are used, for better performance.
  * * Only handles case where input, output, and tap type are all the same.
  */
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
 
@@ -50,9 +50,9 @@ pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T: Copy> FIRFilter<T>
@@ -60,13 +60,17 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create FIR block given taps.
-    pub fn new(src: Streamp<T>, taps: &[T]) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            ntaps: taps.len(),
-            fir: FIR::new(taps),
-        }
+    pub fn new(src: ReadStream<T>, taps: &[T]) -> (Self, ReadStream<T>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                ntaps: taps.len(),
+                fir: FIR::new(taps),
+            },
+            dr,
+        )
     }
 }
 
@@ -78,13 +82,15 @@ where
         let (input, tags) = self.src.read_buf()?;
         let mut out = self.dst.write_buf()?;
         let n = std::cmp::min(input.len(), out.len());
-        if n > self.ntaps {
-            let v = self.fir.filter_n(&input.slice()[..n]);
-            let n = v.len();
-            input.consume(n);
-            out.fill_from_iter(v);
-            out.produce(n, &tags);
+        if n <= self.ntaps {
+            return Ok(BlockRet::Noop);
         }
+        let v = self.fir.filter_n(&input.slice()[..n]);
+        assert!(v.len() <= n);
+        let n = v.len();
+        input.consume(n);
+        out.fill_from_iter(v);
+        out.produce(n, &tags);
         Ok(BlockRet::Ok)
     }
 }

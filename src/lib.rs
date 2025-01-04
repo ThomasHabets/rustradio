@@ -74,19 +74,19 @@ with streams, and runs the graph.
 use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{AddConst, VectorSource, DebugSink};
 use rustradio::Complex;
-let src = Box::new(VectorSource::new(
+let (src, prev) = VectorSource::new(
     vec![
         Complex::new(10.0, 0.0),
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),
     ],
-));
-let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
-let sink = Box::new(DebugSink::new(add.out()));
+);
+let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
+let sink = DebugSink::new(prev);
 let mut g = Graph::new();
-g.add(src);
-g.add(add);
-g.add(sink);
+g.add(Box::new(src));
+g.add(Box::new(add));
+g.add(Box::new(sink));
 g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
@@ -101,7 +101,6 @@ g.run()?;
 [gnuradio]: https://www.gnuradio.org/
  */
 use anyhow::Result;
-use stream::Stream;
 
 // Macro.
 pub use rustradio_macros;
@@ -199,12 +198,6 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-impl<T> From<std::sync::PoisonError<std::sync::MutexGuard<'_, Stream<T>>>> for Error {
-    fn from(e: std::sync::PoisonError<std::sync::MutexGuard<'_, Stream<T>>>) -> Error {
-        Error::new(&format!("{}", e))
-    }
-}
 
 impl From<anyhow::Error> for Error {
     fn from(e: anyhow::Error) -> Error {

@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Float};
 
 /** Very simple clock recovery by looking at zero crossings.
@@ -31,11 +31,11 @@ pub struct ZeroCrossing {
     last_cross: f32,
     counter: u64,
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
+    dst: WriteStream<Float>,
     // TODO: should this also be tagged `out`?
-    out_clock: Option<Streamp<Float>>,
+    out_clock: Option<WriteStream<Float>>,
 }
 
 impl ZeroCrossing {
@@ -45,24 +45,35 @@ impl ZeroCrossing {
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
     * `max_deviation`: Not currently used.
      */
-    pub fn new(src: Streamp<Float>, sps: Float, max_deviation: Float) -> Self {
+    pub fn new(
+        src: ReadStream<Float>,
+        sps: Float,
+        max_deviation: Float,
+    ) -> (Self, ReadStream<Float>) {
         assert!(sps > 1.0);
-        Self {
-            src,
-            dst: Stream::newp(),
-            sps,
-            clock: sps,
-            max_deviation,
-            last_sign: false,
-            last_cross: 0.0,
-            counter: 0,
-            out_clock: None,
-        }
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                sps,
+                clock: sps,
+                max_deviation,
+                last_sign: false,
+                last_cross: 0.0,
+                counter: 0,
+                out_clock: None,
+            },
+            dr,
+        )
     }
 
     /// Return clock stream.
-    pub fn out_clock(&mut self) -> Streamp<Float> {
-        self.out_clock.get_or_insert(Stream::newp()).clone()
+    pub fn out_clock(&mut self) -> ReadStream<Float> {
+        assert!(self.out_clock.is_none());
+        let (w, r) = crate::stream::new_stream();
+        self.out_clock = Some(w);
+        r
     }
 }
 

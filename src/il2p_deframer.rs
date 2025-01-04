@@ -4,7 +4,7 @@
 use log::info;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag};
+use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag};
 use crate::{Error, Result};
 
 const HEADER_SIZE: usize = 15 * 8;
@@ -151,7 +151,7 @@ enum State {
 #[rustradio(crate)]
 pub struct Il2pDeframer {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
     dst: NoCopyStreamp<Vec<u8>>,
     decoded: usize,
@@ -165,7 +165,7 @@ impl Drop for Il2pDeframer {
 }
 impl Il2pDeframer {
     /// New
-    pub fn new(src: Streamp<u8>) -> Self {
+    pub fn new(src: ReadStream<u8>) -> Self {
         Self {
             src,
             dst: NoCopyStream::newp(),
@@ -360,7 +360,9 @@ impl Header {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Stream;
+    use crate::stream::ReadStream;
+
+    use crate::blocks::CorrelateAccessCodeTag;
 
     use std::fs::File;
     use std::io::Read;
@@ -375,10 +377,10 @@ mod tests {
 
     #[test]
     fn test_header_decode() -> Result<()> {
-        let src = Stream::fromp_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
-        let mut cac =
-            crate::blocks::CorrelateAccessCodeTag::new(src, SYNC_WORD.into(), "sync".into(), 0);
-        let mut deframer = Il2pDeframer::new(cac.out());
+        let src = ReadStream::from_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
+        let (mut cac, cac_out) =
+            CorrelateAccessCodeTag::new(src, SYNC_WORD.into(), "sync".into(), 0);
+        let mut deframer = Il2pDeframer::new(cac_out);
         cac.work()?;
         deframer.work()?;
         deframer.work()?;

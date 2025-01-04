@@ -14,7 +14,7 @@ const VERSION: &str = "1.1.0";
 
 use crate::block::{Block, BlockRet};
 use crate::file_source::FileSource;
-use crate::stream::Streamp;
+use crate::stream::ReadStream;
 use crate::{Complex, Error, Float, Sample};
 
 /// Capture segment.
@@ -216,7 +216,7 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
         self
     }
     /// Build a SigMFSource.
-    pub fn build(self) -> Result<SigMFSource<T>> {
+    pub fn build(self) -> Result<(SigMFSource<T>, ReadStream<T>)> {
         SigMFSource::new(&self.filename, self.sample_rate)
     }
 }
@@ -266,7 +266,7 @@ impl Type for Float {
 
 impl<T: Default + Copy + Type> SigMFSource<T> {
     /// Create a new SigMF source block.
-    pub fn new(filename: &str, samp_rate: Option<f64>) -> Result<Self> {
+    pub fn new(filename: &str, samp_rate: Option<f64>) -> Result<(Self, ReadStream<T>)> {
         let meta = parse_meta(filename)?;
         if let Some(samp_rate) = samp_rate {
             if let Some(t) = meta.global.core_sample_rate {
@@ -288,14 +288,14 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             ))
             .into());
         }
-        Ok(Self {
-            sample_rate: meta.global.core_sample_rate,
-            file_source: FileSource::new(&format!["{}-data", filename], false)?,
-        })
-    }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.file_source.out()
+        let (file_source, dr) = FileSource::new(&format!["{}-data", filename], false)?;
+        Ok((
+            Self {
+                sample_rate: meta.global.core_sample_rate,
+                file_source,
+            },
+            dr,
+        ))
     }
     /// Get the sample rate from the meta file.
     pub fn sample_rate(&self) -> Option<f64> {

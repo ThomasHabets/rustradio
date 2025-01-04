@@ -19,7 +19,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 
 const CHUNK_SIZE: usize = 8192;
@@ -54,7 +54,7 @@ impl<T> From<SendError<T>> for Error {
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
     buf: Vec<u8>,
 }
 
@@ -67,7 +67,7 @@ impl RtlSdrSource {
     ///
     /// If given frequency of 100Mhz, and sample rate of 1Msps, the
     /// received spectrum is 99.5Mhz to 100.5Mhz.
-    pub fn new(freq: u64, samp_rate: u32, igain: i32) -> Result<Self, Error> {
+    pub fn new(freq: u64, samp_rate: u32, igain: i32) -> Result<(Self, ReadStream<u8>), Error> {
         let index = 0;
         let found = rtlsdr::get_device_count();
         if index >= found {
@@ -103,11 +103,15 @@ impl RtlSdrSource {
                 }
             })?;
         assert_eq!(rx.recv()?, Vec::<u8>::new());
-        Ok(Self {
-            rx,
-            dst: Stream::newp(),
-            buf: Vec::new(),
-        })
+        let (dst, dr) = crate::stream::new_stream();
+        Ok((
+            Self {
+                rx,
+                dst,
+                buf: Vec::new(),
+            },
+            dr,
+        ))
     }
 }
 

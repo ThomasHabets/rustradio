@@ -14,7 +14,7 @@ This implementation is a pretty inefficient.
 
 use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::window::WindowType;
 use crate::{Complex, Error, Float};
 
@@ -23,9 +23,9 @@ use crate::{Complex, Error, Float};
 #[rustradio(crate, out)]
 pub struct Hilbert {
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
     history: Vec<Float>,
     filter: FIR<Float>,
     ntaps: usize,
@@ -33,28 +33,38 @@ pub struct Hilbert {
 
 impl Hilbert {
     /// Create new hilber transformer with this many taps.
-    pub fn new(src: Streamp<Float>, ntaps: usize, window_type: &WindowType) -> Self {
+    pub fn new(
+        src: ReadStream<Float>,
+        ntaps: usize,
+        window_type: &WindowType,
+    ) -> (Self, ReadStream<Complex>) {
         // TODO: take window function.
         assert!(ntaps & 1 == 1, "hilbert filter len must be odd");
         let taps = crate::fir::hilbert(&window_type.make_window(ntaps));
-        Self {
-            src,
-            ntaps,
-            dst: Stream::newp(),
-            history: vec![0.0; ntaps],
-            filter: FIR::new(&taps),
-        }
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                ntaps,
+                dst,
+                history: vec![0.0; ntaps],
+                filter: FIR::new(&taps),
+            },
+            dr,
+        )
     }
 }
 
 impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        assert_eq!(self.ntaps, self.history.len());
-        let (i, tags) = self.src.read_buf()?;
+        debug_assert_eq!(self.ntaps, self.history.len());
+        let (ii, tags) = self.src.read_buf()?;
+        let i = ii.slice();
         if i.is_empty() {
             return Ok(BlockRet::Noop);
         }
-        let mut o = self.dst.write_buf()?;
+        let mut oo = self.dst.write_buf()?;
+        let o = oo.slice();
         if o.is_empty() {
             return Ok(BlockRet::OutputFull);
         }
@@ -72,13 +82,13 @@ impl Block for Hilbert {
         // the fastest on my laptop.
         for i in 0..n {
             let t = &iv[i..(i + self.ntaps)];
-            o.slice()[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t));
+            o[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t));
         }
 
-        o.produce(n, &tags);
+        oo.produce(n, &tags);
 
         self.history[..self.ntaps].clone_from_slice(&iv[n..len]);
-        i.consume(n);
+        ii.consume(n);
         Ok(BlockRet::Ok)
     }
 }

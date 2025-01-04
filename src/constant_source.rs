@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::WriteStream;
 use crate::Error;
 
 /// Generate the same value, forever.
@@ -10,7 +10,7 @@ use crate::Error;
 #[rustradio(crate, out, new)]
 pub struct ConstantSource<T: Copy> {
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
     val: T,
 }
 

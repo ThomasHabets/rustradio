@@ -32,6 +32,10 @@ rustradio_macros = { version = "0.6.1", path = "rustradio_macros" }
 structopt = "0.3.26"
 stderrlog = "0.6.0"
 ctrlc = "3.4.1"
+# apt install libgoogle-perftools-dev google-perftools
+# Uncomment the PROFILER stuff in examples/ax25-1200-rx.rs
+# google-pprof --lines target/release/examples/ax25-1200-rx my-prof.prof
+# gperftools = "0.2.0"
 
 [lib]
 name = "rustradio"
@@ -53,6 +57,7 @@ required-features = ["audio"]
 
 [profile.release]
 overflow-checks = true
+# debug = true
 #lto = true
 #codegen-units = 1  # Higher is faster, lower gives more opt potential.
 

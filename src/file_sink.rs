@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStreamp, Streamp};
+use crate::stream::{NoCopyStreamp, ReadStream};
 use crate::{Error, Sample};
 
 /// File write mode.
@@ -27,12 +27,12 @@ pub enum Mode {
 pub struct FileSink<T: Copy> {
     f: BufWriter<std::fs::File>,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
 }
 
 impl<T: Copy> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new(src: Streamp<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
+    pub fn new(src: ReadStream<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
         debug!("Opening sink {}", filename.display());
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
@@ -132,7 +132,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Complex, Float, Stream};
+    use crate::{Complex, Float};
 
     #[test]
     fn sink_f32() -> Result<()> {
@@ -140,7 +140,7 @@ mod tests {
         let tmpfn = tmpd.path().join("delme.bin");
         {
             #[allow(clippy::approx_constant)]
-            let ssrc = Stream::fromp_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
+            let ssrc = ReadStream::from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
             let mut sink = FileSink::<Float>::new(ssrc, tmpfn.clone(), Mode::Create)?;
             sink.work()?;
             sink.flush()?;
@@ -159,7 +159,7 @@ mod tests {
         let tmpfn = tmpd.path().join("delme.bin");
         {
             #[allow(clippy::approx_constant)]
-            let ssrc = Stream::fromp_slice(&[Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
+            let ssrc = ReadStream::from_slice(&[Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)]);
             let mut sink = FileSink::<Complex>::new(ssrc, tmpfn.clone(), Mode::Create)?;
             sink.work()?;
             sink.flush()?;

@@ -40,7 +40,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
-use rustradio::stream::Streamp;
+use rustradio::stream::ReadStream;
 use rustradio::window::WindowType;
 use rustradio::Error;
 use rustradio::{graph::Graph, mtgraph::MTGraph};
@@ -97,24 +97,27 @@ struct Opt {
 
 macro_rules! add_block {
     ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
+        let (block, prev) = $cons;
+        let block = Box::new(block);
         $g.add(block);
         prev
     }};
 }
 
-fn get_complex_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(Streamp<Complex>, f32)> {
+fn get_complex_input(
+    g: &mut Box<dyn GraphRunner>,
+    opt: &Opt,
+) -> Result<(ReadStream<Complex>, f32)> {
     if let Some(ref read) = opt.read {
         let mut b = SigMFSourceBuilder::new(read.clone());
         if let Some(s) = opt.samp_rate {
             b = b.sample_rate(s as f64);
         }
-        let b = b.build()?;
+        let (b, prev) = b.build()?;
         let samp_rate = b
             .sample_rate()
             .ok_or(Error::new("SigMF file does not specify sample rate"))?;
-        let prev = add_block![g, b];
+        g.add(Box::new(b));
         return Ok((prev, samp_rate as f32));
     }
 
@@ -136,7 +139,7 @@ fn get_complex_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(Streamp
     panic!("not read, not rtlsdr");
 }
 
-fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
+fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
     if opt.audio {
         if let Some(ref read) = &opt.read {
             let prev = add_block![g, FileSource::new(read, false)?];
@@ -233,21 +236,22 @@ fn main() -> Result<()> {
     let (prev, mut block) = {
         //let block = ZeroCrossing::new(prev, samp_rate / baud, opt.symbol_max_deviation);
         let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
-        let block = SymbolSync::new(
+        let (block, out) = SymbolSync::new(
             prev,
             samp_rate / baud,
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TEDZeroCrossing::new()),
             Box::new(clock_filter),
         );
-        (block.out(), block)
+        (out, block)
     };
 
     // Optional clock output.
     let prev = if let Some(clockfile) = opt.clock_file {
         let clock = block.out_clock();
-        let (a, prev) = add_block![g, Tee::new(prev)];
-        let clock = add_block![g, AddConst::new(clock, -samp_rate / baud)];
+        let (block, a, prev) = Tee::new(prev);
+        g.add(Box::new(block));
+        let clock = add_block![g, AddConst::new(clock.expect("TODO"), -samp_rate / baud)];
         let clock = add_block![g, ToText::new(vec![a, clock])];
         g.add(Box::new(FileSink::new(
             clock,
@@ -276,8 +280,9 @@ fn main() -> Result<()> {
      */
 
     let mut hdlc = HdlcDeframer::new(prev, 10, 1500);
+    let prev = hdlc.out();
     hdlc.set_fix_bits(opt.fix_bits);
-    let prev = add_block![g, hdlc];
+    g.add(Box::new(hdlc));
     if let Some(o) = opt.output {
         g.add(Box::new(PduWriter::new(prev, o)));
     } else {
@@ -294,7 +299,10 @@ fn main() -> Result<()> {
     // Run.
     eprintln!("Running…");
     let st = std::time::Instant::now();
+    // use gperftools::profiler::PROFILER;
+    // PROFILER.lock().unwrap().start("./my-prof.prof").unwrap();
     g.run()?;
+    // PROFILER.lock().unwrap().stop().unwrap();
     eprintln!("{}", g.generate_stats(st.elapsed()));
     Ok(())
 }

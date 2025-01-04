@@ -42,9 +42,8 @@ struct Opt {
 
 macro_rules! add_block {
     ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
-        $g.add(block);
+        let (block, prev) = $cons;
+        $g.add(Box::new(block));
         prev
     }};
 }
@@ -107,16 +106,15 @@ fn main() -> Result<()> {
     let baud = 1200.0;
     let prev = {
         let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
-        let block = SymbolSync::new(
+        let (block, prev) = SymbolSync::new(
             prev,
             samp_rate / baud,
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TEDZeroCrossing::new()),
             Box::new(clock_filter),
         );
-        let r = block.out();
         g.add(Box::new(block));
-        r
+        prev
     };
 
     let prev = add_block![g, BinarySlicer::new(prev)];
@@ -131,7 +129,8 @@ fn main() -> Result<()> {
         )
     ];
 
-    let (a, prev) = add_block![g, Tee::new(prev)];
+    let (b, a, prev) = Tee::new(prev);
+    g.add(Box::new(b));
     let clock = add_block![g, ToText::new(vec![a])];
     g.add(Box::new(FileSink::new(
         clock,

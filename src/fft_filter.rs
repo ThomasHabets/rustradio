@@ -14,13 +14,13 @@ let samp_rate: Float = 1_000_000.0;
 let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, &rustradio::window::WindowType::Hamming);
 
 // Set up dummy source and sink.
-let src = Box::new(ConstantSource::new(Complex::new(0.0,0.0)));
+let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0));
 
 // Create and connect fft.
-let fft = Box::new(FftFilter::new(src.out(), &taps));
+let (fft, fft_out) = FftFilter::new(src_out, &taps);
 
 // Set up dummy sink.
-let sink = Box::new(NullSink::new(fft.out()));
+let sink = NullSink::new(fft_out);
 ```
 
 ## Further reading:
@@ -34,7 +34,7 @@ use log::trace;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -49,9 +49,9 @@ pub struct FftFilter {
     fft: Arc<dyn rustfft::Fft<Float>>,
     ifft: Arc<dyn rustfft::Fft<Float>>,
     #[rustradio(in)]
-    src: Streamp<Complex>,
+    src: ReadStream<Complex>,
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
 }
 
 impl FftFilter {
@@ -64,7 +64,7 @@ impl FftFilter {
     }
 
     /// Create new FftFilter, given filter taps.
-    pub fn new(src: Streamp<Complex>, taps: &[Complex]) -> Self {
+    pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
         // Set up FFT / batch size.
         let fft_size = Self::calc_fft_size(taps.len());
         let nsamples = fft_size - taps.len();
@@ -87,17 +87,21 @@ impl FftFilter {
             taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
         }
 
-        Self {
-            src,
-            dst: Stream::newp(),
-            fft_size,
-            taps_fft,
-            tail: vec![Complex::default(); taps.len()],
-            fft,
-            ifft,
-            buf: Vec::with_capacity(fft_size),
-            nsamples,
-        }
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                fft_size,
+                taps_fft,
+                tail: vec![Complex::default(); taps.len()],
+                fft,
+                ifft,
+                buf: Vec::with_capacity(fft_size),
+                nsamples,
+            },
+            dr,
+        )
     }
 }
 
@@ -197,27 +201,30 @@ impl Block for FftFilter {
 pub struct FftFilterFloat {
     complex: FftFilter,
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
-    inner_in: Streamp<Complex>,
-    inner_out: Streamp<Complex>,
+    dst: WriteStream<Float>,
+    inner_in: WriteStream<Complex>,
+    inner_out: ReadStream<Complex>,
 }
 
 impl FftFilterFloat {
     /// Create a new FftFilterFloat block.
-    pub fn new(src: Streamp<Float>, taps: &[Float]) -> Self {
+    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
         let ctaps: Vec<Complex> = taps.iter().copied().map(|f| Complex::new(f, 0.0)).collect();
-        let inner_in = Stream::newp();
-        let complex = FftFilter::new(inner_in.clone(), &ctaps);
-        let inner_out = complex.out();
-        Self {
-            src,
-            dst: Stream::newp(),
-            complex,
-            inner_in,
-            inner_out,
-        }
+        let (inner_in, r) = crate::stream::new_stream();
+        let (complex, inner_out) = FftFilter::new(r, &ctaps);
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                complex,
+                inner_in,
+                inner_out,
+            },
+            dr,
+        )
     }
 }
 
@@ -270,58 +277,36 @@ mod tests {
         let twidth = 100.0;
 
         // Create blocks.
-        let mut src = SignalSourceComplex::new(samp_rate, signal, amplitude);
+        let (mut src, o) = SignalSourceComplex::new(samp_rate, signal, amplitude);
         let taps = low_pass_complex(samp_rate, cutoff, twidth, &WindowType::Hamming);
-        let mut fft = FftFilter::new(src.out(), &taps);
+        let (mut fft, out) = FftFilter::new(o, &taps);
 
         // Generate a bunch of samples from signal generator.
         let mut total = 0;
         loop {
-            let out;
-            {
-                src.work()?;
-                out = src
-                    .out()
-                    .read_buf()?
-                    .0
-                    .iter()
-                    .copied()
-                    .collect::<Vec<Complex>>();
-                // write_vec("bleh.txt", &out)?;
-                let m = out
-                    .iter()
-                    .map(|x| x.norm_sqr().sqrt())
-                    .max_by(|a, b| a.total_cmp(b))
-                    .unwrap();
-                assert!((0.999..1.001).contains(&m));
-                eprintln!("Generated {} samples, and they look good", out.len());
-            }
-
+            src.work()?;
             // Filter the stream.
-            {
-                fft.work()?;
-                let out = fft
-                    .out()
-                    .read_buf()?
-                    .0
-                    .iter()
-                    .skip(taps.len()) // I get garbage in the beginning.
-                    .copied()
-                    .collect::<Vec<Complex>>();
-                // write_vec("bleh.txt", &out)?;
+            fft.work()?;
+            let out = out
+                .read_buf()?
+                .0
+                .iter()
+                .skip(taps.len()) // I get garbage in the beginning.
+                .copied()
+                .collect::<Vec<Complex>>();
+            // write_vec("bleh.txt", &out)?;
 
-                total += out.len();
-                let m = out
-                    .iter()
-                    .map(|x| x.norm_sqr().sqrt())
-                    .max_by(|a, b| a.total_cmp(b))
-                    .unwrap();
-                assert!(
-                    (0.0..0.0002).contains(&m),
-                    "Signal insufficiently suppressed. Got magnitude {}",
-                    m
-                );
-            }
+            total += out.len();
+            let m = out
+                .iter()
+                .map(|x| x.norm_sqr().sqrt())
+                .max_by(|a, b| a.total_cmp(b))
+                .unwrap();
+            assert!(
+                (0.0..0.0002).contains(&m),
+                "Signal insufficiently suppressed. Got magnitude {}",
+                m
+            );
             if total > samp_rate as usize {
                 break;
             }

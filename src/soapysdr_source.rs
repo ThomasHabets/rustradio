@@ -3,7 +3,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error};
 
 impl From<soapysdr::Error> for Error {
@@ -43,7 +43,7 @@ impl SoapySdrSourceBuilder {
         self
     }
     /// Build the source object.
-    pub fn build(self) -> Result<SoapySdrSource> {
+    pub fn build(self) -> Result<(SoapySdrSource, ReadStream<Complex>)> {
         let dev = soapysdr::Device::new(&*self.dev)?;
         debug!("SoapySDR RX driver: {}", dev.driver_key()?);
         debug!("SoapySDR RX hardware: {}", dev.hardware_key()?);
@@ -89,10 +89,8 @@ impl SoapySdrSourceBuilder {
         dev.set_gain(soapysdr::Direction::Rx, self.channel, self.igain)?;
         let mut stream = dev.rx_stream(&[self.channel])?;
         stream.activate(None)?;
-        Ok(SoapySdrSource {
-            stream,
-            dst: Stream::newp(),
-        })
+        let (dst, dr) = crate::stream::new_stream();
+        Ok((SoapySdrSource { stream, dst }, dr))
     }
 }
 
@@ -102,7 +100,7 @@ impl SoapySdrSourceBuilder {
 pub struct SoapySdrSource {
     stream: soapysdr::RxStream<Complex>,
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
 }
 
 fn ai_string(ai: &soapysdr::ArgInfo) -> String {
