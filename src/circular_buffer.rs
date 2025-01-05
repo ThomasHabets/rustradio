@@ -411,7 +411,7 @@ impl<T: Copy> Buffer<T> {
     }
 
     /// Get the read slice.
-    pub fn read_buf(self: &Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let s = self.state.lock().unwrap();
         let (start, end) = s.read_range();
         let mut tags = Vec::with_capacity(s.tags.len());
@@ -442,7 +442,7 @@ impl<T: Copy> Buffer<T> {
         }
         drop(s);
         tags.sort_by_key(|a| a.pos());
-        Ok((BufferReader::new(Arc::clone(self), start, end), tags))
+        Ok((BufferReader::new(self, start, end), tags))
     }
 
     /// Get the write slice.
@@ -452,9 +452,7 @@ impl<T: Copy> Buffer<T> {
         drop(s);
         Ok(BufferWriter::new(
             //unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
-            self.clone(),
-            start,
-            end,
+            self, start, end,
         ))
     }
 }

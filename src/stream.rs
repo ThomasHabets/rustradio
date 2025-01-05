@@ -80,10 +80,15 @@ impl<T: Copy> ReadStream<T> {
     }
 
     pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
-        Ok(self.circ.read_buf()?)
+        Ok(Arc::clone(&self.circ).read_buf()?)
     }
     pub fn eof(&self) -> bool {
-        match self.circ.read_buf() {
+        // Fast path.
+        if Arc::strong_count(&self.circ) != 1 {
+            return false;
+        }
+        // TODO: can we remove this needless clone?
+        match Arc::clone(&self.circ).read_buf() {
             Ok((b, _)) if !b.is_empty() => false,
             Err(_) => false,
             Ok(_) => Arc::strong_count(&self.circ) == 1,
@@ -98,7 +103,7 @@ pub struct WriteStream<T> {
 
 impl<T: Copy> WriteStream<T> {
     pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>, Error> {
-        Ok(self.circ.clone().write_buf()?)
+        Ok(Arc::clone(&self.circ).write_buf()?)
     }
 }
 
