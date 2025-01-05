@@ -102,11 +102,10 @@ mod tests {
         let input: Vec<_> = (0..inputsize)
             .map(|i| Complex::new(i as Float, 0.0))
             .collect();
-        let mut src = VectorSource::new(input);
+        let (mut src, src_out) = VectorSource::new(input);
         src.work()?;
-        let mut resamp = RationalResampler::new(src.out(), interp, deci)?;
+        let (mut resamp, os) = RationalResampler::new(src_out, interp, deci)?;
         resamp.work()?;
-        let os = resamp.out();
         let (res, _) = os.read_buf()?;
         assert_eq!(
             finalcount,

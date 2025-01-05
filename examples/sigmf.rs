@@ -21,9 +21,8 @@ struct Opt {
 
 macro_rules! add_block {
     ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
-        $g.add(block);
+        let (block, prev) = $cons;
+        $g.add(Box::new(block));
         prev
     }};
 }

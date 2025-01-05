@@ -16,21 +16,21 @@ struct Opt {
 fn simple_copy() -> Result<()> {
     let mut g = Graph::new();
 
-    let src = Box::new(
-        VectorSourceBuilder::new(vec![
-            Complex::new(10.0, 0.0),
-            Complex::new(-20.0, 0.0),
-            Complex::new(100.0, -100.0),
-        ])
-        .repeat(2)
-        .build(),
-    );
-    let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
-    let sink = Box::new(DebugSink::new(add.out()));
+    let (src, src_out) = VectorSourceBuilder::new(vec![
+        Complex::new(10.0, 0.0),
+        Complex::new(-20.0, 0.0),
+        Complex::new(100.0, -100.0),
+    ])
+    .repeat(2)
+    .build();
+    let src = Box::new(src);
+
+    let (add, add_out) = AddConst::new(src_out, Complex::new(1.1, 2.0));
+    let sink = DebugSink::new(add_out);
 
     g.add(src);
-    g.add(add);
-    g.add(sink);
+    g.add(Box::new(add));
+    g.add(Box::new(sink));
 
     g.run()
 }
@@ -38,17 +38,15 @@ fn simple_copy() -> Result<()> {
 fn simple_noncopy() -> Result<()> {
     let mut g = Graph::new();
 
-    let src = Box::new(
-        VectorSourceBuilder::new(vec![
-            Complex::new(10.0, 0.0),
-            Complex::new(-20.0, 0.0),
-            Complex::new(100.0, -100.0),
-        ])
-        .repeat(2)
-        .build(),
-    );
-    let to_pdu = StreamToPdu::new(src.out(), "burst".to_string(), 10_000, 50);
-    g.add(Box::new(PduWriter::new(to_pdu.out(), ".".into())));
+    let (src, src_out) = VectorSourceBuilder::new(vec![
+        Complex::new(10.0, 0.0),
+        Complex::new(-20.0, 0.0),
+        Complex::new(100.0, -100.0),
+    ])
+    .repeat(2)
+    .build();
+    let (to_pdu, prev) = StreamToPdu::new(src_out, "burst".to_string(), 10_000, 50);
+    g.add(Box::new(PduWriter::new(prev, ".".into())));
     //let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
     //let sink = Box::new(DebugSink::new(add.out()));
     //let sink = Box::new(DebugSink::new(src.out()));

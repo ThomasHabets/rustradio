@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn typical() -> Result<()> {
-        let b: Buffer<u8> = Buffer::new(4096)?;
+        let b = Arc::new(Buffer::new(4096)?);
 
         // Initial.
         assert!(b.read_buf()?.0.is_empty());
@@ -631,7 +631,7 @@ mod tests {
 
     #[test]
     fn two_writes() -> Result<()> {
-        let b: Buffer<u8> = Buffer::new(4096)?;
+        let b = Arc::new(Buffer::new(4096)?);
 
         // Write 10 bytes.
         {
@@ -678,7 +678,7 @@ mod tests {
 
     #[test]
     fn exact_overflow() -> Result<()> {
-        let b: Buffer<u8> = Buffer::new(4096)?;
+        let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(4096)?);
 
         // Initial.
         assert!(b.read_buf()?.0.is_empty());
@@ -698,7 +698,7 @@ mod tests {
 
     #[test]
     fn with_float() -> Result<()> {
-        let b: Buffer<Float> = Buffer::new(4096)?;
+        let b: Arc<Buffer<Float>> = Arc::new(Buffer::new(4096)?);
 
         // Initial.
         assert!(b.read_buf()?.0.is_empty());

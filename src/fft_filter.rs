@@ -277,58 +277,36 @@ mod tests {
         let twidth = 100.0;
 
         // Create blocks.
-        let mut src = SignalSourceComplex::new(samp_rate, signal, amplitude);
+        let (mut src, o) = SignalSourceComplex::new(samp_rate, signal, amplitude);
         let taps = low_pass_complex(samp_rate, cutoff, twidth, &WindowType::Hamming);
-        let mut fft = FftFilter::new(src.out(), &taps);
+        let (mut fft, out) = FftFilter::new(o, &taps);
 
         // Generate a bunch of samples from signal generator.
         let mut total = 0;
         loop {
-            let out;
-            {
-                src.work()?;
-                out = src
-                    .out()
-                    .read_buf()?
-                    .0
-                    .iter()
-                    .copied()
-                    .collect::<Vec<Complex>>();
-                // write_vec("bleh.txt", &out)?;
-                let m = out
-                    .iter()
-                    .map(|x| x.norm_sqr().sqrt())
-                    .max_by(|a, b| a.total_cmp(b))
-                    .unwrap();
-                assert!((0.999..1.001).contains(&m));
-                eprintln!("Generated {} samples, and they look good", out.len());
-            }
-
+            src.work()?;
             // Filter the stream.
-            {
-                fft.work()?;
-                let out = fft
-                    .out()
-                    .read_buf()?
-                    .0
-                    .iter()
-                    .skip(taps.len()) // I get garbage in the beginning.
-                    .copied()
-                    .collect::<Vec<Complex>>();
-                // write_vec("bleh.txt", &out)?;
+            fft.work()?;
+            let out = out
+                .read_buf()?
+                .0
+                .iter()
+                .skip(taps.len()) // I get garbage in the beginning.
+                .copied()
+                .collect::<Vec<Complex>>();
+            // write_vec("bleh.txt", &out)?;
 
-                total += out.len();
-                let m = out
-                    .iter()
-                    .map(|x| x.norm_sqr().sqrt())
-                    .max_by(|a, b| a.total_cmp(b))
-                    .unwrap();
-                assert!(
-                    (0.0..0.0002).contains(&m),
-                    "Signal insufficiently suppressed. Got magnitude {}",
-                    m
-                );
-            }
+            total += out.len();
+            let m = out
+                .iter()
+                .map(|x| x.norm_sqr().sqrt())
+                .max_by(|a, b| a.total_cmp(b))
+                .unwrap();
+            assert!(
+                (0.0..0.0002).contains(&m),
+                "Signal insufficiently suppressed. Got magnitude {}",
+                m
+            );
             if total > samp_rate as usize {
                 break;
             }

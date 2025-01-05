@@ -7,11 +7,11 @@ fn main() -> Result<()> {
     println!("Running some block without Graph");
     if true {
         let mut v: Vec<Box<dyn Block>> = Vec::new();
-        let src = VectorSource::new(vec![1.0, -1.0, 3.21]);
-        let add = AddConst::new(src.out(), 1.1);
+        let (src, src_out) = VectorSource::new(vec![1.0, -1.0, 3.21]);
+        let (add, add_out) = AddConst::new(src_out, 1.1);
         v.push(Box::new(src));
 
-        let debug = DebugSink::new(add.out());
+        let debug = DebugSink::new(add_out);
         v.push(Box::new(add));
         v.push(Box::new(debug));
 

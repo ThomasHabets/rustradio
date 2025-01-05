@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos, TagValue};
+use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag, TagPos, TagValue};
 use crate::{Error, Sample};
 
 /// Stream to PDU block.
@@ -41,7 +41,7 @@ use crate::{Error, Sample};
 #[rustradio(crate, nevereof)]
 pub struct StreamToPdu<T> {
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
     dst: NoCopyStreamp<Vec<T>>,
     tag: String,
@@ -53,7 +53,7 @@ pub struct StreamToPdu<T> {
 
 impl<T> StreamToPdu<T> {
     /// Make new Stream to PDU block.
-    pub fn new(src: Streamp<T>, tag: String, max_size: usize, tail: usize) -> Self {
+    pub fn new(src: ReadStream<T>, tag: String, max_size: usize, tail: usize) -> Self {
         Self {
             src,
             tag,

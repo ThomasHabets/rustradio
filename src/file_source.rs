@@ -117,10 +117,10 @@ mod tests {
             ],
         )?;
 
-        let mut src = FileSource::<Float>::new(&tmpfn, false)?;
+        let (mut src, src_out) = FileSource::<Float>::new(&tmpfn, false)?;
         src.work()?;
 
-        let (res, _) = src.dst.read_buf()?;
+        let (res, _) = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
         assert_eq!(res.slice(), correct);
@@ -136,10 +136,10 @@ mod tests {
             vec![0, 0, 0, 0, 0, 0, 0, 0, 195, 245, 72, 64, 205, 204, 44, 192],
         )?;
 
-        let mut src = FileSource::<Complex>::new(&tmpfn, false)?;
+        let (mut src, src_out) = FileSource::<Complex>::new(&tmpfn, false)?;
         src.work()?;
 
-        let (res, _) = src.dst.read_buf()?;
+        let (res, _) = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)];
         assert_eq!(res.slice(), correct);

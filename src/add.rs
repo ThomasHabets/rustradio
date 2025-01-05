@@ -36,17 +36,17 @@ mod tests {
 
     #[test]
     fn add_float() -> crate::Result<()> {
+        // Testing VectorSource too, because why not.
         let input_a: Vec<_> = (0..10).map(|i| i as Float).collect();
-        let mut a = VectorSource::new(input_a);
-        a.work()?;
+        let (mut ablock, a) = VectorSource::new(input_a);
+        ablock.work()?;
 
         let input_b: Vec<_> = (0..20).map(|i| 2.0 * (i as Float)).collect();
-        let mut b = VectorSource::new(input_b);
-        b.work()?;
+        let (mut bblock, b) = VectorSource::new(input_b);
+        bblock.work()?;
 
-        let mut add = Add::new(a.out(), b.out());
+        let (mut add, os) = Add::new(a, b);
         add.work()?;
-        let os = add.out();
         let (res, _) = os.read_buf()?;
         let want: Vec<_> = (0..10).map(|i| 3 * i).collect();
         let got: Vec<_> = res.slice().iter().map(|f| *f as usize).collect();

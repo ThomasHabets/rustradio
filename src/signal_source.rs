@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::WriteStream;
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float};
 
 /// Generate a pure complex sine wave.
@@ -22,12 +22,15 @@ impl SignalSourceComplex {
     /// Create new SignalSourceComplex block.
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> (Self, ReadStream<Complex>) {
         let (dst, dr) = crate::stream::new_stream();
-        (Self {
-            dst,
-            current: 0.0,
-            amplitude,
-            rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
-        }, dr)
+        (
+            Self {
+                dst,
+                current: 0.0,
+                amplitude,
+                rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
+            },
+            dr,
+        )
     }
 }
 
@@ -47,8 +50,7 @@ impl Iterator for SignalSourceComplex {
 
 impl Block for SignalSourceComplex {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let obind = self.dst.clone();
-        let mut o = obind.write_buf()?;
+        let mut o = self.dst.write_buf()?;
         let n = o.len();
         for (to, from) in o.slice().iter_mut().zip(self.take(n)) {
             *to = from;
@@ -75,14 +77,17 @@ pub struct SignalSourceFloat {
 /// Generate pure complex sine sine.
 impl SignalSourceFloat {
     /// Create new SignalSourceFloat block.
-    pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> Self {
+    pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> (Self, ReadStream<Float>) {
         let (dst, dr) = crate::stream::new_stream();
-        (Self {
-            dst,
-            current: 0.0,
-            amplitude,
-            rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
-        }, dr)
+        (
+            Self {
+                dst,
+                current: 0.0,
+                amplitude,
+                rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
+            },
+            dr,
+        )
     }
 }
 
@@ -96,8 +101,7 @@ impl Iterator for SignalSourceFloat {
 
 impl Block for SignalSourceFloat {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let obind = self.dst.clone();
-        let mut o = obind.write_buf()?;
+        let mut o = self.dst.write_buf()?;
         let n = o.len();
         o.slice()
             .iter_mut()
