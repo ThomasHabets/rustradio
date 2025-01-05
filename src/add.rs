@@ -3,7 +3,7 @@ use crate::stream::{ReadStream, WriteStream};
 
 /// Adds two streams, sample wise.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out)]
+#[rustradio(crate, new, out, sync)]
 pub struct Add<T>
 where
     T: Copy + std::ops::Add<Output = T>,
@@ -17,61 +17,6 @@ where
 
     #[rustradio(out)]
     dst: WriteStream<T>,
-}
-
-impl<T> Add<T>
-where
-    T: Copy + std::ops::Add<Output = T>,
-{
-    fn process_sync_tags(
-        &mut self,
-        a: T,
-        b: T,
-        tags: &[crate::stream::Tag],
-    ) -> (T, Vec<crate::stream::Tag>) {
-        (self.process_sync(a, b), tags.to_vec())
-    }
-}
-impl<T> crate::block::Block for Add<T>
-where
-    T: Copy + std::ops::Add<Output = T>,
-{
-    fn work(&mut self) -> Result<crate::block::BlockRet, crate::Error> {
-        let (a, _) = self.a.read_buf()?;
-        let (b, _) = self.b.read_buf()?;
-        let n = [a.len(), b.len()]
-            .iter()
-            .fold(usize::MAX, |min, &x| min.min(x));
-        if n == 0 {
-            return Ok(crate::block::BlockRet::Noop);
-        }
-        let mut dst = self.dst.write_buf()?;
-        let n = [dst.len()].iter().fold(n, |min, &x| min.min(x));
-        let mut otags = Vec::new();
-        let it = a
-            .iter()
-            .take(n)
-            .zip(b.iter())
-            .enumerate()
-            .map(|(pos, (a, b))| {
-                let (s, ts) = self.process_sync_tags(*a, *b, &[]);
-                for tag in ts {
-                    otags.push(crate::stream::Tag::new(
-                        pos,
-                        tag.key().into(),
-                        tag.val().clone(),
-                    ));
-                }
-                s
-            });
-        for (samp, w) in it.zip(dst.slice().iter_mut()) {
-            *w = samp;
-        }
-        a.consume(n);
-        b.consume(n);
-        dst.produce(n, &otags);
-        Ok(crate::block::BlockRet::Ok)
-    }
 }
 impl<T> Add<T>
 where
