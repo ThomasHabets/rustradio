@@ -248,6 +248,7 @@ pub struct BufferWriter<T: Copy> {
 impl<T: Copy> BufferWriter<T> {
     #[must_use]
     fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> BufferWriter<T> {
+        assert!(end >= start);
         Self { parent, start, end }
     }
 
