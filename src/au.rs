@@ -12,7 +12,7 @@ It's also much simpler.
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Float};
 
 /// Au support several encodings. This code currently only one.
@@ -54,10 +54,10 @@ pub struct AuEncode {
     header: Option<Vec<u8>>,
 
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
 
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
 }
 
 impl AuEncode {
@@ -66,7 +66,12 @@ impl AuEncode {
     /// * `encoding`: currently only `Encoding::PCM16` is implemented.
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
-    pub fn new(src: Streamp<Float>, encoding: Encoding, bitrate: u32, channels: u32) -> Self {
+    pub fn new(
+        src: ReadStream<Float>,
+        encoding: Encoding,
+        bitrate: u32,
+        channels: u32,
+    ) -> (Self, ReadStream<u8>) {
         assert_eq!(
             encoding,
             Encoding::PCM16,
@@ -97,11 +102,15 @@ impl AuEncode {
         // Minimum annotation field.
         v.extend(&[0, 0, 0, 0]);
 
-        Self {
-            header: Some(v),
-            src,
-            dst: Stream::newp(),
-        }
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                header: Some(v),
+                src,
+                dst,
+            },
+            dr,
+        )
     }
 }
 
@@ -157,22 +166,26 @@ enum DecodeState {
 #[rustradio(crate, out)]
 pub struct AuDecode {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
+    dst: WriteStream<Float>,
     state: DecodeState,
     bitrate: u32,
 }
 
 impl AuDecode {
     /// Create new AuDecode block.
-    pub fn new(src: Streamp<u8>, bitrate: u32) -> Self {
-        Self {
-            src,
-            bitrate,
-            dst: Stream::newp(),
-            state: DecodeState::WaitingMagic,
-        }
+    pub fn new(src: ReadStream<u8>, bitrate: u32) -> (Self, ReadStream<Float>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                bitrate,
+                dst,
+                state: DecodeState::WaitingMagic,
+            },
+            dr,
+        )
     }
 }
 

@@ -108,7 +108,7 @@ pub use rustradio_macros;
 // Blocks.
 pub mod add;
 pub mod add_const;
-//pub mod au;
+pub mod au;
 //pub mod binary_slicer;
 //pub mod burst_tagger;
 //pub mod complex_to_mag2;
