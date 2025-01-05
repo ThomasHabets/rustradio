@@ -41,9 +41,8 @@ mod internal {
 
     macro_rules! blehbleh {
         ($g:ident, $cons:expr) => {{
-            let block = Box::new($cons);
-            let prev = block.out();
-            $g.add(block);
+            let (block, prev) = $cons;
+            $g.add(Box::new(block));
             prev
         }};
     }

@@ -5,7 +5,7 @@ use log::{debug, error, info, trace};
 
 use crate::block::{Block, BlockRet};
 use crate::graph::CancellationToken;
-use crate::stream::Streamp;
+use crate::stream::ReadStream;
 use crate::{Error, Float};
 
 use std::sync::mpsc::{sync_channel, SyncSender};
@@ -90,7 +90,7 @@ impl CpalOutput {
 #[rustradio(crate)]
 pub struct AudioSink {
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     sender: Option<SyncSender<f32>>,
 
     // The cpal::Stream is not Send, but needs to be kept alive for the duration
@@ -102,7 +102,7 @@ pub struct AudioSink {
 }
 
 impl AudioSink {
-    pub fn new(src: Streamp<Float>, sample_rate: u64) -> Result<Self> {
+    pub fn new(src: ReadStream<Float>, sample_rate: u64) -> Result<Self> {
         let output = CpalOutput::new(sample_rate as u32)?;
         let (tx, rx) = std::sync::mpsc::channel();
         let cancel = CancellationToken::new();

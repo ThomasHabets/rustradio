@@ -28,10 +28,10 @@ fn main() -> Result<()> {
         //use rustradio::graph::Graph;
         use rustradio::Complex;
         //let mut g = Graph::new();
-        let mut src = RtlSdrSource::new(868_000_000, 1024_000, 30)?;
-        let mut dec = RtlSdrDecode::new(src.out());
-        let mut add = AddConst::new(dec.out(), Complex::new(1.1, 2.0));
-        let mut sink = NullSink::new(add.out());
+        let (mut src, prev) = RtlSdrSource::new(868_000_000, 1024_000, 30)?;
+        let (mut dec, prev) = RtlSdrDecode::new(prev);
+        let (mut add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
+        let mut sink = NullSink::new(prev);
         let mut v: Vec<&mut dyn Block> = vec![&mut src, &mut dec, &mut add, &mut sink];
         loop {
             for b in &mut v {

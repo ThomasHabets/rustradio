@@ -75,11 +75,10 @@ fn main() -> Result<()> {
         // RTL SDR source.
         #[cfg(feature = "rtlsdr")]
         {
-            let src = Box::new(RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?);
-            let dec = Box::new(RtlSdrDecode::new(src.out()));
-            let prev = dec.out();
-            g.add(src);
-            g.add(dec);
+            let (src, prev) = RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?;
+            let (dec, prev) = RtlSdrDecode::new(prev);
+            g.add(Box::new(src));
+            g.add(Box::new(dec));
             prev
         }
         #[cfg(not(feature = "rtlsdr"))]
