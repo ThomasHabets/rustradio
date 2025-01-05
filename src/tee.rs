@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 
 /// Tee
@@ -12,11 +12,11 @@ use crate::Error;
 #[rustradio(crate, new, out)]
 pub struct Tee<T: Copy> {
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst1: Streamp<T>,
+    dst1: WriteStream<T>,
     #[rustradio(out)]
-    dst2: Streamp<T>,
+    dst2: WriteStream<T>,
 }
 
 impl<T: Copy> Block for Tee<T> {

@@ -268,7 +268,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         extra.push(quote! {
             impl #impl_generics #struct_name #ty_generics #where_clause {
                 pub fn new(#(#in_name_types,)*#(#other_name_types),*) -> (Self #(,#path::stream::ReadStream<#outval_types>)*) {
-                    let #(#out_names = #path::stream::new_stream();)*
+                    #(let #out_names = #path::stream::new_stream();)*
                     (Self {
                     #(#in_names,)*
                     #(#out_names: #out_names.0,)*

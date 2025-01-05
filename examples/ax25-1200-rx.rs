@@ -236,14 +236,14 @@ fn main() -> Result<()> {
     let (prev, mut block) = {
         //let block = ZeroCrossing::new(prev, samp_rate / baud, opt.symbol_max_deviation);
         let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
-        let block = SymbolSync::new(
+        let (block, out) = SymbolSync::new(
             prev,
             samp_rate / baud,
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TEDZeroCrossing::new()),
             Box::new(clock_filter),
         );
-        (block.out(), block)
+        (out, block)
     };
 
     // Optional clock output.
