@@ -101,7 +101,6 @@ g.run()?;
 [gnuradio]: https://www.gnuradio.org/
  */
 use anyhow::Result;
-use stream::Stream;
 
 // Macro.
 pub use rustradio_macros;
@@ -199,12 +198,6 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-impl<T> From<std::sync::PoisonError<std::sync::MutexGuard<'_, Stream<T>>>> for Error {
-    fn from(e: std::sync::PoisonError<std::sync::MutexGuard<'_, Stream<T>>>) -> Error {
-        Error::new(&format!("{}", e))
-    }
-}
 
 impl From<anyhow::Error> for Error {
     fn from(e: anyhow::Error) -> Error {

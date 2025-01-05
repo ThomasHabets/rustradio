@@ -107,16 +107,6 @@ pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
     (WriteStream { circ: circ.clone() }, ReadStream { circ })
 }
 
-/// A stream between blocks.
-#[derive(Debug)]
-pub struct Stream<T> {
-    circ: circular_buffer::Buffer<T>,
-    eof: std::sync::atomic::AtomicBool,
-}
-
-/// Convenience type for a "pointer to a stream".
-pub type Streamp<T> = Arc<Stream<T>>;
-
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NoCopyStream<T> {
     s: Mutex<VecDeque<T>>,
@@ -127,20 +117,6 @@ pub struct NoCopyStream<T> {
 pub type NoCopyStreamp<T> = Arc<NoCopyStream<T>>;
 
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 409600;
-
-impl<T> Stream<T> {
-    /// Create a new stream.
-    pub fn new() -> Self {
-        Self {
-            circ: circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap(),
-            eof: false.into(),
-        }
-    }
-    /// Create a new Arc<Stream>.
-    pub fn newp() -> Arc<Self> {
-        Arc::new(Self::new())
-    }
-}
 
 impl<T> NoCopyStream<T> {
     /// Create new stream.
@@ -194,11 +170,5 @@ impl<T: Len> NoCopyStream<T> {
     /// Get the size of the front packet.
     pub fn peek_size(&self) -> Option<usize> {
         self.s.lock().unwrap().front().map(|e| e.len())
-    }
-}
-
-impl<T> Default for Stream<T> {
-    fn default() -> Self {
-        Self::new()
     }
 }
