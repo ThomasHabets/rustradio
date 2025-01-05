@@ -7,7 +7,7 @@ Use FftFilter if many taps are used, for better performance.
  * * Only handles case where input, output, and tap type are all the same.
  */
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
 
@@ -50,9 +50,9 @@ pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T: Copy> FIRFilter<T>
@@ -60,13 +60,17 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create FIR block given taps.
-    pub fn new(src: Streamp<T>, taps: &[T]) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            ntaps: taps.len(),
-            fir: FIR::new(taps),
-        }
+    pub fn new(src: ReadStream<T>, taps: &[T]) -> (Self, ReadStream<T>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                ntaps: taps.len(),
+                fir: FIR::new(taps),
+            },
+            dr,
+        )
     }
 }
 

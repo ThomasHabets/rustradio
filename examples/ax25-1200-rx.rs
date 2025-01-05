@@ -40,7 +40,7 @@ use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
-use rustradio::stream::Streamp;
+use rustradio::stream::ReadStream;
 use rustradio::window::WindowType;
 use rustradio::Error;
 use rustradio::{graph::Graph, mtgraph::MTGraph};
@@ -104,7 +104,10 @@ macro_rules! add_block {
     }};
 }
 
-fn get_complex_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(Streamp<Complex>, f32)> {
+fn get_complex_input(
+    g: &mut Box<dyn GraphRunner>,
+    opt: &Opt,
+) -> Result<(ReadStream<Complex>, f32)> {
     if let Some(ref read) = opt.read {
         let mut b = SigMFSourceBuilder::new(read.clone());
         if let Some(s) = opt.samp_rate {
