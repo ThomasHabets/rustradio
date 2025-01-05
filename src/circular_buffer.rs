@@ -1,5 +1,8 @@
 //! Test implementation of circular buffers.
 //! Full of unsafe. Full of ugly code.
+//!
+// TODO:
+// * Make Circ typed?
 
 use std::collections::BTreeMap;
 use std::os::fd::AsRawFd;
