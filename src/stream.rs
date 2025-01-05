@@ -98,7 +98,7 @@ pub struct WriteStream<T> {
 
 impl<T: Copy> WriteStream<T> {
     pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>, Error> {
-        Ok(self.circ.write_buf()?)
+        Ok(self.circ.clone().write_buf()?)
     }
 }
 

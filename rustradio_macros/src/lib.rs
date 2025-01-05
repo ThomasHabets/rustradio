@@ -218,7 +218,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     // * out_names:          dst
     // * out_types_types:    WriteStream<Complex>
     // * outval_types:       Complex
-    let (out_names, out_types, outval_types) = unzip_n![
+    let (out_names, _out_types, outval_types) = unzip_n![
         fields_named
             .named
             .iter()
@@ -267,7 +267,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     if has_attr(&input.attrs, "new", STRUCT_ATTRS) {
         extra.push(quote! {
             impl #impl_generics #struct_name #ty_generics #where_clause {
-                pub fn new(#(#in_name_types,)*#(#other_name_types),*) -> (Self #(,#out_types)*) {
+                pub fn new(#(#in_name_types,)*#(#other_name_types),*) -> (Self #(,#path::stream::ReadStream<#outval_types>)*) {
                     let #(#out_names = #path::stream::new_stream();)*
                     (Self {
                     #(#in_names,)*
@@ -304,8 +304,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         extra.push(quote! {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
-                    #(let #in_names = self.#in_names.clone();
-                      let #in_names = #in_names.read_buf()?;)*
+                    #( let #in_names = self.#in_names.read_buf()?;)*
                     let mut tags = #first.1;
                     #(let #in_names = #in_names.0;)*
 
@@ -314,8 +313,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     if n ==  0 {
                         return Ok(#path::block::BlockRet::Noop);
                     }
-                    #(let #out_names = self.#out_names.clone();
-                      let mut #out_names = #out_names.write_buf()?;)*
+                    #( let mut #out_names = self.#out_names.write_buf()?;)*
 
                     // Clamp n to be no more than output space.
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
@@ -362,7 +360,6 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                  impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
                     fn eof(&mut self) -> bool {
                         if true #(&&self.#in_names.eof())* {
-                            #(self.#out_names.set_eof();)*
                             true
                         } else {
                             false

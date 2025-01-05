@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 use crate::{Complex, Float};
 
@@ -13,7 +13,7 @@ where
 {
     map: F,
     name: String,
-    src: Streamp<In>,
+    src: ReadStream<In>,
 }
 
 impl<In, Out, F> MapBuilder<In, Out, F>
@@ -23,7 +23,7 @@ where
     F: Fn(In) -> Out,
 {
     /// Create new MapBuilder.
-    pub fn new(src: Streamp<In>, map: F) -> Self {
+    pub fn new(src: ReadStream<In>, map: F) -> Self {
         Self {
             src,
             map,
@@ -36,7 +36,7 @@ where
         self
     }
     /// Build Map.
-    pub fn build(self) -> Map<In, Out, F> {
+    pub fn build(self) -> (Map<In, Out, F>, ReadStream<Out>) {
         Map::new(self.name, self.src, self.map)
     }
 }
@@ -53,9 +53,9 @@ where
     name: String,
     map: F,
     #[rustradio(in)]
-    src: Streamp<In>,
+    src: ReadStream<In>,
     #[rustradio(out)]
-    dst: Streamp<F::Output>,
+    dst: WriteStream<F::Output>,
 }
 
 impl<In, Out, F> Map<In, Out, F>
@@ -68,13 +68,17 @@ where
     ///
     /// Return value is the input multiplied by the scale. E.g. with a
     /// scale of 100.0, the input 0.123 becomes 12.
-    fn new(name: String, src: Streamp<In>, map: F) -> Self {
-        Self {
-            name,
-            map,
-            src,
-            dst: Stream::newp(),
-        }
+    fn new(name: String, src: ReadStream<In>, map: F) -> (Self, ReadStream<Out>) {
+        let dst = crate::stream::new_stream();
+        (
+            Self {
+                name,
+                map,
+                src,
+                dst: dst.0,
+            },
+            dst.1,
+        )
     }
     fn process_sync(&mut self, s: In) -> Out {
         (self.map)(s)
@@ -91,11 +95,11 @@ where
 #[rustradio(crate, out, new)]
 pub struct FloatToComplex {
     #[rustradio(in)]
-    re: Streamp<Float>,
+    re: ReadStream<Float>,
     #[rustradio(in)]
-    im: Streamp<Float>,
+    im: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
 }
 
 impl Block for FloatToComplex {

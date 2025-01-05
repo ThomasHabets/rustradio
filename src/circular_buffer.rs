@@ -188,26 +188,27 @@ impl BufferState {
 }
 
 /// BufferReader is an RAII'd read slice with some helper functions.
-pub struct BufferReader<'a, T: Copy> {
-    slice: &'a [T],
-    parent: &'a Buffer<T>,
+pub struct BufferReader<T: Copy> {
+    parent: Arc<Buffer<T>>,
+    start: usize,
+    end: usize,
 }
 
-impl<'a, T: Copy> BufferReader<'a, T> {
+impl<T: Copy> BufferReader<T> {
     #[must_use]
-    fn new(slice: &'a [T], parent: &'a Buffer<T>) -> BufferReader<'a, T> {
-        Self { slice, parent }
+    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> Self {
+        Self { parent, start, end }
     }
 
     /// Return slice to read from.
     #[must_use]
     pub fn slice(&self) -> &[T] {
-        self.slice
+        self.parent.slice(self.start, self.end)
     }
 
     /// Helper function to iterate over input instead.
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
-        self.slice.iter()
+        self.slice().iter()
     }
 
     /// We're done with the buffer. Consume `n` samples.
@@ -218,52 +219,53 @@ impl<'a, T: Copy> BufferReader<'a, T> {
     /// len convenience function.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.slice.len()
+        self.end - self.start
     }
 
     /// is_empty convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.slice.is_empty()
+        self.len() == 0
     }
 }
 
-impl<T: Copy> std::ops::Index<usize> for BufferReader<'_, T> {
+impl<T: Copy> std::ops::Index<usize> for BufferReader<T> {
     type Output = T;
 
     fn index(&self, n: usize) -> &Self::Output {
-        &self.slice[n]
+        &self.slice()[n]
     }
 }
 
-impl<T: Copy> Drop for BufferReader<'_, T> {
+impl<T: Copy> Drop for BufferReader<T> {
     fn drop(&mut self) {
         self.parent.return_read_buf();
     }
 }
 
 /// BufferWriter is an RAII slice with some helper functions.
-pub struct BufferWriter<'a, T: Copy> {
-    slice: &'a mut [T],
-    parent: &'a Buffer<T>,
+pub struct BufferWriter<T: Copy> {
+    parent: Arc<Buffer<T>>,
+    start: usize,
+    end: usize,
 }
 
-impl<'a, T: Copy> BufferWriter<'a, T> {
+impl<T: Copy> BufferWriter<T> {
     #[must_use]
-    fn new(slice: &'a mut [T], parent: &'a Buffer<T>) -> BufferWriter<'a, T> {
-        Self { slice, parent }
+    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> BufferWriter<T> {
+        Self { parent, start, end }
     }
 
     /// Return the slice to write to.
     #[must_use]
     pub fn slice(&mut self) -> &mut [T] {
-        self.slice
+        self.parent.slice_mut(self.start, self.end)
     }
 
     /// Shortcut to save typing for the common operation of copying
     /// from an iterator.
     pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
-        for (place, item) in self.slice.iter_mut().zip(src) {
+        for (place, item) in self.slice().iter_mut().zip(src) {
             *place = item;
         }
     }
@@ -271,7 +273,7 @@ impl<'a, T: Copy> BufferWriter<'a, T> {
     /// Shortcut to save typing for the common operation of copying
     /// from an iterator.
     pub fn fill_from_slice(&mut self, src: &[T]) {
-        self.slice[..src.len()].copy_from_slice(src);
+        self.slice()[..src.len()].copy_from_slice(src);
     }
 
     /// Having written into the write buffer, now tell the buffer
@@ -284,17 +286,17 @@ impl<'a, T: Copy> BufferWriter<'a, T> {
     /// len convenience function.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.slice.len()
+        self.end - self.start
     }
 
     /// is_empty convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.slice.is_empty()
+        self.len() == 0
     }
 }
 
-impl<T: Copy> Drop for BufferWriter<'_, T> {
+impl<T: Copy> Drop for BufferWriter<T> {
     fn drop(&mut self) {
         self.parent.return_write_buf();
     }
@@ -427,15 +429,22 @@ impl<T: Copy> Buffer<T> {
         s.write_borrow = false;
     }
 
+    pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
+        self.circ.full_buffer::<T>(start, end)
+    }
+
+    pub(crate) fn slice_mut(&self, start: usize, end: usize) -> &mut [T] {
+        self.circ.full_buffer::<T>(start, end)
+    }
+
     /// Get the read slice.
-    pub fn read_buf(&self) -> Result<(BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(self: &Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let mut s = self.state.lock().unwrap();
         if s.read_borrow {
             return Err(Error::new("read buf already borrowed").into());
         }
         s.read_borrow = true;
         let (start, end) = s.read_range();
-        let buf = self.circ.full_buffer::<T>(start, end);
         let mut tags = Vec::new();
 
         // TODO: range scan the tags.
@@ -464,23 +473,25 @@ impl<T: Copy> Buffer<T> {
         }
         tags.sort_by_key(|a| a.pos());
         Ok((
-            BufferReader::new(unsafe { std::mem::transmute::<&mut [T], &[T]>(buf) }, self),
+            //BufferReader::new(unsafe { std::mem::transmute::<&mut [T], &[T]>(buf) }, Arc::clone(self)),
+            BufferReader::new(Arc::clone(self), start, end),
             tags,
         ))
     }
 
     /// Get the write slice.
-    pub fn write_buf(&self) -> Result<BufferWriter<T>> {
+    pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
         let mut s = self.state.lock().unwrap();
         if s.write_borrow {
             return Err(Error::new("write buf already borrowed").into());
         }
         s.write_borrow = true;
         let (start, end) = s.write_range();
-        let buf = self.circ.full_buffer::<T>(start, end);
         Ok(BufferWriter::new(
-            unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
-            self,
+            //unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
+            self.clone(),
+            start,
+            end,
         ))
     }
 }
