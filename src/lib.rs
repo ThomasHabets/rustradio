@@ -131,7 +131,7 @@ pub mod iir_filter;
 //pub mod null_sink;
 //pub mod pdu_writer;
 //pub mod quadrature_demod;
-//pub mod rational_resampler;
+pub mod rational_resampler;
 //pub mod rtlsdr_decode;
 pub mod sigmf;
 //pub mod signal_source;

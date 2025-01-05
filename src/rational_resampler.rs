@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::trace;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 
 fn gcd(mut a: usize, mut b: usize) -> usize {
@@ -27,10 +27,10 @@ pub struct RationalResampler<T: Copy> {
     counter: i64,
 
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
 
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T: Copy> RationalResampler<T> {
@@ -38,17 +38,25 @@ impl<T: Copy> RationalResampler<T> {
     ///
     /// A common pattern to convert between arbitrary sample rates X
     /// and Y is to decimate by X and interpolate by Y.
-    pub fn new(src: Streamp<T>, mut interp: usize, mut deci: usize) -> Result<Self> {
+    pub fn new(
+        src: ReadStream<T>,
+        mut interp: usize,
+        mut deci: usize,
+    ) -> Result<(Self, ReadStream<T>)> {
         let g = gcd(deci, interp);
         deci /= g;
         interp /= g;
-        Ok(Self {
-            interp: i64::try_from(interp)?,
-            deci: i64::try_from(deci)?,
-            counter: 0,
-            src,
-            dst: Stream::newp(),
-        })
+        let (dst, dr) = crate::stream::new_stream();
+        Ok((
+            Self {
+                interp: i64::try_from(interp)?,
+                deci: i64::try_from(deci)?,
+                counter: 0,
+                src,
+                dst,
+            },
+            dr,
+        ))
     }
 }
 
