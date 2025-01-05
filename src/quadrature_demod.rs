@@ -26,7 +26,7 @@ QuadratureDemod by about 4x.
  */
 use anyhow::Result;
 
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
@@ -37,9 +37,9 @@ pub struct QuadratureDemod {
     #[rustradio(default)]
     last: Complex,
     #[rustradio(in)]
-    src: Streamp<Complex>,
+    src: ReadStream<Complex>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
+    dst: WriteStream<Float>,
 }
 
 impl QuadratureDemod {
@@ -87,9 +87,9 @@ impl QuadratureDemod {
 #[rustradio(crate, new, out, sync)]
 pub struct FastFM {
     #[rustradio(in)]
-    src: Streamp<Complex>,
+    src: ReadStream<Complex>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
+    dst: WriteStream<Float>,
     #[rustradio(default)]
     q1: Complex,
     #[rustradio(default)]

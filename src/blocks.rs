@@ -23,7 +23,7 @@ pub use crate::fir::FIRFilter;
 //pub use crate::nrzi::NrziDecode;
 //pub use crate::null_sink::NullSink;
 //pub use crate::pdu_writer::PduWriter;
-//pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
+pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
 pub use crate::rational_resampler::RationalResampler;
 //pub use crate::rtlsdr_decode::RtlSdrDecode;
 pub use crate::sigmf::SigMFSourceBuilder;
