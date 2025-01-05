@@ -14,7 +14,7 @@ This implementation is a pretty inefficient.
 
 use crate::block::{Block, BlockRet};
 use crate::fir::FIR;
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::window::WindowType;
 use crate::{Complex, Error, Float};
 
@@ -23,9 +23,9 @@ use crate::{Complex, Error, Float};
 #[rustradio(crate, out)]
 pub struct Hilbert {
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
     history: Vec<Float>,
     filter: FIR<Float>,
     ntaps: usize,
@@ -33,17 +33,25 @@ pub struct Hilbert {
 
 impl Hilbert {
     /// Create new hilber transformer with this many taps.
-    pub fn new(src: Streamp<Float>, ntaps: usize, window_type: &WindowType) -> Self {
+    pub fn new(
+        src: ReadStream<Float>,
+        ntaps: usize,
+        window_type: &WindowType,
+    ) -> (Self, ReadStream<Complex>) {
         // TODO: take window function.
         assert!(ntaps & 1 == 1, "hilbert filter len must be odd");
         let taps = crate::fir::hilbert(&window_type.make_window(ntaps));
-        Self {
-            src,
-            ntaps,
-            dst: Stream::newp(),
-            history: vec![0.0; ntaps],
-            filter: FIR::new(&taps),
-        }
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                ntaps,
+                dst,
+                history: vec![0.0; ntaps],
+                filter: FIR::new(&taps),
+            },
+            dr,
+        )
     }
 }
 

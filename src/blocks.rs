@@ -17,7 +17,7 @@ pub use crate::file_sink::{FileSink, NoCopyFileSink};
 pub use crate::file_source::FileSource;
 pub use crate::fir::FIRFilter;
 //pub use crate::hdlc_deframer::HdlcDeframer;
-//pub use crate::hilbert::Hilbert;
+pub use crate::hilbert::Hilbert;
 //pub use crate::il2p_deframer::Il2pDeframer;
 //pub use crate::multiply_const::MultiplyConst;
 //pub use crate::nrzi::NrziDecode;

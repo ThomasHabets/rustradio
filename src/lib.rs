@@ -123,7 +123,7 @@ pub mod file_sink;
 pub mod file_source;
 pub mod fir;
 //pub mod hdlc_deframer;
-//pub mod hilbert;
+pub mod hilbert;
 pub mod iir_filter;
 //pub mod il2p_deframer;
 //pub mod multiply_const;
