@@ -34,7 +34,7 @@ use log::trace;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -49,9 +49,9 @@ pub struct FftFilter {
     fft: Arc<dyn rustfft::Fft<Float>>,
     ifft: Arc<dyn rustfft::Fft<Float>>,
     #[rustradio(in)]
-    src: Streamp<Complex>,
+    src: ReadStream<Complex>,
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
 }
 
 impl FftFilter {
@@ -64,7 +64,7 @@ impl FftFilter {
     }
 
     /// Create new FftFilter, given filter taps.
-    pub fn new(src: Streamp<Complex>, taps: &[Complex]) -> Self {
+    pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
         // Set up FFT / batch size.
         let fft_size = Self::calc_fft_size(taps.len());
         let nsamples = fft_size - taps.len();
@@ -87,17 +87,21 @@ impl FftFilter {
             taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
         }
 
-        Self {
-            src,
-            dst: Stream::newp(),
-            fft_size,
-            taps_fft,
-            tail: vec![Complex::default(); taps.len()],
-            fft,
-            ifft,
-            buf: Vec::with_capacity(fft_size),
-            nsamples,
-        }
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                fft_size,
+                taps_fft,
+                tail: vec![Complex::default(); taps.len()],
+                fft,
+                ifft,
+                buf: Vec::with_capacity(fft_size),
+                nsamples,
+            },
+            dr,
+        )
     }
 }
 
@@ -197,27 +201,30 @@ impl Block for FftFilter {
 pub struct FftFilterFloat {
     complex: FftFilter,
     #[rustradio(in)]
-    src: Streamp<Float>,
+    src: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<Float>,
-    inner_in: Streamp<Complex>,
-    inner_out: Streamp<Complex>,
+    dst: WriteStream<Float>,
+    inner_in: WriteStream<Complex>,
+    inner_out: ReadStream<Complex>,
 }
 
 impl FftFilterFloat {
     /// Create a new FftFilterFloat block.
-    pub fn new(src: Streamp<Float>, taps: &[Float]) -> Self {
+    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
         let ctaps: Vec<Complex> = taps.iter().copied().map(|f| Complex::new(f, 0.0)).collect();
-        let inner_in = Stream::newp();
-        let complex = FftFilter::new(inner_in.clone(), &ctaps);
-        let inner_out = complex.out();
-        Self {
-            src,
-            dst: Stream::newp(),
-            complex,
-            inner_in,
-            inner_out,
-        }
+        let (inner_in, r) = crate::stream::new_stream();
+        let (complex, inner_out) = FftFilter::new(r, &ctaps);
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                complex,
+                inner_in,
+                inner_out,
+            },
+            dr,
+        )
     }
 }
 
