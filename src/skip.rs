@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 
 /// Turn samples into text.
@@ -10,9 +10,9 @@ use crate::Error;
 #[rustradio(crate, out, new)]
 pub struct Skip<T: Copy> {
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
     skip: usize,
 }
 

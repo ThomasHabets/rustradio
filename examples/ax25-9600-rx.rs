@@ -68,9 +68,8 @@ struct Opt {
 
 macro_rules! add_block {
     ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
-        $g.add(block);
+        let (block, prev) = $cons;
+        $g.add(Box::new(block));
         prev
     }};
 }
@@ -161,20 +160,21 @@ fn main() -> Result<()> {
     let baud = 9600.0;
     let (prev, mut block) = {
         let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
-        let block = SymbolSync::new(
+        let (block, prev) = SymbolSync::new(
             prev,
             samp_rate / baud,
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TEDZeroCrossing::new()),
             Box::new(clock_filter),
         );
-        (block.out(), block)
+        (prev, block)
     };
 
     // Optional clock output.
     let prev = if let Some(clockfile) = opt.clock_file {
-        let clock = block.out_clock();
-        let (a, prev) = add_block![g, Tee::new(prev)];
+        let clock = block.out_clock().unwrap();
+        let (b, a, prev) = Tee::new(prev);
+        g.add(Box::new(b));
         let clock = add_block![g, AddConst::new(clock, -samp_rate / baud)];
         let clock = add_block![g, ToText::new(vec![a, clock])];
         g.add(Box::new(FileSink::new(
@@ -197,7 +197,12 @@ fn main() -> Result<()> {
     let prev = add_block![g, Descrambler::new(prev, 0x21, 0, 16)];
 
     // Decode.
-    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
+    let prev = {
+        let b = HdlcDeframer::new(prev, 10, 1500);
+        let prev = b.out();
+        g.add(Box::new(b));
+        prev
+    };
 
     g.add(Box::new(PduWriter::new(prev, opt.output)));
 

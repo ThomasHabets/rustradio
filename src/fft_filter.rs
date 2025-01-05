@@ -14,13 +14,13 @@ let samp_rate: Float = 1_000_000.0;
 let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, &rustradio::window::WindowType::Hamming);
 
 // Set up dummy source and sink.
-let src = Box::new(ConstantSource::new(Complex::new(0.0,0.0)));
+let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0));
 
 // Create and connect fft.
-let fft = Box::new(FftFilter::new(src.out(), &taps));
+let (fft, fft_out) = FftFilter::new(src_out, &taps);
 
 // Set up dummy sink.
-let sink = Box::new(NullSink::new(fft.out()));
+let sink = NullSink::new(fft_out);
 ```
 
 ## Further reading:

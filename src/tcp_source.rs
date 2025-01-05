@@ -8,7 +8,7 @@ use anyhow::Result;
 use log::warn;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Sample};
 
 /// TCP Source, connecting to a server and streaming the data.
@@ -18,22 +18,21 @@ pub struct TcpSource<T: Copy> {
     stream: std::net::TcpStream,
     buf: Vec<u8>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T: Copy + Default> TcpSource<T> {
     /// Create new TCP source block.
-    pub fn new(addr: &str, port: u16) -> Result<Self> {
-        Ok(Self {
-            stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
-            buf: Vec::new(),
-            dst: Stream::newp(),
-        })
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<T> {
-        self.dst.clone()
+    pub fn new(addr: &str, port: u16) -> Result<(Self, ReadStream<T>)> {
+        let (dst, dr) = crate::stream::new_stream();
+        Ok((
+            Self {
+                stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
+                buf: Vec::new(),
+                dst,
+            },
+            dr,
+        ))
     }
 }
 
@@ -108,7 +107,7 @@ mod tests {
 
             stream.write_all(&data[pos + n..]).unwrap();
         });
-        let mut src: TcpSource<Float> = match addr {
+        let (mut src, src_out): (TcpSource<Float>, _) = match addr {
             std::net::SocketAddr::V4(_) => panic!("Where did IPv4 come from?"),
             std::net::SocketAddr::V6(a) => {
                 println!("Connecting to port {}", a.port());
@@ -117,16 +116,14 @@ mod tests {
         };
         src.work()?;
         {
-            let o = src.out();
-            let (res, _) = o.read_buf()?;
+            let (res, _) = src_out.read_buf()?;
             let want: Vec<Float> = [12345678.91817].into();
             assert_eq!(res.slice(), want, "first failed");
         }
 
         src.work()?;
         {
-            let o = src.out();
-            let (res, _) = o.read_buf()?;
+            let (res, _) = src_out.read_buf()?;
             assert_eq!(
                 res.slice(),
                 vec![12345678.91817, 91_817.125],
@@ -136,8 +133,7 @@ mod tests {
 
         src.work()?;
         {
-            let o = src.out();
-            let (res, _) = o.read_buf()?;
+            let (res, _) = src_out.read_buf()?;
             assert_eq!(
                 res.slice(),
                 vec![12345678.91817, 91_817.125, 7_589_234.5, 4712893.7589234],

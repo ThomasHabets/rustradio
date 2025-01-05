@@ -33,12 +33,10 @@ use rustradio::blocks::{AuEncode, VectorSource, FileSink};
 use rustradio::au::Encoding;
 use rustradio::file_sink::Mode;
 use rustradio::Complex;
-let src = VectorSource::new(
+let (src, src_out) = VectorSource::new(
     vec![10.0, 0.0, -20.0, 0.0, 100.0, -100.0],
 );
-let src_out = src.out();
-let au = AuEncode::new(src_out, Encoding::PCM16, 48000, 1);
-let au_out = au.out();
+let (au, au_out) = AuEncode::new(src_out, Encoding::PCM16, 48000, 1);
 let sink = FileSink::new(au_out, "/dev/null".into(), Mode::Overwrite)?;
 let mut g = Graph::new();
 g.add(Box::new(src));

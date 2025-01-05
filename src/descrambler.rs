@@ -4,7 +4,7 @@ AX.25 G3RUH uses mask 0x21 and length 16. Seed doesn't matter, since
 by the time the packet arrives the original seed will be shifted out
 anyway.
  */
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 
 /// LFSR as used by G3RUH.
 ///
@@ -40,29 +40,37 @@ impl Lfsr {
 #[rustradio(crate, out, sync)]
 pub struct Descrambler {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
     lfsr: Lfsr,
 }
 impl Descrambler {
     /// Create new descrambler.
     // TODO: take an lfsr, partly so that we can generate this new()
-    pub fn new(src: Streamp<u8>, mask: u64, seed: u64, len: u8) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            lfsr: Lfsr::new(mask, seed, len),
-        }
+    pub fn new(src: ReadStream<u8>, mask: u64, seed: u64, len: u8) -> (Self, ReadStream<u8>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                lfsr: Lfsr::new(mask, seed, len),
+            },
+            dr,
+        )
     }
 
     /// Create a descrambler with G3RUH parameters.
-    pub fn new_g3ruh(src: Streamp<u8>) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            lfsr: Lfsr::new(0x21, 0, 16),
-        }
+    pub fn new_g3ruh(src: ReadStream<u8>) -> (Self, ReadStream<u8>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                lfsr: Lfsr::new(0x21, 0, 16),
+            },
+            dr,
+        )
     }
 
     fn process_sync(&mut self, bit: u8) -> u8 {

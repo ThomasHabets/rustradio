@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
@@ -10,9 +10,9 @@ use crate::{Complex, Error, Float};
 #[rustradio(crate, new, out)]
 pub struct RtlSdrDecode {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
 }
 
 impl Block for RtlSdrDecode {
@@ -51,25 +51,23 @@ mod tests {
 
     #[test]
     fn empty() -> crate::Result<()> {
-        let mut src = VectorSource::new(vec![]);
+        let (mut src, src_out) = VectorSource::new(vec![]);
         assert_eq!(src.work()?, BlockRet::EOF);
-        let mut dec = RtlSdrDecode::new(src.out());
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         assert_eq!(dec.work()?, BlockRet::Noop);
-        let os = dec.out();
-        let (res, _) = os.read_buf()?;
+        let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 0);
         Ok(())
     }
 
     #[test]
     fn some_input() -> crate::Result<()> {
-        let mut src = VectorSource::new(vec![0, 10, 20, 10, 0, 13]);
+        let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0, 13]);
         assert_eq!(src.work()?, BlockRet::Ok);
         assert_eq!(src.work()?, BlockRet::EOF);
-        let mut dec = RtlSdrDecode::new(src.out());
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         assert_eq!(dec.work()?, BlockRet::Ok);
-        let os = dec.out();
-        let (res, _) = os.read_buf()?;
+        let (res, _) = dec_out.read_buf()?;
         // Probably this should compare close to, but not equal.
         assert_eq!(
             res.slice(),
@@ -93,13 +91,12 @@ mod tests {
 
     #[test]
     fn uneven() -> crate::Result<()> {
-        let mut src = VectorSource::new(vec![0, 10, 20, 10, 0]);
+        let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0]);
         assert_eq!(src.work()?, BlockRet::Ok);
         assert_eq!(src.work()?, BlockRet::EOF);
-        let mut dec = RtlSdrDecode::new(src.out());
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         assert_eq!(dec.work()?, BlockRet::Ok);
-        let os = dec.out();
-        let (res, _) = os.read_buf()?;
+        let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 2);
         Ok(())
     }
@@ -107,15 +104,14 @@ mod tests {
     #[test]
     fn overflow() -> crate::Result<()> {
         // Input is pairs of bytes. Output is complex, meaning a 4x increase. That won't fit.
-        let mut src = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE]);
+        let (mut src, src_out) = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE]);
         assert_eq!(src.work()?, BlockRet::Ok);
         assert_eq!(src.work()?, BlockRet::EOF);
-        let mut dec = RtlSdrDecode::new(src.out());
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         for n in 0..4 {
             eprintln!("loop iter: {n}");
             assert_eq!(dec.work()?, BlockRet::Ok);
-            let os = dec.out();
-            let (res, _) = os.read_buf()?;
+            let (res, _) = dec_out.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE / 8);
             res.consume(crate::stream::DEFAULT_STREAM_SIZE / 8);
         }

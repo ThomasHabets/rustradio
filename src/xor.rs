@@ -1,6 +1,6 @@
 //! Xor two streams.
 use crate::block::{Block, BlockRet};
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 
 /// Xors a constant value to every sample.
@@ -12,11 +12,11 @@ where
     T: Copy,
 {
     #[rustradio(in)]
-    a: Streamp<T>,
+    a: ReadStream<T>,
     #[rustradio(in)]
-    b: Streamp<T>,
+    b: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T> Block for Xor<T>

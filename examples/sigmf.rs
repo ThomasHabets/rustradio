@@ -51,7 +51,9 @@ fn main() -> Result<()> {
         })
         .build()
     ];
-    let prev = add_block![g, DebugFilter::new(prev)];
+    let dbg = DebugFilter::new(prev);
+    let prev = dbg.out();
+    g.add(Box::new(dbg));
     g.add(Box::new(NoCopyFileSink::new(
         prev,
         "out.txt".into(),

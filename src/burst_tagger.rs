@@ -19,13 +19,12 @@ Also see `examples/wpcr.rs`.
 use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIIRFilter,BurstTagger,StreamToPdu};
 use rustradio::Complex;
-let src = FileSource::new("/dev/null", false)?;
-let tee = Tee::new(src.out());
-let (data,b) = tee.out();
-let c2m = ComplexToMag2::new(b);
-let iir = SinglePoleIIRFilter::new(c2m.out(), 0.01).unwrap();
-let burst = BurstTagger::new(data, c2m.out(), 0.0001, "burst".to_string());
-let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
+let (src, src_out) = FileSource::new("/dev/null", false)?;
+let (tee, data, b) = Tee::new(src_out);
+let (c2m, c2m_out) = ComplexToMag2::new(b);
+let (iir, iir_out) = SinglePoleIIRFilter::new(c2m_out, 0.01).unwrap();
+let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst".to_string());
+let pdus = StreamToPdu::new(burst_out, "burst".to_string(), 10_000, 50);
 // pdus.out() now delivers bursts as Vec<Complex>
 # Ok::<(), anyhow::Error>(())
 ```
@@ -39,7 +38,7 @@ let pdus = StreamToPdu::new(burst.out(), "burst".to_string(), 10_000, 50);
 
  */
 
-use crate::stream::{Streamp, Tag, TagValue};
+use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::Float;
 
 /// Burst tagger:
@@ -47,11 +46,11 @@ use crate::Float;
 #[rustradio(crate, out, new, sync_tag)]
 pub struct BurstTagger<T: Copy> {
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(in)]
-    trigger: Streamp<Float>,
+    trigger: ReadStream<Float>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 
     threshold: Float,
     tag: String,
@@ -89,8 +88,8 @@ mod tests {
 
     #[test]
     fn tag_it() -> Result<()> {
-        let mut src = VectorSource::new((0..100).map(|i| i as u32).collect());
-        let mut trigger = VectorSource::new(
+        let (mut src, src_out) = VectorSource::new((0..100).map(|i| i as u32).collect());
+        let (mut trigger, trigger_out) = VectorSource::new(
             (0..100)
                 .map(|i| match i as u32 {
                     0..80 => 0.1,
@@ -99,8 +98,8 @@ mod tests {
                 })
                 .collect(),
         );
-        let mut b = BurstTagger::new(src.out(), trigger.out(), 0.25, "burst".to_string());
-        let mut sink = VectorSink::new(b.out(), 1000);
+        let (mut b, b_out) = BurstTagger::new(src_out, trigger_out, 0.25, "burst".to_string());
+        let mut sink = VectorSink::new(b_out, 1000);
         src.work()?;
         trigger.work()?;
         b.work()?;

@@ -74,19 +74,19 @@ with streams, and runs the graph.
 use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{AddConst, VectorSource, DebugSink};
 use rustradio::Complex;
-let src = Box::new(VectorSource::new(
+let (src, prev) = VectorSource::new(
     vec![
         Complex::new(10.0, 0.0),
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),
     ],
-));
-let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
-let sink = Box::new(DebugSink::new(add.out()));
+);
+let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
+let sink = DebugSink::new(prev);
 let mut g = Graph::new();
-g.add(src);
-g.add(add);
-g.add(sink);
+g.add(Box::new(src));
+g.add(Box::new(add));
+g.add(Box::new(sink));
 g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
@@ -110,14 +110,14 @@ pub mod add;
 pub mod add_const;
 pub mod au;
 pub mod binary_slicer;
-//pub mod burst_tagger;
-//pub mod complex_to_mag2;
-//pub mod constant_source;
+pub mod burst_tagger;
+pub mod complex_to_mag2;
+pub mod constant_source;
 pub mod convert;
-//pub mod correlate_access_code;
+pub mod correlate_access_code;
 pub mod debug_sink;
-//pub mod delay;
-//pub mod descrambler;
+pub mod delay;
+pub mod descrambler;
 pub mod fft_filter;
 pub mod file_sink;
 pub mod file_source;
@@ -125,30 +125,30 @@ pub mod fir;
 pub mod hdlc_deframer;
 pub mod hilbert;
 pub mod iir_filter;
-//pub mod il2p_deframer;
-//pub mod multiply_const;
+pub mod il2p_deframer;
+pub mod multiply_const;
 pub mod nrzi;
-//pub mod null_sink;
+pub mod null_sink;
 pub mod pdu_writer;
 pub mod quadrature_demod;
 pub mod rational_resampler;
-//pub mod rtlsdr_decode;
+pub mod rtlsdr_decode;
 pub mod sigmf;
 pub mod signal_source;
-//pub mod single_pole_iir_filter;
-//pub mod skip;
+pub mod single_pole_iir_filter;
+pub mod skip;
 pub mod stream_to_pdu;
 pub mod symbol_sync;
-//pub mod tcp_source;
+pub mod tcp_source;
 pub mod tee;
 pub mod to_text;
-//pub mod vec_to_stream;
-//pub mod vector_sink;
+pub mod vec_to_stream;
+pub mod vector_sink;
 pub mod vector_source;
-//pub mod wpcr;
-//pub mod xor;
-//pub mod xor_const;
-//pub mod zero_crossing;
+pub mod wpcr;
+pub mod xor;
+pub mod xor_const;
+pub mod zero_crossing;
 
 #[cfg(feature = "audio")]
 pub mod audio_sink;

@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Streamp, Tag};
+use crate::stream::{ReadStream, Tag};
 use crate::Error;
 
 /// VectorSink.
@@ -12,7 +12,7 @@ use crate::Error;
 #[rustradio(crate, new)]
 pub struct VectorSink<T: Copy> {
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
 
     #[rustradio(default)]
     storage: Vec<T>,
@@ -55,8 +55,8 @@ mod tests {
 
     #[test]
     fn only_data() -> Result<()> {
-        let mut src = VectorSource::new(vec![0u32, 1, 2, 3, 4, 5]);
-        let mut sink = VectorSink::new(src.out(), 100);
+        let (mut src, src_out) = VectorSource::new(vec![0u32, 1, 2, 3, 4, 5]);
+        let mut sink = VectorSink::new(src_out, 100);
         src.work()?;
         sink.work()?;
         assert_eq!(sink.data(), &[0, 1, 2, 3, 4, 5]);

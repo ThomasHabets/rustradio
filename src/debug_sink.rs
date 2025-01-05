@@ -67,6 +67,10 @@ where
             dst: NoCopyStream::newp(),
         }
     }
+    /// Return the output stream.
+    pub fn out(&self) -> NoCopyStreamp<String> {
+        self.dst.clone()
+    }
 }
 
 impl<T> Block for DebugFilter<T>

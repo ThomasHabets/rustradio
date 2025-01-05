@@ -20,15 +20,15 @@ use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
-let src = Box::new(FileSource::<u8>::new("/dev/null", false)?);
-let dec = Box::new(RtlSdrDecode::new(src.out()));
-let add = Box::new(AddConst::new(dec.out(), Complex::new(1.1, 2.0)));
-let sink = Box::new(NullSink::new(add.out()));
+let (src, prev) = FileSource::<u8>::new("/dev/null", false)?;
+let (dec, prev) = RtlSdrDecode::new(prev);
+let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
+let sink = NullSink::new(prev);
 let mut g = MTGraph::new();
-g.add(src);
-g.add(dec);
-g.add(add);
-g.add(sink);
+g.add(Box::new(src));
+g.add(Box::new(dec));
+g.add(Box::new(add));
+g.add(Box::new(sink));
 g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```

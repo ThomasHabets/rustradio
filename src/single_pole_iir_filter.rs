@@ -1,7 +1,7 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::Float;
 
 struct SinglePoleIIR<Tout> {
@@ -54,9 +54,9 @@ where
 {
     iir: SinglePoleIIR<T>,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T> SinglePoleIIRFilter<T>
@@ -69,12 +69,16 @@ where
 {
     /// Create new IIR filter.
     // TODO: have it take IIR, so that we can generate new()?
-    pub fn new(src: Streamp<T>, alpha: Float) -> Option<Self> {
-        Some(Self {
-            src,
-            dst: Stream::newp(),
-            iir: SinglePoleIIR::<T>::new(alpha)?,
-        })
+    pub fn new(src: ReadStream<T>, alpha: Float) -> Option<(Self, ReadStream<T>)> {
+        let (dst, dr) = crate::stream::new_stream();
+        Some((
+            Self {
+                src,
+                dst,
+                iir: SinglePoleIIR::<T>::new(alpha)?,
+            },
+            dr,
+        ))
     }
     fn process_sync(&mut self, a: T) -> T {
         self.iir.filter(a)
@@ -85,14 +89,14 @@ where
 mod tests {
     use super::*;
     use crate::block::Block;
-    use crate::stream::Stream;
     use crate::{Complex, Error};
 
     #[test]
     fn iir_ff() -> Result<()> {
         // TODO: create an actual test.
-        let src = Stream::fromp_slice(&[0.1, 0.2]);
-        let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+        let src = ReadStream::from_slice(&[0.1, 0.2]);
+        let (mut iir, _) =
+            SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
     }
@@ -100,21 +104,24 @@ mod tests {
     #[test]
     fn iir_cc() -> Result<()> {
         // TODO: create an actual test.
-        let src = Stream::fromp_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
-        let mut iir = SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+        let src = ReadStream::from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
+        let (mut iir, _) =
+            SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
     }
 
     #[test]
     fn reject_bad_alpha() -> Result<()> {
-        let src = Stream::fromp_slice(&[0.1, 0.2]);
-        SinglePoleIIRFilter::new(src.clone(), 0.0).ok_or(Error::new("should accept 0.0"))?;
-        SinglePoleIIRFilter::new(src.clone(), 0.1).ok_or(Error::new("should accept 0.1"))?;
-        SinglePoleIIRFilter::new(src.clone(), 1.0).ok_or(Error::new("should accept 1.0"))?;
-        if SinglePoleIIRFilter::new(src.clone(), -0.1).is_some() {
+        for tv in [0.0, 0.1, 1.0] {
+            let src = ReadStream::from_slice(&[0.1, 0.2]);
+            SinglePoleIIRFilter::new(src, tv).ok_or(Error::new("should accept {tv}"))?;
+        }
+        let src = ReadStream::from_slice(&[0.1, 0.2]);
+        if SinglePoleIIRFilter::new(src, -0.1).is_some() {
             return Err(Error::new("should not accept -0.1").into());
         }
+        let src = ReadStream::from_slice(&[0.1, 0.2]);
         if SinglePoleIIRFilter::new(src, 1.1).is_some() {
             return Err(Error::new("should not accept 1.1").into());
         }

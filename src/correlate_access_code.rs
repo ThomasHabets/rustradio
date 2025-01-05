@@ -2,16 +2,16 @@
 
 For now an initial yes/no bit block. Future work should add tagging.
 */
-use crate::stream::{Stream, Streamp, Tag, TagValue};
+use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
 /// CorrelateAccessCode outputs 1 if CAC matches.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, out, sync)]
 pub struct CorrelateAccessCode {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
 
     code: Vec<u8>,
     slide: Vec<u8>,
@@ -20,14 +20,18 @@ pub struct CorrelateAccessCode {
 
 impl CorrelateAccessCode {
     /// Create new correlate access block.
-    pub fn new(src: Streamp<u8>, code: Vec<u8>, allowed_diffs: usize) -> Self {
-        Self {
-            src,
-            dst: Stream::newp(),
-            slide: vec![0; code.len()],
-            code,
-            allowed_diffs,
-        }
+    pub fn new(src: ReadStream<u8>, code: Vec<u8>, allowed_diffs: usize) -> (Self, ReadStream<u8>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                dst,
+                slide: vec![0; code.len()],
+                code,
+                allowed_diffs,
+            },
+            dr,
+        )
     }
     fn process_sync(&mut self, a: u8) -> u8 {
         self.slide.push(a);
@@ -55,9 +59,9 @@ impl CorrelateAccessCode {
 pub struct CorrelateAccessCodeTag {
     code: Vec<u8>,
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
     slide: Vec<u8>,
     allowed_diffs: usize,
     tag: String,
@@ -65,15 +69,24 @@ pub struct CorrelateAccessCodeTag {
 
 impl CorrelateAccessCodeTag {
     /// Create new correlate access block.
-    pub fn new(src: Streamp<u8>, code: Vec<u8>, tag: String, allowed_diffs: usize) -> Self {
-        Self {
-            src,
-            tag,
-            dst: Stream::newp(),
-            slide: vec![0; code.len()],
-            code,
-            allowed_diffs,
-        }
+    pub fn new(
+        src: ReadStream<u8>,
+        code: Vec<u8>,
+        tag: String,
+        allowed_diffs: usize,
+    ) -> (Self, ReadStream<u8>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                src,
+                tag,
+                dst,
+                slide: vec![0; code.len()],
+                code,
+                allowed_diffs,
+            },
+            dr,
+        )
     }
     fn process_sync_tags(&mut self, a: u8, tags: &[Tag]) -> (u8, Vec<Tag>) {
         self.slide.push(a);

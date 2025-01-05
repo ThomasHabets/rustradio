@@ -68,7 +68,7 @@ impl<T: Copy> ReadStream<T> {
     #[cfg(test)]
     pub fn from_slice(data: &[T]) -> Self {
         let circ = Arc::new(circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap()); // TODO
-        let mut wb = circ.write_buf().unwrap();
+        let mut wb = circ.clone().write_buf().unwrap();
         wb.fill_from_slice(data);
         wb.produce(data.len(), &[]);
         Self { circ }
