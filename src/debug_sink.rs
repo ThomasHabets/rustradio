@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagPos};
+use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag, TagPos};
 use crate::Error;
 
 /// Nocopy version of DebugSink.
@@ -50,7 +50,7 @@ where
     T: Copy,
 {
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
     #[rustradio(out)]
     dst: NoCopyStreamp<String>,
 }
@@ -61,7 +61,7 @@ where
     T: Copy,
 {
     /// Create new debug block.
-    pub fn new(src: Streamp<T>) -> Self {
+    pub fn new(src: ReadStream<T>) -> Self {
         Self {
             src,
             dst: NoCopyStream::newp(),
@@ -110,7 +110,7 @@ where
     T: Copy,
 {
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
 }
 
 //#[allow(clippy::new_without_default)]
