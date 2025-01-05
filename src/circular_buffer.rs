@@ -168,20 +168,20 @@ impl BufferState {
         (self.rpos, self.rpos + self.used)
     }
 
-    // In samples.
+    /// Total capacity of this buffer, ignoring fullness. In samples.
     #[must_use]
     fn capacity(&self) -> usize {
         self.circ_len / self.member_size
     }
 
-    // Write capacity, in samples.
+    /// How many samples fit to be written.
     #[must_use]
     fn write_capacity(&self) -> usize {
         let (a, b) = self.write_range();
         b - a
     }
 
-    // Free space, in samples
+    /// Available space to be written, in samples.
     #[must_use]
     fn free(&self) -> usize {
         self.capacity() - self.used
@@ -324,6 +324,12 @@ impl<T> Buffer<T> {
     #[must_use]
     pub fn total_size(&self) -> usize {
         self.circ.total_size() / self.member_size
+    }
+
+    /// Available space to write, in bytes.
+    #[must_use]
+    pub fn free(&self) -> usize {
+        self.state.lock().unwrap().free()
     }
 }
 

@@ -79,6 +79,7 @@ impl<T: Copy> ReadStream<T> {
         self.circ.total_size()
     }
 
+    /// Return a BufferReader, for reading from the stream.
     pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
         Ok(Arc::clone(&self.circ).read_buf()?)
     }
@@ -102,6 +103,12 @@ pub struct WriteStream<T> {
 }
 
 impl<T: Copy> WriteStream<T> {
+    /// Return free space in the stream, in samples.
+    #[must_use]
+    pub fn free(&self) -> usize {
+        self.circ.free()
+    }
+    /// Return a BufferWriter for writing to the stream.
     pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>, Error> {
         Ok(Arc::clone(&self.circ).write_buf()?)
     }
