@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Sample};
 
 /// Read stream from raw file.
@@ -18,21 +18,25 @@ pub struct FileSource<T: Copy> {
     repeat: bool,
     buf: Vec<u8>,
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
 }
 
 impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
-    pub fn new(filename: &str, repeat: bool) -> Result<Self> {
+    pub fn new(filename: &str, repeat: bool) -> Result<(Self, ReadStream<T>)> {
         let f = BufReader::new(std::fs::File::open(filename)?);
         debug!("Opening source {filename}");
-        Ok(Self {
-            filename: filename.to_string(),
-            f,
-            repeat,
-            buf: Vec::new(),
-            dst: Stream::newp(),
-        })
+        let (dst, dr) = crate::stream::new_stream();
+        Ok((
+            Self {
+                filename: filename.to_string(),
+                f,
+                repeat,
+                buf: Vec::new(),
+                dst,
+            },
+            dr,
+        ))
     }
 }
 

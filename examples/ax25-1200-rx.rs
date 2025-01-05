@@ -97,8 +97,8 @@ struct Opt {
 
 macro_rules! add_block {
     ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
+        let (block, prev) = $cons;
+        let block = Box::new(block);
         $g.add(block);
         prev
     }};
@@ -113,11 +113,11 @@ fn get_complex_input(
         if let Some(s) = opt.samp_rate {
             b = b.sample_rate(s as f64);
         }
-        let b = b.build()?;
+        let (b, prev) = b.build()?;
         let samp_rate = b
             .sample_rate()
             .ok_or(Error::new("SigMF file does not specify sample rate"))?;
-        let prev = add_block![g, b];
+        g.add(Box::new(b));
         return Ok((prev, samp_rate as f32));
     }
 
