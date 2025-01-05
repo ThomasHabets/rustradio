@@ -82,13 +82,15 @@ where
         let (input, tags) = self.src.read_buf()?;
         let mut out = self.dst.write_buf()?;
         let n = std::cmp::min(input.len(), out.len());
-        if n > self.ntaps {
-            let v = self.fir.filter_n(&input.slice()[..n]);
-            let n = v.len();
-            input.consume(n);
-            out.fill_from_iter(v);
-            out.produce(n, &tags);
+        if n <= self.ntaps {
+            return Ok(BlockRet::Noop);
         }
+        let v = self.fir.filter_n(&input.slice()[..n]);
+        assert!(v.len() <= n);
+        let n = v.len();
+        input.consume(n);
+        out.fill_from_iter(v);
+        out.produce(n, &tags);
         Ok(BlockRet::Ok)
     }
 }

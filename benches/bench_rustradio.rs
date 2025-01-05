@@ -2,7 +2,7 @@
 
 extern crate rustradio;
 extern crate test;
-use rustradio::block::Block;
+use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::stream::new_stream;
 use rustradio::window::WindowType;
@@ -33,7 +33,8 @@ fn bench_fft_filter(b: &mut Bencher) {
             let n = out.len();
             out.consume(n);
         }
-        filter.work().unwrap();
+        assert_eq!(BlockRet::Ok, filter.work().unwrap());
+        assert_eq!(BlockRet::Noop, filter.work().unwrap());
     });
 }
 
@@ -60,6 +61,12 @@ fn bench_fir_filter(b: &mut Bencher) {
             let n = out.len();
             out.consume(n);
         }
-        filter.work().unwrap();
+        loop {
+            match filter.work().unwrap() {
+                BlockRet::Ok => continue,
+                BlockRet::Noop => break,
+                other => panic!("FIRFilter returned {other:?}"),
+            }
+        }
     });
 }
