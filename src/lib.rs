@@ -138,7 +138,7 @@ pub mod iir_filter;
 //pub mod single_pole_iir_filter;
 //pub mod skip;
 //pub mod stream_to_pdu;
-//pub mod symbol_sync;
+pub mod symbol_sync;
 //pub mod tcp_source;
 //pub mod tee;
 //pub mod to_text;
