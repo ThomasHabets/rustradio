@@ -141,7 +141,7 @@ pub mod sigmf;
 pub mod symbol_sync;
 //pub mod tcp_source;
 pub mod tee;
-//pub mod to_text;
+pub mod to_text;
 //pub mod vec_to_stream;
 //pub mod vector_sink;
 //pub mod vector_source;

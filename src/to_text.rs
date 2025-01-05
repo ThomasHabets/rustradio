@@ -23,7 +23,7 @@ g.add(Box::new(sink));
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::{ReadStream, WriteStream};
 use crate::Error;
 
 /// Turn samples into text.
@@ -33,18 +33,16 @@ use crate::Error;
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, out, noeof)]
 pub struct ToText<T: Copy> {
-    srcs: Vec<Streamp<T>>,
+    srcs: Vec<ReadStream<T>>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
 }
 
 impl<T: Copy> ToText<T> {
     /// Create new ToText block.
-    pub fn new(srcs: Vec<Streamp<T>>) -> Self {
-        Self {
-            srcs,
-            dst: Stream::newp(),
-        }
+    pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (Self { srcs, dst }, dr)
     }
 }
 

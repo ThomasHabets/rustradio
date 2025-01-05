@@ -34,7 +34,7 @@ pub use crate::sigmf::SigMFSourceBuilder;
 pub use crate::symbol_sync::SymbolSync;
 //pub use crate::tcp_source::TcpSource;
 pub use crate::tee::Tee;
-//pub use crate::to_text::ToText;
+pub use crate::to_text::ToText;
 //pub use crate::vec_to_stream::VecToStream;
 //pub use crate::vector_sink::VectorSink;
 //pub use crate::vector_source::{VectorSource, VectorSourceBuilder};
