@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp};
+use crate::stream::WriteStream;
 use crate::{Complex, Error, Float};
 
 /// Generate a pure complex sine wave.
@@ -10,7 +10,7 @@ use crate::{Complex, Error, Float};
 #[rustradio(crate)]
 pub struct SignalSourceComplex {
     #[rustradio(out)]
-    dst: Streamp<Complex>,
+    dst: WriteStream<Complex>,
 
     amplitude: Float,
     rad_per_sample: f64,
@@ -20,17 +20,14 @@ pub struct SignalSourceComplex {
 /// Generate pure complex sine sine.
 impl SignalSourceComplex {
     /// Create new SignalSourceComplex block.
-    pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> Self {
-        Self {
-            dst: Stream::newp(),
+    pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> (Self, ReadStream<Complex>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (Self {
+            dst,
             current: 0.0,
             amplitude,
             rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
-        }
-    }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Complex> {
-        self.dst.clone()
+        }, dr)
     }
 }
 
@@ -69,7 +66,7 @@ impl Block for SignalSourceComplex {
 #[rustradio(crate)]
 pub struct SignalSourceFloat {
     #[rustradio(out)]
-    dst: Streamp<Float>,
+    dst: WriteStream<Float>,
     amplitude: Float,
     rad_per_sample: f64,
     current: f64,
@@ -79,16 +76,13 @@ pub struct SignalSourceFloat {
 impl SignalSourceFloat {
     /// Create new SignalSourceFloat block.
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> Self {
-        Self {
-            dst: Stream::newp(),
+        let (dst, dr) = crate::stream::new_stream();
+        (Self {
+            dst,
             current: 0.0,
             amplitude,
             rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
-        }
-    }
-    /// Return the output stream.
-    pub fn out(&self) -> Streamp<Float> {
-        self.dst.clone()
+        }, dr)
     }
 }
 

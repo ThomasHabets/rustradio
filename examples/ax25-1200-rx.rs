@@ -139,7 +139,7 @@ fn get_complex_input(
     panic!("not read, not rtlsdr");
 }
 
-fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(Streamp<Float>, f32)> {
+fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
     if opt.audio {
         if let Some(ref read) = &opt.read {
             let prev = add_block![g, FileSource::new(read, false)?];
