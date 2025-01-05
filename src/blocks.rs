@@ -13,7 +13,7 @@ pub use crate::add_const::{add_const, AddConst};
 //pub use crate::descrambler::Descrambler;
 //pub use crate::fft_filter::FftFilter;
 //pub use crate::fft_filter::FftFilterFloat;
-//pub use crate::file_sink::{FileSink, NoCopyFileSink};
+pub use crate::file_sink::{FileSink, NoCopyFileSink};
 //pub use crate::file_source::FileSource;
 pub use crate::fir::FIRFilter;
 //pub use crate::hdlc_deframer::HdlcDeframer;

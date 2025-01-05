@@ -119,7 +119,7 @@ pub mod convert;
 //pub mod delay;
 //pub mod descrambler;
 //pub mod fft_filter;
-//pub mod file_sink;
+pub mod file_sink;
 //pub mod file_source;
 pub mod fir;
 //pub mod hdlc_deframer;

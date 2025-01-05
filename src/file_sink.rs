@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStreamp, Streamp};
+use crate::stream::{NoCopyStreamp, ReadStream};
 use crate::{Error, Sample};
 
 /// File write mode.
@@ -27,12 +27,12 @@ pub enum Mode {
 pub struct FileSink<T: Copy> {
     f: BufWriter<std::fs::File>,
     #[rustradio(in)]
-    src: Streamp<T>,
+    src: ReadStream<T>,
 }
 
 impl<T: Copy> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new(src: Streamp<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
+    pub fn new(src: ReadStream<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
         debug!("Opening sink {}", filename.display());
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
