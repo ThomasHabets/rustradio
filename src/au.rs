@@ -234,9 +234,9 @@ impl Block for AuDecode {
                 }
                 let channels = u32::from_be_bytes(head[12..16].try_into().unwrap());
                 if channels != 1 {
-                    return Err(Error::new(
-                        "AU block only supports one channel currently, got {channels}",
-                    ));
+                    return Err(Error::new(&format!(
+                        "AU block only supports one channel currently, got {channels}"
+                    )));
                 }
                 self.state = DecodeState::Data;
             }
