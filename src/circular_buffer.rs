@@ -125,8 +125,8 @@ impl Circ {
     #[must_use]
     fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         let ez = std::mem::size_of::<T>();
-        assert!(self.len % ez == 0);
-        assert!(
+        debug_assert!(self.len % ez == 0);
+        debug_assert!(
             end - start <= self.len / ez / 2,
             "requested {start} to {end} ({} entries) of {} but len is {}",
             end - start,
@@ -148,8 +148,6 @@ struct BufferState {
     used: usize,        // In samples.
     circ_len: usize,    // In bytes.
     member_size: usize, // In bytes.
-    read_borrow: bool,
-    write_borrow: bool,
     tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 
@@ -225,7 +223,7 @@ impl<T: Copy> BufferReader<T> {
     /// is_empty convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.end == self.start
     }
 }
 
@@ -234,12 +232,6 @@ impl<T: Copy> std::ops::Index<usize> for BufferReader<T> {
 
     fn index(&self, n: usize) -> &Self::Output {
         &self.slice()[n]
-    }
-}
-
-impl<T: Copy> Drop for BufferReader<T> {
-    fn drop(&mut self) {
-        self.parent.return_read_buf();
     }
 }
 
@@ -292,13 +284,7 @@ impl<T: Copy> BufferWriter<T> {
     /// is_empty convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
-impl<T: Copy> Drop for BufferWriter<T> {
-    fn drop(&mut self) {
-        self.parent.return_write_buf();
+        self.end == self.start
     }
 }
 
@@ -316,8 +302,6 @@ impl<T> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             state: Arc::new(Mutex::new(BufferState {
-                read_borrow: false,
-                write_borrow: false,
                 rpos: 0,
                 wpos: 0,
                 used: 0,
@@ -415,20 +399,6 @@ impl<T: Copy> Buffer<T> {
         s.used += n;
     }
 
-    /// Will only be called from the read buffer, as it gets destroyed.
-    pub(in crate::circular_buffer) fn return_read_buf(&self) {
-        let mut s = self.state.lock().unwrap();
-        assert!(s.read_borrow);
-        s.read_borrow = false;
-    }
-
-    /// Will only be called from the write buffer, as it gets destroyed.
-    pub(in crate::circular_buffer) fn return_write_buf(&self) {
-        let mut s = self.state.lock().unwrap();
-        assert!(s.write_borrow);
-        s.write_borrow = false;
-    }
-
     pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
         self.circ.full_buffer::<T>(start, end)
     }
@@ -439,13 +409,9 @@ impl<T: Copy> Buffer<T> {
 
     /// Get the read slice.
     pub fn read_buf(self: &Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let mut s = self.state.lock().unwrap();
-        if s.read_borrow {
-            return Err(Error::new("read buf already borrowed").into());
-        }
-        s.read_borrow = true;
+        let s = self.state.lock().unwrap();
         let (start, end) = s.read_range();
-        let mut tags = Vec::new();
+        let mut tags = Vec::with_capacity(s.tags.len());
 
         // TODO: range scan the tags.
         for (n, ts) in &s.tags {
@@ -471,22 +437,16 @@ impl<T: Copy> Buffer<T> {
                 ));
             }
         }
+        drop(s);
         tags.sort_by_key(|a| a.pos());
-        Ok((
-            //BufferReader::new(unsafe { std::mem::transmute::<&mut [T], &[T]>(buf) }, Arc::clone(self)),
-            BufferReader::new(Arc::clone(self), start, end),
-            tags,
-        ))
+        Ok((BufferReader::new(Arc::clone(self), start, end), tags))
     }
 
     /// Get the write slice.
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
-        let mut s = self.state.lock().unwrap();
-        if s.write_borrow {
-            return Err(Error::new("write buf already borrowed").into());
-        }
-        s.write_borrow = true;
+        let s = self.state.lock().unwrap();
         let (start, end) = s.write_range();
+        drop(s);
         Ok(BufferWriter::new(
             //unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
             self.clone(),
