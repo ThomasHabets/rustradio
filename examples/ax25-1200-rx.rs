@@ -280,8 +280,9 @@ fn main() -> Result<()> {
      */
 
     let mut hdlc = HdlcDeframer::new(prev, 10, 1500);
+    let prev = hdlc.out();
     hdlc.set_fix_bits(opt.fix_bits);
-    let prev = add_block![g, hdlc];
+    g.add(Box::new(hdlc));
     if let Some(o) = opt.output {
         g.add(Box::new(PduWriter::new(prev, o)));
     } else {

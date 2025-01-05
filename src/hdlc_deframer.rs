@@ -10,7 +10,7 @@ therefore [APRS][aprs].
 use log::{debug, info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, Streamp, Tag, TagValue};
+use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag, TagValue};
 use crate::{Error, Result};
 
 enum State {
@@ -73,7 +73,7 @@ found as Vec<u8>.
 #[rustradio(crate)]
 pub struct HdlcDeframer {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
     dst: NoCopyStreamp<Vec<u8>>,
     state: State,
@@ -100,7 +100,7 @@ impl HdlcDeframer {
     /// Create new HdlcDeframer.
     ///
     /// min_size and max_size is size in bytes.
-    pub fn new(src: Streamp<u8>, min_size: usize, max_size: usize) -> Self {
+    pub fn new(src: ReadStream<u8>, min_size: usize, max_size: usize) -> Self {
         Self {
             src,
             dst: NoCopyStream::newp(),
@@ -232,8 +232,7 @@ impl HdlcDeframer {
 
 impl Block for HdlcDeframer {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let ti = self.src.clone();
-        let (input, _tags) = ti.read_buf()?;
+        let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::Noop);
         }
@@ -307,7 +306,6 @@ fn calc_crc(data: &[u8]) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Stream;
 
     fn str2bits(s: &str) -> Vec<u8> {
         s.chars()

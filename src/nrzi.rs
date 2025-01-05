@@ -16,16 +16,16 @@ one. This code is going with NRZI-S, meaning a toggle is zero, and
 constant is one, because that's what done by AX.25, both 1200bps Bell
 202, and 9600 G3RUH.
 */
-use crate::stream::Streamp;
+use crate::stream::{ReadStream, WriteStream};
 
 /// NRZI decoder.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, out, sync)]
 pub struct NrziDecode {
     #[rustradio(in)]
-    src: Streamp<u8>,
+    src: ReadStream<u8>,
     #[rustradio(out)]
-    dst: Streamp<u8>,
+    dst: WriteStream<u8>,
     #[rustradio(default)]
     last: u8,
 }
