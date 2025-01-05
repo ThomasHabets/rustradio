@@ -144,7 +144,7 @@ pub mod tee;
 pub mod to_text;
 //pub mod vec_to_stream;
 //pub mod vector_sink;
-//pub mod vector_source;
+pub mod vector_source;
 //pub mod wpcr;
 //pub mod xor;
 //pub mod xor_const;

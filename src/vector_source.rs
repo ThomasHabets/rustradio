@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{Stream, Streamp, Tag, TagValue};
+use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::Error;
 
 /// Repeat or counts.
@@ -50,7 +50,7 @@ where
     T: Copy,
 {
     #[rustradio(out)]
-    dst: Streamp<T>,
+    dst: WriteStream<T>,
     data: Vec<T>,
     repeat: Repeat,
     repeat_count: u64,
@@ -61,14 +61,18 @@ impl<T: Copy> VectorSource<T> {
     /// Create new Vector Source block.
     ///
     /// Optionally the data can repeat.
-    pub fn new(data: Vec<T>) -> Self {
-        Self {
-            dst: Stream::newp(),
-            data,
-            repeat: Repeat::Finite(1),
-            pos: 0,
-            repeat_count: 0,
-        }
+    pub fn new(data: Vec<T>) -> (Self, ReadStream<T>) {
+        let (dst, dr) = crate::stream::new_stream();
+        (
+            Self {
+                dst: Stream::newp(),
+                data,
+                repeat: Repeat::Finite(1),
+                pos: 0,
+                repeat_count: 0,
+            },
+            dr,
+        )
     }
 
     /// Set repeat status.

@@ -57,12 +57,14 @@ impl Hilbert {
 
 impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        assert_eq!(self.ntaps, self.history.len());
-        let (i, tags) = self.src.read_buf()?;
+        debug_assert_eq!(self.ntaps, self.history.len());
+        let (ii, tags) = self.src.read_buf()?;
+        let i = ii.slice();
         if i.is_empty() {
             return Ok(BlockRet::Noop);
         }
-        let mut o = self.dst.write_buf()?;
+        let mut oo = self.dst.write_buf()?;
+        let o = oo.slice();
         if o.is_empty() {
             return Ok(BlockRet::OutputFull);
         }
@@ -80,13 +82,13 @@ impl Block for Hilbert {
         // the fastest on my laptop.
         for i in 0..n {
             let t = &iv[i..(i + self.ntaps)];
-            o.slice()[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t));
+            o[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter(t));
         }
 
-        o.produce(n, &tags);
+        oo.produce(n, &tags);
 
         self.history[..self.ntaps].clone_from_slice(&iv[n..len]);
-        i.consume(n);
+        ii.consume(n);
         Ok(BlockRet::Ok)
     }
 }
