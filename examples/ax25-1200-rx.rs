@@ -184,6 +184,20 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
     Ok((prev, samp_rate))
 }
 
+fn print_cpu_stats() {
+    println!("Feature   Built  Supported");
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        let _target_avx2 = false;
+        #[cfg(target_feature = "avx2")]
+        let _target_avx2 = true;
+        println!(
+            "AVX2      {_target_avx2:-5}      {:5}",
+            is_x86_feature_detected!("avx2")
+        );
+    }
+}
+
 fn main() -> Result<()> {
     let opt = Opt::from_args();
     stderrlog::new()
@@ -296,6 +310,7 @@ fn main() -> Result<()> {
     })
     .expect("Error setting Ctrl-C handler");
 
+    print_cpu_stats();
     // Run.
     eprintln!("Running…");
     let st = std::time::Instant::now();
