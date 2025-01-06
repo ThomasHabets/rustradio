@@ -31,15 +31,20 @@ cargo test || {
 
 # Test with all features.
 export CARGO_TARGET_DIR="$MAIN_DIR/target/test.all"
-cargo test --all-features || {
+cargo test --features rtlsdr,soapysdr,fast-math,audio || {
     echo "Tests fail with features" >&2
     exit 1
 }
 
 # Build with nightly.
 # TODO: maybe add --all-targets
-export CARGO_TARGET_DIR="$MAIN_DIR/target/nightly"
 cargo +nightly 2>/dev/null > /dev/null && {
+    export CARGO_TARGET_DIR="$MAIN_DIR/target/test.nightly.all"
+    cargo +nightly test --all-features || {
+	echo "Tests fail with features" >&2
+	exit 1
+    }
+    export CARGO_TARGET_DIR="$MAIN_DIR/target/nightly"
     cargo +nightly bench --no-run -F rtlsdr || {
 	echo "Benchmark builds fail" >&2
 	exit 1
