@@ -16,6 +16,34 @@ pub struct FIR<T: Copy> {
     taps: Vec<T>,
 }
 
+impl FIR<Float> {
+    /// Run filter once, creating one sample from the taps and an
+    /// equal number of input samples.
+    pub fn filter_float(&self, input: &[Float]) -> Float {
+        #[cfg(feature = "simd")]
+        {
+            use std::simd::num::SimdFloat;
+            let batch_n = 8;
+            // How will this work if Float is f64?
+            type Batch = std::simd::f32x8;
+            let partial = input
+                .chunks_exact(batch_n)
+                .zip(self.taps.chunks_exact(batch_n))
+                .map(|(a, b)| Batch::from_slice(a) * Batch::from_slice(b))
+                .fold(Batch::splat(0.0), |acc, x| acc + x)
+                .reduce_sum();
+            // Maybe even faster if doing a second round with f32x4.
+            return input
+                .iter()
+                .zip(self.taps.iter())
+                .skip(self.taps.len() - self.taps.len() % batch_n)
+                .fold(partial, |acc, (&f, &x)| acc + x * f);
+        }
+        #[allow(unreachable_code)]
+        self.filter(input)
+    }
+}
+
 impl<T> FIR<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
@@ -31,9 +59,8 @@ where
     pub fn filter(&self, input: &[T]) -> T {
         input
             .iter()
-            .take(self.taps.len())
-            .enumerate()
-            .fold(T::default(), |acc, (i, x)| acc + *x * self.taps[i])
+            .zip(self.taps.iter())
+            .fold(T::default(), |acc, (&f, &x)| acc + x * f)
     }
 
     /// Call `filter()` multiple times, across an input range.

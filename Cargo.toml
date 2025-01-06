@@ -42,6 +42,7 @@ name = "rustradio"
 path = "src/lib.rs"
 
 [features]
+simd = []
 rtlsdr = ["dep:rtlsdr"]
 soapysdr = ["dep:soapysdr"]
 fast-math = ["dep:fast-math"]

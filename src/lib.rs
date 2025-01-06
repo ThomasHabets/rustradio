@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "simd", feature(portable_simd))]
 /*! This create provides a framework for running SDR (software defined
 radio) applications.
 
