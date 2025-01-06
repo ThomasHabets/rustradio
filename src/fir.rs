@@ -16,11 +16,55 @@ pub struct FIR<T: Copy> {
     taps: Vec<T>,
 }
 
+#[cfg(target_feature = "avx2")]
+#[target_feature(enable = "avx2")]
+#[allow(unreachable_code)]
+unsafe fn sum_product_avx2(vec1: &[f32], vec2: &[f32]) -> f32 {
+    use core::arch::x86_64::*;
+    assert_eq!(vec1.len(), vec2.len());
+    let len = vec1.len() - vec1.len() % 8;
+
+    let mut sum = _mm256_setzero_ps(); // Initialize sum vector to zeros.
+
+    for i in (0..len).step_by(8) {
+        let a = _mm256_loadu_ps(vec1.as_ptr().add(i));
+        let b = _mm256_loadu_ps(vec2.as_ptr().add(i));
+
+        // Multiply and accumulate.
+        let prod = _mm256_mul_ps(a, b);
+        sum = _mm256_add_ps(sum, prod);
+    }
+
+    // Split.
+    let low = _mm256_extractf128_ps(sum, 0);
+    let high = _mm256_extractf128_ps(sum, 1);
+
+    // Compact step 1 => 4 floats.
+    let m128 = _mm_hadd_ps(low, high);
+    // Compact step 2 => 2 floats.
+    let m128 = _mm_hadd_ps(m128, low);
+    // Compact step 3 => 1 floats.
+    let m128 = _mm_hadd_ps(m128, low);
+    let partial = _mm_cvtss_f32(m128);
+    let skip = vec1.len() - vec1.len() % 8;
+    vec1[skip..]
+        .iter()
+        .zip(vec2[skip..].iter())
+        .fold(partial, |acc, (&f, &x)| acc + x * f)
+}
+
 impl FIR<Float> {
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
     pub fn filter_float(&self, input: &[Float]) -> Float {
+        // AVX2 is faster, when available.
+        #[cfg(target_feature = "avx2")]
+        unsafe {
+            return sum_product_avx2(&self.taps, input);
+        }
+        // Second fastest is generic simd.
         #[cfg(feature = "simd")]
+        #[allow(unreachable_code)]
         {
             use std::simd::num::SimdFloat;
             let batch_n = 8;
@@ -33,10 +77,10 @@ impl FIR<Float> {
                 .fold(Batch::splat(0.0), |acc, x| acc + x)
                 .reduce_sum();
             // Maybe even faster if doing a second round with f32x4.
-            return input
+            let skip = self.taps.len() - self.taps.len() % batch_n;
+            return input[skip..]
                 .iter()
-                .zip(self.taps.iter())
-                .skip(self.taps.len() - self.taps.len() % batch_n)
+                .zip(self.taps[skip..].iter())
                 .fold(partial, |acc, (&f, &x)| acc + x * f);
         }
         #[allow(unreachable_code)]
