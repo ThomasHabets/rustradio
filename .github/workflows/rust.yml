@@ -25,10 +25,10 @@ jobs:
     - name: Dependencies
       run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev
     - name: Build all features
-      run: cargo build --all-features --verbose
+      run: cargo build --features rtlsdr,soapysdr,fast-math,audio --verbose
     - name: Build examples, all features
-      run: cargo build --all-features --verbose --examples
+      run: cargo build --features rtlsdr,soapysdr,fast-math,audio --verbose --examples
     - name: Run tests
       run: cargo test --verbose
     - name: Run tests all features
-      run: cargo test --all-features --verbose
+      run: cargo +nightly test --all-features --verbose
