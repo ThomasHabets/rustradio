@@ -16,7 +16,7 @@ use std::sync::mpsc::{RecvError, SendError, TryRecvError};
 use std::thread;
 
 use anyhow::Result;
-use log::debug;
+use log::{debug, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
@@ -98,8 +98,11 @@ impl RtlSdrSource {
                 tx.send(vec![])?;
                 loop {
                     let buf = dev.read_sync(CHUNK_SIZE)?;
-                    tx.send(buf)
-                        .expect("Failed to send message from RTL-SDR read thread to the block");
+                    if let Err(e) = tx.send(buf) {
+                        warn!("Failed to send message from RTL-SDR read thread to the block");
+                        warn!("Assuming it's shutdown time");
+                        return Err(e.into());
+                    }
                 }
             })?;
         assert_eq!(rx.recv()?, Vec::<u8>::new());
