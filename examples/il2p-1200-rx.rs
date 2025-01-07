@@ -138,7 +138,7 @@ fn main() -> Result<()> {
         rustradio::file_sink::Mode::Overwrite,
     )?));
 
-    g.add(Box::new(Il2pDeframer::new(prev)));
+    let _ = add_block![g, Il2pDeframer::new(prev)];
     //g.add(Box::new(NullSink::new(prev)));
 
     // Run the graph.

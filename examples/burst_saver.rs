@@ -59,14 +59,6 @@ macro_rules! add_block {
         prev
     }};
 }
-macro_rules! add_block_vec {
-    ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
-        $g.add(block);
-        prev
-    }};
-}
 
 fn main() -> Result<()> {
     let opt = Opt::from_args();
@@ -129,7 +121,7 @@ fn main() -> Result<()> {
         BurstTagger::new(datapath, magpath, opt.threshold, "burst".to_string())
     ];
 
-    let prev = add_block_vec![
+    let prev = add_block![
         g,
         StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, opt.tail)
     ];

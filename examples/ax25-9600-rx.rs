@@ -197,12 +197,7 @@ fn main() -> Result<()> {
     let prev = add_block![g, Descrambler::new(prev, 0x21, 0, 16)];
 
     // Decode.
-    let prev = {
-        let b = HdlcDeframer::new(prev, 10, 1500);
-        let prev = b.out();
-        g.add(Box::new(b));
-        prev
-    };
+    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
 
     g.add(Box::new(PduWriter::new(prev, opt.output)));
 

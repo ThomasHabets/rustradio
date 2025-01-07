@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStreamp, ReadStream};
+use crate::stream::{NCReadStream, ReadStream};
 use crate::{Error, Sample};
 
 /// File write mode.
@@ -82,12 +82,12 @@ where
 pub struct NoCopyFileSink<T> {
     f: BufWriter<std::fs::File>,
     #[rustradio(in)]
-    src: NoCopyStreamp<T>,
+    src: NCReadStream<T>,
 }
 
 impl<T> NoCopyFileSink<T> {
     /// Create new NoCopyFileSink block.
-    pub fn new(src: NoCopyStreamp<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
+    pub fn new(src: NCReadStream<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
         debug!("Opening sink {}", filename.display());
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()

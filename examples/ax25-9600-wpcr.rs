@@ -52,15 +52,6 @@ macro_rules! add_block {
     }};
 }
 
-macro_rules! add_block_vec {
-    ($g:ident, $cons:expr) => {{
-        let block = Box::new($cons);
-        let prev = block.out();
-        $g.add(block);
-        prev
-    }};
-}
-
 fn main() -> Result<()> {
     let opt = Opt::from_args();
     stderrlog::new()
@@ -136,16 +127,16 @@ fn main() -> Result<()> {
 
     // Create quad demod raw sample blobs (Vec<Float>) from tagged
     // stream of Floats.
-    let prev = add_block_vec![
+    let prev = add_block![
         g,
         StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50)
     ];
 
     // A kind of frequency lock.
-    let prev = add_block_vec![g, Midpointer::new(prev)];
+    let prev = add_block![g, Midpointer::new(prev)];
 
     // Symbol sync.
-    let prev = add_block_vec![g, WpcrBuilder::new(prev).samp_rate(samp_rate).build()];
+    let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(samp_rate).build()];
 
     // Turn Vec<Float> into Float.
     let prev = add_block![g, VecToStream::new(prev)];
@@ -160,7 +151,7 @@ fn main() -> Result<()> {
     let prev = add_block![g, Descrambler::new(prev, 0x21, 0, 16)];
 
     // Decode.
-    let prev = add_block_vec![g, HdlcDeframer::new(prev, 10, 1500)];
+    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
 
     // Save.
     g.add(Box::new(PduWriter::new(prev, opt.output)));

@@ -293,8 +293,7 @@ fn main() -> Result<()> {
     )?));
      */
 
-    let mut hdlc = HdlcDeframer::new(prev, 10, 1500);
-    let prev = hdlc.out();
+    let (mut hdlc, prev) = HdlcDeframer::new(prev, 10, 1500);
     hdlc.set_fix_bits(opt.fix_bits);
     g.add(Box::new(hdlc));
     if let Some(o) = opt.output {

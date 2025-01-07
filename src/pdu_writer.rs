@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::NoCopyStreamp;
+use crate::stream::NCReadStream;
 use crate::{Error, Sample};
 
 /** PDU writer
@@ -25,7 +25,7 @@ directory, named as microseconds since epoch.
 #[rustradio(crate, new)]
 pub struct PduWriter<T> {
     #[rustradio(in)]
-    src: NoCopyStreamp<Vec<T>>,
+    src: NCReadStream<Vec<T>>,
     dir: PathBuf,
     #[rustradio(default)]
     files_written: usize,

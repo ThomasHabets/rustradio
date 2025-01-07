@@ -45,8 +45,7 @@ fn simple_noncopy() -> Result<()> {
     ])
     .repeat(2)
     .build();
-    let to_pdu = StreamToPdu::new(src_out, "burst".to_string(), 10_000, 50);
-    let prev = to_pdu.out();
+    let (to_pdu, prev) = StreamToPdu::new(src_out, "burst".to_string(), 10_000, 50);
     g.add(Box::new(to_pdu));
     g.add(Box::new(PduWriter::new(prev, ".".into())));
     //let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));

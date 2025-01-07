@@ -4,7 +4,7 @@
 use log::info;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag};
 use crate::{Error, Result};
 
 const HEADER_SIZE: usize = 15 * 8;
@@ -153,7 +153,7 @@ pub struct Il2pDeframer {
     #[rustradio(in)]
     src: ReadStream<u8>,
     #[rustradio(out)]
-    dst: NoCopyStreamp<Vec<u8>>,
+    dst: NCWriteStream<Vec<u8>>,
     decoded: usize,
     state: State,
 }
@@ -165,17 +165,17 @@ impl Drop for Il2pDeframer {
 }
 impl Il2pDeframer {
     /// New
-    pub fn new(src: ReadStream<u8>) -> Self {
-        Self {
-            src,
-            dst: NoCopyStream::newp(),
-            decoded: 0,
-            state: State::Unsynced,
-        }
-    }
-    /// Get output stream.
-    pub fn out(&self) -> NoCopyStreamp<Vec<u8>> {
-        self.dst.clone()
+    pub fn new(src: ReadStream<u8>) -> (Self, NCReadStream<Vec<u8>>) {
+        let (dst, dr) = crate::stream::new_nocopy_stream();
+        (
+            Self {
+                src,
+                dst,
+                decoded: 0,
+                state: State::Unsynced,
+            },
+            dr,
+        )
     }
 }
 
@@ -380,11 +380,10 @@ mod tests {
         let src = ReadStream::from_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
         let (mut cac, cac_out) =
             CorrelateAccessCodeTag::new(src, SYNC_WORD.into(), "sync".into(), 0);
-        let mut deframer = Il2pDeframer::new(cac_out);
+        let (mut deframer, o) = Il2pDeframer::new(cac_out);
         cac.work()?;
         deframer.work()?;
         deframer.work()?;
-        let o = deframer.out();
         let _ = o.pop().expect("expected to get a parsed packet");
         // TODO: confirm parsing.
         if let Some(res) = o.pop() {

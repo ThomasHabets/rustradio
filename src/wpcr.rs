@@ -38,27 +38,21 @@ Drawbacks of this method:
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, Tag, TagValue};
+use crate::stream::{NCReadStream, NCWriteStream, Tag, TagValue};
 use crate::{Complex, Error, Float};
 
 /// Midpointer is a block re-center a NRZ burst around 0.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct Midpointer {
-    src: NoCopyStreamp<Vec<Float>>,
-    dst: NoCopyStreamp<Vec<Float>>,
+    src: NCReadStream<Vec<Float>>,
+    dst: NCWriteStream<Vec<Float>>,
 }
 impl Midpointer {
     /// Create new midpointer.
-    pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
-        Self {
-            src,
-            dst: NoCopyStream::newp(),
-        }
-    }
-    /// Get output stream.
-    pub fn out(&self) -> NoCopyStreamp<Vec<Float>> {
-        self.dst.clone()
+    pub fn new(src: NCReadStream<Vec<Float>>) -> (Self, NCReadStream<Vec<Float>>) {
+        let (dst, dr) = crate::stream::new_nocopy_stream();
+        (Self { src, dst }, dr)
     }
 }
 impl Block for Midpointer {
@@ -88,14 +82,14 @@ impl Block for Midpointer {
 /// Builder for Wpcr blocks.
 pub struct WpcrBuilder {
     wpcr: Wpcr,
+    out: NCReadStream<Vec<Float>>,
 }
 
 impl WpcrBuilder {
     /// Create new WpcrBuilder
-    pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
-        Self {
-            wpcr: Wpcr::new(src),
-        }
+    pub fn new(src: NCReadStream<Vec<Float>>) -> Self {
+        let (wpcr, out) = Wpcr::new(src);
+        Self { wpcr, out }
     }
 
     /// Set sample rate. Used to tag with frequency.
@@ -105,8 +99,8 @@ impl WpcrBuilder {
     }
 
     /// Build Wpcr block.
-    pub fn build(self) -> Wpcr {
-        self.wpcr
+    pub fn build(self) -> (Wpcr, NCReadStream<Vec<Float>>) {
+        (self.wpcr, self.out)
     }
 }
 
@@ -114,29 +108,28 @@ impl WpcrBuilder {
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct Wpcr {
-    src: NoCopyStreamp<Vec<Float>>,
-    dst: NoCopyStreamp<Vec<Float>>,
+    src: NCReadStream<Vec<Float>>,
+    dst: NCWriteStream<Vec<Float>>,
     samp_rate: Option<Float>,
 }
 
 impl Wpcr {
     /// Create new WPCR block.
-    pub fn new(src: NoCopyStreamp<Vec<Float>>) -> Self {
-        Self {
-            src,
-            dst: NoCopyStream::newp(),
-            samp_rate: None,
-        }
+    pub fn new(src: NCReadStream<Vec<Float>>) -> (Self, NCReadStream<Vec<Float>>) {
+        let (dst, dr) = crate::stream::new_nocopy_stream();
+        (
+            Self {
+                src,
+                dst,
+                samp_rate: None,
+            },
+            dr,
+        )
     }
 
     /// Set sample rate. Only used for tagging purposes
     pub fn set_samp_rate(&mut self, s: Option<Float>) {
         self.samp_rate = s;
-    }
-
-    /// Return the output stream.
-    pub fn out(&self) -> NoCopyStreamp<Vec<Float>> {
-        self.dst.clone()
     }
 
     fn process_one(&self, samples: &[Float]) -> Option<(Vec<Float>, Vec<Tag>)> {

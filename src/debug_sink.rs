@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag, TagPos};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos};
 use crate::Error;
 
 /// Nocopy version of DebugSink.
@@ -13,7 +13,7 @@ use crate::Error;
 #[rustradio(crate, new)]
 pub struct DebugSinkNoCopy<T> {
     #[rustradio(in)]
-    src: NoCopyStreamp<T>,
+    src: NCReadStream<T>,
 }
 
 impl<T> Block for DebugSinkNoCopy<T>
@@ -52,7 +52,7 @@ where
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
-    dst: NoCopyStreamp<String>,
+    dst: NCWriteStream<String>,
 }
 
 // TODO: fix derive macro so that new() can be generated.
@@ -61,15 +61,9 @@ where
     T: Copy,
 {
     /// Create new debug block.
-    pub fn new(src: ReadStream<T>) -> Self {
-        Self {
-            src,
-            dst: NoCopyStream::newp(),
-        }
-    }
-    /// Return the output stream.
-    pub fn out(&self) -> NoCopyStreamp<String> {
-        self.dst.clone()
+    pub fn new(src: ReadStream<T>) -> (Self, NCReadStream<String>) {
+        let (dst, dr) = crate::stream::new_nocopy_stream();
+        (Self { src, dst }, dr)
     }
 }
 

@@ -58,6 +58,8 @@ impl Tag {
     }
 }
 
+pub(crate) const DEFAULT_STREAM_SIZE: usize = 409600;
+
 #[derive(Debug)]
 pub struct ReadStream<T> {
     circ: Arc<circular_buffer::Buffer<T>>,
@@ -120,67 +122,46 @@ pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
 }
 
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
-pub struct NoCopyStream<T> {
-    s: Mutex<VecDeque<T>>,
-    eof: std::sync::atomic::AtomicBool,
+pub struct NCReadStream<T> {
+    q: Arc<Mutex<VecDeque<T>>>,
 }
 
-/// Convenience type for a "pointer to a stream".
-pub type NoCopyStreamp<T> = Arc<NoCopyStream<T>>;
+/// A stream of noncopyable objects (e.g. Vec / PDUs).
+pub struct NCWriteStream<T> {
+    q: Arc<Mutex<VecDeque<T>>>,
+}
 
-pub(crate) const DEFAULT_STREAM_SIZE: usize = 409600;
+pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
+    let q = Arc::new(Mutex::new(VecDeque::new()));
+    (NCWriteStream { q: q.clone() }, NCReadStream { q })
+}
 
-impl<T> NoCopyStream<T> {
-    /// Create new stream.
-    pub fn new() -> Self {
-        Self {
-            s: Mutex::new(VecDeque::new()),
-            eof: false.into(),
-        }
+impl<T> NCReadStream<T> {
+    /// Pop one sample.
+    /// Ideally this should only be NoCopy.
+    pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
+        // TODO: attach tags.
+        self.q.lock().unwrap().pop_front().map(|v| (v, Vec::new()))
     }
-
-    /// Create new streamp.
-    pub fn newp() -> NoCopyStreamp<T> {
-        Arc::new(Self::new())
+    /// Return stream EOF status.
+    pub fn eof(&self) -> bool {
+        Arc::strong_count(&self.q) == 1
     }
+}
 
+impl<T> NCWriteStream<T> {
     /// Push one sample, handing off ownership.
     /// Ideally this should only be NoCopy.
     ///
     /// TODO: Actually store the tags.
     pub fn push(&self, val: T, _tags: &[Tag]) {
-        self.s.lock().unwrap().push_back(val);
-    }
-
-    /// Pop one sample.
-    /// Ideally this should only be NoCopy.
-    pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
-        // TODO: attach tags.
-        self.s.lock().unwrap().pop_front().map(|v| (v, Vec::new()))
-    }
-
-    /// Set EOF status on stream.
-    ///
-    /// Stream won't really be EOF until all data is also read.
-    pub fn set_eof(&self) {
-        self.eof.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    /// Return stream EOF status.
-    pub fn eof(&self) -> bool {
-        self.s.lock().unwrap().is_empty() && self.eof.load(std::sync::atomic::Ordering::SeqCst)
+        self.q.lock().unwrap().push_back(val);
     }
 }
 
-impl<T> Default for NoCopyStream<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T: Len> NoCopyStream<T> {
+impl<T: Len> NCReadStream<T> {
     /// Get the size of the front packet.
     pub fn peek_size(&self) -> Option<usize> {
-        self.s.lock().unwrap().front().map(|e| e.len())
+        self.q.lock().unwrap().front().map(|e| e.len())
     }
 }

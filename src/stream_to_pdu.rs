@@ -31,7 +31,7 @@ use std::collections::HashMap;
 use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NoCopyStream, NoCopyStreamp, ReadStream, Tag, TagPos, TagValue};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos, TagValue};
 use crate::{Error, Sample};
 
 /// Stream to PDU block.
@@ -42,7 +42,7 @@ pub struct StreamToPdu<T> {
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
-    dst: NoCopyStreamp<Vec<T>>,
+    dst: NCWriteStream<Vec<T>>,
     tag: String,
     buf: Vec<T>,
     endcounter: Option<usize>,
@@ -52,20 +52,25 @@ pub struct StreamToPdu<T> {
 
 impl<T> StreamToPdu<T> {
     /// Make new Stream to PDU block.
-    pub fn new(src: ReadStream<T>, tag: String, max_size: usize, tail: usize) -> Self {
-        Self {
-            src,
-            tag,
-            dst: NoCopyStream::newp(),
-            buf: Vec::with_capacity(max_size),
-            endcounter: None,
-            max_size,
-            tail,
-        }
-    }
-    /// Get output PDU stream.
-    pub fn out(&self) -> NoCopyStreamp<Vec<T>> {
-        self.dst.clone()
+    pub fn new(
+        src: ReadStream<T>,
+        tag: String,
+        max_size: usize,
+        tail: usize,
+    ) -> (Self, NCReadStream<Vec<T>>) {
+        let (dst, dr) = crate::stream::new_nocopy_stream();
+        (
+            Self {
+                src,
+                tag,
+                dst,
+                buf: Vec::with_capacity(max_size),
+                endcounter: None,
+                max_size,
+                tail,
+            },
+            dr,
+        )
     }
 }
 

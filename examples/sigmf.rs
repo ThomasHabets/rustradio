@@ -51,8 +51,7 @@ fn main() -> Result<()> {
         })
         .build()
     ];
-    let dbg = DebugFilter::new(prev);
-    let prev = dbg.out();
+    let (dbg, prev) = DebugFilter::new(prev);
     g.add(Box::new(dbg));
     g.add(Box::new(NoCopyFileSink::new(
         prev,
