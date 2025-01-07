@@ -12,15 +12,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        toolchain:
-          - stable
-          - nightly
     steps:
     - uses: actions/checkout@v3
     - name: Rustup
-      run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      run: rustup install nightly
     - name: Build
       run: cargo build --verbose
     - name: Build examples
@@ -37,3 +32,5 @@ jobs:
       run: cargo test --verbose
     - name: Run tests all features
       run: cargo test --features rtlsdr,soapysdr,fast-math,audio --verbose
+    - name: Run tests all features on nightly
+      run: cargo test --all-features --verbose
