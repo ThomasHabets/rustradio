@@ -252,13 +252,13 @@ impl Block for HdlcDeframer {
 // Turn 8 bits in LSB order into a byte.
 fn bits2byte(data: &[u8]) -> u8 {
     assert!(data.len() == 8);
-    data[7] << 7
-        | data[6] << 6
-        | data[5] << 5
-        | data[4] << 4
-        | data[3] << 3
-        | data[2] << 2
-        | data[1] << 1
+    (data[7] << 7)
+        | (data[6] << 6)
+        | (data[5] << 5)
+        | (data[4] << 4)
+        | (data[3] << 3)
+        | (data[2] << 2)
+        | (data[1] << 1)
         | data[0]
 }
 

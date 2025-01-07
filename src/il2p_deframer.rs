@@ -302,27 +302,27 @@ impl Header {
             ui: (data[0] & 0x40) != 0,
             fec: (data[0] & 0x80) != 0,
             hdrtype1: (data[1] & 0x80) != 0,
-            pid: (data[1] & 0x40) >> 3
-                | (data[2] & 0x40) >> 4
-                | (data[3] & 0x40) >> 5
-                | (data[4] & 0x40) >> 6,
+            pid: ((data[1] & 0x40) >> 3)
+                | ((data[2] & 0x40) >> 4)
+                | ((data[3] & 0x40) >> 5)
+                | ((data[4] & 0x40) >> 6),
             control: (data[5] & 0x40)
-                | (data[6] & 0x40) >> 1
-                | (data[7] & 0x40) >> 2
-                | (data[8] & 0x40) >> 3
-                | (data[9] & 0x40) >> 4
-                | (data[10] & 0x40) >> 5
-                | (data[11] & 0x40) >> 6,
-            payload_size: (data[2] as u16 & 0x80) << 2
-                | (data[3] as u16 & 0x80) << 1
+                | ((data[6] & 0x40) >> 1)
+                | ((data[7] & 0x40) >> 2)
+                | ((data[8] & 0x40) >> 3)
+                | ((data[9] & 0x40) >> 4)
+                | ((data[10] & 0x40) >> 5)
+                | ((data[11] & 0x40) >> 6),
+            payload_size: ((data[2] as u16 & 0x80) << 2)
+                | ((data[3] as u16 & 0x80) << 1)
                 | (data[4] as u16 & 0x80)
-                | (data[5] as u16 & 0x80) >> 1
-                | (data[6] as u16 & 0x80) >> 2
-                | (data[7] as u16 & 0x80) >> 3
-                | (data[8] as u16 & 0x80) >> 4
-                | (data[9] as u16 & 0x80) >> 5
-                | (data[10] as u16 & 0x80) >> 6
-                | (data[11] as u16 & 0x80) >> 7,
+                | ((data[5] as u16 & 0x80) >> 1)
+                | ((data[6] as u16 & 0x80) >> 2)
+                | ((data[7] as u16 & 0x80) >> 3)
+                | ((data[8] as u16 & 0x80) >> 4)
+                | ((data[9] as u16 & 0x80) >> 5)
+                | ((data[10] as u16 & 0x80) >> 6)
+                | ((data[11] as u16 & 0x80) >> 7),
         })
     }
     fn describe(&self) -> String {
