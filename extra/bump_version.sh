@@ -20,3 +20,6 @@ sed -i "s/^version = \"${CURRENT?}\"/version = \"${NEW?}\"/" rustradio_macros/Ca
 cargo build
 git commit -a -m"Bump version to ${NEW?}"
 git tag "v${NEW?}"
+git push
+git push --tags
+(cd rustradio_macros/ && cargo publish) && cargo publish

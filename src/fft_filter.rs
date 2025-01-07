@@ -235,14 +235,17 @@ impl Block for FftFilterFloat {
             let (outer_in, tags) = self.src.read_buf()?;
             let mut inner_to = self.inner_in.write_buf()?;
             let n = std::cmp::min(outer_in.len(), inner_to.len());
+            let o = inner_to.slice();
             for (i, samp) in outer_in.iter().take(n).enumerate() {
-                inner_to.slice()[i] = Complex::new(*samp, 0.0);
+                o[i] = Complex::new(*samp, 0.0);
             }
             inner_to.produce(n, &tags);
             outer_in.consume(n);
         }
 
         // Run Complex FftFilter.
+        // TODO: if fft work function fails, for some reason, then samples are
+        // lost.
         let ret = self.complex.work()?;
 
         // Replicate stream write.
@@ -250,8 +253,9 @@ impl Block for FftFilterFloat {
             let (inner_from, tags) = self.inner_out.read_buf()?;
             let mut outer_to = self.dst.write_buf()?;
             let n = std::cmp::min(inner_from.len(), outer_to.len());
+            let o = outer_to.slice();
             for (i, samp) in inner_from.iter().take(n).enumerate() {
-                outer_to.slice()[i] = samp.re;
+                o[i] = samp.re;
             }
             inner_from.consume(n);
             outer_to.produce(n, &tags);
