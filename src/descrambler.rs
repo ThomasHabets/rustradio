@@ -37,7 +37,7 @@ impl Lfsr {
 
 /// Descrambler uses an LFSR to descramble bits.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, sync)]
+#[rustradio(crate, sync)]
 pub struct Descrambler {
     #[rustradio(in)]
     src: ReadStream<u8>,

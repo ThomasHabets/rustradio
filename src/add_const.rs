@@ -17,7 +17,7 @@ where
 
 /// AddConst adds a constant value to every sample.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct AddConst<T: Copy + std::ops::Add<Output = T>> {
     val: T,
     #[rustradio(in)]

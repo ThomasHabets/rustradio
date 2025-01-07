@@ -116,7 +116,7 @@ where
 
 /// Finite impulse response filter block.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,

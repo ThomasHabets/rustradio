@@ -39,7 +39,7 @@ use crate::{Complex, Error, Float};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct FftFilter {
     buf: Vec<Complex>,
     taps_fft: Vec<Complex>,
@@ -197,7 +197,7 @@ impl Block for FftFilter {
 /// therefore, this Float version of the FftFilter has a little worse
 /// performance than the Complex filter.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct FftFilterFloat {
     complex: FftFilter,
     #[rustradio(in)]

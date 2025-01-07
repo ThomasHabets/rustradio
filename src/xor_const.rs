@@ -3,7 +3,7 @@ use crate::stream::{ReadStream, WriteStream};
 
 /// XorConst xors a constant value to every sample.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct XorConst<T>
 where
     T: Copy + std::ops::BitXor<Output = T>,

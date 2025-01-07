@@ -5,7 +5,7 @@ use crate::stream::{ReadStream, WriteStream};
 ///
 /// TODO: replace with a mapper?
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct MultiplyConst<T: Copy + std::ops::Mul<Output = T>> {
     val: T,
     #[rustradio(in)]

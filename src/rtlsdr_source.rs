@@ -50,7 +50,7 @@ impl<T> From<SendError<T>> for Error {
 
 /// RTL SDR Source block.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct RtlSdrSource {
     rx: mpsc::Receiver<Vec<u8>>,
     #[rustradio(out)]

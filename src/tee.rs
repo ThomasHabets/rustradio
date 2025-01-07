@@ -9,7 +9,7 @@ use crate::Error;
 /// Tee
 // TODO: make sync
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out)]
+#[rustradio(crate, new)]
 pub struct Tee<T: Copy> {
     #[rustradio(in)]
     src: ReadStream<T>,

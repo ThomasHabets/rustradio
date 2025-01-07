@@ -22,7 +22,7 @@ But for now it's "good enough" to get simple 2FSK decoded pretty
 reliably.
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct ZeroCrossing {
     sps: Float,
     max_deviation: Float,

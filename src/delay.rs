@@ -8,7 +8,7 @@ use crate::Error;
 
 /// Delay stream. Good for syncing up streams.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct Delay<T: Copy> {
     delay: usize,
     current_delay: usize,

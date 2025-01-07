@@ -96,7 +96,7 @@ impl SoapySdrSourceBuilder {
 
 /// SoapySDR source.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct SoapySdrSource {
     stream: soapysdr::RxStream<Complex>,
     #[rustradio(out)]

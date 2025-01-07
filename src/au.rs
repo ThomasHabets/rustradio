@@ -47,7 +47,7 @@ g.run()?;
 ```
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct AuEncode {
     header: Option<Vec<u8>>,
 
@@ -161,7 +161,7 @@ enum DecodeState {
 /// Currently only accepts a very narrow header format of PCM16, mono,
 /// 44100 Hz.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct AuDecode {
     #[rustradio(in)]
     src: ReadStream<u8>,

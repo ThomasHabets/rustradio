@@ -4,7 +4,7 @@ use crate::{Complex, Float};
 
 /// Convert Complex numbers to square of their magnitude.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct ComplexToMag2 {
     #[rustradio(in)]
     src: ReadStream<Complex>,

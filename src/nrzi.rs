@@ -20,7 +20,7 @@ use crate::stream::{ReadStream, WriteStream};
 
 /// NRZI decoder.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct NrziDecode {
     #[rustradio(in)]
     src: ReadStream<u8>,

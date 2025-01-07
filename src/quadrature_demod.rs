@@ -31,7 +31,7 @@ use crate::{Complex, Float};
 
 /// Quadrature demod, the core of an FM demodulator.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, new, sync)]
+#[rustradio(crate, new, sync)]
 pub struct QuadratureDemod {
     gain: Float,
     #[rustradio(default)]
@@ -84,7 +84,7 @@ impl QuadratureDemod {
 /// Lyons has an more general version of this algorithm, also on page
 /// 760, but it's not implemented here.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct FastFM {
     #[rustradio(in)]
     src: ReadStream<Complex>,

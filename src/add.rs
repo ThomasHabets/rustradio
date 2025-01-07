@@ -3,7 +3,7 @@ use crate::stream::{ReadStream, WriteStream};
 
 /// Adds two streams, sample wise.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct Add<T>
 where
     T: Copy + std::ops::Add<Output = T>,

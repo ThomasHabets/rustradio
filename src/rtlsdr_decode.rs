@@ -7,7 +7,7 @@ use crate::{Complex, Error, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out)]
+#[rustradio(crate, new)]
 pub struct RtlSdrDecode {
     #[rustradio(in)]
     src: ReadStream<u8>,

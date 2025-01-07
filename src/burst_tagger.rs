@@ -43,7 +43,7 @@ use crate::Float;
 
 /// Burst tagger:
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, new, sync_tag)]
+#[rustradio(crate, new, sync_tag)]
 pub struct BurstTagger<T: Copy> {
     #[rustradio(in)]
     src: ReadStream<T>,

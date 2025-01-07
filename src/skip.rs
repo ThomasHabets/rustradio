@@ -7,7 +7,7 @@ use crate::Error;
 
 /// Turn samples into text.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, new)]
+#[rustradio(crate, new)]
 pub struct Skip<T: Copy> {
     #[rustradio(in)]
     src: ReadStream<T>,

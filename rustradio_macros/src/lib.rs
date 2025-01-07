@@ -25,7 +25,6 @@ macro_rules! unzip_n {
 
 static STRUCT_ATTRS: &[&str] = &[
     "new",
-    "out", // TODO: remove this attr
     "crate",
     "sync",
     "sync_tag",

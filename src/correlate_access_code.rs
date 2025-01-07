@@ -6,7 +6,7 @@ use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
 /// CorrelateAccessCode outputs 1 if CAC matches.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, sync)]
+#[rustradio(crate, sync)]
 pub struct CorrelateAccessCode {
     #[rustradio(in)]
     src: ReadStream<u8>,
@@ -55,7 +55,7 @@ impl CorrelateAccessCode {
 
 /// CorrelateAccessCode outputs 1 if CAC matches.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, sync_tag)]
+#[rustradio(crate, sync_tag)]
 pub struct CorrelateAccessCodeTag {
     code: Vec<u8>,
     #[rustradio(in)]

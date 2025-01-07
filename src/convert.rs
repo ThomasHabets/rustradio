@@ -43,7 +43,7 @@ where
 
 /// Arbitrary mapping
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, custom_name, sync)]
+#[rustradio(crate, custom_name, sync)]
 pub struct Map<In, Out, F>
 where
     In: Copy,
@@ -92,7 +92,7 @@ where
 /// Convert floats to complex.
 // TODO: make sync.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, new)]
+#[rustradio(crate, new)]
 pub struct FloatToComplex {
     #[rustradio(in)]
     re: ReadStream<Float>,

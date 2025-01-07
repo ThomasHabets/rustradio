@@ -31,7 +31,7 @@ use crate::Error;
 /// Read from one or more streams, and produce a text file where each
 /// line is one sample per stream, separated by spaces.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, noeof)]
+#[rustradio(crate, noeof)]
 pub struct ToText<T: Copy> {
     srcs: Vec<ReadStream<T>>,
     #[rustradio(out)]

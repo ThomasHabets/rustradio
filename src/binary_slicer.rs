@@ -8,7 +8,7 @@ use crate::Float;
 
 /// Turn positive Float values into binary `1u8`, and negative into `0u8`.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out, sync)]
+#[rustradio(crate, new, sync)]
 pub struct BinarySlicer {
     #[rustradio(in)]
     src: ReadStream<Float>,

@@ -89,7 +89,7 @@ impl SoapySdrSinkBuilder {
 }
 
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct SoapySdrSink {
     #[rustradio(in)]
     src: ReadStream<Complex>,

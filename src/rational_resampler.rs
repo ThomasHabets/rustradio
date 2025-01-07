@@ -20,7 +20,7 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 
 /// Resample by a fractional amount.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct RationalResampler<T: Copy> {
     deci: i64,
     interp: i64,

@@ -44,7 +44,7 @@ where
 
 /// Debug filter turning samples into strings.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct DebugFilter<T>
 where
     T: Copy,

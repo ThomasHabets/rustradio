@@ -20,7 +20,7 @@ use crate::{Complex, Error, Float};
 
 /// Hilbert transformer block.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct Hilbert {
     #[rustradio(in)]
     src: ReadStream<Float>,

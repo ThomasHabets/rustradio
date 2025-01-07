@@ -6,7 +6,7 @@ use crate::Error;
 /// Xors a constant value to every sample.
 // TODO: make this sync
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, out)]
+#[rustradio(crate, new)]
 pub struct Xor<T>
 where
     T: Copy,

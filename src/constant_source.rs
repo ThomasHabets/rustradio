@@ -7,7 +7,7 @@ use crate::Error;
 
 /// Generate the same value, forever.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, new)]
+#[rustradio(crate, new)]
 pub struct ConstantSource<T: Copy> {
     #[rustradio(out)]
     dst: WriteStream<T>,

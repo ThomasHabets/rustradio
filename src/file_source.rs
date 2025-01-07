@@ -11,7 +11,7 @@ use crate::{Error, Sample};
 
 /// Read stream from raw file.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct FileSource<T: Copy> {
     filename: String,
     f: BufReader<std::fs::File>,

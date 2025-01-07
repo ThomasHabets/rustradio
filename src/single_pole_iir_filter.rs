@@ -43,7 +43,7 @@ where
 
 /// Infinite Impulse Response (IIR) filter.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out, sync)]
+#[rustradio(crate, sync)]
 pub struct SinglePoleIIRFilter<T>
 where
     T: Copy

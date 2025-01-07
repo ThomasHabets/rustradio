@@ -44,7 +44,7 @@ impl<T: Copy> VectorSourceBuilder<T> {
 
 /// Generate values from a fixed vector.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, out)]
+#[rustradio(crate)]
 pub struct VectorSource<T>
 where
     T: Copy,
