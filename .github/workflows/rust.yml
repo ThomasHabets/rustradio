@@ -33,4 +33,4 @@ jobs:
     - name: Run tests all features
       run: cargo test --features rtlsdr,soapysdr,fast-math,audio --verbose
     - name: Run tests all features on nightly
-      run: cargo test --all-features --verbose
+      run: cargo +nightly test --all-features --verbose
