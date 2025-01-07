@@ -78,12 +78,11 @@ impl Block for Hilbert {
         iv.extend(&self.history);
         iv.extend(i.iter().take(inout).copied());
 
-        // I tried a couple of variations of this loop, and this was
-        // the fastest on my laptop.
-        for i in 0..n {
+        use rayon::prelude::*;
+        o.par_iter_mut().take(n).enumerate().for_each(|(i, val)| {
             let t = &iv[i..(i + self.ntaps)];
-            o[i] = Complex::new(iv[i + self.ntaps / 2], self.filter.filter_float(t));
-        }
+            *val = Complex::new(iv[i + self.ntaps / 2], self.filter.filter_float(t));
+        });
 
         oo.produce(n, &tags);
 
