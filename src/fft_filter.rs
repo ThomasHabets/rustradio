@@ -105,43 +105,7 @@ impl FftFilter {
     }
 }
 
-/// AVX2 code for multiplying two vectors.
-///
-/// This needs more benchmarking against the regular rust compiler. I think it's
-/// marginally faster as of Rust 1.83.0, but while this hand coded vector code
-/// seems to use fewer instructions, in benchmarks the difference is within the
-/// margin of error.
-#[cfg(target_feature = "avx2")]
-#[allow(unreachable_code)]
-fn sum_vec_avx2(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
-    use std::mem::MaybeUninit;
-    let len = left.len();
-    let mut ret: Vec<MaybeUninit<Complex>> = Vec::with_capacity(len);
-    let ret = unsafe {
-        ret.set_len(left.len());
-        std::mem::transmute::<Vec<MaybeUninit<Complex>>, Vec<Complex>>(ret)
-    };
-    (0..len).step_by(4).for_each(|i| unsafe {
-        use core::arch::x86_64::*;
-        let a = _mm256_loadu_ps((left.as_ptr() as *const f32).add(i * 2));
-        let b = _mm256_loadu_ps((right.as_ptr() as *const f32).add(i * 2));
-        let a_re = _mm256_shuffle_ps(a, a, 0b10001000);
-        let a_im = _mm256_shuffle_ps(a, a, 0b11011101);
-        let b_re = _mm256_shuffle_ps(b, b, 0b10001000);
-        let b_im = _mm256_shuffle_ps(b, b, 0b11011101);
-
-        let re = _mm256_fmsub_ps(a_re, b_re, _mm256_mul_ps(a_im, b_im));
-        let im = _mm256_fmadd_ps(a_re, b_im, _mm256_mul_ps(a_im, b_re));
-        let res = _mm256_unpacklo_ps(re, im);
-        _mm256_storeu_ps((ret.as_ptr() as *mut f32).add(i * 2), res);
-    });
-    ret
-}
-
 fn sum_vec(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
-    #[cfg(target_feature = "avx2")]
-    return sum_vec_avx2(left, right);
-    #[allow(unreachable_code)]
     left.iter().zip(right.iter()).map(|(x, y)| x * y).collect()
 }
 
@@ -192,6 +156,9 @@ impl Block for FftFilter {
             // Filter by array multiplication.
             //
             // This loop is about 5% of FftFilterFloat CPU time.
+            //
+            // TODO: maybe this could be faster if we just write back to
+            // `self.buf`. It's not used after this line.
             let mut filtered = sum_vec(&self.buf, &self.taps_fft);
 
             // IFFT back to the time domain.
