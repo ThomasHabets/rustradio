@@ -105,8 +105,8 @@ impl FftFilter {
     }
 }
 
-fn sum_vec(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
-    left.iter().zip(right.iter()).map(|(x, y)| x * y).collect()
+fn sum_vec(left: &mut [Complex], right: &[Complex]) {
+    left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y)
 }
 
 impl Block for FftFilter {
@@ -154,30 +154,25 @@ impl Block for FftFilter {
             self.fft.process(&mut self.buf);
 
             // Filter by array multiplication.
-            //
-            // This loop is about 5% of FftFilterFloat CPU time.
-            //
-            // TODO: maybe this could be faster if we just write back to
-            // `self.buf`. It's not used after this line.
-            let mut filtered = sum_vec(&self.buf, &self.taps_fft);
+            sum_vec(&mut self.buf, &self.taps_fft);
 
             // IFFT back to the time domain.
-            self.ifft.process(&mut filtered);
+            self.ifft.process(&mut self.buf);
 
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {
-                filtered[i] += t;
+                self.buf[i] += t;
             }
 
             // Output.
-            // TODO: needless copy.
-            o.fill_from_slice(&filtered[..self.nsamples]);
+            // TODO: needless copy?
+            o.fill_from_slice(&self.buf[..self.nsamples]);
             o.produce(self.nsamples, &[]);
             produced = true;
 
             // Stash tail.
             for i in 0..self.tail.len() {
-                self.tail[i] = filtered[self.nsamples + i];
+                self.tail[i] = self.buf[self.nsamples + i];
             }
 
             // Clear buffer. Per above performance comment.
