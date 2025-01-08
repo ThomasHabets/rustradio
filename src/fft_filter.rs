@@ -107,6 +107,7 @@ impl FftFilter {
 
 impl Block for FftFilter {
     fn work(&mut self) -> Result<BlockRet, Error> {
+        // TODO: multithread this.
         let mut produced = false;
         loop {
             let (input, _tags) = self.src.read_buf()?;
@@ -150,13 +151,14 @@ impl Block for FftFilter {
 
             // Filter by array multiplication.
             //
-            // TODO: check if this can be done faster by using volk.
+            // TODO: check if this can be done faster by using SIMD.
+            // This loop is about 5% of FftFilterFloat CPU time.
             let mut filtered: Vec<Complex> = self
                 .buf
                 .iter()
                 .zip(self.taps_fft.iter())
                 .map(|(x, y)| x * y)
-                .collect::<Vec<Complex>>();
+                .collect();
 
             // IFFT back to the time domain.
             self.ifft.process(&mut filtered);
