@@ -211,6 +211,53 @@ impl From<std::io::Error> for Error {
     }
 }
 
+pub struct Feature {
+    name: String,
+    build: bool,
+    detected: bool,
+}
+
+pub fn environment_str(features: &[Feature]) -> String {
+    let mut s = "Feature   Build Detected\n".to_string();
+    for feature in features {
+        s += &format!(
+            "{:10} {:-5}    {:-5}\n",
+            feature.name, feature.build, feature.detected
+        );
+    }
+    s
+}
+
+pub fn check_environment() -> Result<Vec<Feature>> {
+    let mut assumptions = Vec::new();
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        assumptions.push(Feature {
+            name: "AVX2".to_string(),
+            build: cfg!(target_feature = "avx2"),
+            detected: is_x86_feature_detected!("avx2"),
+        });
+    }
+    let errs: Vec<_> = assumptions
+        .iter()
+        .filter_map(|f| {
+            if f.build && !f.detected {
+                Some(format!(
+                    "Feature {} assumed by build flags but not detected",
+                    f.name
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if errs.is_empty() {
+        Ok(assumptions)
+    } else {
+        Err(Error::new(&format!("{:?}", errs)).into())
+    }
+}
+
 /// A trait all sample types must implement.
 pub trait Sample {
     /// The type of the sample.
