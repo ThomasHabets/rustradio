@@ -17,7 +17,6 @@ pub struct FIR<T: Copy> {
 }
 
 #[cfg(target_feature = "avx2")]
-#[target_feature(enable = "avx2")]
 #[allow(unreachable_code)]
 unsafe fn sum_product_avx2(vec1: &[f32], vec2: &[f32]) -> f32 {
     use core::arch::x86_64::*;
