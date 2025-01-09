@@ -29,11 +29,3 @@ $ od -A none -w8 -f test.c32 > t
 $ gnuplot
 gnuplot> plot 't' using 1 w l, 't' using 2 w l
 ```
-
-## For maximum performance
-
-```
-$ cat ~/.cargo/config.toml
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["-Ctarget-cpu=native"]
-```

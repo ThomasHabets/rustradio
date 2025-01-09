@@ -2,7 +2,9 @@
 use crate::stream::{ReadStream, WriteStream};
 
 /// Add const value, implemented in terms of Map.
-/// TODO: remove AddConst, below?
+///
+/// This is basically example code. We have AddConst and add_const doing the
+/// same thing.
 pub fn add_const<T>(
     src: ReadStream<T>,
     val: T,
