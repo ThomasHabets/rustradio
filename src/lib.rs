@@ -1,4 +1,11 @@
+// Enable `std::simd` if feature simd is enabled.
 #![cfg_attr(feature = "simd", feature(portable_simd))]
+// Enable RISC-V arch detection, if on a RISC-V arch.
+#![cfg_attr(
+    any(target_arch = "riscv32", target_arch = "riscv64"),
+    feature(stdarch_riscv_feature_detection)
+)]
+
 /*! This create provides a framework for running SDR (software defined
 radio) applications.
 
@@ -238,6 +245,15 @@ pub fn check_environment() -> Result<Vec<Feature>> {
             detected: is_x86_feature_detected!("avx2"),
         });
     }
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    {
+        assumptions.push(Feature {
+            name: "Vector".to_string(),
+            build: cfg!(target_feature = "v"),
+            detected: std::arch::is_riscv_feature_detected!("v"),
+        });
+    }
+
     let errs: Vec<_> = assumptions
         .iter()
         .filter_map(|f| {
