@@ -11,6 +11,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+if [[ "${NOTEST:-}" = "true" ]]; then
+    exit 0
+fi
+
 if [[ "${1:-}" = "local" || "${NODIFF:-}" = "true" ]]; then
     true
 else
