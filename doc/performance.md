@@ -43,6 +43,19 @@ RUSTFLAGS="-Cprofile-use=$(pwd)/merged.profdata -Ctarget-cpu=native" cargo build
 # Now your newly built binary should be faster. YMMV.
 ```
 
+## Benchmarking
+
+A flow graph will have many moving parts, so one way to benchmark is to run it
+on example data. For audio domain AX.25 there's a WA8LMF CD. For others, and
+especially for your own domain, you may need to make your own.
+
+To benchmark blocks or other RustRadio components, see the `benches` directory,
+which can then be run with:
+
+```
+cargo +nightly bench
+```
+
 ## Block optimizations
 
 Ideas for how to make your block faster.

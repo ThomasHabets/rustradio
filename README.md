@@ -5,27 +5,23 @@ A library for digital signals processing in the spirit of GNU Radio.
 * https://github.com/ThomasHabets/rustradio
 * https://crates.io/crates/rustradio
 
-For extra speed(?), build with env `RUSTFLAGS="-C target-cpu=native"`
+## Differences from GNU Radio
 
-## Publish new version
+### Pro
 
-```
-./extra/bump_version.sh
-git push && cargo publish
-```
+* Written in Rust instead of C++ & Python.
+  * Easier to get things right than C++.
+  * More performant than Python (and possibly more performant than C++).
+  * Easier to ship as a built binary.
+* Type safe streams.
 
-## Benchmark
+### Con
 
-```
-cargo +nightly bench
-```
+* GNU Radio is obviously way more mature.
+* GNU Radio has a very nice UI for iterating on graphs.
 
-## Useful commands
+## Missing feature before declaring 1.0
 
-Plot I/Q data
-
-```
-$ od -A none -w8 -f test.c32 > t
-$ gnuplot
-gnuplot> plot 't' using 1 w l, 't' using 2 w l
-```
+* A clear strategy for optional output streams.
+* SymbolSync block at least have the right API.
+* Example AX.25 KISS modem written.
