@@ -1,5 +1,13 @@
 # Performance
 
+RustRadio, unlike GNU Radio, does not choose inner loops or "kernels" at
+runtime. Instead it assumes that a binary is already optimized for the
+appropriate platform.
+
+This is so that all code gets correctly optimized, not just those parts that are
+deemed to be high level kernels. Let the compiler do its job. It'll vectorize
+and optimize more than you'd think.
+
 ## Optimize for your platform
 
 Get your architecture tuple:
@@ -9,10 +17,10 @@ $ cargo +nightly rustc -Z unstable-options --print host-tuple
 x86_64-unknown-linux-gnu
 ```
 
-Then configure your target like so:
+Then configure cargo to build for the local machine by adding something like
+this to `~/.cargo/config.toml`.
 
 ```
-$ cat ~/.cargo/config.toml
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-Ctarget-cpu=native"]
 ```
@@ -49,7 +57,7 @@ with `par_iter_mut()` in the `Hilbert` block made it 4-5x faster in real time.
 * Don't call `.read_buf()` or `.write_buf()` more than necessary.
 * Don't call `.slice()` on the buffers too often either.
 * Rust is pretty good at vectorizing simple loops, as long as you enabled
-  `target-cpu=native` (see above), so you may not need to bother. Check the
-  assembly.
-  * `FIR` has a `std::simd` and AVX2 specialization, which can serve as
-    inspiration.
+  `target-cpu=native` (see above), so you may not need to bother doing it
+  manually. Check the assembly.
+  * If you do want to do it, `FIR` has a `std::simd` and AVX2 specialization,
+    which can serve as inspiration.
