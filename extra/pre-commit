@@ -11,10 +11,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Set up directory with only what's being committed, and go there.
-git archive HEAD | tar -x -C "$TEMP_DIR"
-git diff --cached --binary | (cd "$TEMP_DIR" && git apply)
-cd "$TEMP_DIR"
+if [[ "${1:-}" = "local" ]]; then
+    true
+else
+    # Set up directory with only what's being committed, and go there.
+    git archive HEAD | tar -x -C "$TEMP_DIR"
+    git diff --cached --binary | (cd "$TEMP_DIR" && git apply)
+    cd "$TEMP_DIR"
+fi
 
 # Regular fmt check.
 cargo fmt -- --check || {
