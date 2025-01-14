@@ -192,13 +192,16 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     // * in_name_types:     src: ReadStream<Complex>
     // * inval_name_types:  src: Complex
     // * in_tag_names:      src_tag
-    // * intag_name_types:  src_tag: &[Vec]
+    // * intag_name_types:  src_tag: &'a [Vec]   or   src_tag: &[Vec]
+    //
+    // Only the first tag has lifetime marking, if it's a sync block.
     let (in_names, in_name_types, inval_name_types, in_tag_names, intag_name_types) = unzip_n![
         fields_named
             .named
             .iter()
             .filter(|field| has_attr(&field.attrs, "in", FIELD_ATTRS))
-            .map(|field| {
+            .enumerate()
+            .map(|(i, field)| {
                 let inner = inner_type(&field.ty);
                 let ty = field.ty.clone();
                 let field_name = field.ident.clone().unwrap();
@@ -208,7 +211,11 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     quote! { #field_name: #ty },
                     quote! { #field_name: #inner },
                     quote! { #tagname },
-                    quote! { #tagname: &[#path::stream::Tag] },
+                    if i == 0 || !has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
+                        quote! { #tagname: &'a [#path::stream::Tag] }
+                    } else {
+                        quote! { #tagname: &[#path::stream::Tag] }
+                    },
                 )
             }),
         a,
@@ -302,8 +309,8 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
             let first_tags = &in_tag_names[0];
             extra.push(quote! {
                 impl #impl_generics #struct_name #ty_generics #where_clause {
-                    fn process_sync_tags(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types,)* Vec<#path::stream::Tag>) {
-                        (self.process_sync(#(#in_names,)*), #first_tags.to_vec())
+                    fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types,)* std::borrow::Cow<'a, [#path::stream::Tag]>) {
+                        (self.process_sync(#(#in_names,)*), std::borrow::Cow::Borrowed(#first_tags))
                     }
                 }
             });
@@ -330,7 +337,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                         //
                         // TODO: actually pass the tags.
                         let (s, ts) = self.process_sync_tags(#(*#in_names, &[]),*);
-                        for tag in ts {
+                        for tag in ts.iter() {
                             otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
                         }
                         s

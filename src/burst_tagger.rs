@@ -38,6 +38,8 @@ let pdus = StreamToPdu::new(burst_out, "burst".to_string(), 10_000, 50);
 
  */
 
+use std::borrow::Cow;
+
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::Float;
 
@@ -60,17 +62,17 @@ pub struct BurstTagger<T: Copy> {
 }
 
 impl<T: Copy> BurstTagger<T> {
-    fn process_sync_tags(
+    fn process_sync_tags<'a>(
         &mut self,
         s: T,
-        tags: &[Tag],
+        tags: &'a [Tag],
         tv: Float,
         _tv_tags: &[Tag],
-    ) -> (T, Vec<Tag>) {
-        let mut tags = tags.to_vec();
+    ) -> (T, Cow<'a, [Tag]>) {
         let cur = tv > self.threshold;
-        if cur != self.last {
-            tags.push(Tag::new(
+        let tags = if cur != self.last {
+            let mut owned_tags: Vec<Tag> = tags.to_vec();
+            owned_tags.push(Tag::new(
                 0,
                 self.tag.clone(),
                 if cur {
@@ -79,7 +81,10 @@ impl<T: Copy> BurstTagger<T> {
                     TagValue::Bool(false)
                 },
             ));
-        }
+            Cow::Owned(owned_tags)
+        } else {
+            Cow::Borrowed(tags)
+        };
         self.last = cur;
         (s, tags)
     }
