@@ -19,6 +19,7 @@ sed -i -r 's/^(rustradio_macros.*version = ")[0-9.]+(".*)/\1'"${NEW}"'\2/' Cargo
 sed -i "s/^version = \"${CURRENT?}\"/version = \"${NEW?}\"/" rustradio_macros/Cargo.toml
 cargo build
 git commit -a -m"Bump version to ${NEW?}"
+cargo semver-checks
 git tag "v${NEW?}"
 git push
 git push --tags
