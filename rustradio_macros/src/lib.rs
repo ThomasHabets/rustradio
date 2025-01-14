@@ -191,7 +191,9 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     // * in_names:          src
     // * in_name_types:     src: ReadStream<Complex>
     // * inval_name_types:  src: Complex
-    let (in_names, in_name_types, inval_name_types) = unzip_n![
+    // * in_tag_names:      src_tag
+    // * intag_name_types:  src_tag: &[Vec]
+    let (in_names, in_name_types, inval_name_types, in_tag_names, intag_name_types) = unzip_n![
         fields_named
             .named
             .iter()
@@ -200,15 +202,20 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                 let inner = inner_type(&field.ty);
                 let ty = field.ty.clone();
                 let field_name = field.ident.clone().unwrap();
+                let tagname: syn::Ident = syn::parse_str(&format!("{field_name}_tag")).unwrap();
                 (
                     field_name.clone(),
                     quote! { #field_name: #ty },
                     quote! { #field_name: #inner },
+                    quote! { #tagname },
+                    quote! { #tagname: &[#path::stream::Tag] },
                 )
             }),
         a,
         b,
-        c
+        c,
+        d,
+        e
     ];
 
     // Create vec of useful out expressions.
@@ -292,10 +299,11 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
             quote! { #first.iter().take(n)#(.zip(#rest.iter()))* }
         };
         if has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
+            let first_tags = &in_tag_names[0];
             extra.push(quote! {
                 impl #impl_generics #struct_name #ty_generics #where_clause {
-                    fn process_sync_tags(&mut self, #(#inval_name_types,)* tags: &[#path::stream::Tag]) -> (#(#outval_types,)* Vec<#path::stream::Tag>) {
-                        (self.process_sync(#(#in_names,)*), tags.to_vec())
+                    fn process_sync_tags(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types,)* Vec<#path::stream::Tag>) {
+                        (self.process_sync(#(#in_names,)*), #first_tags.to_vec())
                     }
                 }
             });
@@ -319,7 +327,9 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     let mut otags = Vec::new();
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
                         // let (s, ts) = self.process_sync_tags(#(*#in_names),*,&tags);
-                        let (s, ts) = self.process_sync_tags(#(*#in_names),*,&[]);
+                        //
+                        // TODO: actually pass the tags.
+                        let (s, ts) = self.process_sync_tags(#(*#in_names, &[]),*);
                         for tag in ts {
                             otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
                         }

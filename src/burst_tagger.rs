@@ -60,7 +60,13 @@ pub struct BurstTagger<T: Copy> {
 }
 
 impl<T: Copy> BurstTagger<T> {
-    fn process_sync_tags(&mut self, s: T, tv: Float, tags: &[Tag]) -> (T, Vec<Tag>) {
+    fn process_sync_tags(
+        &mut self,
+        s: T,
+        tags: &[Tag],
+        tv: Float,
+        _tv_tags: &[Tag],
+    ) -> (T, Vec<Tag>) {
         let mut tags = tags.to_vec();
         let cur = tv > self.threshold;
         if cur != self.last {
