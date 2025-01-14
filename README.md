@@ -25,3 +25,6 @@ A library for digital signals processing in the spirit of GNU Radio.
 * A clear strategy for optional output streams.
 * SymbolSync block at least have the right API.
 * Example AX.25 KISS modem written.
+* Evaluate Cow for block API
+* Tags for all input streams to sync block.
+* Add cargo-semver-checks to pre-commit or bump-version?

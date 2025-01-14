@@ -56,6 +56,28 @@ which can then be run with:
 cargo +nightly bench
 ```
 
+## Flamegraphs
+
+First install flamegraph:
+
+```
+cargo install flamegraph
+```
+
+Then generate one:
+
+```
+cargo +nightly flamegraph \
+    --features rtlsdr,fast-math,simd \
+    --release \
+    --example ax25-1200-rx \
+    -- \
+    -a \
+    -r cd/cd_tracks_01.au \
+    --sample_rate 44100 \
+    -o tmp
+```
+
 ## Block optimizations
 
 Ideas for how to make your block faster.
