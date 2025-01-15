@@ -303,7 +303,6 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     }
 
     // Support sync blocks.
-    // TODO: no way this works with anything more than two inputs, and one output.
     if has_attr(&input.attrs, "sync", STRUCT_ATTRS)
         || has_attr(&input.attrs, "sync_tag", STRUCT_ATTRS)
     {
