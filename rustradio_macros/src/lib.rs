@@ -341,17 +341,30 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     // Clamp n to be no more than output space.
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
                     let mut otags = Vec::new();
+                    let empty_tags = true #(&&#in_tag_names.is_empty())*;
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                        // TODO: This tag filtering is quite expensive.
-                        #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
-                          .filter(|t| t.pos() == pos)
-                          .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
-                          .collect();)*
-                        let (s, ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
-                        for tag in ts.iter() {
-                            otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
+                        if empty_tags {
+                            // Fast path for input without tags.
+                            // There may be opportunity to deduplicate some of
+                            // the next couple of lines with the !empty_tags
+                            // case.
+                            let (s, ts) = self.process_sync_tags(#(*#in_names, &[]),*);
+                            for tag in ts.iter() {
+                                otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
+                            }
+                            s
+                        } else {
+                            // TODO: This tag filtering is quite expensive.
+                            #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
+                              .filter(|t| t.pos() == pos)
+                              .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
+                              .collect();)*
+                            let (s, ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
+                            for tag in ts.iter() {
+                                otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
+                            }
+                            s
                         }
-                        s
                     });
                     for (samp, w) in it.zip(#(#out_names.slice().iter_mut())*) {
                         *w = samp;
