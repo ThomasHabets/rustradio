@@ -342,6 +342,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
                     let mut otags = Vec::new();
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
+                        // TODO: This tag filtering is quite expensive.
                         #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
                           .filter(|t| t.pos() == pos)
                           .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
