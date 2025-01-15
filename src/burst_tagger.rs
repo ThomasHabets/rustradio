@@ -120,6 +120,9 @@ mod tests {
         assert_eq!(
             sink.tags(),
             &[
+                Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat".to_string(), TagValue::U64(0)),
+                Tag::new(0, "VectorSource::first".to_string(), TagValue::Bool(true)),
                 Tag::new(80, "burst".to_string(), TagValue::Bool(true)),
                 Tag::new(90, "burst".to_string(), TagValue::Bool(false)),
             ]

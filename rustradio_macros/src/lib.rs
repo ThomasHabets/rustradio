@@ -194,7 +194,8 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     // * in_tag_names:      src_tag
     // * intag_name_types:  src_tag: &'a [Vec]   or   src_tag: &[Vec]
     //
-    // Only the first tag has lifetime marking, if it's a sync block.
+    // Only the first tag has lifetime marking, if it's a `sync` block. If it's
+    // a `sync_tag` block they're all lifetimed marked, though.
     let (in_names, in_name_types, inval_name_types, in_tag_names, intag_name_types) = unzip_n![
         fields_named
             .named
@@ -327,7 +328,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
                     #( let #in_names = self.#in_names.read_buf()?;)*
-                    let mut tags = #first.1;
+                    #(let #in_tag_names = #in_names.1;)*
                     #(let #in_names = #in_names.0;)*
 
                     // Clamp n to be no more than the input available.
@@ -341,10 +342,11 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
                     let mut otags = Vec::new();
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                        // let (s, ts) = self.process_sync_tags(#(*#in_names),*,&tags);
-                        //
-                        // TODO: actually pass the tags.
-                        let (s, ts) = self.process_sync_tags(#(*#in_names, &[]),*);
+                        #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
+                          .filter(|t| t.pos() == pos)
+                          .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
+                          .collect();)*
+                        let (s, ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
                         for tag in ts.iter() {
                             otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
                         }
