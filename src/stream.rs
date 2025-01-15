@@ -175,7 +175,11 @@ impl<T> NCReadStream<T> {
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
-        Arc::strong_count(&self.q) == 1
+        if !self.q.lock().unwrap().is_empty() {
+            false
+        } else {
+            Arc::strong_count(&self.q) == 1
+        }
     }
 }
 
