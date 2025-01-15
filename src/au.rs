@@ -15,7 +15,7 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Float};
 
-/// Au support several encodings. This code currently only one.
+/// Au support several encodings. This code currently has only one.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Encoding {
     /// 16 bit linear PCM.

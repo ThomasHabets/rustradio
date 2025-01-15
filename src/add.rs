@@ -1,7 +1,38 @@
 //! Add two streams.
+//!
+//! To add a constant value to a stream, instead use AddConst.
 use crate::stream::{ReadStream, WriteStream};
 
 /// Adds two streams, sample wise.
+///
+/// Output tags are taken from the first stream. Tags from the other input
+/// stream is discarded.
+///
+/// To add a constant value to a stream, instead use AddConst.
+///
+/// ```
+/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::blocks::{ConstantSource, SignalSourceFloat, Add, NullSink};
+///
+/// let mut graph = Graph::new();
+///
+/// // Add a constant value. Could just as well use AddConst instead of Add.
+/// let (src1, src1_out) = ConstantSource::new(1.0);
+/// let (src2, src2_out) = SignalSourceFloat::new(44100.0, 1000.0, 1.0);
+///
+/// // Sum up the streams.
+/// let (sum, sum_out) = Add::new(src1_out, src2_out);
+///
+/// graph.add(Box::new(src1));
+/// graph.add(Box::new(src2));
+/// graph.add(Box::new(sum));
+///
+/// // Set up dummy sink.
+/// let sink = NullSink::new(sum_out);
+/// # return Ok(());
+/// graph.run()?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
 pub struct Add<T>
@@ -18,6 +49,7 @@ where
     #[rustradio(out)]
     dst: WriteStream<T>,
 }
+
 impl<T> Add<T>
 where
     T: Copy + std::ops::Add<Output = T>,
@@ -54,3 +86,5 @@ mod tests {
         Ok(())
     }
 }
+/* vim: textwidth=80
+ */
