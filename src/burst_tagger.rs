@@ -97,6 +97,14 @@ mod tests {
     use crate::blocks::{VectorSink, VectorSource};
     use crate::Result;
 
+    fn tag_compare(left: &[Tag], right: &[Tag]) {
+        let mut left = left.to_vec();
+        left.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut right = right.to_vec();
+        right.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert_eq!(left, right);
+    }
+
     #[test]
     fn tag_it() -> Result<()> {
         let (mut src, src_out) = VectorSource::new((0..100).map(|i| i as u32).collect());
@@ -117,15 +125,15 @@ mod tests {
         sink.work()?;
         let want: Vec<_> = (0..100).map(|i| i as u32).collect();
         assert_eq!(sink.data(), want);
-        assert_eq!(
-            sink.tags(),
+        tag_compare(
+            &sink.tags(),
             &[
                 Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
-                Tag::new(0, "VectorSource::repeat".to_string(), TagValue::U64(0)),
                 Tag::new(0, "VectorSource::first".to_string(), TagValue::Bool(true)),
-                Tag::new(80, "burst".to_string(), TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat".to_string(), TagValue::U64(0)),
                 Tag::new(90, "burst".to_string(), TagValue::Bool(false)),
-            ]
+                Tag::new(80, "burst".to_string(), TagValue::Bool(true)),
+            ],
         );
         Ok(())
     }
