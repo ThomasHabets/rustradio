@@ -35,26 +35,30 @@ use crate::stream::{ReadStream, WriteStream};
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
-pub struct Add<T>
+pub struct Add<Ta, Tb, Tout>
 where
-    T: Copy + std::ops::Add<Output = T>,
+    Ta: Copy + std::ops::Add<Tb, Output = Tout>,
+    Tb: Copy,
+    Tout: Copy,
 {
     /// Hello world.
     #[rustradio(in)]
-    a: ReadStream<T>,
+    a: ReadStream<Ta>,
 
     #[rustradio(in)]
-    b: ReadStream<T>,
+    b: ReadStream<Tb>,
 
     #[rustradio(out)]
-    dst: WriteStream<T>,
+    dst: WriteStream<Tout>,
 }
 
-impl<T> Add<T>
+impl<Ta, Tb, Tout> Add<Ta, Tb, Tout>
 where
-    T: Copy + std::ops::Add<Output = T>,
+    Ta: Copy + std::ops::Add<Tb, Output = Tout>,
+    Tb: Copy,
+    Tout: Copy,
 {
-    fn process_sync(&self, a: T, b: T) -> T {
+    fn process_sync(&self, a: Ta, b: Tb) -> Tout {
         a + b
     }
 }
