@@ -5,7 +5,7 @@
 * https://youtu.be/uMEfx_l5Oxk
 */
 use anyhow::Result;
-use log::debug;
+use log::{debug, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::iir_filter::CappedFilter;
@@ -97,9 +97,17 @@ impl SymbolSync {
     }
 
     /// Return clock stream.
+    ///
+    /// The output stream can only be created once, so if called a second time,
+    /// just returns None.
     pub fn out_clock(&mut self) -> Option<ReadStream<Float>> {
-        //self.out_clock.get_or_insert(Stream::newp()).clone()
-        todo!()
+        if self.out_clock.is_some() {
+            warn!("SymbolSync::out_clock() called more than once");
+            return None;
+        }
+        let (tx, rx) = crate::stream::new_stream();
+        self.out_clock = Some(tx);
+        Some(rx)
     }
 }
 
@@ -199,3 +207,5 @@ impl Block for SymbolSync {
         Ok(BlockRet::Ok)
     }
 }
+/* vim: textwidth=80
+ */
