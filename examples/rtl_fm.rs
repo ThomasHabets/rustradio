@@ -2,8 +2,8 @@
 Example broadcast FM receiver, sending output to an Au file.
  */
 use anyhow::Result;
+use clap::Parser;
 use log::warn;
-use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
@@ -11,37 +11,37 @@ use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::{Complex, Float};
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
 struct Opt {
     /// Read capture file instead of live from RTL SDR.
-    #[structopt(short = "r")]
+    #[arg(short)]
     filename: Option<String>,
 
     /// Output file. If unset, use sound card for output.
-    #[structopt(short = "o")]
+    #[arg(short)]
     output: Option<std::path::PathBuf>,
 
     /// Tuned frequency, if reading from RTL SDR.
     #[allow(dead_code)]
-    #[structopt(long = "freq", default_value = "100000000")]
+    #[arg(long = "freq", default_value = "100000000")]
     freq: u64,
 
     /// Input gain, if reading from RTL SDR.
     #[allow(dead_code)]
-    #[structopt(long = "gain", default_value = "20")]
+    #[arg(long = "gain", default_value = "20")]
     gain: i32,
 
     /// Verbosity of debug messages.
-    #[structopt(short = "v", default_value = "0")]
+    #[arg(short, default_value = "0")]
     verbose: usize,
 
     /// Audio volume.
-    #[structopt(long = "volume", default_value = "1.0")]
+    #[arg(long = "volume", default_value = "1.0")]
     volume: Float,
 
     /// Audio output rate.
-    #[structopt(default_value = "48000")]
+    #[arg(default_value = "48000")]
     audio_rate: u32,
 }
 
@@ -55,7 +55,7 @@ macro_rules! blehbleh {
 
 fn main() -> Result<()> {
     println!("rtl_fm receiver example");
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")

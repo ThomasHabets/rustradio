@@ -1,15 +1,15 @@
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::Parser;
 
 use rustradio::blocks::{AddConst, DebugSink, PduWriter, StreamToPdu, VectorSourceBuilder};
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::Complex;
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
 struct Opt {
-    #[structopt(short = "v", default_value = "0")]
+    #[arg(short, default_value = "0")]
     verbose: usize,
 }
 
@@ -60,7 +60,7 @@ fn simple_noncopy() -> Result<()> {
 
 fn main() -> Result<()> {
     println!("Simple test graphs");
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")

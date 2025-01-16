@@ -4,43 +4,43 @@ clock recovery.
 use std::path::PathBuf;
 
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::{Error, Float};
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
 struct Opt {
-    #[structopt(short = "r")]
+    #[arg(short)]
     read: Option<String>,
 
     #[cfg(feature = "rtlsdr")]
-    #[structopt(long = "freq", default_value = "144800000")]
+    #[arg(long = "freq", default_value = "144800000")]
     freq: u64,
 
     #[cfg(feature = "rtlsdr")]
-    #[structopt(long = "gain", default_value = "20")]
+    #[arg(long = "gain", default_value = "20")]
     gain: i32,
 
-    #[structopt(long = "rtlsdr")]
+    #[arg(long = "rtlsdr")]
     rtlsdr: bool,
 
-    #[structopt(long = "sample_rate", short = "s", default_value = "50000")]
+    #[arg(long = "sample_rate", short, default_value = "50000")]
     samp_rate: Float,
 
-    #[structopt(long = "out", short = "o")]
+    #[arg(long = "out", short)]
     output: PathBuf,
 
-    #[structopt(short = "v", default_value = "0")]
+    #[arg(short, default_value = "0")]
     verbose: usize,
 
-    #[structopt(long = "threshold", default_value = "0.0001")]
+    #[arg(long = "threshold", default_value = "0.0001")]
     threshold: Float,
 
-    #[structopt(long = "iir_alpha", default_value = "0.01")]
+    #[arg(long = "iir_alpha", default_value = "0.01")]
     iir_alpha: Float,
 }
 
@@ -53,7 +53,7 @@ macro_rules! add_block {
 }
 
 fn main() -> Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")

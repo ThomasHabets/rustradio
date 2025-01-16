@@ -2,32 +2,32 @@
 Example tone generator.
  */
 use anyhow::Result;
+use clap::Parser;
 use log::warn;
-use structopt::StructOpt;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::Float;
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
 struct Opt {
     /// Frequency of tone.
     #[allow(dead_code)]
-    #[structopt(long = "freq", default_value = "8000")]
+    #[arg(long = "freq", default_value = "8000")]
     freq: Float,
 
     /// Verbosity of debug messages.
-    #[structopt(short = "v", default_value = "0")]
+    #[arg(short, default_value = "0")]
     verbose: usize,
 
     /// Tone volume.
-    #[structopt(long = "volume", default_value = "0.1")]
+    #[arg(long = "volume", default_value = "0.1")]
     volume: Float,
 
     /// Audio output rate.
-    #[structopt(default_value = "48000")]
+    #[arg(default_value = "48000")]
     audio_rate: u32,
 }
 
@@ -41,7 +41,7 @@ macro_rules! add_block {
 
 fn main() -> Result<()> {
     println!("tone generator receiver example");
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")

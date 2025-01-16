@@ -4,8 +4,8 @@ Example broadcast FM receiver, sending output to an Au file.
 #[cfg(feature = "soapysdr")]
 mod internal {
     use anyhow::Result;
+    use clap::Parser;
     use log::warn;
-    use structopt::StructOpt;
 
     use rustradio::blocks::*;
     use rustradio::file_sink::Mode;
@@ -13,29 +13,29 @@ mod internal {
     use rustradio::graph::GraphRunner;
     use rustradio::Float;
 
-    #[derive(StructOpt, Debug)]
-    #[structopt()]
+    #[derive(clap::Parser, Debug)]
+    #[command(version, about)]
     struct Opt {
-        #[structopt(short = "d")]
+        #[arg(short)]
         driver: String,
 
-        #[structopt(short = "o")]
+        #[arg(short)]
         output: std::path::PathBuf,
 
         // Unused if soapysdr feature not enabled.
         #[allow(dead_code)]
-        #[structopt(long = "freq", default_value = "100000000")]
+        #[arg(long = "freq", default_value = "100000000")]
         freq: u64,
 
         // Unused if soapysdr feature not enabled.
         #[allow(dead_code)]
-        #[structopt(long = "gain", default_value = "20")]
+        #[arg(long = "gain", default_value = "20")]
         gain: i32,
 
-        #[structopt(short = "v", default_value = "0")]
+        #[arg(short, default_value = "0")]
         verbose: usize,
 
-        #[structopt(long = "volume", default_value = "1.0")]
+        #[arg(long = "volume", default_value = "1.0")]
         volume: Float,
     }
 
@@ -49,7 +49,7 @@ mod internal {
 
     pub fn main() -> Result<()> {
         println!("soapy_fm receiver example");
-        let opt = Opt::from_args();
+        let opt = Opt::parse();
         stderrlog::new()
             .module(module_path!())
             .module("rustradio")

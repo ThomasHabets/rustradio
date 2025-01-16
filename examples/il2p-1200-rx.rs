@@ -10,7 +10,7 @@ let scrambled = vec![0x26, 0x57, 0x4d, 0x57, 0xf1, 0x96, 0xcc, 0x85, 0x42, 0xe7,
 use std::path::PathBuf;
 
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
@@ -18,25 +18,29 @@ use rustradio::graph::GraphRunner;
 use rustradio::window::WindowType;
 use rustradio::{Complex, Float};
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
 struct Opt {
-    #[structopt(long = "out", short = "o", help = "Directory to write packets to")]
+    #[arg(long = "out", short, help = "Directory to write packets to")]
     _output: Option<PathBuf>,
 
-    #[structopt(short = "v", default_value = "0")]
+    #[arg(short, default_value = "0")]
     verbose: usize,
 
-    #[structopt(long = "sample_rate", default_value = "50000")]
+    #[arg(long = "sample_rate", default_value = "50000")]
     samp_rate: u32,
 
-    #[structopt(short = "r", help = "Read I/Q from file")]
+    #[arg(short, help = "Read I/Q from file")]
     read: String,
 
-    #[structopt(long = "symbol_taps", default_value = "0.5,0.5", use_delimiter = true)]
+    #[arg(
+        long = "symbol_taps",
+        default_value = "0.5,0.5",
+        use_value_delimiter = true
+    )]
     symbol_taps: Vec<Float>,
 
-    #[structopt(long, default_value = "0.5")]
+    #[arg(long, default_value = "0.5")]
     symbol_max_deviation: Float,
 }
 
@@ -49,7 +53,7 @@ macro_rules! add_block {
 }
 
 fn main() -> Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")

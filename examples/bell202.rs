@@ -1,17 +1,17 @@
 use anyhow::Result;
+use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::Complex;
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
 struct Opt {
-    #[structopt(short = "d")]
+    #[arg(short)]
     driver: String,
-    #[structopt(short = "v", default_value = "0")]
+    #[arg(short, default_value = "0")]
     verbose: usize,
 }
 macro_rules! add_block {
@@ -23,7 +23,7 @@ macro_rules! add_block {
 }
 pub fn main() -> Result<()> {
     println!("soapy_fm receiver example");
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")

@@ -36,7 +36,7 @@ As of 2023-12-27:
 use std::path::PathBuf;
 
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
@@ -46,52 +46,56 @@ use rustradio::Error;
 use rustradio::{graph::Graph, mtgraph::MTGraph};
 use rustradio::{Complex, Float};
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
 struct Opt {
-    #[structopt(long = "audio", short = "a", help = "Input is an .au file, not I/Q")]
+    #[arg(long, short, help = "Input is an .au file, not I/Q")]
     audio: bool,
 
-    #[structopt(long = "out", short = "o", help = "Directory to write packets to")]
+    #[arg(long = "out", short, help = "Directory to write packets to")]
     output: Option<PathBuf>,
 
     #[cfg(feature = "rtlsdr")]
-    #[structopt(long = "freq", default_value = "144800000")]
+    #[arg(long = "freq", default_value = "144800000")]
     freq: u64,
 
     #[cfg(feature = "rtlsdr")]
-    #[structopt(long = "gain", default_value = "20")]
+    #[arg(long = "gain", default_value = "20")]
     gain: i32,
 
-    #[structopt(short = "v", default_value = "0")]
+    #[arg(short = 'v', default_value = "0")]
     verbose: usize,
 
-    #[structopt(long)]
+    #[arg(long)]
     fix_bits: bool,
 
-    #[structopt(long = "rtlsdr", help = "Stream I/Q from an RTLSDR")]
+    #[arg(long = "rtlsdr", help = "Stream I/Q from an RTLSDR")]
     rtlsdr: bool,
 
-    #[structopt(long = "clock-file", help = "File to write clock sync data to")]
+    #[arg(long = "clock-file", help = "File to write clock sync data to")]
     clock_file: Option<PathBuf>,
 
-    #[structopt(long = "sample_rate")]
+    #[arg(long = "sample_rate")]
     samp_rate: Option<u32>,
 
-    #[structopt(short = "r", help = "Read I/Q from file")]
+    #[arg(short = 'r', help = "Read I/Q from file")]
     read: Option<String>,
 
-    #[structopt(long = "fast_fm", help = "Use FastFM for the FM carrier demod")]
+    #[arg(long = "fast_fm", help = "Use FastFM for the FM carrier demod")]
     fast_fm: bool,
 
-    #[structopt(long = "symbol_taps", default_value = "0.5,0.5", use_delimiter = true)]
+    #[arg(
+        long = "symbol_taps",
+        default_value = "0.5,0.5",
+        use_value_delimiter = true
+    )]
     symbol_taps: Vec<Float>,
 
-    #[structopt(long, default_value = "0.5")]
+    #[arg(long, default_value = "0.5")]
     symbol_max_deviation: Float,
 
     /// Run multithreaded.
-    #[structopt(long)]
+    #[arg(long)]
     multithread: bool,
 }
 
@@ -190,7 +194,7 @@ fn main() -> Result<()> {
         print!("{}", rustradio::environment_str(&features));
     }
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")

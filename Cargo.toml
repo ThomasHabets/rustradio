@@ -30,7 +30,7 @@ rustradio_macros = { version = "0.8.0", path = "rustradio_macros" }
 rayon = "1.10.0"
 
 [dev-dependencies]
-structopt = "0.3.26"
+clap = { version = "4", features = ["derive"] }
 stderrlog = "0.6.0"
 ctrlc = "3.4.1"
 # apt install libgoogle-perftools-dev google-perftools
