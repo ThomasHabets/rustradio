@@ -17,7 +17,11 @@ echo "Current: '$CURRENT', New: '$NEW'"
 sed -i "s/^version = \"${CURRENT?}\"/version = \"${NEW?}\"/" Cargo.toml
 sed -i -r 's/^(rustradio_macros.*version = ")[0-9.]+(".*)/\1'"${NEW}"'\2/' Cargo.toml
 sed -i "s/^version = \"${CURRENT?}\"/version = \"${NEW?}\"/" rustradio_macros/Cargo.toml
+
+# At least one of these should update Cargo.locks, I hope.
 cargo build
+cargo test
+
 git commit -a -m"Bump version to ${NEW?}"
 cargo semver-checks
 git tag "v${NEW?}"
