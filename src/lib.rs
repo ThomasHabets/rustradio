@@ -2,7 +2,10 @@
 #![cfg_attr(feature = "simd", feature(portable_simd))]
 // Enable RISC-V arch detection, if on a RISC-V arch.
 #![cfg_attr(
-    any(target_arch = "riscv32", target_arch = "riscv64"),
+    all(
+        feature = "simd",
+        any(target_arch = "riscv32", target_arch = "riscv64")
+    ),
     feature(stdarch_riscv_feature_detection)
 )]
 
@@ -245,7 +248,12 @@ pub fn check_environment() -> Result<Vec<Feature>> {
             detected: is_x86_feature_detected!("avx2"),
         });
     }
-    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+
+    // TODO: ideally we don't duplicate this test here, but reuse it from the top of the file.
+    #[cfg(all(
+        feature = "simd",
+        any(target_arch = "riscv32", target_arch = "riscv64")
+    ))]
     {
         assumptions.push(Feature {
             name: "Vector".to_string(),
