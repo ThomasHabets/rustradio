@@ -114,7 +114,7 @@ impl Block for FftFilter {
         // TODO: multithread this.
         let mut produced = false;
         loop {
-            let (input, _tags) = self.src.read_buf()?;
+            let (input, tags) = self.src.read_buf()?;
             let mut o = self.dst.write_buf()?;
 
             if self.nsamples > o.len() {
@@ -167,7 +167,7 @@ impl Block for FftFilter {
             // Output.
             // TODO: needless copy?
             o.fill_from_slice(&self.buf[..self.nsamples]);
-            o.produce(self.nsamples, &[]);
+            o.produce(self.nsamples, &tags);
             produced = true;
 
             // Stash tail.
