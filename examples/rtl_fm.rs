@@ -24,6 +24,10 @@ struct Opt {
     #[arg(long)]
     rtlsdr_file: bool,
 
+    /// Loop the read file forever.
+    #[arg(long)]
+    file_repeat: bool,
+
     /// Output file. If unset, use sound card for output.
     #[arg(short)]
     output: Option<std::path::PathBuf>,
@@ -189,10 +193,10 @@ fn main() -> Result<()> {
 
     let prev = if let Some(filename) = opt.filename {
         if opt.rtlsdr_file {
-            let prev = blehbleh!(g, FileSource::<u8>::new(&filename, false)?);
+            let prev = blehbleh!(g, FileSource::<u8>::new(&filename, opt.file_repeat)?);
             blehbleh![g, RtlSdrDecode::new(prev)]
         } else {
-            blehbleh!(g, FileSource::<Complex>::new(&filename, false)?)
+            blehbleh!(g, FileSource::<Complex>::new(&filename, opt.file_repeat)?)
         }
     } else if !cfg!(feature = "rtlsdr") {
         panic!("RTL SDR feature not enabled")
