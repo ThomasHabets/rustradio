@@ -122,6 +122,7 @@ pub mod add_const;
 pub mod au;
 pub mod binary_slicer;
 pub mod burst_tagger;
+pub mod cma;
 pub mod complex_to_mag2;
 pub mod constant_source;
 pub mod convert;
