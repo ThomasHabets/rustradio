@@ -77,10 +77,16 @@ fn run_ui(
     const MAX_SIZE: usize = 44100 / 50;
     let mut data: VecDeque<Float> = VecDeque::with_capacity(MAX_SIZE);
     loop {
-        while let Ok(s) = rx.try_recv() {
-            data.push_back(s);
-            if data.len() > MAX_SIZE {
-                data.pop_front();
+        loop {
+            match rx.try_recv() {
+                Ok(s) => {
+                    data.push_back(s);
+                    if data.len() > MAX_SIZE {
+                        data.pop_front();
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return Ok(()),
             }
         }
         if !(paused && pause_msg) {
@@ -165,10 +171,10 @@ fn main() -> Result<()> {
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
 
-    let (tx, rx) = std::sync::mpsc::channel();
+    let (ui_tx, rx) = std::sync::mpsc::channel();
 
     let pid = std::process::id();
-    std::thread::spawn(move || {
+    let ui_thread = std::thread::spawn(move || {
         let terminal = ratatui::init();
         let result = run_ui(terminal, rx, opt.fps);
         ratatui::restore();
@@ -245,7 +251,7 @@ fn main() -> Result<()> {
     let prev = blehbleh![
         g,
         MapBuilder::new(prev, move |x| {
-            if let Err(e) = tx.send(x) {
+            if let Err(e) = ui_tx.send(x) {
                 trace!("Failed to write data to UI (probably exiting): {e}");
             }
             x
@@ -290,6 +296,7 @@ fn main() -> Result<()> {
     let st = std::time::Instant::now();
     eprintln!("Running loop");
     g.run()?;
+    ui_thread.join().expect("Failed to join UI thread");
     eprintln!("{}", g.generate_stats(st.elapsed()));
     Ok(())
 }
