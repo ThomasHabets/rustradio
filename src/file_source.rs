@@ -1,6 +1,6 @@
 //! Read stream from raw file.
 use std::io::BufReader;
-use std::io::Read;
+use std::io::{Read, Seek};
 
 use anyhow::Result;
 use log::{debug, trace, warn};
@@ -64,7 +64,12 @@ where
                 .map_err(|e| -> anyhow::Error { e.into() })?;
             if n == 0 {
                 warn!("EOF on {}. Repeat: {}", self.filename, self.repeat);
-                return Ok(BlockRet::EOF);
+                if self.repeat {
+                    self.f.seek(std::io::SeekFrom::Start(0))?;
+                    return Ok(BlockRet::Noop);
+                } else {
+                    return Ok(BlockRet::EOF);
+                }
             }
             if self.buf.is_empty() && (n % sample_size) == 0 {
                 // Fast path when reading only whole samples.
