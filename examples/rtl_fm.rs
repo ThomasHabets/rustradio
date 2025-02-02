@@ -20,6 +20,10 @@ struct Opt {
     #[arg(short)]
     filename: Option<String>,
 
+    /// File is the output of the rtl-sdr command.
+    #[arg(long)]
+    rtlsdr_file: bool,
+
     /// Output file. If unset, use sound card for output.
     #[arg(short)]
     output: Option<std::path::PathBuf>,
@@ -178,7 +182,12 @@ fn main() -> Result<()> {
     let samp_rate = 1_024_000.0;
 
     let prev = if let Some(filename) = opt.filename {
-        blehbleh!(g, FileSource::<Complex>::new(&filename, false)?)
+        if opt.rtlsdr_file {
+            let prev = blehbleh!(g, FileSource::<u8>::new(&filename, false)?);
+            blehbleh![g, RtlSdrDecode::new(prev)]
+        } else {
+            blehbleh!(g, FileSource::<Complex>::new(&filename, false)?)
+        }
     } else if !cfg!(feature = "rtlsdr") {
         panic!("RTL SDR feature not enabled")
     } else {
