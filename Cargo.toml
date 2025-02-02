@@ -33,6 +33,8 @@ rayon = "1.10.0"
 clap = { version = "4", features = ["derive"] }
 stderrlog = "0.6.0"
 ctrlc = "3.4.1"
+ratatui = { version = "0.29.0", features = ["all-widgets"]}
+crossterm = "0.28.1"
 # apt install libgoogle-perftools-dev google-perftools
 # Uncomment the PROFILER stuff in examples/ax25-1200-rx.rs
 # google-pprof --lines target/release/examples/ax25-1200-rx my-prof.prof
