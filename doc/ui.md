@@ -38,3 +38,6 @@ With triggers and such, inspired by the GNURadio blocks.
 
 Once there's a standard network protocol, nothing's stopping a QT or Web UI
 frontend. But the initial implementation is a TUI.
+
+While time/spectrum/waterfall don't need every interval, they do need contiguous
+samples to be correct. (waterfall also needs to know how much it missed)
