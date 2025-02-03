@@ -99,7 +99,9 @@ fn run_ui(
         }
         if !(paused && pause_msg) {
             if last_update.elapsed() > update_rate {
-                terminal.clear()?;
+                // Clearing the screen manually creates blinking.
+                //terminal.clear()?;
+
                 // TODO: why doesn't altscreen remove screen tearing?
                 let mut stdout = std::io::stdout();
                 crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
