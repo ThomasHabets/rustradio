@@ -14,6 +14,7 @@ pub use crate::delay::Delay;
 pub use crate::descrambler::Descrambler;
 pub use crate::fft_filter::FftFilter;
 pub use crate::fft_filter::FftFilterFloat;
+pub use crate::fft_stream::FftStream;
 pub use crate::file_sink::{FileSink, NoCopyFileSink};
 pub use crate::file_source::FileSource;
 pub use crate::fir::FIRFilter;
