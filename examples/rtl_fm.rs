@@ -28,6 +28,10 @@ struct Opt {
     #[arg(long)]
     file_repeat: bool,
 
+    /// Enable text based UI.
+    #[arg(long)]
+    tui: bool,
+
     /// Output file. If unset, use sound card for output.
     #[arg(short)]
     output: Option<std::path::PathBuf>,
@@ -179,12 +183,14 @@ fn main() -> Result<()> {
 
     let pid = std::process::id();
     let ui_thread = std::thread::spawn(move || {
-        let terminal = ratatui::init();
-        let result = run_ui(terminal, rx, opt.fps);
-        ratatui::restore();
-        result.unwrap();
-        unsafe {
-            libc::kill(pid as i32, libc::SIGINT);
+        if opt.tui {
+            let terminal = ratatui::init();
+            let result = run_ui(terminal, rx, opt.fps);
+            ratatui::restore();
+            result.unwrap();
+            unsafe {
+                libc::kill(pid as i32, libc::SIGINT);
+            }
         }
     });
 
@@ -255,8 +261,10 @@ fn main() -> Result<()> {
     let prev = blehbleh![
         g,
         MapBuilder::new(prev, move |x| {
-            if let Err(e) = ui_tx.send(x) {
-                trace!("Failed to write data to UI (probably exiting): {e}");
+            if opt.tui {
+                if let Err(e) = ui_tx.send(x) {
+                    trace!("Failed to write data to UI (probably exiting): {e}");
+                }
             }
             x
         })
