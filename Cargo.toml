@@ -60,10 +60,19 @@ name = "tone"
 required-features = ["audio"]
 
 [profile.release]
-overflow-checks = true
 # debug = true
-#lto = true
-#codegen-units = 1  # Higher is faster, lower gives more opt potential.
+
+# Disabled overflow checks help speed by like 8%.
+overflow-checks = true
+
+# LTO speeds up by like 15%.
+lto = true
+
+# They say that lower should make for faster code, but empirically it seems that
+# it only makes things worse.
+# codegen-units = 1
 
 [profile.release.package."*"]
 overflow-checks = true
+
+# vim: textwidth=80
