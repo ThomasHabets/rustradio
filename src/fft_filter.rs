@@ -36,17 +36,134 @@ use crate::{Complex, Error, Float};
 
 use fftw::plan::{C2CPlan, C2CPlan32};
 
+trait Engine {
+    fn run(&mut self, i: &mut [Complex], o: &mut [Complex]);
+}
+
+fn calc_fft_size(from: usize) -> usize {
+    let mut n = 1;
+    while n < from {
+        n <<= 1;
+    }
+    2 * n
+}
+
+mod rr_fftw {
+    use super::*;
+
+    pub struct FftwEngine {
+        taps_fft: Vec<Complex>,
+        fft: C2CPlan32,
+        ifft: C2CPlan32,
+    }
+
+    impl FftwEngine {
+        pub fn new(taps: &[Complex]) -> Self {
+            let fft_size = calc_fft_size(taps.len());
+            // Create FFT planners.
+            let mut fft: C2CPlan32 = C2CPlan::aligned(
+                &[fft_size],
+                fftw::types::Sign::Forward,
+                fftw::types::Flag::MEASURE,
+            )
+            .unwrap();
+            let ifft: C2CPlan32 = C2CPlan::aligned(
+                &[fft_size],
+                fftw::types::Sign::Backward,
+                fftw::types::Flag::MEASURE,
+            )
+            .unwrap();
+
+            // Pre-FFT the taps.
+            let mut taps_fft = taps.to_vec();
+            taps_fft.resize(fft_size, Complex::default());
+            let mut tmp = taps_fft.clone();
+            fft.c2c(&mut tmp, &mut taps_fft).unwrap();
+
+            // Normalization is actually the square root of this
+            // expression, but since we'll do two FFTs we can just skip
+            // the square root here and do it just once here in setup.
+            {
+                let f = 1.0 / taps_fft.len() as Float;
+                taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
+            }
+            Self {
+                fft,
+                ifft,
+                taps_fft,
+            }
+        }
+    }
+
+    impl Engine for FftwEngine {
+        fn run(&mut self, i: &mut [Complex], o: &mut [Complex]) {
+            let fft_size = self.taps_fft.len();
+            let o: &mut [Complex] = &mut o[..fft_size];
+
+            // Ugly option: create un-initialized.
+            let mut tmp = Vec::with_capacity(fft_size);
+            unsafe { tmp.set_len(fft_size) };
+
+            // Safer option: Create zeroed.
+            // let mut tmp: Vec<Complex> = vec![Complex::default(); fft_size];
+
+            self.fft.c2c(i, &mut tmp).unwrap();
+            sum_vec(&mut tmp, &self.taps_fft);
+
+            // TODO: I really don't get why I can't get it to work storing directly into the output
+            // slice.
+            self.ifft.c2c(&mut tmp, i).unwrap();
+            o.copy_from_slice(i);
+        }
+    }
+}
+
+mod rr_rustfft {
+    use super::*;
+    use std::sync::Arc;
+    pub struct RustFftEngine {
+        taps_fft: Vec<Complex>,
+        fft: Arc<dyn rustfft::Fft<Float>>,
+        ifft: Arc<dyn rustfft::Fft<Float>>,
+    }
+    impl RustFftEngine {
+        pub fn new(taps: &[Complex]) -> Self {
+            let fft_size = calc_fft_size(taps.len());
+            let mut planner = rustfft::FftPlanner::new();
+            let fft = planner.plan_fft_forward(fft_size);
+            let ifft = planner.plan_fft_inverse(fft_size);
+            let mut taps_fft = taps.to_vec();
+            taps_fft.resize(fft_size, Complex::default());
+            fft.process(&mut taps_fft);
+            Self {
+                fft,
+                ifft,
+                taps_fft,
+            }
+        }
+    }
+    impl Engine for RustFftEngine {
+        fn run(&mut self, i: &mut [Complex], o: &mut [Complex]) {
+            self.fft.process(i);
+            sum_vec(i, &self.taps_fft);
+            self.ifft.process(i);
+            let fft_size = self.taps_fft.len();
+            let o: &mut [Complex] = &mut o[..fft_size];
+            o.copy_from_slice(i);
+        }
+    }
+}
+
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct FftFilter {
     buf: Vec<Complex>,
-    taps_fft: Vec<Complex>,
     nsamples: usize,
     fft_size: usize,
     tail: Vec<Complex>,
-    fft: C2CPlan32,
-    ifft: C2CPlan32,
+    engine: rr_fftw::FftwEngine,
+    //engine: rr_rustfft::RustFftEngine,
     #[rustradio(in)]
     src: ReadStream<Complex>,
     #[rustradio(out)]
@@ -54,47 +171,14 @@ pub struct FftFilter {
 }
 
 impl FftFilter {
-    fn calc_fft_size(from: usize) -> usize {
-        let mut n = 1;
-        while n < from {
-            n <<= 1;
-        }
-        2 * n
-    }
-
     /// Create new FftFilter, given filter taps.
     pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
         // Set up FFT / batch size.
-        let fft_size = Self::calc_fft_size(taps.len());
+        let fft_size = calc_fft_size(taps.len());
         let nsamples = fft_size - taps.len();
 
-        // Create FFT planners.
-        let mut fft: C2CPlan32 = C2CPlan::aligned(
-            &[fft_size],
-            fftw::types::Sign::Forward,
-            fftw::types::Flag::MEASURE,
-        )
-        .unwrap();
-        let ifft: C2CPlan32 = C2CPlan::aligned(
-            &[fft_size],
-            fftw::types::Sign::Backward,
-            fftw::types::Flag::MEASURE,
-        )
-        .unwrap();
-
-        // Pre-FFT the taps.
-        let mut taps_fft = taps.to_vec();
-        taps_fft.resize(fft_size, Complex::default());
-        let mut tmp = taps_fft.clone();
-        fft.c2c(&mut tmp, &mut taps_fft).unwrap();
-
-        // Normalization is actually the square root of this
-        // expression, but since we'll do two FFTs we can just skip
-        // the square root here and do it just once here in setup.
-        {
-            let f = 1.0 / taps_fft.len() as Float;
-            taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
-        }
+        let engine = rr_fftw::FftwEngine::new(taps);
+        //let engine = rr_rustfft::RustFftEngine::new(taps);
 
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -102,10 +186,8 @@ impl FftFilter {
                 src,
                 dst,
                 fft_size,
-                taps_fft,
                 tail: vec![Complex::default(); taps.len()],
-                fft,
-                ifft,
+                engine,
                 buf: Vec::with_capacity(fft_size),
                 nsamples,
             },
@@ -160,14 +242,7 @@ impl Block for FftFilter {
 
             // Run FFT.
             self.buf.resize(self.fft_size, Complex::default());
-            let mut tmp = self.buf.clone();
-            self.fft.c2c(&mut self.buf, &mut tmp).unwrap();
-
-            // Filter by array multiplication.
-            sum_vec(&mut tmp, &self.taps_fft);
-
-            // IFFT back to the time domain.
-            self.ifft.c2c(&mut tmp, &mut self.buf).unwrap();
+            self.engine.run(&mut self.buf, o.slice());
 
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {

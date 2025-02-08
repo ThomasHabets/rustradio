@@ -69,7 +69,7 @@ required-features = ["audio"]
 # overflow-checks = true
 
 # LTO speeds up by like 15%.
-lto = true
+# lto = true
 
 # They say that lower should make for faster code, but empirically it seems that
 # it only makes things worse.
