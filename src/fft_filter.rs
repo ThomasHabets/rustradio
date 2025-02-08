@@ -36,10 +36,16 @@ use crate::{Complex, Error, Float};
 
 use fftw::plan::{C2CPlan, C2CPlan32};
 
-trait Engine {
+pub trait Engine {
     fn run(&mut self, i: &mut [Complex], o: &mut [Complex]);
+
+    // This is just so that we don't have to keep track of both the engine and the original tap
+    // len.
+    #[must_use]
+    fn tap_len(&self) -> usize;
 }
 
+#[must_use]
 fn calc_fft_size(from: usize) -> usize {
     let mut n = 1;
     while n < from {
@@ -48,16 +54,18 @@ fn calc_fft_size(from: usize) -> usize {
     2 * n
 }
 
-mod rr_fftw {
+pub mod rr_fftw {
     use super::*;
 
     pub struct FftwEngine {
+        tap_len: usize,
         taps_fft: Vec<Complex>,
         fft: C2CPlan32,
         ifft: C2CPlan32,
     }
 
     impl FftwEngine {
+        #[must_use]
         pub fn new(taps: &[Complex]) -> Self {
             let fft_size = calc_fft_size(taps.len());
             // Create FFT planners.
@@ -91,6 +99,7 @@ mod rr_fftw {
                 fft,
                 ifft,
                 taps_fft,
+                tap_len: taps.len(),
             }
         }
     }
@@ -115,18 +124,23 @@ mod rr_fftw {
             self.ifft.c2c(&mut tmp, i).unwrap();
             o.copy_from_slice(i);
         }
+        fn tap_len(&self) -> usize {
+            self.tap_len
+        }
     }
 }
 
-mod rr_rustfft {
+pub mod rr_rustfft {
     use super::*;
     use std::sync::Arc;
     pub struct RustFftEngine {
+        tap_len: usize,
         taps_fft: Vec<Complex>,
         fft: Arc<dyn rustfft::Fft<Float>>,
         ifft: Arc<dyn rustfft::Fft<Float>>,
     }
     impl RustFftEngine {
+        #[must_use]
         pub fn new(taps: &[Complex]) -> Self {
             let fft_size = calc_fft_size(taps.len());
             let mut planner = rustfft::FftPlanner::new();
@@ -139,6 +153,7 @@ mod rr_rustfft {
                 fft,
                 ifft,
                 taps_fft,
+                tap_len: taps.len(),
             }
         }
     }
@@ -148,8 +163,10 @@ mod rr_rustfft {
             sum_vec(i, &self.taps_fft);
             self.ifft.process(i);
             let fft_size = self.taps_fft.len();
-            let o: &mut [Complex] = &mut o[..fft_size];
-            o.copy_from_slice(i);
+            o[..fft_size].copy_from_slice(i);
+        }
+        fn tap_len(&self) -> usize {
+            self.tap_len
         }
     }
 }
@@ -157,12 +174,12 @@ mod rr_rustfft {
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FftFilter {
+pub struct FftFilter<T: Engine> {
     buf: Vec<Complex>,
     nsamples: usize,
     fft_size: usize,
     tail: Vec<Complex>,
-    engine: rr_fftw::FftwEngine,
+    engine: T,
     //engine: rr_rustfft::RustFftEngine,
     #[rustradio(in)]
     src: ReadStream<Complex>,
@@ -170,15 +187,13 @@ pub struct FftFilter {
     dst: WriteStream<Complex>,
 }
 
-impl FftFilter {
+impl<T: Engine> FftFilter<T> {
     /// Create new FftFilter, given filter taps.
-    pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
+    #[must_use]
+    pub fn new(src: ReadStream<Complex>, engine: T) -> (Self, ReadStream<Complex>) {
         // Set up FFT / batch size.
-        let fft_size = calc_fft_size(taps.len());
-        let nsamples = fft_size - taps.len();
-
-        let engine = rr_fftw::FftwEngine::new(taps);
-        //let engine = rr_rustfft::RustFftEngine::new(taps);
+        let fft_size = calc_fft_size(engine.tap_len());
+        let nsamples = fft_size - engine.tap_len();
 
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -186,7 +201,7 @@ impl FftFilter {
                 src,
                 dst,
                 fft_size,
-                tail: vec![Complex::default(); taps.len()],
+                tail: vec![Complex::default(); engine.tap_len()],
                 engine,
                 buf: Vec::with_capacity(fft_size),
                 nsamples,
@@ -200,7 +215,7 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
     left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y)
 }
 
-impl Block for FftFilter {
+impl<T: Engine> Block for FftFilter<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: multithread this.
         let mut produced = false;
@@ -281,8 +296,8 @@ impl Block for FftFilter {
 /// performance than the Complex filter.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FftFilterFloat {
-    complex: FftFilter,
+pub struct FftFilterFloat<T: Engine> {
+    complex: FftFilter<T>,
     #[rustradio(in)]
     src: ReadStream<Float>,
     #[rustradio(out)]
@@ -291,12 +306,12 @@ pub struct FftFilterFloat {
     inner_out: ReadStream<Complex>,
 }
 
-impl FftFilterFloat {
+impl<T: Engine> FftFilterFloat<T> {
     /// Create a new FftFilterFloat block.
-    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
-        let ctaps: Vec<Complex> = taps.iter().copied().map(|f| Complex::new(f, 0.0)).collect();
+    #[must_use]
+    pub fn new(src: ReadStream<Float>, engine: T) -> (Self, ReadStream<Float>) {
         let (inner_in, r) = crate::stream::new_stream();
-        let (complex, inner_out) = FftFilter::new(r, &ctaps);
+        let (complex, inner_out) = FftFilter::new(r, engine);
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -311,7 +326,7 @@ impl FftFilterFloat {
     }
 }
 
-impl Block for FftFilterFloat {
+impl<T: Engine> Block for FftFilterFloat<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // Convert input to Complex.
         {
