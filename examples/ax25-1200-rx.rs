@@ -188,7 +188,64 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
     Ok((prev, samp_rate))
 }
 
+#[inline(never)]
+fn fft_bench_fftw(
+    plan: &mut impl fftw::plan::C2CPlan<Complex = Complex>,
+    a: &mut [Complex],
+    b: &mut [Complex],
+) {
+    let _ = plan.c2c(a, b);
+}
+
+#[inline(never)]
+fn fft_bench_rustfft(fft: &std::sync::Arc<dyn rustfft::Fft<Float>>, a: &mut [Complex]) {
+    fft.process(a);
+}
+
+#[inline(never)]
+fn fft_bench() {
+    use fftw::array::AlignedVec;
+    use fftw::plan::*;
+    use fftw::types::*;
+    use std::f32::consts::PI;
+
+    let n = 1024;
+    let iter = 100000;
+    // FFTW.
+    {
+        let mut plan: C2CPlan32 = C2CPlan::aligned(&[n], Sign::Forward, Flag::MEASURE).unwrap();
+        let mut a = AlignedVec::new(n);
+        let mut b = AlignedVec::new(n);
+        let k0 = 2.0 * PI / n as f32;
+        for i in 0..n {
+            a[i] = c32::new((k0 * i as f32).cos(), 0.0);
+        }
+        let start = std::time::Instant::now();
+        for _ in 0..iter {
+            //plan.c2c(&mut a, &mut b).unwrap();
+            fft_bench_fftw(&mut plan, &mut a, &mut b);
+        }
+        println!("FFTW: {:?}", start.elapsed());
+    }
+
+    // rustfft
+    {
+        let mut planner = rustfft::FftPlanner::new();
+        let fft = planner.plan_fft_forward(n);
+        let mut v = vec![Complex::default(); n];
+        let start = std::time::Instant::now();
+        for _ in 0..iter {
+            fft_bench_rustfft(&fft, &mut v);
+        }
+        println!("rustfft: {:?}", start.elapsed());
+    }
+    panic!();
+}
+
 fn main() -> Result<()> {
+    if false {
+        fft_bench();
+    }
     {
         let features = rustradio::check_environment()?;
         print!("{}", rustradio::environment_str(&features));

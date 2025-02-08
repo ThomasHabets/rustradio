@@ -27,15 +27,14 @@ let sink = NullSink::new(fft_out);
 * <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
 * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
 */
-use std::sync::Arc;
-
 use anyhow::Result;
 use log::trace;
-use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float};
+
+use fftw::plan::{C2CPlan, C2CPlan32};
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
 #[derive(rustradio_macros::Block)]
@@ -46,8 +45,8 @@ pub struct FftFilter {
     nsamples: usize,
     fft_size: usize,
     tail: Vec<Complex>,
-    fft: Arc<dyn rustfft::Fft<Float>>,
-    ifft: Arc<dyn rustfft::Fft<Float>>,
+    fft: C2CPlan32,
+    ifft: C2CPlan32,
     #[rustradio(in)]
     src: ReadStream<Complex>,
     #[rustradio(out)]
@@ -70,14 +69,24 @@ impl FftFilter {
         let nsamples = fft_size - taps.len();
 
         // Create FFT planners.
-        let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(fft_size);
-        let ifft = planner.plan_fft_inverse(fft_size);
+        let mut fft: C2CPlan32 = C2CPlan::aligned(
+            &[fft_size],
+            fftw::types::Sign::Forward,
+            fftw::types::Flag::MEASURE,
+        )
+        .unwrap();
+        let ifft: C2CPlan32 = C2CPlan::aligned(
+            &[fft_size],
+            fftw::types::Sign::Backward,
+            fftw::types::Flag::MEASURE,
+        )
+        .unwrap();
 
         // Pre-FFT the taps.
         let mut taps_fft = taps.to_vec();
         taps_fft.resize(fft_size, Complex::default());
-        fft.process(&mut taps_fft);
+        let mut tmp = taps_fft.clone();
+        fft.c2c(&mut tmp, &mut taps_fft).unwrap();
 
         // Normalization is actually the square root of this
         // expression, but since we'll do two FFTs we can just skip
@@ -151,13 +160,14 @@ impl Block for FftFilter {
 
             // Run FFT.
             self.buf.resize(self.fft_size, Complex::default());
-            self.fft.process(&mut self.buf);
+            let mut tmp = self.buf.clone();
+            self.fft.c2c(&mut self.buf, &mut tmp).unwrap();
 
             // Filter by array multiplication.
-            sum_vec(&mut self.buf, &self.taps_fft);
+            sum_vec(&mut tmp, &self.taps_fft);
 
             // IFFT back to the time domain.
-            self.ifft.process(&mut self.buf);
+            self.ifft.c2c(&mut tmp, &mut self.buf).unwrap();
 
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {
