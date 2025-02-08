@@ -28,6 +28,13 @@ cpal = { version = "0.15.3", features = ["jack"], optional=true }
 errno = "0.3.9"
 rustradio_macros = { version = "0.8.2", path = "rustradio_macros" }
 rayon = "1.10.0"
+# System fftw has been many times faster for me than not. Maybe because the C
+# code is not compiled with the right options, like -march=native?
+[dependencies.fftw]
+version = "0.8.0"
+default-features = false
+features = ["system"]
+optional = true
 
 [dev-dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -50,6 +57,7 @@ rtlsdr = ["dep:rtlsdr"]
 soapysdr = ["dep:soapysdr"]
 fast-math = ["dep:fast-math"]
 audio = ["dep:cpal"]
+fftw = ["dep:fftw"]
 
 [[example]]
 name = "bell202"
