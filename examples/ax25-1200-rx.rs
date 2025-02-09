@@ -172,11 +172,7 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    #[cfg(feature = "fftw")]
-    let e = rustradio::fft_filter::rr_fftw::FftwEngine::new(&taps);
-    #[cfg(not(feature = "fftw"))]
-    let e = rustradio::fft_filter::rr_rustfft::RustFftEngine::new(&taps);
-    let prev = add_block![g, FftFilter::new(prev, e)];
+    let prev = add_block![g, FftFilter::new(prev, &taps)];
     let new_samp_rate = 50_000.0;
     let prev = add_block![
         g,
@@ -284,34 +280,7 @@ fn main() -> Result<()> {
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    #[cfg(feature = "fftw")]
-    let prev = add_block![
-        g,
-        FftFilterFloat::new(
-            prev,
-            rustradio::fft_filter::rr_fftw::FftwEngine::new(
-                &taps
-                    .iter()
-                    .copied()
-                    .map(|f| Complex::new(f, 0.0))
-                    .collect::<Vec<_>>(),
-            )
-        )
-    ];
-    #[cfg(not(feature = "fftw"))]
-    let prev = add_block![
-        g,
-        FftFilterFloat::new(
-            prev,
-            rustradio::fft_filter::rr_rustfft::RustFftEngine::new(
-                &taps
-                    .iter()
-                    .copied()
-                    .map(|f| Complex::new(f, 0.0))
-                    .collect::<Vec<_>>(),
-            )
-        )
-    ];
+    let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
 
     let freq1 = 1200.0;
     let freq2 = 2200.0;

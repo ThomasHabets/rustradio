@@ -42,7 +42,7 @@ use crate::{Complex, Error, Float};
 /// FFTW is a little bit faster.
 pub trait Engine {
     /// Run runs an FFT round. Input and output is always the size of the FFT.
-    fn run(&mut self, i: &mut [Complex], o: &mut [Complex]);
+    fn run(&mut self, i: &mut [Complex]);
 
     /// Return the number of taps used.
     ///
@@ -114,9 +114,8 @@ pub mod rr_fftw {
     }
 
     impl Engine for FftwEngine {
-        fn run(&mut self, i: &mut [Complex], o: &mut [Complex]) {
+        fn run(&mut self, i: &mut [Complex]) {
             let fft_size = self.taps_fft.len();
-            let o: &mut [Complex] = &mut o[..fft_size];
 
             // Ugly option: create un-initialized.
             let mut tmp = Vec::with_capacity(fft_size);
@@ -131,7 +130,6 @@ pub mod rr_fftw {
             // TODO: I really don't get why I can't get it to work storing directly into the output
             // slice.
             self.ifft.c2c(&mut tmp, i).unwrap();
-            o.copy_from_slice(i);
         }
         fn tap_len(&self) -> usize {
             self.tap_len
@@ -158,6 +156,13 @@ pub mod rr_rustfft {
             let mut taps_fft = taps.to_vec();
             taps_fft.resize(fft_size, Complex::default());
             fft.process(&mut taps_fft);
+            // Normalization is actually the square root of this
+            // expression, but since we'll do two FFTs we can just skip
+            // the square root here and do it just once here in setup.
+            {
+                let f = 1.0 / taps_fft.len() as Float;
+                taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
+            }
             Self {
                 fft,
                 ifft,
@@ -167,12 +172,10 @@ pub mod rr_rustfft {
         }
     }
     impl Engine for RustFftEngine {
-        fn run(&mut self, i: &mut [Complex], o: &mut [Complex]) {
+        fn run(&mut self, i: &mut [Complex]) {
             self.fft.process(i);
             sum_vec(i, &self.taps_fft);
             self.ifft.process(i);
-            let fft_size = self.taps_fft.len();
-            o[..fft_size].copy_from_slice(i);
         }
         fn tap_len(&self) -> usize {
             self.tap_len
@@ -196,10 +199,35 @@ pub struct FftFilter<T: Engine> {
     dst: WriteStream<Complex>,
 }
 
+#[cfg(feature = "fftw")]
+impl FftFilter<rr_fftw::FftwEngine> {
+    /// Create a new FftFilter block, selecting the best FFT engine.
+    ///
+    /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
+    /// Otherwise it's RustFFT.
+    pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
+        trace!("FftFilter: defaulting to FFTW");
+        let engine = rr_fftw::FftwEngine::new(taps);
+        Self::new_engine(src, engine)
+    }
+}
+
+#[cfg(not(feature = "fftw"))]
+impl FftFilter<rr_rustfft::RustFftEngine> {
+    /// Create a new FftFilter block, selecting the best FFT engine.
+    ///
+    /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
+    /// Otherwise it's RustFFT.
+    pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
+        trace!("FftFilter: defaulting to RustFFT");
+        let engine = rr_rustfft::RustFftEngine::new(taps);
+        Self::new_engine(src, engine)
+    }
+}
 impl<T: Engine> FftFilter<T> {
     /// Create new FftFilter, given filter taps.
     #[must_use]
-    pub fn new(src: ReadStream<Complex>, engine: T) -> (Self, ReadStream<Complex>) {
+    pub fn new_engine(src: ReadStream<Complex>, engine: T) -> (Self, ReadStream<Complex>) {
         // Set up FFT / batch size.
         let fft_size = calc_fft_size(engine.tap_len());
         let nsamples = fft_size - engine.tap_len();
@@ -266,7 +294,7 @@ impl<T: Engine> Block for FftFilter<T> {
 
             // Run FFT.
             self.buf.resize(self.fft_size, Complex::default());
-            self.engine.run(&mut self.buf, o.slice());
+            self.engine.run(&mut self.buf);
 
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {
@@ -315,12 +343,40 @@ pub struct FftFilterFloat<T: Engine> {
     inner_out: ReadStream<Complex>,
 }
 
+#[cfg(feature = "fftw")]
+impl FftFilterFloat<rr_fftw::FftwEngine> {
+    /// Create a new FftFilterFloat block, selecting the best FFT engine.
+    ///
+    /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
+    /// Otherwise it's RustFFT.
+    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
+        let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
+        let engine = rr_fftw::FftwEngine::new(&taps);
+        Self::new_engine(src, engine)
+    }
+}
+
+#[cfg(not(feature = "fftw"))]
+impl FftFilterFloat<rr_rustfft::RustFftEngine> {
+    /// Create a new FftFilterFloat block, selecting the best FFT engine.
+    ///
+    /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
+    /// Otherwise it's RustFFT.
+    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
+        let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
+        let engine = rr_rustfft::RustFftEngine::new(&taps);
+        Self::new_engine(src, engine)
+    }
+}
+
 impl<T: Engine> FftFilterFloat<T> {
     /// Create a new FftFilterFloat block.
+    ///
+    /// Use `new()` if to make your application code engine agnostic.
     #[must_use]
-    pub fn new(src: ReadStream<Float>, engine: T) -> (Self, ReadStream<Float>) {
+    pub fn new_engine(src: ReadStream<Float>, engine: T) -> (Self, ReadStream<Float>) {
         let (inner_in, r) = crate::stream::new_stream();
-        let (complex, inner_out) = FftFilter::new(r, engine);
+        let (complex, inner_out) = FftFilter::new_engine(r, engine);
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
