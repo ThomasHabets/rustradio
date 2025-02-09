@@ -241,6 +241,7 @@ pub fn environment_str(features: &[Feature]) -> String {
 }
 
 pub fn check_environment() -> Result<Vec<Feature>> {
+    #[allow(unused_mut)]
     let mut assumptions: Vec<Feature> = Vec::new();
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
