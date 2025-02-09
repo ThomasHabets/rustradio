@@ -34,13 +34,20 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float};
 
-use fftw::plan::{C2CPlan, C2CPlan32};
-
+/// FFT engine.
+///
+/// This can be either RustFFT, a pure Rust dependency, or FFTW, an external
+/// standard implementation written in C.
+///
+/// FFTW is a little bit faster.
 pub trait Engine {
+    /// Run runs an FFT round. Input and output is always the size of the FFT.
     fn run(&mut self, i: &mut [Complex], o: &mut [Complex]);
 
-    // This is just so that we don't have to keep track of both the engine and the original tap
-    // len.
+    /// Return the number of taps used.
+    ///
+    /// This is just so that we don't have to keep track of both the engine and the original tap
+    /// len.
     #[must_use]
     fn tap_len(&self) -> usize;
 }
@@ -54,8 +61,10 @@ fn calc_fft_size(from: usize) -> usize {
     2 * n
 }
 
+#[cfg(feature = "fftw")]
 pub mod rr_fftw {
     use super::*;
+    use fftw::plan::{C2CPlan, C2CPlan32};
 
     pub struct FftwEngine {
         tap_len: usize,
@@ -428,3 +437,5 @@ mod tests {
         Ok(())
     }
 }
+/* vim: textwidth=80
+ */

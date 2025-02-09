@@ -172,7 +172,10 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
+    #[cfg(feature = "fftw")]
     let e = rustradio::fft_filter::rr_fftw::FftwEngine::new(&taps);
+    #[cfg(not(feature = "fftw"))]
+    let e = rustradio::fft_filter::rr_rustfft::RustFftEngine::new(&taps);
     let prev = add_block![g, FftFilter::new(prev, e)];
     let new_samp_rate = 50_000.0;
     let prev = add_block![
@@ -189,6 +192,7 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
     Ok((prev, samp_rate))
 }
 
+#[cfg(feature = "fftw")]
 #[inline(never)]
 fn fft_bench_fftw(
     plan: &mut impl fftw::plan::C2CPlan<Complex = Complex>,
@@ -205,15 +209,15 @@ fn fft_bench_rustfft(fft: &std::sync::Arc<dyn rustfft::Fft<Float>>, a: &mut [Com
 
 #[inline(never)]
 fn fft_bench() {
-    use fftw::array::AlignedVec;
-    use fftw::plan::*;
-    use fftw::types::*;
-    use std::f32::consts::PI;
-
     let n = 1024;
     let iter = 100000;
     // FFTW.
+    #[cfg(feature = "fftw")]
     {
+        use fftw::array::AlignedVec;
+        use fftw::plan::*;
+        use fftw::types::*;
+        use std::f32::consts::PI;
         let mut plan: C2CPlan32 = C2CPlan::aligned(&[n], Sign::Forward, Flag::MEASURE).unwrap();
         let mut a = AlignedVec::new(n);
         let mut b = AlignedVec::new(n);
@@ -280,11 +284,26 @@ fn main() -> Result<()> {
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
+    #[cfg(feature = "fftw")]
     let prev = add_block![
         g,
         FftFilterFloat::new(
             prev,
             rustradio::fft_filter::rr_fftw::FftwEngine::new(
+                &taps
+                    .iter()
+                    .copied()
+                    .map(|f| Complex::new(f, 0.0))
+                    .collect::<Vec<_>>(),
+            )
+        )
+    ];
+    #[cfg(not(feature = "fftw"))]
+    let prev = add_block![
+        g,
+        FftFilterFloat::new(
+            prev,
+            rustradio::fft_filter::rr_rustfft::RustFftEngine::new(
                 &taps
                     .iter()
                     .copied()
