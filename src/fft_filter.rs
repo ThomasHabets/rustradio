@@ -124,11 +124,9 @@ pub mod rr_fftw {
             // Safer option: Create zeroed.
             // let mut tmp: Vec<Complex> = vec![Complex::default(); fft_size];
 
+            // TODO: can we find a way to do this in-place?
             self.fft.c2c(i, &mut tmp).unwrap();
             sum_vec(&mut tmp, &self.taps_fft);
-
-            // TODO: I really don't get why I can't get it to work storing directly into the output
-            // slice.
             self.ifft.c2c(&mut tmp, i).unwrap();
         }
         fn tap_len(&self) -> usize {
@@ -192,7 +190,6 @@ pub struct FftFilter<T: Engine> {
     fft_size: usize,
     tail: Vec<Complex>,
     engine: T,
-    //engine: rr_rustfft::RustFftEngine,
     #[rustradio(in)]
     src: ReadStream<Complex>,
     #[rustradio(out)]
