@@ -40,9 +40,9 @@ use crate::{Complex, Error, Float};
 /// standard implementation written in C.
 ///
 /// FFTW is a little bit faster.
-pub trait Engine {
+pub trait Engine: Sync + Send {
     /// Run runs an FFT round. Input and output is always the size of the FFT.
-    fn run(&mut self, i: &mut [Complex]);
+    fn run(&self, i: &mut [Complex]);
 
     /// Return the number of taps used.
     ///
@@ -114,7 +114,7 @@ pub mod rr_fftw {
     }
 
     impl Engine for FftwEngine {
-        fn run(&mut self, i: &mut [Complex]) {
+        fn run(&self, i: &mut [Complex]) {
             let fft_size = self.taps_fft.len();
 
             // Ugly option: create un-initialized.
@@ -170,7 +170,7 @@ pub mod rr_rustfft {
         }
     }
     impl Engine for RustFftEngine {
-        fn run(&mut self, i: &mut [Complex]) {
+        fn run(&self, i: &mut [Complex]) {
             self.fft.process(i);
             sum_vec(i, &self.taps_fft);
             self.ifft.process(i);
@@ -185,7 +185,6 @@ pub mod rr_rustfft {
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct FftFilter<T: Engine> {
-    buf: Vec<Complex>,
     nsamples: usize,
     fft_size: usize,
     tail: Vec<Complex>,
@@ -228,7 +227,6 @@ impl<T: Engine> FftFilter<T> {
         // Set up FFT / batch size.
         let fft_size = calc_fft_size(engine.tap_len());
         let nsamples = fft_size - engine.tap_len();
-
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -237,7 +235,6 @@ impl<T: Engine> FftFilter<T> {
                 fft_size,
                 tail: vec![Complex::default(); engine.tap_len()],
                 engine,
-                buf: Vec::with_capacity(fft_size),
                 nsamples,
             },
             dr,
@@ -252,71 +249,69 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
 impl<T: Engine> Block for FftFilter<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: multithread this.
-        let mut produced = false;
+        let (input, tags) = self.src.read_buf()?;
+        let mut o = self.dst.write_buf()?;
+
+        if self.nsamples > input.len() {
+            trace!(
+                "FftFilter: Need {} output space, only have {}",
+                self.nsamples,
+                o.len()
+            );
+            return Ok(BlockRet::Noop);
+        }
+        if self.nsamples > o.len() {
+            trace!(
+                "FftFilter: Need {} output space, only have {}",
+                self.nsamples,
+                o.len()
+            );
+            return Ok(BlockRet::Noop);
+        }
+        // Set up FFTs.
+        let islice = input.slice();
+        let nchunks = islice.len() % self.nsamples;
+        let mut chunks = Vec::with_capacity(nchunks);
+        let mut to_consume = 0;
         loop {
-            let (input, tags) = self.src.read_buf()?;
-            let mut o = self.dst.write_buf()?;
-
-            if self.nsamples > o.len() {
-                trace!(
-                    "FftFilter: Need {} output space, only have {}",
-                    self.nsamples,
-                    o.len()
-                );
+            if islice.len() - to_consume < self.nsamples {
                 break;
             }
-            // Read so that self.buf contains exactly self.nsamples samples.
-            //
-            // Yes, this part is weird. It evolved into this, but any
-            // cleanup I do to the next few lines just made it slower,
-            // even though I removed needless logic.
-            //
-            // E.g.:
-            // * self.buf.len() is *always* empty here, so that's a
-            //   needless subtraction.
-            // * We break if input available less than nsamples, so
-            //   why not just compare that?
-            // * Why do we even have self.buf? It's cleared on every round.
-            //   (well, that means no heap allocation, sure)
-            //
-            // Why are these things not fixed: Because then it's
-            // slower, for some reason. At least as of 2023-10-07, on
-            // amd64, with Rust 1.7.1.
-            let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
-            if add < self.nsamples {
-                break;
-            }
-            self.buf.extend(input.iter().take(add).copied());
-            input.consume(add);
+            let mut chunk = Vec::with_capacity(self.nsamples);
+            chunk.extend_from_slice(&islice[to_consume..(to_consume + self.nsamples)]);
+            chunk.resize(self.fft_size, Complex::default());
+            chunks.push(chunk);
+            to_consume += self.nsamples;
+        }
+        input.consume(to_consume);
 
-            // Run FFT.
-            self.buf.resize(self.fft_size, Complex::default());
-            self.engine.run(&mut self.buf);
+        // Run FFT.
+        use rayon::iter::IntoParallelRefMutIterator;
+        use rayon::iter::ParallelIterator;
+        chunks.par_iter_mut().for_each(|chunk| {
+            self.engine.run(chunk);
+        });
 
+        let os = o.slice();
+        let mut pos = 0;
+        for chunk in &mut chunks {
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {
-                self.buf[i] += t;
+                chunk[i] += t;
             }
 
             // Output.
             // TODO: needless copy?
-            o.fill_from_slice(&self.buf[..self.nsamples]);
-            o.produce(self.nsamples, &tags);
-            produced = true;
+            os[pos..(pos + self.nsamples)].copy_from_slice(&chunk[..self.nsamples]);
+            pos += self.nsamples;
 
             // Stash tail.
             for i in 0..self.tail.len() {
-                self.tail[i] = self.buf[self.nsamples + i];
+                self.tail[i] = chunk[self.nsamples + i];
             }
-
-            // Clear buffer. Per above performance comment.
-            self.buf.clear();
         }
-        if produced {
-            Ok(BlockRet::Ok)
-        } else {
-            Ok(BlockRet::Noop)
-        }
+        o.produce(pos, &tags);
+        Ok(BlockRet::Ok)
     }
 }
 
