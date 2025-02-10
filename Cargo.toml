@@ -16,7 +16,7 @@ keywords = ["SDR", "radio"]
 anyhow = "1.0.75"
 log = "0.4.20"
 num-complex = "0.4.4"
-rustfft = "6.1.0"
+rustfft = "6.2.0"
 tempfile = "3.8.0"
 rtlsdr = {version = "0.1.4", optional=true}
 fast-math = {version = "0.1.1", optional=true}
