@@ -78,18 +78,11 @@ pub mod rr_fftw {
         pub fn new(taps: &[Complex]) -> Self {
             let fft_size = calc_fft_size(taps.len());
             // Create FFT planners.
-            let fft: C2CPlan32 = C2CPlan::aligned(
-                &[fft_size],
-                fftw::types::Sign::Forward,
-                fftw::types::Flag::MEASURE,
-            )
-            .unwrap();
-            let ifft: C2CPlan32 = C2CPlan::aligned(
-                &[fft_size],
-                fftw::types::Sign::Backward,
-                fftw::types::Flag::MEASURE,
-            )
-            .unwrap();
+            let flags = fftw::types::Flag::MEASURE | fftw::types::Flag::DESTROYINPUT;
+            let fft: C2CPlan32 =
+                C2CPlan::aligned(&[fft_size], fftw::types::Sign::Forward, flags).unwrap();
+            let ifft: C2CPlan32 =
+                C2CPlan::aligned(&[fft_size], fftw::types::Sign::Backward, flags).unwrap();
 
             // Pre-FFT the taps.
             let mut taps_fft = taps.to_vec();

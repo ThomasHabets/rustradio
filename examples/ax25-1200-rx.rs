@@ -196,9 +196,9 @@ extern "C" {
 }
 
 fn main() -> Result<()> {
-    if false {
+    if true {
         unsafe {
-            fftw_init_threads();
+            assert_ne!(0, fftw_init_threads());
             fftw_plan_with_nthreads(2);
         }
     }
