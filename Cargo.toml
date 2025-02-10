@@ -71,16 +71,16 @@ required-features = ["audio"]
 # debug = true
 
 # Disabled overflow checks help speed by like 8%.
-# overflow-checks = true
+overflow-checks = true
 
 # LTO speeds up by like 15%.
-# lto = true
+lto = true
 
 # They say that lower should make for faster code, but empirically it seems that
 # it only makes things worse.
 # codegen-units = 1
 
 [profile.release.package."*"]
-# overflow-checks = true
+overflow-checks = true
 
 # vim: textwidth=80
