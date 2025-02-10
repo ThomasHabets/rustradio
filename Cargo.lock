@@ -525,8 +525,6 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 [[package]]
 name = "fftw"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ca544f4c7f2c162c493d084893ec81b9dc3c17e43098d6c3e0c6f9a4173c5d2"
 dependencies = [
  "bitflags 2.4.0",
  "fftw-sys",
@@ -540,8 +538,6 @@ dependencies = [
 [[package]]
 name = "fftw-sys"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3303f4a5566afea7d8ec5a2cbec044d61c2573995f1c607902113e974f1c28d"
 dependencies = [
  "libc",
  "num-complex",

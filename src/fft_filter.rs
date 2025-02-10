@@ -78,7 +78,7 @@ pub mod rr_fftw {
         pub fn new(taps: &[Complex]) -> Self {
             let fft_size = calc_fft_size(taps.len());
             // Create FFT planners.
-            let mut fft: C2CPlan32 = C2CPlan::aligned(
+            let fft: C2CPlan32 = C2CPlan::aligned(
                 &[fft_size],
                 fftw::types::Sign::Forward,
                 fftw::types::Flag::MEASURE,

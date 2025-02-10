@@ -188,7 +188,20 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
     Ok((prev, samp_rate))
 }
 
+use libc::c_int;
+#[link(name = "fftw3_threads")]
+extern "C" {
+    pub fn fftw_init_threads() -> c_int;
+    pub fn fftw_plan_with_nthreads(nthreads: c_int);
+}
+
 fn main() -> Result<()> {
+    if false {
+        unsafe {
+            fftw_init_threads();
+            fftw_plan_with_nthreads(2);
+        }
+    }
     {
         let features = rustradio::check_environment()?;
         print!("{}", rustradio::environment_str(&features));
