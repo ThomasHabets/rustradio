@@ -155,9 +155,8 @@ fn main() -> Result<()> {
 
     // Run.
     eprintln!("Running…");
-    let st = std::time::Instant::now();
     g.run()?;
-    eprintln!("{}", g.generate_stats(st.elapsed()));
+    eprintln!("{}", g.generate_stats().unwrap());
     Ok(())
 }
 /* ---- Emacs variables ----

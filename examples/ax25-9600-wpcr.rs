@@ -157,9 +157,8 @@ fn main() -> Result<()> {
     g.add(Box::new(PduWriter::new(prev, opt.output)));
 
     // Run.
-    let st = std::time::Instant::now();
     g.run()?;
-    eprintln!("{}", g.generate_stats(st.elapsed()));
+    eprintln!("{}", g.generate_stats().unwrap());
     Ok(())
 }
 /* ---- Emacs variables ----

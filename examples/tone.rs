@@ -80,9 +80,8 @@ fn main() -> Result<()> {
         cancel.cancel();
     })
     .expect("failed to set Ctrl-C handler");
-    let st = std::time::Instant::now();
     eprintln!("Running loop");
     g.run()?;
-    eprintln!("{}", g.generate_stats(st.elapsed()));
+    eprintln!("{}", g.generate_stats().unwrap());
     Ok(())
 }

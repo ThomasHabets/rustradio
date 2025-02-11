@@ -306,12 +306,11 @@ fn main() -> Result<()> {
 
     // Run.
     eprintln!("Running…");
-    let st = std::time::Instant::now();
     // use gperftools::profiler::PROFILER;
     // PROFILER.lock().unwrap().start("./my-prof.prof").unwrap();
     g.run()?;
     // PROFILER.lock().unwrap().stop().unwrap();
-    eprintln!("{}", g.generate_stats(st.elapsed()));
+    eprintln!("{}", g.generate_stats().expect("failed to generate stats"));
     Ok(())
 }
 /* ---- Emacs variables ----

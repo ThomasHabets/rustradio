@@ -21,7 +21,7 @@ pub trait GraphRunner {
     fn run(&mut self) -> Result<()>;
 
     /// Return a string with stats about where time went.
-    fn generate_stats(&self, elapsed: std::time::Duration) -> String;
+    fn generate_stats(&self) -> Option<String>;
 
     /// Return a cancellation token, for asynchronously stopping the
     /// graph, for example if the user presses Ctrl-C.
@@ -66,20 +66,37 @@ g.run()?;
 ```
 */
 pub struct Graph {
+    spent_time: Option<std::time::Duration>,
+    spent_cpu_time: Option<std::time::Duration>,
     blocks: Vec<Box<dyn Block>>,
     cancel_token: CancellationToken,
     times: Vec<std::time::Duration>,
+    cpu_times: Vec<std::time::Duration>,
 }
 
 impl Graph {
     /// Create a new flowgraph.
     pub fn new() -> Self {
         Self {
+            spent_time: None,
+            spent_cpu_time: None,
             blocks: Vec::new(),
             times: Vec::new(),
+            cpu_times: Vec::new(),
             cancel_token: CancellationToken::new(),
         }
     }
+}
+
+#[must_use]
+pub(crate) fn get_cpu_time() -> std::time::Duration {
+    use libc::{clock_gettime, timespec, CLOCK_PROCESS_CPUTIME_ID};
+    let mut ts: timespec = unsafe { std::mem::zeroed() };
+    let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
+    if rc != 0 {
+        panic!("clock_gettime()");
+    }
+    std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
 }
 
 impl GraphRunner for Graph {
@@ -91,7 +108,10 @@ impl GraphRunner for Graph {
     /// Run the graph until completion.
     fn run(&mut self) -> Result<()> {
         let st = Instant::now();
+        let start_run_cpu = get_cpu_time();
         self.times
+            .resize(self.blocks.len(), std::time::Duration::default());
+        self.cpu_times
             .resize(self.blocks.len(), std::time::Duration::default());
         let mut eof = vec![false; self.blocks.len()];
         loop {
@@ -105,8 +125,10 @@ impl GraphRunner for Graph {
                     continue;
                 }
                 let st = Instant::now();
+                let st_cpu = get_cpu_time();
                 let ret = b.work()?;
                 self.times[n] += st.elapsed();
+                self.cpu_times[n] += get_cpu_time() - st_cpu;
                 match ret {
                     BlockRet::Ok => {
                         // Block did something.
@@ -139,7 +161,13 @@ impl GraphRunner for Graph {
                 std::thread::sleep(idle_sleep);
             }
         }
-        for line in self.generate_stats(st.elapsed()).split('\n') {
+        self.spent_time = Some(st.elapsed());
+        self.spent_cpu_time = Some(get_cpu_time() - start_run_cpu);
+        for line in self
+            .generate_stats()
+            .expect("failed to generate stats after run")
+            .split('\n')
+        {
             if !line.is_empty() {
                 info!("{}", line);
             }
@@ -148,9 +176,17 @@ impl GraphRunner for Graph {
     }
 
     /// Return a string with stats about where time went.
-    fn generate_stats(&self, elapsed: std::time::Duration) -> String {
+    fn generate_stats(&self) -> Option<String> {
+        let elapsed = self.spent_time?;
+        let elapsed_cpu = self.spent_cpu_time?.as_secs_f64();
         let total = self
             .times
+            .iter()
+            .cloned()
+            .sum::<std::time::Duration>()
+            .as_secs_f64();
+        let block_cpu = self
+            .cpu_times
             .iter()
             .cloned()
             .sum::<std::time::Duration>()
@@ -164,42 +200,57 @@ impl GraphRunner for Graph {
         let ml = std::cmp::max(ml, "Elapsed seconds".len());
         let elapsed = elapsed.as_secs_f64();
 
-        let dashes = "-".repeat(ml + 20) + "\n";
+        let dashes = "-".repeat(ml + 46) + "\n";
         let (secw, secd) = (10, 3);
         let (pw, pd) = (7, 2);
 
-        let mut s: String = format!("{:<width$}    Seconds  Percent\n", "Block name", width = ml);
+        let mut s: String = format!(
+            "{:<width$}    Seconds  Percent    CPU sec     CPU%   Mul\n",
+            "Block name",
+            width = ml
+        );
         s.push_str(&dashes);
         for (n, b) in self.blocks.iter().enumerate() {
             s.push_str(&format!(
-                "{:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
+                "{:<width$} {:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
                 b.block_name(),
                 self.times[n].as_secs_f32(),
                 100.0 * self.times[n].as_secs_f64() / total,
+                self.cpu_times[n].as_secs_f32(),
+                100.0 * self.cpu_times[n].as_secs_f64() / block_cpu,
+                self.cpu_times[n].as_secs_f32() / self.times[n].as_secs_f32(),
                 width = ml,
             ));
         }
         s.push_str(&dashes);
         s.push_str(&format!(
-            "{:<width$} {total:secw$.secd$} {:>pw$.pd$}%\n",
+            "{:<width$} {total:secw$.secd$} {:>pw$.pd$}% {block_cpu:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
             "All blocks",
             100.0 * total / elapsed,
+            100.0 * block_cpu / elapsed_cpu,
+            block_cpu / elapsed,
             width = ml,
         ));
         s.push_str(&format!(
-            "{:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
+            "{:<width$} {:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
             "Non-block time",
             elapsed - total,
             100.0 * (elapsed - total) / elapsed,
+            elapsed_cpu - block_cpu,
+            100.0 * (elapsed_cpu - block_cpu) / elapsed_cpu,
+            (elapsed_cpu - block_cpu) / (elapsed - total),
             width = ml,
         ));
         s.push_str(&format!(
-            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}%\n",
+            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
             "Elapsed seconds",
             100.0,
+            elapsed_cpu,
+            100.0,
+            elapsed_cpu / elapsed,
             width = ml,
         ));
-        s
+        Some(s)
     }
 
     /// Return a cancellation token, for asynchronously stopping the

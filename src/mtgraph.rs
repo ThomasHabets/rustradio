@@ -7,7 +7,7 @@ use anyhow::Result;
 use log::{debug, error, info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::graph::CancellationToken;
+use crate::graph::{get_cpu_time, CancellationToken};
 
 /**
 A graph is a thing that RustRadio runs, to let blocks "talk to each
@@ -34,6 +34,8 @@ g.run()?;
 ```
 */
 pub struct MTGraph {
+    spent_time: Option<std::time::Duration>,
+    spent_cpu_time: Option<std::time::Duration>,
     blocks: Vec<Box<dyn Block + Send>>,
     cancel_token: CancellationToken,
     times: BTreeMap<(usize, String), std::time::Duration>,
@@ -43,6 +45,8 @@ impl MTGraph {
     /// Create a new flowgraph.
     pub fn new() -> Self {
         Self {
+            spent_time: None,
+            spent_cpu_time: None,
             blocks: Vec::new(),
             times: BTreeMap::new(),
             cancel_token: CancellationToken::new(),
@@ -136,6 +140,7 @@ impl crate::graph::GraphRunner for MTGraph {
         };
 
         let st = Instant::now();
+        let run_start_cpu = get_cpu_time();
         let mut threads = Vec::new();
         let mut index = self.blocks.len();
         while let Some(mut b) = self.blocks.pop() {
@@ -147,7 +152,7 @@ impl crate::graph::GraphRunner for MTGraph {
                 .name(b.block_name().to_string())
                 .spawn(move || -> Result<std::time::Duration> {
                     let idle_sleep = std::time::Duration::from_millis(1);
-                    let mut tt = std::time::Duration::new(0, 0);
+                    let mut tt = std::time::Duration::default();
                     while !cancel_token.is_canceled() {
                         let st = Instant::now();
                         let ret = b.work()?;
@@ -196,7 +201,9 @@ impl crate::graph::GraphRunner for MTGraph {
             self.times.insert((n, name), j);
         }
         exit_monitor.join().unwrap().unwrap();
-        for line in self.generate_stats(st.elapsed()).split('\n') {
+        self.spent_time = Some(st.elapsed());
+        self.spent_cpu_time = Some(get_cpu_time() - run_start_cpu);
+        for line in self.generate_stats().expect("can't happen").split('\n') {
             if !line.is_empty() {
                 info!("{}", line);
             }
@@ -205,7 +212,12 @@ impl crate::graph::GraphRunner for MTGraph {
     }
 
     /// Return a string with stats about where time went.
-    fn generate_stats(&self, elapsed: std::time::Duration) -> String {
+    ///
+    /// MTGraph can't measure per block CPU time, since rayon and other block
+    /// threading is not measurable.
+    fn generate_stats(&self) -> Option<String> {
+        let elapsed = self.spent_time?.as_secs_f64();
+        let elapsed_cpu = self.spent_cpu_time?.as_secs_f64();
         let total = self
             .times
             .values()
@@ -218,19 +230,21 @@ impl crate::graph::GraphRunner for MTGraph {
             .collect();
         let ml = names.iter().map(|b| b.len()).max().unwrap(); // unwrap: can only fail if block list is empty.
         let ml = std::cmp::max(ml, "Elapsed seconds".len());
-        let elapsed = elapsed.as_secs_f64();
 
-        let dashes = "-".repeat(ml + 20) + "\n";
+        let dashes = "-".repeat(ml + 46) + "\n";
         let (secw, secd) = (10, 3);
         let (pw, pd) = (7, 2);
 
-        let mut s: String = format!("{:<width$}    Seconds  Percent\n", "Block name", width = ml);
+        let mut s: String = format!(
+            "{:<width$}    Seconds  Percent     CPU sec   CPU%    Mul\n",
+            "Block name",
+            width = ml
+        );
         s.push_str(&dashes);
         for (n, tt) in self.times.values().enumerate() {
             let name = &names[n];
             s.push_str(&format!(
-                "{:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
-                name,
+                "{name:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
                 tt.as_secs_f32(),
                 100.0 * tt.as_secs_f64() / total,
                 width = ml,
@@ -243,6 +257,7 @@ impl crate::graph::GraphRunner for MTGraph {
             100.0 * total / elapsed,
             width = ml,
         ));
+        // This is nonsetse data at the moment. Skip it.
         s.push_str(&format!(
             "{:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
             "Non-block time",
@@ -251,12 +266,14 @@ impl crate::graph::GraphRunner for MTGraph {
             width = ml,
         ));
         s.push_str(&format!(
-            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}%\n",
+            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}% {elapsed_cpu:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
             "Elapsed seconds",
             100.0,
+            100.0,
+            elapsed_cpu / elapsed,
             width = ml,
         ));
-        s
+        Some(s)
     }
 
     /// Return a cancellation token, for asynchronously stopping the
@@ -285,3 +302,5 @@ impl Default for MTGraph {
         Self::new()
     }
 }
+/* vim: textwidth=80
+ */
