@@ -32,10 +32,15 @@ cargo fmt -- --check || {
 
 # Test.
 export CARGO_TARGET_DIR="$MAIN_DIR/target/test.normal"
-cargo test || {
-    echo "Tests fail without features" >&2
-    exit 1
-}
+for dir in . rustradio_macros; do
+        (
+                cd "${dir}"
+                cargo test || {
+                    echo "Tests fail without features" >&2
+                    exit 1
+                }
+        )
+done
 
 # Test with all features.
 export CARGO_TARGET_DIR="$MAIN_DIR/target/test.all"
@@ -57,10 +62,14 @@ cargo +nightly 2>/dev/null > /dev/null && {
 	echo "Benchmark builds fail" >&2
 	exit 1
     }
-    cargo +nightly clippy -- -D warnings || {
-	echo "Clippy fail" >&2
-	exit 1
-    }
+    for dir in . rustradio_macros; do
+            (
+                    cargo +nightly clippy -- -D warnings || {
+                        echo "Clippy fail" >&2
+                        exit 1
+                    }
+            )
+    done
 } || echo "Skipping nightly, because not installed"
 
 if [[ ${AI_REVIEW:-} = true ]]; then

@@ -113,8 +113,11 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 /// Most blocks should derive from `Block`. Example use:
 ///
 /// ```
+/// use rustradio::Error;
+/// use rustradio::block::{Block, BlockRet};
+/// use rustradio::stream::{ReadStream, WriteStream};
 /// #[derive(rustradio_macros::Block)]
-/// #[rustradio(new, out)]
+/// #[rustradio(new)]
 /// pub struct MyBlock<T: Copy> {
 ///   #[rustradio(in)]
 ///   src: ReadStream<T>,
@@ -124,7 +127,8 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 ///   other_parameter: u32,
 /// }
 /// impl<T: Copy> Block for MyBlock<T> {
-///   fn work(…) … {
+///   fn work(&mut self) -> Result<BlockRet, Error> {
+///     todo!()
 ///   }
 /// }
 /// ```
