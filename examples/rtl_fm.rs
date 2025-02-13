@@ -189,12 +189,13 @@ fn render(
     );
 
     // Draw spectrum.
-    let max = 200.0;
+    // TODO: this max value can't simply be sent to a fixed value.
+    let max = 40.0;
     frame.render_widget(
         Canvas::default()
             .block(Block::bordered().title("Spectrum"))
             .x_bounds([0.0, data.len() as f64])
-            .y_bounds([0.0, max])
+            .y_bounds([-10.0, max])
             .paint(move |ctx| {
                 ctx.layer();
                 let mut last = (0.0, 0.0);
