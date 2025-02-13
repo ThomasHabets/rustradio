@@ -47,7 +47,7 @@ impl Block for FftStream {
         if oo.len() < self.size {
             return Ok(BlockRet::Ok);
         }
-        oo.copy_from_slice(ii);
+        oo[..self.size].copy_from_slice(&ii[..self.size]);
         self.fft.process(oo);
         input.consume(self.size);
         o.produce(self.size, &[]);
