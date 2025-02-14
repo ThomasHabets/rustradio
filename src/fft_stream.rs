@@ -65,11 +65,11 @@ impl Block for FftStream {
         // requires input also be scratch space, and therefore mutable.
         if self.threaded {
             use rayon::prelude::*;
-            oo.par_chunks_mut(self.size).for_each(|chunk| {
+            oo.par_chunks_exact_mut(self.size).for_each(|chunk| {
                 self.fft.process(chunk);
             });
         } else {
-            oo.chunks_mut(self.size).for_each(|chunk| {
+            oo.chunks_exact_mut(self.size).for_each(|chunk| {
                 self.fft.process(chunk);
             });
         }
