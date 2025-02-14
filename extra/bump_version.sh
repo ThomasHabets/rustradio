@@ -21,6 +21,11 @@ sed -i "s/^version = \"${CURRENT?}\"/version = \"${NEW?}\"/" rustradio_macros/Ca
 # At least one of these should update Cargo.locks, I hope.
 cargo build
 cargo test
+(
+        cd rustradio_macros
+        cargo build
+        cargo test
+)
 
 git commit -a -m"Bump version to ${NEW?}"
 cargo semver-checks
