@@ -65,28 +65,22 @@ impl crate::graph::GraphRunner for MTGraph {
         let (exit_monitor, em_tx) = {
             let cancel_token = self.cancel_token.clone();
             let block_count = self.blocks.len();
-            let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, BlockRet)>(block_count);
+            let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, bool)>(block_count);
             (std::thread::Builder::new()
              .name("exit monitor".to_string())
              .spawn(move || -> Result<()> {
-                 let mut status = vec![BlockRet::Ok; block_count];
+                 let mut status = vec![false; block_count];
 
                  let mut first_phase = true;
-                 while let Ok((index, s)) = rx.recv() {
+                 while let Ok((index, mut maybe_done)) = rx.recv() {
                      // We'll skip deeper checks if we already by the
                      // received message know that we're not done.
-                     let mut maybe_done = match s {
-                         BlockRet::Ok | BlockRet::Pending |BlockRet::OutputFull => {
-                             // Bump down to first phase, if not already there.
-                             first_phase = true;
-                             false
-                         },
-                         BlockRet::Noop | BlockRet::EOF => true,
-                         BlockRet::InternalAwaiting => panic!("InternalAwaiting should never be received"),
-                     };
+                     if !maybe_done {
+                         first_phase = true;
+                     }
 
                      // Update state.
-                     status[index] = s;
+                     status[index] = maybe_done;
 
                      if !maybe_done {
                          continue;
@@ -94,26 +88,11 @@ impl crate::graph::GraphRunner for MTGraph {
 
                      // Don't bother checking all states if we already know we're not done.
                      for si in &status {
-                         match si {
-                             BlockRet::Ok | BlockRet::Pending |BlockRet::OutputFull=> {
-                                 trace!("MTGraph exit monitor: index {index} not done, has state {:?}", si);
-                                 first_phase = true;
-                                 maybe_done = false;
-                                 break;
-                             },
-                             BlockRet::Noop |BlockRet::EOF => {},
-                             BlockRet::InternalAwaiting => {
-                                 maybe_done = false;
-                                 // We can safely break here, without
-                                 // checking for more Ok/Pending,
-                                 // since the only way they could be
-                                 // set to that is if we received a
-                                 // message, and in that case we've
-                                 // already been bumped down to the
-                                 // first phase.
-                                 break;
-                             },
-                         };
+                         if !si {
+                             trace!("MTGraph exit monitor: index {index} not done, has state {:?}", si);
+                             first_phase = true;
+                             maybe_done = false;
+                         }
                      }
 
                      if maybe_done {
@@ -124,8 +103,8 @@ impl crate::graph::GraphRunner for MTGraph {
                          debug!("First phase of done detection completed. Resetting for second phase.");
                          first_phase = false;
                          for si in &mut status {
-                             if !matches![si, BlockRet::EOF] {
-                                 *si = BlockRet::InternalAwaiting;
+                             if *si {
+                                 *si = true;
                              }
                          }
                      }
@@ -164,8 +143,20 @@ impl crate::graph::GraphRunner for MTGraph {
                         };
 
                         tt += st.elapsed();
+                        let maybe_done = match ret {
+                            BlockRet::Ok | BlockRet::Pending | BlockRet::OutputFull => {
+                                // Bump down to first phase, if not already there.
+                                false
+                            }
+                            BlockRet::Noop | BlockRet::EOF => true,
+                            BlockRet::NeedMoreInput(_) => false,
+                            BlockRet::NeedMoreInputFloat(_) => false,
+                            BlockRet::InternalAwaiting => {
+                                panic!("InternalAwaiting should never be received")
+                            }
+                        };
                         em_tx
-                            .send((index, ret.clone()))
+                            .send((index, maybe_done))
                             .expect("mpsc status send failed");
                         match ret {
                             BlockRet::Ok => {}
@@ -174,6 +165,12 @@ impl crate::graph::GraphRunner for MTGraph {
                             }
                             BlockRet::Noop | BlockRet::OutputFull => {
                                 std::thread::sleep(idle_sleep);
+                            }
+                            BlockRet::NeedMoreInputFloat(stream) => {
+                                stream.wait_for_read();
+                            }
+                            BlockRet::NeedMoreInput(stream) => {
+                                stream.wait_for_read();
                             }
                             BlockRet::Pending => {
                                 std::thread::sleep(idle_sleep);

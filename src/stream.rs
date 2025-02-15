@@ -115,6 +115,10 @@ impl<T: Copy> ReadStream<T> {
         Ok(Arc::clone(&self.circ).read_buf()?)
     }
 
+    pub fn wait_for_read(&self) {
+        self.circ.wait_for_read();
+    }
+
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {

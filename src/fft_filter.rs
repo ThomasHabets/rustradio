@@ -263,6 +263,7 @@ impl<T: Engine> Block for FftFilter<T> {
                     self.nsamples,
                     o.len()
                 );
+                //return Ok(BlockRet::NeedMoreOutput(&self.dst));
                 break;
             }
             // Read so that self.buf contains exactly self.nsamples samples.
@@ -284,7 +285,7 @@ impl<T: Engine> Block for FftFilter<T> {
             // amd64, with Rust 1.7.1.
             let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
             if add < self.nsamples {
-                break;
+                return Ok(BlockRet::NeedMoreInput(&self.src));
             }
             self.buf.extend(input.iter().take(add).copied());
             input.consume(add);
@@ -315,7 +316,7 @@ impl<T: Engine> Block for FftFilter<T> {
         if produced {
             Ok(BlockRet::Ok)
         } else {
-            Ok(BlockRet::Noop)
+            Ok(BlockRet::NeedMoreInput(&self.src))
         }
     }
 }
@@ -406,7 +407,10 @@ impl<T: Engine> Block for FftFilterFloat<T> {
         // Run Complex FftFilter.
         // TODO: if fft work function fails, for some reason, then samples are
         // lost.
-        let ret = self.complex.work()?;
+        let ret = match self.complex.work()? {
+            BlockRet::NeedMoreInput(_) => BlockRet::Noop,
+            other => other,
+        };
 
         // Replicate stream write.
         {

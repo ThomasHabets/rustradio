@@ -7,7 +7,8 @@ thing, and you connect them together with streams to process the data.
 
 use anyhow::Result;
 
-use crate::Error;
+use crate::stream::ReadStream;
+use crate::{Complex, Error, Float};
 
 /** Return type for all blocks.
 
@@ -16,8 +17,8 @@ it should just never bother calling it again.
 
 TODO: Add state for "don't call me unless there's more input".
  */
-#[derive(Debug, Clone, PartialEq)]
-pub enum BlockRet {
+#[derive(Debug, Clone)]
+pub enum BlockRet<'a> {
     /// At least one sample was produced.
     ///
     /// More data may be produced only if more data comes in.
@@ -36,6 +37,10 @@ pub enum BlockRet {
     /// When all nodes in a graph produce either EOF or Noop, the graph is
     /// considered done, and the `g.run()` returns.
     Noop,
+
+    /// Waiting for more input.
+    NeedMoreInput(&'a ReadStream<Complex>),
+    NeedMoreInputFloat(&'a ReadStream<Float>),
 
     /// Produced nothing, because not enough output space.
     OutputFull,

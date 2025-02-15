@@ -151,6 +151,8 @@ impl GraphRunner for Graph {
                             eof[n] = true;
                         }
                     }
+                    BlockRet::NeedMoreInput(_stream) => {}
+                    BlockRet::NeedMoreInputFloat(_stream) => {}
                     BlockRet::EOF => {
                         eof[n] = true;
                     }
