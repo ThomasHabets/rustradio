@@ -347,12 +347,19 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     // Clamp n to be no more than the input available.
                     let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
                     if n ==  0 {
-                        return Ok(#path::block::BlockRet::Noop);
+                        return Ok(#path::block::BlockRet::WaitForStream(Box::new(|| {
+                            #(self.#in_names.wait_for_read();)*
+                        })));
                     }
                     #( let mut #out_names = self.#out_names.write_buf()?;)*
 
                     // Clamp n to be no more than output space.
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
+                    if n ==  0 {
+                        return Ok(#path::block::BlockRet::WaitForStream(Box::new(|| {
+                            #(self.#out_names.wait_for_write();)*
+                        })));
+                    }
                     let mut otags = Vec::new();
                     let empty_tags = true #(&&#in_tag_names.is_empty())*;
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {

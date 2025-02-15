@@ -238,12 +238,12 @@ impl crate::graph::GraphRunner for MTGraph {
         let ml = names.iter().map(|b| b.len()).max().unwrap(); // unwrap: can only fail if block list is empty.
         let ml = std::cmp::max(ml, "Elapsed seconds".len());
 
-        let dashes = "-".repeat(ml + 46) + "\n";
+        let dashes = "-".repeat(ml + 52) + "\n";
         let (secw, secd) = (10, 3);
         let (pw, pd) = (7, 2);
 
         let mut s: String = format!(
-            "{:<width$}    Seconds  Percent     CPU sec   CPU%    Mul Work\n",
+            "{:<width$}    Seconds  Percent     CPU sec   CPU%    Mul  Work\n",
             "Block name",
             width = ml
         );
@@ -252,7 +252,7 @@ impl crate::graph::GraphRunner for MTGraph {
             let tt = stats.elapsed;
             let name = &names[n];
             s.push_str(&format!(
-                "{name:<width$} {:secw$.secd$} {:>pw$.pd$}%                      {}\n",
+                "{name:<width$} {:secw$.secd$} {:>pw$.pd$}%                         {:7}\n",
                 tt.as_secs_f32(),
                 100.0 * tt.as_secs_f64() / total,
                 stats.work_calls,
