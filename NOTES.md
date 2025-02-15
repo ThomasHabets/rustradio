@@ -10,8 +10,10 @@
 * Think about if Cow could improve things.
 * Should blocks return weak Streamp's? Not sure. Because maybe the
   owning block gets dropped while there's still data in the Stream.
-* Some static way to prevent multiple consumers, or support multiple
-  consumers in a correct way.
+* Need a way for a block to say Noop until there's more data on a stream, or
+  room on output.
+  * Graph can then check that before calling `work`.
+  * MTGraph could condvar it.
 
 ### Internal
 
