@@ -60,7 +60,17 @@ impl Tag {
     }
 }
 
-pub(crate) const DEFAULT_STREAM_SIZE: usize = 409600;
+/// Default stream size. Must be a multiple of the system page size.
+///
+/// Larger means better batching, but more RAM used. Twice as much virtual
+/// address space as RAM is used.
+///
+/// Some experimentation with the multithreaded GraphRunner on 2025-02-15 with
+/// ax25-1200-rx, in real time:
+/// * 40_000KiB: 0.929s
+/// *  4_000KiB: 1.066
+/// *    400KiB: 1.228s
+pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
 /// ReadStream is the reading side of a stream.
 ///
