@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use anyhow::Result;
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 
 use crate::block::{Block, BlockRet};
 use crate::graph::{get_cpu_time, CancellationToken};
@@ -67,70 +67,11 @@ impl crate::graph::GraphRunner for MTGraph {
 
     /// Run the graph until completion.
     fn run(&mut self) -> Result<()> {
-        let (exit_monitor, em_tx) = {
-            let cancel_token = self.cancel_token.clone();
-            let block_count = self.blocks.len();
-            let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, bool)>(block_count);
-            (std::thread::Builder::new()
-             .name("exit monitor".to_string())
-             .spawn(move || -> Result<()> {
-                 let mut status = vec![false; block_count];
-
-                 let mut first_phase = true;
-                 while let Ok((index, mut maybe_done)) = rx.recv() {
-                     // We'll skip deeper checks if we already by the
-                     // received message know that we're not done.
-                     if !maybe_done {
-                         first_phase = true;
-                     }
-
-                     // Update state.
-                     status[index] = maybe_done;
-
-                     if !maybe_done {
-                         continue;
-                     }
-
-                     // Don't bother checking all states if we already know we're not done.
-                     for si in &status {
-                         if !si {
-                             trace!("MTGraph exit monitor: index {index} not done, has state {:?}", si);
-                             first_phase = true;
-                             maybe_done = false;
-                         }
-                     }
-
-                     if maybe_done {
-                         if !first_phase {
-                             debug!("All blocks returning done in two phases.");
-                             break;
-                         }
-                         debug!("First phase of done detection completed. Resetting for second phase.");
-                         first_phase = false;
-                         for si in &mut status {
-                             if *si {
-                                 *si = true;
-                             }
-                         }
-                     }
-                 }
-                 // Cancel all remaining blocks.
-                 cancel_token.cancel();
-
-                 // Discard remaining messages. This saves the sender getting an error on send.
-                 while rx.recv().is_ok() {}
-                 Ok(())
-                })?, tx)
-        };
-
         let st = Instant::now();
         let run_start_cpu = get_cpu_time();
         let mut threads = Vec::new();
-        let mut index = self.blocks.len();
         while let Some(mut b) = self.blocks.pop() {
-            index -= 1;
             let cancel_token = self.cancel_token.clone();
-            let em_tx = em_tx.clone();
             debug!("Starting thread {}", b.block_name());
             let th = std::thread::Builder::new()
                 .name(b.block_name().to_string())
@@ -149,30 +90,24 @@ impl crate::graph::GraphRunner for MTGraph {
                         stats.work_calls += 1;
                         let ret = b.work()?;
                         stats.elapsed += st.elapsed();
-                        let maybe_done = match ret {
-                            BlockRet::Ok | BlockRet::Pending | BlockRet::OutputFull => {
-                                // Bump down to first phase, if not already there.
-                                false
-                            }
-                            BlockRet::Noop | BlockRet::EOF => true,
-                            BlockRet::WaitForFunc(_) => true,
-                            BlockRet::InternalAwaiting => {
-                                panic!("InternalAwaiting should never be received")
-                            }
-                        };
-                        em_tx
-                            .send((index, maybe_done))
-                            .expect("mpsc status send failed");
                         match ret {
                             BlockRet::Ok => {}
                             BlockRet::EOF => {
-                                return Ok(stats);
+                                break;
                             }
                             BlockRet::Noop | BlockRet::OutputFull => {
+                                drop(ret);
+                                if b.eof() {
+                                    break;
+                                }
                                 std::thread::sleep(idle_sleep);
                             }
-                            BlockRet::WaitForFunc(f) => {
+                            BlockRet::WaitForFunc(ref f) => {
                                 f();
+                                drop(ret);
+                                if b.eof() {
+                                    break;
+                                }
                             }
                             BlockRet::Pending => {
                                 std::thread::sleep(idle_sleep);
@@ -182,6 +117,7 @@ impl crate::graph::GraphRunner for MTGraph {
                             }
                         }
                     }
+                    info!("Block {} done", b.block_name());
                     Ok(stats)
                 });
             let th = match th {
@@ -194,7 +130,6 @@ impl crate::graph::GraphRunner for MTGraph {
             };
             threads.push(th);
         }
-        drop(em_tx);
         debug!("Joining threads");
         for (n, th) in threads.into_iter().rev().enumerate() {
             let name = th.thread().name().unwrap().to_string();
@@ -206,7 +141,6 @@ impl crate::graph::GraphRunner for MTGraph {
             debug!("Thread {} finished with {:?}", name, j);
             self.block_stats.insert((n, name), j);
         }
-        exit_monitor.join().unwrap().unwrap();
         self.spent_time = Some(st.elapsed());
         self.spent_cpu_time = Some(get_cpu_time() - run_start_cpu);
         for line in self.generate_stats().expect("can't happen").split('\n') {

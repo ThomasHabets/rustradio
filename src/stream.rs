@@ -123,15 +123,16 @@ impl<T: Copy> ReadStream<T> {
     #[must_use]
     pub fn eof(&self) -> bool {
         // Fast path.
-        if Arc::strong_count(&self.circ) != 1 {
+        let refcount = Arc::strong_count(&self.circ);
+        if refcount != 1 {
             return false;
         }
-        // TODO: can we remove this needless clone?
-        match Arc::clone(&self.circ).read_buf() {
-            Ok((b, _)) if !b.is_empty() => false,
-            Err(_) => false,
-            Ok(_) => Arc::strong_count(&self.circ) == 1,
-        }
+        // Refcount 1 means that that the WriteStream has closed. No more data is coming. So as
+        // long as the buffer is empty, that's it then.
+        let (b, _) = Arc::clone(&self.circ)
+            .read_buf()
+            .expect("can't happen: read_buf() failed");
+        b.is_empty()
     }
 }
 

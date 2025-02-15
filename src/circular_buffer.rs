@@ -467,6 +467,8 @@ impl<T: Copy> Buffer<T> {
     }
 
     /// Get the read slice.
+    ///
+    /// TODO: no need for Result in API.
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let s = self.state.0.lock().unwrap();
         let (start, end) = s.read_range();

@@ -42,7 +42,7 @@ Under development.
 TODO: implement real EOF handling.
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, nevereof)]
+#[rustradio(crate)]
 pub struct SymbolSync {
     sps: Float,
     max_deviation: Float,
