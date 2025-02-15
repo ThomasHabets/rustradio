@@ -5,7 +5,7 @@
 * https://youtu.be/uMEfx_l5Oxk
 */
 use anyhow::Result;
-use log::{debug, warn};
+use log::{trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::iir_filter::CappedFilter;
@@ -178,9 +178,10 @@ impl Block for SymbolSync {
                         while self.next_sym_middle < self.stream_pos {
                             self.next_sym_middle += self.clock;
                         }
-                        debug!(
+                        trace!(
                             "SymbolSync: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
-                            self.stream_pos, self.clock
+                            self.stream_pos,
+                            self.clock
                         );
                     }
                 }
