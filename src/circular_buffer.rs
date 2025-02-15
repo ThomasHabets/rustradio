@@ -355,8 +355,12 @@ impl<T> Buffer<T> {
     pub fn wait_for_read(&self) -> usize {
         let (lock, cv) = &*self.state;
         let mut s = lock.lock().unwrap();
-        while s.used == 0 {
-            s = cv.wait(s).unwrap();
+        // TODO: this should be a 'while', but it also needs to check for EOF.
+        if s.used == 0 {
+            let (s2, _) = cv
+                .wait_timeout(s, std::time::Duration::from_millis(100))
+                .unwrap();
+            s = s2;
         }
         s.used
     }

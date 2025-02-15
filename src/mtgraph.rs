@@ -149,8 +149,8 @@ impl crate::graph::GraphRunner for MTGraph {
                                 false
                             }
                             BlockRet::Noop | BlockRet::EOF => true,
-                            BlockRet::NeedMoreInput(_) => false,
-                            BlockRet::NeedMoreInputFloat(_) => false,
+                            BlockRet::NeedMoreInput(_) => true,
+                            BlockRet::NeedMoreInputFloat(_) => true,
                             BlockRet::InternalAwaiting => {
                                 panic!("InternalAwaiting should never be received")
                             }

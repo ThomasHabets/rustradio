@@ -115,7 +115,7 @@ impl Block for SymbolSync {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::NeedMoreInputFloat(&self.src));
         }
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {

@@ -52,9 +52,9 @@ mod tests {
     #[test]
     fn empty() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![]);
-        assert_eq!(src.work()?, BlockRet::EOF);
+        assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
-        assert_eq!(dec.work()?, BlockRet::Noop);
+        assert!(matches![dec.work()?, BlockRet::Noop]);
         let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 0);
         Ok(())
@@ -63,10 +63,10 @@ mod tests {
     #[test]
     fn some_input() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0, 13]);
-        assert_eq!(src.work()?, BlockRet::Ok);
-        assert_eq!(src.work()?, BlockRet::EOF);
+        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
-        assert_eq!(dec.work()?, BlockRet::Ok);
+        assert!(matches![dec.work()?, BlockRet::Ok]);
         let (res, _) = dec_out.read_buf()?;
         // Probably this should compare close to, but not equal.
         assert_eq!(
@@ -92,10 +92,10 @@ mod tests {
     #[test]
     fn uneven() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0]);
-        assert_eq!(src.work()?, BlockRet::Ok);
-        assert_eq!(src.work()?, BlockRet::EOF);
+        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
-        assert_eq!(dec.work()?, BlockRet::Ok);
+        assert!(matches![dec.work()?, BlockRet::Ok]);
         let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 2);
         Ok(())
@@ -105,18 +105,18 @@ mod tests {
     fn overflow() -> crate::Result<()> {
         // Input is pairs of bytes. Output is complex, meaning a 4x increase. That won't fit.
         let (mut src, src_out) = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE]);
-        assert_eq!(src.work()?, BlockRet::Ok);
-        assert_eq!(src.work()?, BlockRet::EOF);
+        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         for n in 0..4 {
             eprintln!("loop iter: {n}");
-            assert_eq!(dec.work()?, BlockRet::Ok);
+            assert!(matches![dec.work()?, BlockRet::Ok]);
             let (res, _) = dec_out.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE / 8);
             res.consume(crate::stream::DEFAULT_STREAM_SIZE / 8);
         }
         // Finally there's no more input bytes to process.
-        assert_eq!(dec.work()?, BlockRet::Noop);
+        assert!(matches![dec.work()?, BlockRet::Noop]);
         Ok(())
     }
 }

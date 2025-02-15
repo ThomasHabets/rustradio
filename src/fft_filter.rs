@@ -408,7 +408,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
         // TODO: if fft work function fails, for some reason, then samples are
         // lost.
         let ret = match self.complex.work()? {
-            BlockRet::NeedMoreInput(_) => BlockRet::Noop,
+            BlockRet::NeedMoreInput(_) => BlockRet::NeedMoreInputFloat(&self.src),
             other => other,
         };
 

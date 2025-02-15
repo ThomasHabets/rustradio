@@ -84,8 +84,8 @@ fn bench_fft_filter(b: &mut Bencher) {
             let n = out.len();
             out.consume(n);
         }
-        assert_eq!(BlockRet::Ok, filter.work().unwrap());
-        assert_eq!(BlockRet::Noop, filter.work().unwrap());
+        assert!(matches![filter.work().unwrap(), BlockRet::Ok]);
+        assert!(matches![filter.work().unwrap(), BlockRet::Noop]);
     });
 }
 
