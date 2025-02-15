@@ -77,6 +77,14 @@ impl Block for Hilbert {
         let len = self.history.len() + inout;
         let n = len - self.ntaps;
 
+        // TODO: combine this check with the i.is_empty() check above.
+        if n == 0 {
+            return Ok(BlockRet::WaitForStream(Box::new(|| {
+                self.src.wait_for_read();
+                self.dst.wait_for_write();
+            })));
+        }
+
         // TODO: Probably needless copy.
         let mut iv = Vec::with_capacity(len);
         iv.extend(&self.history);
