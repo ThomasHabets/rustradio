@@ -11,6 +11,7 @@ use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
+use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, Float};
 
 const SPECTRUM_SIZE: usize = 1024;
@@ -63,6 +64,10 @@ struct Opt {
     /// Audio output rate.
     #[arg(default_value = "48000")]
     audio_rate: u32,
+
+    /// Run with multithreaded scheduler.
+    #[arg(long)]
+    multithread: bool,
 }
 
 macro_rules! blehbleh {
@@ -258,7 +263,11 @@ fn main() -> Result<()> {
         }
     });
 
-    let mut g = Graph::new();
+    let mut g: Box<dyn GraphRunner> = if opt.multithread {
+        Box::new(MTGraph::new())
+    } else {
+        Box::new(Graph::new())
+    };
     let samp_rate = 1_024_000.0;
 
     let prev = if let Some(filename) = opt.filename {
