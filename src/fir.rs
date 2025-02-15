@@ -169,12 +169,19 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
+        // TODO: is this right, with the "plus one"?
+        let need = self.ntaps + 1;
         let (input, tags) = self.src.read_buf()?;
-        let mut out = self.dst.write_buf()?;
-        let n = std::cmp::min(input.len(), out.len());
-        if n <= self.ntaps {
-            return Ok(BlockRet::Noop);
+        if input.len() < need {
+            return Ok(BlockRet::WaitForStream(&self.src, need));
         }
+
+        let mut out = self.dst.write_buf()?;
+        if out.len() < need {
+            return Ok(BlockRet::WaitForStream(&self.dst, need));
+        }
+
+        let n = std::cmp::min(input.len(), out.len());
         let v = self.fir.filter_n(&input.slice()[..n]);
         assert!(v.len() <= n);
         let n = v.len();

@@ -84,8 +84,10 @@ fn bench_fft_filter(b: &mut Bencher) {
             let n = out.len();
             out.consume(n);
         }
-        assert_eq!(BlockRet::Ok, filter.work().unwrap());
-        assert_eq!(BlockRet::Noop, filter.work().unwrap());
+        assert!(matches![
+            filter.work().unwrap(),
+            BlockRet::WaitForStream(_, _)
+        ]);
     });
 }
 
@@ -111,8 +113,8 @@ fn bench_fir_filter(b: &mut Bencher) {
         loop {
             match filter.work().unwrap() {
                 BlockRet::Ok => continue,
-                BlockRet::Noop => break,
-                other => panic!("FIRFilter returned {other:?}"),
+                BlockRet::WaitForStream(_, _) => break,
+                _other => panic!("FIRFilter returned bad state"),
             }
         }
     });

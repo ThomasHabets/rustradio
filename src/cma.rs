@@ -51,13 +51,17 @@ impl Block for CmaEqualizer {
         let mut output = self.dst.write_buf()?;
 
         let is = input.slice();
+        if is.len() < self.taps.len() {
+            return Ok(BlockRet::WaitForStream(&self.src, self.taps.len()));
+        }
+
         let os = output.slice();
+        if os.len() < self.taps.len() {
+            return Ok(BlockRet::WaitForStream(&self.dst, self.taps.len()));
+        }
 
         let len = std::cmp::min(is.len(), os.len());
         let len = std::cmp::min(self.taps.len(), len);
-        if len != self.taps.len() {
-            return Ok(BlockRet::Noop);
-        }
 
         // Process samples using CMA.
         for i in 0..len {

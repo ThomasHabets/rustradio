@@ -252,19 +252,17 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
 impl<T: Engine> Block for FftFilter<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: multithread this.
-        let mut produced = false;
         loop {
-            let (input, tags) = self.src.read_buf()?;
             let mut o = self.dst.write_buf()?;
-
             if self.nsamples > o.len() {
                 trace!(
                     "FftFilter: Need {} output space, only have {}",
                     self.nsamples,
                     o.len()
                 );
-                break;
+                return Ok(BlockRet::WaitForStream(&self.dst, self.nsamples));
             }
+            let (input, tags) = self.src.read_buf()?;
             // Read so that self.buf contains exactly self.nsamples samples.
             //
             // Yes, this part is weird. It evolved into this, but any
@@ -284,7 +282,10 @@ impl<T: Engine> Block for FftFilter<T> {
             // amd64, with Rust 1.7.1.
             let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
             if add < self.nsamples {
-                break;
+                return Ok(BlockRet::WaitForStream(
+                    &self.src,
+                    self.nsamples - self.buf.len(),
+                ));
             }
             self.buf.extend(input.iter().take(add).copied());
             input.consume(add);
@@ -302,7 +303,6 @@ impl<T: Engine> Block for FftFilter<T> {
             // TODO: needless copy?
             o.fill_from_slice(&self.buf[..self.nsamples]);
             o.produce(self.nsamples, &tags);
-            produced = true;
 
             // Stash tail.
             for i in 0..self.tail.len() {
@@ -311,11 +311,6 @@ impl<T: Engine> Block for FftFilter<T> {
 
             // Clear buffer. Per above performance comment.
             self.buf.clear();
-        }
-        if produced {
-            Ok(BlockRet::Ok)
-        } else {
-            Ok(BlockRet::Noop)
         }
     }
 }
@@ -420,7 +415,20 @@ impl<T: Engine> Block for FftFilterFloat<T> {
             inner_from.consume(n);
             outer_to.produce(n, &tags);
         }
-        Ok(ret)
+
+        // Replace the inner stream wait with an outer stream wait.
+
+        Ok(match ret {
+            BlockRet::WaitForStream(_, need) => {
+                let src = &self.src;
+                let dst = &self.dst;
+                BlockRet::WaitForFunc(Box::new(move || {
+                    src.wait_for_read(need);
+                    dst.wait_for_write(need);
+                }))
+            }
+            other => other,
+        })
     }
 }
 

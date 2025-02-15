@@ -122,7 +122,7 @@ impl Block for RtlSdrSource {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         if !self.buf.is_empty() {
             let n = std::cmp::min(o.len(), self.buf.len());

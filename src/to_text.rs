@@ -52,17 +52,12 @@ impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
         // aquires samples.  Ideally it should process
         // min(self.srcs...) samples, or until output buffer is full,
         // all in one lock.
-        let mut empty = true;
-        loop {
+        let cur_block = 'outer: loop {
             let mut outs = Vec::new();
-            for src in &mut self.srcs {
+            for (cur_block, src) in self.srcs.iter_mut().enumerate() {
                 let (i, tags) = src.read_buf()?;
                 if i.is_empty() {
-                    if empty {
-                        return Ok(BlockRet::Noop);
-                    } else {
-                        return Ok(BlockRet::Ok);
-                    }
+                    break 'outer cur_block;
                 }
                 let mut s: String = format!("{:?}", i.slice()[0]);
                 if !tags.is_empty() && tags[0].pos() == 0 {
@@ -77,11 +72,10 @@ impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
                 }
                 outs.push(s);
             }
-            empty = false;
             let out = (outs.join(" ") + "\n").into_bytes();
             let mut o = self.dst.write_buf()?;
             if out.len() > o.len() {
-                return Ok(BlockRet::Ok);
+                return Ok(BlockRet::WaitForStream(&self.dst, out.len()));
             }
             o.slice()[..out.len()].copy_from_slice(&out);
             o.produce(out.len(), &[]);
@@ -89,6 +83,7 @@ impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
                 let (i, _tags) = src.read_buf()?;
                 i.consume(1);
             }
-        }
+        };
+        Ok(BlockRet::WaitForStream(&self.srcs[cur_block], 1))
     }
 }

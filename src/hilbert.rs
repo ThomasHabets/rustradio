@@ -61,17 +61,25 @@ impl Block for Hilbert {
         let (ii, tags) = self.src.read_buf()?;
         let i = ii.slice();
         if i.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let mut oo = self.dst.write_buf()?;
         let o = oo.slice();
         if o.is_empty() {
-            return Ok(BlockRet::OutputFull);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
 
         let inout = std::cmp::min(i.len(), o.len());
         let len = self.history.len() + inout;
         let n = len - self.ntaps;
+
+        // TODO: combine this check with the i.is_empty() check above.
+        if n == 0 {
+            return Ok(BlockRet::WaitForFunc(Box::new(|| {
+                self.src.wait_for_read(1);
+                self.dst.wait_for_write(1);
+            })));
+        }
 
         // TODO: Probably needless copy.
         let mut iv = Vec::with_capacity(len);

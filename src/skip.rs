@@ -20,7 +20,7 @@ impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, tags) = self.src.read_buf()?;
         if i.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let mut o = self.dst.write_buf()?;
 

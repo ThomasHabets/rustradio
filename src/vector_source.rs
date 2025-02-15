@@ -115,7 +115,7 @@ where
         }
         let mut os = self.dst.write_buf()?;
         if os.is_empty() {
-            return Ok(BlockRet::OutputFull);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         let n = std::cmp::min(os.len(), self.data.len() - self.pos);
         os.fill_from_slice(&self.data[self.pos..(self.pos + n)]);
@@ -137,14 +137,14 @@ mod tests {
     #[test]
     fn empty() -> Result<()> {
         let (mut src, _) = VectorSource::<u8>::new(vec![]);
-        assert_eq!(src.work()?, BlockRet::EOF);
+        assert!(matches![src.work()?, BlockRet::EOF]);
         Ok(())
     }
 
     #[test]
     fn some() -> Result<()> {
         let (mut src, os) = VectorSource::new(vec![1u8, 2, 3]);
-        assert_eq!(src.work()?, BlockRet::Ok);
+        assert!(matches![src.work()?, BlockRet::Ok]);
         let (res, _) = os.read_buf()?;
         assert_eq!(res.slice(), &[1, 2, 3]);
         Ok(())
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn max() -> Result<()> {
         let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE]);
-        assert_eq!(src.work()?, BlockRet::Ok);
+        assert!(matches![src.work()?, BlockRet::Ok]);
         let (res, _) = os.read_buf()?;
         assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
         Ok(())
@@ -162,23 +162,23 @@ mod tests {
     #[test]
     fn very_large() -> Result<()> {
         let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE + 100]);
-        assert_eq!(src.work()?, BlockRet::Ok);
+        assert!(matches![src.work()?, BlockRet::Ok]);
         {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
         }
-        assert_eq!(src.work()?, BlockRet::OutputFull);
+        assert!(matches![src.work()?, BlockRet::WaitForStream(_, _)]);
         {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
             res.consume(crate::stream::DEFAULT_STREAM_SIZE);
         }
-        assert_eq!(src.work()?, BlockRet::Ok);
+        assert!(matches![src.work()?, BlockRet::Ok]);
         {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), 100);
         }
-        assert_eq!(src.work()?, BlockRet::EOF);
+        assert!(matches![src.work()?, BlockRet::EOF]);
         Ok(())
     }
 }

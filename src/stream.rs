@@ -4,7 +4,7 @@ Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
 */
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use crate::circular_buffer;
 use crate::{Error, Float, Len};
@@ -72,6 +72,24 @@ impl Tag {
 /// *    400KiB: 1.228s
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
+/// Wait on a stream.
+///
+/// For ReadStream, wait until there's enough to read.
+/// For WriteStream, wait until there's enough to write something.
+pub trait StreamWait {
+    fn wait(&self, need: usize);
+}
+impl<T: Copy> StreamWait for ReadStream<T> {
+    fn wait(&self, need: usize) {
+        self.wait_for_read(need);
+    }
+}
+impl<T: Copy> StreamWait for WriteStream<T> {
+    fn wait(&self, need: usize) {
+        self.wait_for_write(need);
+    }
+}
+
 /// ReadStream is the reading side of a stream.
 ///
 /// From the ReadStream you can get windows into the current stream by calling
@@ -115,19 +133,24 @@ impl<T: Copy> ReadStream<T> {
         Ok(Arc::clone(&self.circ).read_buf()?)
     }
 
+    pub fn wait_for_read(&self, need: usize) {
+        self.circ.wait_for_read(need);
+    }
+
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
         // Fast path.
-        if Arc::strong_count(&self.circ) != 1 {
+        let refcount = Arc::strong_count(&self.circ);
+        if refcount != 1 {
             return false;
         }
-        // TODO: can we remove this needless clone?
-        match Arc::clone(&self.circ).read_buf() {
-            Ok((b, _)) if !b.is_empty() => false,
-            Err(_) => false,
-            Ok(_) => Arc::strong_count(&self.circ) == 1,
-        }
+        // Refcount 1 means that that the WriteStream has closed. No more data is coming. So as
+        // long as the buffer is empty, that's it then.
+        let (b, _) = Arc::clone(&self.circ)
+            .read_buf()
+            .expect("can't happen: read_buf() failed");
+        b.is_empty()
     }
 }
 
@@ -176,6 +199,10 @@ impl<T: Copy> WriteStream<T> {
         }
         Ok(Arc::clone(&self.circ).write_buf()?)
     }
+
+    pub fn wait_for_write(&self, need: usize) {
+        self.circ.wait_for_write(need);
+    }
 }
 
 /// Create a new stream for data elements that implements Copy.
@@ -192,12 +219,32 @@ pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
 
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NCReadStream<T> {
-    q: Arc<Mutex<VecDeque<T>>>,
+    q: Arc<(Mutex<VecDeque<T>>, Condvar)>,
+}
+
+impl<T> StreamWait for NCReadStream<T> {
+    fn wait(&self, need: usize) {
+        let (lock, cv) = &*self.q;
+        let _ = cv
+            .wait_timeout_while(
+                lock.lock().unwrap(),
+                std::time::Duration::from_millis(100),
+                |s| s.len() < need,
+            )
+            .unwrap();
+    }
+}
+
+impl<T> StreamWait for NCWriteStream<T> {
+    fn wait(&self, _need: usize) {
+        // TODO: we should have a maximum, shouldn't we?
+        // For now, as much room as you need.
+    }
 }
 
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NCWriteStream<T> {
-    q: Arc<Mutex<VecDeque<T>>>,
+    q: Arc<(Mutex<VecDeque<T>>, Condvar)>,
 }
 
 /// Create a new stream for data elements that do not implement Copy.
@@ -206,7 +253,7 @@ pub struct NCWriteStream<T> {
 /// which you would not want to just copy willy nilly.
 #[must_use]
 pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
-    let q = Arc::new(Mutex::new(VecDeque::new()));
+    let q = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
     (NCWriteStream { q: q.clone() }, NCReadStream { q })
 }
 
@@ -215,14 +262,17 @@ impl<T> NCReadStream<T> {
     /// Ideally this should only be NoCopy.
     #[must_use]
     pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
+        let (lock, cv) = &*self.q;
         // TODO: attach tags.
-        self.q.lock().unwrap().pop_front().map(|v| (v, Vec::new()))
+        let ret = lock.lock().unwrap().pop_front().map(|v| (v, Vec::new()));
+        cv.notify_all();
+        ret
     }
 
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
-        if !self.q.lock().unwrap().is_empty() {
+        if !self.q.0.lock().unwrap().is_empty() {
             false
         } else {
             Arc::strong_count(&self.q) == 1
@@ -236,13 +286,16 @@ impl<T> NCWriteStream<T> {
     ///
     /// TODO: Actually store the tags.
     pub fn push(&self, val: T, _tags: &[Tag]) {
-        self.q.lock().unwrap().push_back(val);
+        let (lock, cv) = &*self.q;
+        // TODO: attach tags.
+        lock.lock().unwrap().push_back(val);
+        cv.notify_all();
     }
 }
 
 impl<T: Len> NCReadStream<T> {
     /// Get the size of the front packet.
     pub fn peek_size(&self) -> Option<usize> {
-        self.q.lock().unwrap().front().map(|e| e.len())
+        self.q.0.lock().unwrap().front().map(|e| e.len())
     }
 }

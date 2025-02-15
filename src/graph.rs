@@ -130,32 +130,33 @@ impl GraphRunner for Graph {
                 let st_cpu = get_cpu_time();
                 let ret = b.work()?;
 
-                // TODO: should we only count time and CPU time spent if Noop
-                // was not returned?
-                // if !matches![ret, BlockRet::Noop] {
-
                 self.times[n] += st.elapsed();
                 self.cpu_times[n] += get_cpu_time() - st_cpu;
                 match ret {
                     BlockRet::Ok => {
+                        drop(ret);
                         // Block did something.
                         trace!("… {} was not starved", b.block_name());
                         done = false;
                         all_idle = false;
                     }
-                    BlockRet::Pending | BlockRet::OutputFull => {
+                    BlockRet::Pending => {
                         done = false;
                     }
-                    BlockRet::Noop => {
+                    BlockRet::WaitForFunc(_) => {
+                        drop(ret);
+                        if b.eof() {
+                            eof[n] = true;
+                        }
+                    }
+                    BlockRet::WaitForStream(_stream, _need) => {
+                        drop(ret);
                         if b.eof() {
                             eof[n] = true;
                         }
                     }
                     BlockRet::EOF => {
                         eof[n] = true;
-                    }
-                    BlockRet::InternalAwaiting => {
-                        panic!("blocks must never return InternalAwaiting")
                     }
                 };
             }

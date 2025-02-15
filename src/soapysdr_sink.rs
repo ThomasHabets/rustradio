@@ -100,8 +100,9 @@ impl Block for SoapySdrSink {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let timeout_us = 10_000;
         let (i, _tags) = self.src.read_buf()?;
-        if i.len() == 0 {
-            return Ok(BlockRet::Noop);
+        let ilen = i.len();
+        if ilen == 0 {
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         // debug!("writing {}", i.slice().len());
         let n = match self.stream.write(
@@ -119,6 +120,10 @@ impl Block for SoapySdrSink {
             }
         };
         i.consume(n);
-        Ok(BlockRet::Noop)
+        if ilen == n {
+            Ok(BlockRet::WaitForStream(&self.src, 1))
+        } else {
+            Ok(BlockRet::Ok)
+        }
     }
 }

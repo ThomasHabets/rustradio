@@ -81,11 +81,11 @@ impl Block for ZeroCrossing {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         let mut n = 0;
         let mut opos = 0;

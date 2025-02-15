@@ -171,6 +171,6 @@ impl Block for AudioSink {
         }
         i.consume(n);
 
-        Ok(BlockRet::Noop)
+        Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }

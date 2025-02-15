@@ -43,7 +43,7 @@ where
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let packet = match self.src.pop() {
-            None => return Ok(BlockRet::Noop),
+            None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some((x, _tags)) => x,
         };
         let name = SystemTime::now()

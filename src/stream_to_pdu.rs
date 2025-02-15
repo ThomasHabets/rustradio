@@ -92,7 +92,7 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
 
         // TODO: we actually only care about one single tag,

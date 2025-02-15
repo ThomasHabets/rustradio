@@ -4,11 +4,16 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use anyhow::Result;
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 
 use crate::block::{Block, BlockRet};
 use crate::graph::{get_cpu_time, CancellationToken};
 
+#[derive(Default, Debug)]
+struct BlockStats {
+    elapsed: std::time::Duration,
+    work_calls: usize,
+}
 /**
 A graph is a thing that RustRadio runs, to let blocks "talk to each
 other" via streams.
@@ -38,7 +43,7 @@ pub struct MTGraph {
     spent_cpu_time: Option<std::time::Duration>,
     blocks: Vec<Box<dyn Block + Send>>,
     cancel_token: CancellationToken,
-    times: BTreeMap<(usize, String), std::time::Duration>,
+    block_stats: BTreeMap<(usize, String), BlockStats>,
 }
 
 impl MTGraph {
@@ -48,7 +53,7 @@ impl MTGraph {
             spent_time: None,
             spent_cpu_time: None,
             blocks: Vec::new(),
-            times: BTreeMap::new(),
+            block_stats: BTreeMap::new(),
             cancel_token: CancellationToken::new(),
         }
     }
@@ -62,99 +67,20 @@ impl crate::graph::GraphRunner for MTGraph {
 
     /// Run the graph until completion.
     fn run(&mut self) -> Result<()> {
-        let (exit_monitor, em_tx) = {
-            let cancel_token = self.cancel_token.clone();
-            let block_count = self.blocks.len();
-            let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, BlockRet)>(block_count);
-            (std::thread::Builder::new()
-             .name("exit monitor".to_string())
-             .spawn(move || -> Result<()> {
-                 let mut status = vec![BlockRet::Ok; block_count];
-
-                 let mut first_phase = true;
-                 while let Ok((index, s)) = rx.recv() {
-                     // We'll skip deeper checks if we already by the
-                     // received message know that we're not done.
-                     let mut maybe_done = match s {
-                         BlockRet::Ok | BlockRet::Pending |BlockRet::OutputFull => {
-                             // Bump down to first phase, if not already there.
-                             first_phase = true;
-                             false
-                         },
-                         BlockRet::Noop | BlockRet::EOF => true,
-                         BlockRet::InternalAwaiting => panic!("InternalAwaiting should never be received"),
-                     };
-
-                     // Update state.
-                     status[index] = s;
-
-                     if !maybe_done {
-                         continue;
-                     }
-
-                     // Don't bother checking all states if we already know we're not done.
-                     for si in &status {
-                         match si {
-                             BlockRet::Ok | BlockRet::Pending |BlockRet::OutputFull=> {
-                                 trace!("MTGraph exit monitor: index {index} not done, has state {:?}", si);
-                                 first_phase = true;
-                                 maybe_done = false;
-                                 break;
-                             },
-                             BlockRet::Noop |BlockRet::EOF => {},
-                             BlockRet::InternalAwaiting => {
-                                 maybe_done = false;
-                                 // We can safely break here, without
-                                 // checking for more Ok/Pending,
-                                 // since the only way they could be
-                                 // set to that is if we received a
-                                 // message, and in that case we've
-                                 // already been bumped down to the
-                                 // first phase.
-                                 break;
-                             },
-                         };
-                     }
-
-                     if maybe_done {
-                         if !first_phase {
-                             debug!("All blocks returning done in two phases.");
-                             break;
-                         }
-                         debug!("First phase of done detection completed. Resetting for second phase.");
-                         first_phase = false;
-                         for si in &mut status {
-                             if !matches![si, BlockRet::EOF] {
-                                 *si = BlockRet::InternalAwaiting;
-                             }
-                         }
-                     }
-                 }
-                 // Cancel all remaining blocks.
-                 cancel_token.cancel();
-
-                 // Discard remaining messages. This saves the sender getting an error on send.
-                 while rx.recv().is_ok() {}
-                 Ok(())
-                })?, tx)
-        };
-
         let st = Instant::now();
         let run_start_cpu = get_cpu_time();
         let mut threads = Vec::new();
-        let mut index = self.blocks.len();
         while let Some(mut b) = self.blocks.pop() {
-            index -= 1;
             let cancel_token = self.cancel_token.clone();
-            let em_tx = em_tx.clone();
             debug!("Starting thread {}", b.block_name());
             let th = std::thread::Builder::new()
                 .name(b.block_name().to_string())
-                .spawn(move || -> Result<std::time::Duration> {
+                .spawn(move || -> Result<BlockStats> {
                     let idle_sleep = std::time::Duration::from_millis(1);
-                    let mut tt = std::time::Duration::default();
+                    let mut stats = BlockStats::default();
                     while !cancel_token.is_canceled() {
                         let st = Instant::now();
+                        stats.work_calls += 1;
                         let ret = match b.work() {
                             Ok(v) => v,
                             Err(e) => {
@@ -162,28 +88,33 @@ impl crate::graph::GraphRunner for MTGraph {
                                 return Err(e.into());
                             }
                         };
-
-                        tt += st.elapsed();
-                        em_tx
-                            .send((index, ret.clone()))
-                            .expect("mpsc status send failed");
+                        stats.elapsed += st.elapsed();
                         match ret {
                             BlockRet::Ok => {}
                             BlockRet::EOF => {
-                                return Ok(tt);
+                                break;
                             }
-                            BlockRet::Noop | BlockRet::OutputFull => {
-                                std::thread::sleep(idle_sleep);
+                            BlockRet::WaitForStream(stream, need) => {
+                                stream.wait(need);
+                                drop(ret);
+                                if b.eof() {
+                                    break;
+                                }
+                            }
+                            BlockRet::WaitForFunc(ref f) => {
+                                f();
+                                drop(ret);
+                                if b.eof() {
+                                    break;
+                                }
                             }
                             BlockRet::Pending => {
                                 std::thread::sleep(idle_sleep);
                             }
-                            BlockRet::InternalAwaiting => {
-                                panic!("blocks must never return InternalAwaiting")
-                            }
                         }
                     }
-                    Ok(tt)
+                    info!("Block {} done", b.block_name());
+                    Ok(stats)
                 });
             let th = match th {
                 Err(x) => {
@@ -195,7 +126,6 @@ impl crate::graph::GraphRunner for MTGraph {
             };
             threads.push(th);
         }
-        drop(em_tx);
         debug!("Joining threads");
         for (n, th) in threads.into_iter().rev().enumerate() {
             let name = th.thread().name().unwrap().to_string();
@@ -205,9 +135,8 @@ impl crate::graph::GraphRunner for MTGraph {
                 .expect("joining thread")
                 .expect("block exit status");
             debug!("Thread {} finished with {:?}", name, j);
-            self.times.insert((n, name), j);
+            self.block_stats.insert((n, name), j);
         }
-        exit_monitor.join().unwrap().unwrap();
         self.spent_time = Some(st.elapsed());
         self.spent_cpu_time = Some(get_cpu_time() - run_start_cpu);
         for line in self.generate_stats().expect("can't happen").split('\n') {
@@ -226,34 +155,37 @@ impl crate::graph::GraphRunner for MTGraph {
         let elapsed = self.spent_time?.as_secs_f64();
         let elapsed_cpu = self.spent_cpu_time?.as_secs_f64();
         let total = self
-            .times
+            .block_stats
             .values()
+            .map(|b| b.elapsed)
             .sum::<std::time::Duration>()
             .as_secs_f64();
         let names: Vec<String> = self
-            .times
+            .block_stats
             .keys()
             .map(|(n, name)| format!("{}/{}", name, n))
             .collect();
         let ml = names.iter().map(|b| b.len()).max().unwrap(); // unwrap: can only fail if block list is empty.
         let ml = std::cmp::max(ml, "Elapsed seconds".len());
 
-        let dashes = "-".repeat(ml + 46) + "\n";
+        let dashes = "-".repeat(ml + 52) + "\n";
         let (secw, secd) = (10, 3);
         let (pw, pd) = (7, 2);
 
         let mut s: String = format!(
-            "{:<width$}    Seconds  Percent     CPU sec   CPU%    Mul\n",
+            "{:<width$}    Seconds  Percent     CPU sec   CPU%    Mul  Work\n",
             "Block name",
             width = ml
         );
         s.push_str(&dashes);
-        for (n, tt) in self.times.values().enumerate() {
+        for (n, stats) in self.block_stats.values().enumerate() {
+            let tt = stats.elapsed;
             let name = &names[n];
             s.push_str(&format!(
-                "{name:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
+                "{name:<width$} {:secw$.secd$} {:>pw$.pd$}%                         {:7}\n",
                 tt.as_secs_f32(),
                 100.0 * tt.as_secs_f64() / total,
+                stats.work_calls,
                 width = ml,
             ));
         }

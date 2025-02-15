@@ -32,6 +32,9 @@ where
         let (i, _) = self.src.read_buf()?;
         let n = i.len();
         i.consume(n);
-        Ok(BlockRet::Noop)
+        // While we could discard in larger batches, making NullSink more
+        // efficient, that risks needlessly blocking the previous block for lack
+        // of output space.
+        Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }

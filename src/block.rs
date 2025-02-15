@@ -7,6 +7,7 @@ thing, and you connect them together with streams to process the data.
 
 use anyhow::Result;
 
+use crate::stream::StreamWait;
 use crate::Error;
 
 /** Return type for all blocks.
@@ -16,29 +17,33 @@ it should just never bother calling it again.
 
 TODO: Add state for "don't call me unless there's more input".
  */
-#[derive(Debug, Clone, PartialEq)]
-pub enum BlockRet {
-    /// At least one sample was produced.
+//#[derive(Debug)]
+pub enum BlockRet<'a> {
+    /// Everything is fine, but no information about when more data could be
+    /// created.
     ///
-    /// More data may be produced only if more data comes in.
-    ///
-    /// Ideally the difference between Noop and Ok would be inferred, but since
-    /// the input and output streams are owned by the block, we don't yet see
-    /// that.
+    /// TODO: This and Pending should work things out between each other.
     Ok,
 
     /// Block didn't produce anything this time, but has a background
     /// process that may suddenly produce.
     Pending,
 
-    /// Produced nothing, because not enough input.
+    /// Block indicates that there's no point calling it until the provided
+    /// function has been run.
     ///
-    /// When all nodes in a graph produce either EOF or Noop, the graph is
-    /// considered done, and the `g.run()` returns.
-    Noop,
+    /// The function is blocking, but should not block for "too long", since it
+    /// prevents checking for exit conditions like stream EOF and Ctrl-C.
+    ///
+    /// For a single threaded graph, it would stall all blocks, so it's not
+    /// used.
+    WaitForFunc(Box<dyn Fn() + 'a>),
 
-    /// Produced nothing, because not enough output space.
-    OutputFull,
+    /// Signal that we're waiting for a stream. Either an input or output
+    /// stream.
+    ///
+    /// This is basically the same as WaitForFunc, but with a simpler API.
+    WaitForStream(&'a dyn StreamWait, usize),
 
     // More data may be produced even if no more data comes in.
     // Currently not used.
@@ -49,9 +54,6 @@ pub enum BlockRet {
     /// * reading from file, without repeating, and file reached EOF.
     /// * Head block reached its max.
     EOF,
-
-    /// Internal state for two-phase done-detection.
-    InternalAwaiting,
 }
 
 pub trait BlockName {

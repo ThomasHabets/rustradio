@@ -105,11 +105,14 @@ pub struct FloatToComplex {
 impl Block for FloatToComplex {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (a, tags) = self.re.read_buf()?;
-        let (b, _) = self.im.read_buf()?;
-        let n = std::cmp::min(a.len(), b.len());
-        if n == 0 {
-            return Ok(BlockRet::Noop);
+        if a.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.re, 1));
         }
+        let (b, _) = self.im.read_buf()?;
+        if b.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.im, 1));
+        }
+        let n = std::cmp::min(a.len(), b.len());
         let mut o = self.dst.write_buf()?;
         let n = std::cmp::min(n, o.len());
         o.fill_from_iter(

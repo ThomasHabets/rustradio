@@ -42,7 +42,7 @@ Under development.
 TODO: implement real EOF handling.
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, nevereof)]
+#[rustradio(crate)]
 pub struct SymbolSync {
     sps: Float,
     max_deviation: Float,
@@ -115,11 +115,11 @@ impl Block for SymbolSync {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         // TODO: get rid of unwrap.
         let mut out_clock = self.out_clock.as_mut().map(|x| x.write_buf().unwrap());

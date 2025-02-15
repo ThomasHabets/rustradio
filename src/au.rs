@@ -132,11 +132,11 @@ impl Block for AuEncode {
 
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let n = std::cmp::min(i.len(), o.len() / ss);
         if n == 0 {
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
 
         for j in 0..n {
@@ -191,13 +191,13 @@ impl Block for AuDecode {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let mut o = self.dst.write_buf()?;
         match self.state {
             DecodeState::WaitingMagic => {
                 if i.len() < 4 {
-                    return Ok(BlockRet::Noop);
+                    return Ok(BlockRet::WaitForStream(&self.src, 4));
                 }
                 let magic = i.iter().take(4).copied().collect::<Vec<_>>();
                 let magic = u32::from_be_bytes(magic.try_into().unwrap());
@@ -209,7 +209,7 @@ impl Block for AuDecode {
             }
             DecodeState::WaitingSize => {
                 if i.len() < 4 {
-                    return Ok(BlockRet::Noop);
+                    return Ok(BlockRet::WaitForStream(&self.src, 4));
                 }
                 let data_offset = i.iter().take(4).copied().collect::<Vec<_>>();
                 let data_offset = u32::from_be_bytes(data_offset.try_into().unwrap());
@@ -219,7 +219,7 @@ impl Block for AuDecode {
             DecodeState::WaitingHeader(data_offset) => {
                 let header_rest_len = data_offset - 8;
                 if i.len() < header_rest_len {
-                    return Ok(BlockRet::Noop);
+                    return Ok(BlockRet::WaitForStream(&self.src, header_rest_len));
                 }
                 let head = i.iter().take(header_rest_len).copied().collect::<Vec<_>>();
                 if Encoding::PCM16 as u32 != u32::from_be_bytes(head[4..8].try_into().unwrap()) {
@@ -244,7 +244,11 @@ impl Block for AuDecode {
                 let n = std::cmp::min(i.len(), o.len() * 2); // Bytes.
                 let n = n - (n & 1);
                 if n == 0 {
-                    return Ok(BlockRet::Noop);
+                    // Two bytes input, or one sample output.
+                    if i.len() < 2 {
+                        return Ok(BlockRet::WaitForStream(&self.src, 2));
+                    }
+                    return Ok(BlockRet::WaitForStream(&self.dst, 1));
                 }
                 let v = i
                     .iter()
