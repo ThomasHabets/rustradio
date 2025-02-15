@@ -13,6 +13,7 @@ pub struct NullSink<T>
 where
     T: Copy,
 {
+    #[rustradio(in)]
     src: ReadStream<T>,
 }
 
