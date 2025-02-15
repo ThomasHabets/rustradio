@@ -115,7 +115,7 @@ impl Block for SymbolSync {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
-            return Ok(BlockRet::WaitForStream(Box::new(move || {
+            return Ok(BlockRet::WaitForFunc(Box::new(move || {
                 self.src.wait_for_read()
             })));
         }

@@ -41,7 +41,7 @@ pub enum BlockRet<'a> {
     ///
     /// The function is blocking.
     /// TODO: but it can't block forever.
-    WaitForStream(Box<dyn Fn() + 'a>),
+    WaitForFunc(Box<dyn Fn() + 'a>),
 
     /// Produced nothing, because not enough output space.
     OutputFull,

@@ -153,7 +153,7 @@ impl GraphRunner for Graph {
                             eof[n] = true;
                         }
                     }
-                    BlockRet::WaitForStream(_) => {}
+                    BlockRet::WaitForFunc(_) => {}
                     BlockRet::EOF => {
                         eof[n] = true;
                     }

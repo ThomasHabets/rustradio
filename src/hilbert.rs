@@ -61,14 +61,12 @@ impl Block for Hilbert {
         let (ii, tags) = self.src.read_buf()?;
         let i = ii.slice();
         if i.is_empty() {
-            return Ok(BlockRet::WaitForStream(Box::new(|| {
-                self.src.wait_for_read()
-            })));
+            return Ok(BlockRet::WaitForFunc(Box::new(|| self.src.wait_for_read())));
         }
         let mut oo = self.dst.write_buf()?;
         let o = oo.slice();
         if o.is_empty() {
-            return Ok(BlockRet::WaitForStream(Box::new(|| {
+            return Ok(BlockRet::WaitForFunc(Box::new(|| {
                 self.dst.wait_for_write()
             })));
         }
@@ -79,7 +77,7 @@ impl Block for Hilbert {
 
         // TODO: combine this check with the i.is_empty() check above.
         if n == 0 {
-            return Ok(BlockRet::WaitForStream(Box::new(|| {
+            return Ok(BlockRet::WaitForFunc(Box::new(|| {
                 self.src.wait_for_read();
                 self.dst.wait_for_write();
             })));

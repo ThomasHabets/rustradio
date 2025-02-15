@@ -155,7 +155,7 @@ impl crate::graph::GraphRunner for MTGraph {
                                 false
                             }
                             BlockRet::Noop | BlockRet::EOF => true,
-                            BlockRet::WaitForStream(_) => true,
+                            BlockRet::WaitForFunc(_) => true,
                             BlockRet::InternalAwaiting => {
                                 panic!("InternalAwaiting should never be received")
                             }
@@ -171,7 +171,7 @@ impl crate::graph::GraphRunner for MTGraph {
                             BlockRet::Noop | BlockRet::OutputFull => {
                                 std::thread::sleep(idle_sleep);
                             }
-                            BlockRet::WaitForStream(f) => {
+                            BlockRet::WaitForFunc(f) => {
                                 f();
                             }
                             BlockRet::Pending => {
