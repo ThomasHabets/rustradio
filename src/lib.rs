@@ -246,6 +246,21 @@ pub fn check_environment() -> Result<Vec<Feature>> {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
         assumptions.push(Feature {
+            name: "SSE".to_string(),
+            build: cfg!(target_feature = "sse"),
+            detected: is_x86_feature_detected!("sse"),
+        });
+        assumptions.push(Feature {
+            name: "SSE3".to_string(),
+            build: cfg!(target_feature = "sse3"),
+            detected: is_x86_feature_detected!("sse3"),
+        });
+        assumptions.push(Feature {
+            name: "AVX".to_string(),
+            build: cfg!(target_feature = "avx"),
+            detected: is_x86_feature_detected!("avx"),
+        });
+        assumptions.push(Feature {
             name: "AVX2".to_string(),
             build: cfg!(target_feature = "avx2"),
             detected: is_x86_feature_detected!("avx2"),

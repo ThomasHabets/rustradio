@@ -16,34 +16,48 @@ pub struct FIR<T: Copy> {
     taps: Vec<T>,
 }
 
-#[cfg(target_feature = "avx2")]
+#[cfg(all(
+    target_feature = "avx",
+    target_feature = "sse3",
+    target_feature = "sse"
+))]
 #[allow(unreachable_code)]
-unsafe fn sum_product_avx2(vec1: &[f32], vec2: &[f32]) -> f32 {
+unsafe fn sum_product_avx(vec1: &[f32], vec2: &[f32]) -> f32 {
     use core::arch::x86_64::*;
     assert_eq!(vec1.len(), vec2.len());
     let len = vec1.len() - vec1.len() % 8;
 
+    // AVX.
     let mut sum = _mm256_setzero_ps(); // Initialize sum vector to zeros.
 
     for i in (0..len).step_by(8) {
+        // AVX.
         let a = _mm256_loadu_ps(vec1.as_ptr().add(i));
         let b = _mm256_loadu_ps(vec2.as_ptr().add(i));
 
         // Multiply and accumulate.
+        // AVX.
         let prod = _mm256_mul_ps(a, b);
         sum = _mm256_add_ps(sum, prod);
     }
 
     // Split.
+    // AVX.
     let low = _mm256_extractf128_ps(sum, 0);
     let high = _mm256_extractf128_ps(sum, 1);
 
     // Compact step 1 => 4 floats.
+    // SSE3.
     let m128 = _mm_hadd_ps(low, high);
+
     // Compact step 2 => 2 floats.
+    // SSE3.
     let m128 = _mm_hadd_ps(m128, low);
+
     // Compact step 3 => 1 floats.
+    // SSE3.
     let m128 = _mm_hadd_ps(m128, low);
+    // SSE.
     let partial = _mm_cvtss_f32(m128);
     let skip = vec1.len() - vec1.len() % 8;
     vec1[skip..]
@@ -56,10 +70,14 @@ impl FIR<Float> {
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
     pub fn filter_float(&self, input: &[Float]) -> Float {
-        // AVX2 is faster, when available.
-        #[cfg(target_feature = "avx2")]
+        // AVX is faster, when available.
+        #[cfg(all(
+            target_feature = "avx",
+            target_feature = "sse3",
+            target_feature = "sse"
+        ))]
         unsafe {
-            return sum_product_avx2(&self.taps, input);
+            return sum_product_avx(&self.taps, input);
         }
         // Second fastest is generic simd.
         #[cfg(feature = "simd")]

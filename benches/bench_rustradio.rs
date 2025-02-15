@@ -10,17 +10,17 @@ use rustradio::Complex;
 
 use test::Bencher;
 
-/// AVX2 code for multiplying two vectors.
+/// AVX code for multiplying two vectors.
 ///
-/// Looks like this code is a little slower on my laptop than the rust compiled code, as of Rust
-/// 1.83.0.
+/// Looks like this code is a little faster on my laptop than the rust compiled code, as of Rust
+/// nightly (cargo 1.86.0-nightly (2928e3273 2025-02-07)).
 ///
 /// ```
-/// test bench_sum_vec      ... bench:      37,735.72 ns/iter (+/- 2,168.16)
-/// test bench_sum_vec_avx2 ... bench:      42,250.73 ns/iter (+/- 23,112.96)
+/// test bench_sum_vec         ... bench:      49,523.45 ns/iter (+/- 2,023.08)
+/// test bench_sum_vec_avx_fma ... bench:      43,474.55 ns/iter (+/- 1,735.46)
 /// ```
-#[cfg(target_feature = "avx2")]
-fn sum_vec_avx2(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
+fn sum_vec_avx_fma(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
     use std::mem::MaybeUninit;
     let len = left.len();
     let mut ret: Vec<MaybeUninit<Complex>> = Vec::with_capacity(len);
@@ -29,6 +29,7 @@ fn sum_vec_avx2(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
         std::mem::transmute::<Vec<MaybeUninit<Complex>>, Vec<Complex>>(ret)
     };
     (0..len).step_by(4).for_each(|i| unsafe {
+        // All instrucions are AVX except fmsub/fmadd.
         use core::arch::x86_64::*;
         let a = _mm256_loadu_ps((left.as_ptr() as *const f32).add(i * 2));
         let b = _mm256_loadu_ps((right.as_ptr() as *const f32).add(i * 2));
@@ -36,6 +37,7 @@ fn sum_vec_avx2(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
         let a_im = _mm256_shuffle_ps(a, a, 0b11011101);
         let b_re = _mm256_shuffle_ps(b, b, 0b10001000);
         let b_im = _mm256_shuffle_ps(b, b, 0b11011101);
+        // fmsub_ps and add is tagged `fma`.
         let re = _mm256_fmsub_ps(a_re, b_re, _mm256_mul_ps(a_im, b_im));
         let im = _mm256_fmadd_ps(a_re, b_im, _mm256_mul_ps(a_im, b_re));
         let res = _mm256_unpacklo_ps(re, im);
@@ -55,12 +57,12 @@ fn bench_sum_vec(b: &mut Bencher) {
     b.iter(|| sum_vec(&left, &left));
 }
 
-#[cfg(target_feature = "avx2")]
+#[cfg(all(target_feature = "avx", target_feature = "fma"))]
 #[bench]
-fn bench_sum_vec_avx2(b: &mut Bencher) {
+fn bench_sum_vec_avx_fma(b: &mut Bencher) {
     let n = 102400;
     let left = vec![Complex::default(); n];
-    b.iter(|| sum_vec_avx2(&left, &left));
+    b.iter(|| sum_vec_avx_fma(&left, &left));
 }
 
 #[bench]
