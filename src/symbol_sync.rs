@@ -115,13 +115,11 @@ impl Block for SymbolSync {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
-            return Ok(BlockRet::WaitForFunc(Box::new(move || {
-                self.src.wait_for_read()
-            })));
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         // TODO: get rid of unwrap.
         let mut out_clock = self.out_clock.as_mut().map(|x| x.write_buf().unwrap());

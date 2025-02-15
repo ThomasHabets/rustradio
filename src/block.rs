@@ -7,6 +7,7 @@ thing, and you connect them together with streams to process the data.
 
 use anyhow::Result;
 
+use crate::stream::StreamWait;
 use crate::Error;
 
 /** Return type for all blocks.
@@ -37,11 +38,21 @@ pub enum BlockRet<'a> {
     /// considered done, and the `g.run()` returns.
     Noop,
 
-    /// Waiting for more input or more output space.
+    /// Block indicates that there's no point calling it until the provided
+    /// function has been run.
     ///
-    /// The function is blocking.
-    /// TODO: but it can't block forever.
+    /// The function is blocking, but should not block for "too long", since it
+    /// prevents checking for exit conditions like stream EOF and Ctrl-C.
+    ///
+    /// For a single threaded graph, it would stall all blocks, so it's not
+    /// used.
     WaitForFunc(Box<dyn Fn() + 'a>),
+
+    /// Signal that we're waiting for a stream. Either an input or output
+    /// stream.
+    ///
+    /// This is basically the same as WaitForFunc, but with a simpler API.
+    WaitForStream(&'a dyn StreamWait, usize),
 
     /// Produced nothing, because not enough output space.
     OutputFull,

@@ -348,7 +348,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
                     if n ==  0 {
                         return Ok(#path::block::BlockRet::WaitForFunc(Box::new(|| {
-                            #(self.#in_names.wait_for_read();)*
+                            #(self.#in_names.wait_for_read(1);)*
                         })));
                     }
                     #( let mut #out_names = self.#out_names.write_buf()?;)*
@@ -357,7 +357,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
                     if n ==  0 {
                         return Ok(#path::block::BlockRet::WaitForFunc(Box::new(|| {
-                            #(self.#out_names.wait_for_write();)*
+                            #(self.#out_names.wait_for_write(1);)*
                         })));
                     }
                     let mut otags = Vec::new();

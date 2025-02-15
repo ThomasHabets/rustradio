@@ -72,6 +72,24 @@ impl Tag {
 /// *    400KiB: 1.228s
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
+/// Wait on a stream.
+///
+/// For ReadStream, wait until there's enough to read.
+/// For WriteStream, wait until there's enough to write something.
+pub trait StreamWait {
+    fn wait(&self, need: usize);
+}
+impl<T: Copy> StreamWait for ReadStream<T> {
+    fn wait(&self, need: usize) {
+        self.wait_for_read(need);
+    }
+}
+impl<T: Copy> StreamWait for WriteStream<T> {
+    fn wait(&self, need: usize) {
+        self.wait_for_write(need);
+    }
+}
+
 /// ReadStream is the reading side of a stream.
 ///
 /// From the ReadStream you can get windows into the current stream by calling
@@ -115,8 +133,8 @@ impl<T: Copy> ReadStream<T> {
         Ok(Arc::clone(&self.circ).read_buf()?)
     }
 
-    pub fn wait_for_read(&self) {
-        self.circ.wait_for_read();
+    pub fn wait_for_read(&self, need: usize) {
+        self.circ.wait_for_read(need);
     }
 
     /// Return true if there is nothing more ever to read from the stream.
@@ -182,8 +200,8 @@ impl<T: Copy> WriteStream<T> {
         Ok(Arc::clone(&self.circ).write_buf()?)
     }
 
-    pub fn wait_for_write(&self) {
-        self.circ.wait_for_write();
+    pub fn wait_for_write(&self, need: usize) {
+        self.circ.wait_for_write(need);
     }
 }
 

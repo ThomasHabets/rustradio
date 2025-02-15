@@ -32,6 +32,6 @@ where
         let (i, _) = self.src.read_buf()?;
         let n = i.len();
         i.consume(n);
-        Ok(BlockRet::WaitForFunc(Box::new(|| self.src.wait_for_read())))
+        Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }

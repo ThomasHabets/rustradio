@@ -102,6 +102,13 @@ impl crate::graph::GraphRunner for MTGraph {
                                 }
                                 std::thread::sleep(idle_sleep);
                             }
+                            BlockRet::WaitForStream(stream, need) => {
+                                stream.wait(need);
+                                drop(ret);
+                                if b.eof() {
+                                    break;
+                                }
+                            }
                             BlockRet::WaitForFunc(ref f) => {
                                 f();
                                 drop(ret);

@@ -352,11 +352,11 @@ impl<T> Buffer<T> {
     pub fn free(&self) -> usize {
         self.state.0.lock().unwrap().free()
     }
-    pub fn wait_for_write(&self) -> usize {
+    pub fn wait_for_write(&self, need: usize) -> usize {
         let (lock, cv) = &*self.state;
         let mut s = lock.lock().unwrap();
         // TODO: this should be a 'while', but it also needs to check for EOF.
-        if s.free() == 0 {
+        if s.free() < need {
             let (s2, _) = cv
                 .wait_timeout(s, std::time::Duration::from_millis(100))
                 .unwrap();
@@ -364,11 +364,11 @@ impl<T> Buffer<T> {
         }
         s.free()
     }
-    pub fn wait_for_read(&self) -> usize {
+    pub fn wait_for_read(&self, need: usize) -> usize {
         let (lock, cv) = &*self.state;
         let mut s = lock.lock().unwrap();
         // TODO: this should be a 'while', but it also needs to check for EOF.
-        if s.used == 0 {
+        if s.used < need {
             let (s2, _) = cv
                 .wait_timeout(s, std::time::Duration::from_millis(100))
                 .unwrap();

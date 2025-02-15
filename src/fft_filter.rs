@@ -260,9 +260,7 @@ impl<T: Engine> Block for FftFilter<T> {
                     self.nsamples,
                     o.len()
                 );
-                return Ok(BlockRet::WaitForFunc(Box::new(move || {
-                    self.dst.wait_for_write()
-                })));
+                return Ok(BlockRet::WaitForStream(&self.dst, self.nsamples));
             }
             let (input, tags) = self.src.read_buf()?;
             // Read so that self.buf contains exactly self.nsamples samples.
@@ -284,9 +282,10 @@ impl<T: Engine> Block for FftFilter<T> {
             // amd64, with Rust 1.7.1.
             let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
             if add < self.nsamples {
-                return Ok(BlockRet::WaitForFunc(Box::new(move || {
-                    self.src.wait_for_read()
-                })));
+                return Ok(BlockRet::WaitForStream(
+                    &self.src,
+                    self.nsamples - self.buf.len(),
+                ));
             }
             self.buf.extend(input.iter().take(add).copied());
             input.consume(add);
@@ -419,9 +418,15 @@ impl<T: Engine> Block for FftFilterFloat<T> {
 
         // Replace the inner stream wait with an outer stream wait.
         // TODO: this always waits for the input, never the output.
+
         Ok(match ret {
-            BlockRet::WaitForFunc(_) => {
-                BlockRet::WaitForFunc(Box::new(|| self.src.wait_for_read()))
+            BlockRet::WaitForStream(_, need) => {
+                let src = &self.src;
+                let dst = &self.dst;
+                BlockRet::WaitForFunc(Box::new(move || {
+                    src.wait_for_read(need);
+                    dst.wait_for_write(need);
+                }))
             }
             other => other,
         })
