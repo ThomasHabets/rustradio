@@ -180,6 +180,10 @@ impl<T: Copy> WriteStream<T> {
         }
         Ok(Arc::clone(&self.circ).write_buf()?)
     }
+
+    pub fn wait_for_write(&self) {
+        self.circ.wait_for_write();
+    }
 }
 
 /// Create a new stream for data elements that implements Copy.

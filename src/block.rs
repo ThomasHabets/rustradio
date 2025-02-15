@@ -7,8 +7,7 @@ thing, and you connect them together with streams to process the data.
 
 use anyhow::Result;
 
-use crate::stream::ReadStream;
-use crate::{Complex, Error, Float};
+use crate::Error;
 
 /** Return type for all blocks.
 
@@ -17,7 +16,7 @@ it should just never bother calling it again.
 
 TODO: Add state for "don't call me unless there's more input".
  */
-#[derive(Debug, Clone)]
+//#[derive(Debug)]
 pub enum BlockRet<'a> {
     /// At least one sample was produced.
     ///
@@ -38,9 +37,11 @@ pub enum BlockRet<'a> {
     /// considered done, and the `g.run()` returns.
     Noop,
 
-    /// Waiting for more input.
-    NeedMoreInput(&'a ReadStream<Complex>),
-    NeedMoreInputFloat(&'a ReadStream<Float>),
+    /// Waiting for more input or more output space.
+    ///
+    /// The function is blocking.
+    /// TODO: but it can't block forever.
+    WaitForStream(Box<dyn Fn() + 'a>),
 
     /// Produced nothing, because not enough output space.
     OutputFull,

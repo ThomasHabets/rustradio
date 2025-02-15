@@ -58,17 +58,19 @@ impl Hilbert {
 impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet, Error> {
         debug_assert_eq!(self.ntaps, self.history.len());
-        //self.src.wait_for_read();
-        //std::thread::sleep(std::time::Duration::from_secs(2));
         let (ii, tags) = self.src.read_buf()?;
         let i = ii.slice();
         if i.is_empty() {
-            return Ok(BlockRet::NeedMoreInputFloat(&self.src));
+            return Ok(BlockRet::WaitForStream(Box::new(|| {
+                self.src.wait_for_read()
+            })));
         }
         let mut oo = self.dst.write_buf()?;
         let o = oo.slice();
         if o.is_empty() {
-            return Ok(BlockRet::OutputFull);
+            return Ok(BlockRet::WaitForStream(Box::new(|| {
+                self.dst.wait_for_write()
+            })));
         }
 
         let inout = std::cmp::min(i.len(), o.len());

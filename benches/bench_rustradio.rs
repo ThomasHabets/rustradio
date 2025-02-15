@@ -112,7 +112,7 @@ fn bench_fir_filter(b: &mut Bencher) {
             match filter.work().unwrap() {
                 BlockRet::Ok => continue,
                 BlockRet::Noop => break,
-                other => panic!("FIRFilter returned {other:?}"),
+                _other => panic!("FIRFilter returned bad state"),
             }
         }
     });

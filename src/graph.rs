@@ -138,6 +138,7 @@ impl GraphRunner for Graph {
                 self.cpu_times[n] += get_cpu_time() - st_cpu;
                 match ret {
                     BlockRet::Ok => {
+                        drop(ret);
                         // Block did something.
                         trace!("… {} was not starved", b.block_name());
                         done = false;
@@ -147,12 +148,12 @@ impl GraphRunner for Graph {
                         done = false;
                     }
                     BlockRet::Noop => {
+                        drop(ret);
                         if b.eof() {
                             eof[n] = true;
                         }
                     }
-                    BlockRet::NeedMoreInput(_stream) => {}
-                    BlockRet::NeedMoreInputFloat(_stream) => {}
+                    BlockRet::WaitForStream(_) => {}
                     BlockRet::EOF => {
                         eof[n] = true;
                     }

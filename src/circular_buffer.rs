@@ -352,6 +352,18 @@ impl<T> Buffer<T> {
     pub fn free(&self) -> usize {
         self.state.0.lock().unwrap().free()
     }
+    pub fn wait_for_write(&self) -> usize {
+        let (lock, cv) = &*self.state;
+        let mut s = lock.lock().unwrap();
+        // TODO: this should be a 'while', but it also needs to check for EOF.
+        if s.free() == 0 {
+            let (s2, _) = cv
+                .wait_timeout(s, std::time::Duration::from_millis(100))
+                .unwrap();
+            s = s2;
+        }
+        s.free()
+    }
     pub fn wait_for_read(&self) -> usize {
         let (lock, cv) = &*self.state;
         let mut s = lock.lock().unwrap();
