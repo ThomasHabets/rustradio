@@ -11,10 +11,16 @@ fn e2e_test_wa8lmf_intact() -> Result<()> {
     use std::fs::File;
     use std::io::{BufReader, Read};
 
-    for (filename, want) in [(
-        "wa8lmf-cd-track1.au",
-        "dcd04965aa898d9c12ab268422423d648e166c46f0ab4b5b9b8b3ebc4476d588",
-    )] {
+    for (filename, want) in [
+        (
+            "wa8lmf-cd-track1.au",
+            "dcd04965aa898d9c12ab268422423d648e166c46f0ab4b5b9b8b3ebc4476d588",
+        ),
+        (
+            "aprs-9600-50k.c32",
+            "191c7c2aa36bd487db0bd34945eee89108b3fa1373c1b4b2592e741002cd9b3d",
+        ),
+    ] {
         let file = File::open(Path::new("tests/testdata").join(filename))?;
         let mut reader = BufReader::new(file);
         let mut hasher = Sha256::new();
