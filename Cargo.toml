@@ -84,3 +84,7 @@ lto = true
 overflow-checks = true
 
 # vim: textwidth=80
+
+[lints.clippy]
+missing-safety-doc = "warn"
+undocumented-unsafe-blocks = "warn"

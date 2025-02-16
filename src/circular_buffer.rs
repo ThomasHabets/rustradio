@@ -31,6 +31,16 @@ impl Map {
     fn with_addr(f: &std::fs::File, len: usize, ptr: *mut c_void) -> Result<Self> {
         let fd = f.as_raw_fd();
         let flags = MAP_SHARED | if ptr.is_null() { 0 } else { MAP_FIXED };
+
+        // SAFETY:
+        // * If non-fixed: worst case we'll leak memory if this function
+        //   doesn't handle errors properly.
+        // * If fixed: caller *must not* call this on just any place in memory.
+        //
+        // TODO:
+        // * Verify pointer alignment with page boundary.
+        // * Replace this function with a Map `.split()`, so that the fixed
+        //   pointer assumption is restricted to Map.
         let buf = unsafe { libc::mmap(ptr, len as size_t, PROT_READ | PROT_WRITE, flags, fd, 0) };
         if buf == MAP_FAILED {
             let e = errno::errno();
@@ -46,6 +56,8 @@ impl Map {
         }
         assert!(!buf.is_null());
         if !ptr.is_null() && ptr != buf {
+            // SAFETY: we literally just allocated using this pointer and
+            // length, so this has to be fine.
             let rc = unsafe { libc::munmap(buf, len as size_t) };
             if rc != 0 {
                 let e = errno::errno();
@@ -62,6 +74,7 @@ impl Map {
 
 impl Drop for Map {
     fn drop(&mut self) {
+        // SAFETY: This is what we mmapped.
         let rc = unsafe { libc::munmap(self.base as *mut c_void, self.len) };
         if rc != 0 {
             let e = errno::errno();
@@ -136,12 +149,17 @@ impl Circ {
             ez,
             self.len
         );
+        // SAFETY: This is a mut cast for memory that C++ would call non-pointer
+        // POD. Data races are possible from this in general, but will be
+        // prevented by the stream API.
         let buf = unsafe { std::slice::from_raw_parts_mut(self.map.base as *mut T, self.len / ez) };
         &mut buf[start..end]
     }
 }
 
+// SAFETY: Circ are just metadata around normal process-local memory.
 unsafe impl Send for Circ {}
+// SAFETY: Circ are just metadata around normal process-local memory.
 unsafe impl Sync for Circ {}
 
 #[derive(Debug)]

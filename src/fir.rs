@@ -22,48 +22,52 @@ pub struct FIR<T: Copy> {
     target_feature = "sse"
 ))]
 #[allow(unreachable_code)]
-unsafe fn sum_product_avx(vec1: &[f32], vec2: &[f32]) -> f32 {
-    use core::arch::x86_64::*;
-    assert_eq!(vec1.len(), vec2.len());
-    let len = vec1.len() - vec1.len() % 8;
+fn sum_product_avx(vec1: &[f32], vec2: &[f32]) -> f32 {
+    // SAFETY: Pointer arithmetic "should be fine". And as for instruction availability, that could
+    // be checked by the macro above.
+    unsafe {
+        use core::arch::x86_64::*;
+        assert_eq!(vec1.len(), vec2.len());
+        let len = vec1.len() - vec1.len() % 8;
 
-    // AVX.
-    let mut sum = _mm256_setzero_ps(); // Initialize sum vector to zeros.
-
-    for i in (0..len).step_by(8) {
         // AVX.
-        let a = _mm256_loadu_ps(vec1.as_ptr().add(i));
-        let b = _mm256_loadu_ps(vec2.as_ptr().add(i));
+        let mut sum = _mm256_setzero_ps(); // Initialize sum vector to zeros.
 
-        // Multiply and accumulate.
+        for i in (0..len).step_by(8) {
+            // AVX.
+            let a = _mm256_loadu_ps(vec1.as_ptr().add(i));
+            let b = _mm256_loadu_ps(vec2.as_ptr().add(i));
+
+            // Multiply and accumulate.
+            // AVX.
+            let prod = _mm256_mul_ps(a, b);
+            sum = _mm256_add_ps(sum, prod);
+        }
+
+        // Split.
         // AVX.
-        let prod = _mm256_mul_ps(a, b);
-        sum = _mm256_add_ps(sum, prod);
+        let low = _mm256_extractf128_ps(sum, 0);
+        let high = _mm256_extractf128_ps(sum, 1);
+
+        // Compact step 1 => 4 floats.
+        // SSE3.
+        let m128 = _mm_hadd_ps(low, high);
+
+        // Compact step 2 => 2 floats.
+        // SSE3.
+        let m128 = _mm_hadd_ps(m128, low);
+
+        // Compact step 3 => 1 floats.
+        // SSE3.
+        let m128 = _mm_hadd_ps(m128, low);
+        // SSE.
+        let partial = _mm_cvtss_f32(m128);
+        let skip = vec1.len() - vec1.len() % 8;
+        vec1[skip..]
+            .iter()
+            .zip(vec2[skip..].iter())
+            .fold(partial, |acc, (&f, &x)| acc + x * f)
     }
-
-    // Split.
-    // AVX.
-    let low = _mm256_extractf128_ps(sum, 0);
-    let high = _mm256_extractf128_ps(sum, 1);
-
-    // Compact step 1 => 4 floats.
-    // SSE3.
-    let m128 = _mm_hadd_ps(low, high);
-
-    // Compact step 2 => 2 floats.
-    // SSE3.
-    let m128 = _mm_hadd_ps(m128, low);
-
-    // Compact step 3 => 1 floats.
-    // SSE3.
-    let m128 = _mm_hadd_ps(m128, low);
-    // SSE.
-    let partial = _mm_cvtss_f32(m128);
-    let skip = vec1.len() - vec1.len() % 8;
-    vec1[skip..]
-        .iter()
-        .zip(vec2[skip..].iter())
-        .fold(partial, |acc, (&f, &x)| acc + x * f)
 }
 
 impl FIR<Float> {
@@ -76,9 +80,7 @@ impl FIR<Float> {
             target_feature = "sse3",
             target_feature = "sse"
         ))]
-        unsafe {
-            return sum_product_avx(&self.taps, input);
-        }
+        return sum_product_avx(&self.taps, input);
         // Second fastest is generic simd.
         #[cfg(feature = "simd")]
         #[allow(unreachable_code)]
