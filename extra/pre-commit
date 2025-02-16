@@ -3,7 +3,7 @@
 set -ueo pipefail
 
 export RUSTFLAGS="--deny warnings"
-TEMP_DIR="$(mktemp -d)"
+export RR_BRANCH="$(git branch --show-current)"
 MAIN_DIR="$(pwd)"
 
 cleanup() {
@@ -16,8 +16,10 @@ if [[ "${NOTEST:-}" = "true" ]]; then
 fi
 
 if [[ "${1:-}" = "local" || "${NODIFF:-}" = "true" ]]; then
+    # Run with the local working dir.
     true
 else
+    TEMP_DIR="$(mktemp -d)"
     # Set up directory with only what's being committed, and go there.
     git archive HEAD | tar -x -C "$TEMP_DIR"
     git diff --cached --binary | (cd "$TEMP_DIR" && git apply)
@@ -31,7 +33,7 @@ cargo fmt -- --check || {
 }
 
 # Test.
-export CARGO_TARGET_DIR="$MAIN_DIR/target/test.normal"
+export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.test.normal"
 for dir in . rustradio_macros; do
         (
                 cd "${dir}"
@@ -43,7 +45,7 @@ for dir in . rustradio_macros; do
 done
 
 # Test with all features.
-export CARGO_TARGET_DIR="$MAIN_DIR/target/test.all"
+export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.test.all"
 cargo test --features rtlsdr,soapysdr,fast-math,audio || {
     echo "Tests fail with features" >&2
     exit 1
@@ -52,12 +54,12 @@ cargo test --features rtlsdr,soapysdr,fast-math,audio || {
 # Build with nightly.
 # TODO: maybe add --all-targets
 cargo +nightly 2>/dev/null > /dev/null && {
-    export CARGO_TARGET_DIR="$MAIN_DIR/target/test.nightly.all"
+    export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.test.nightly.all"
     cargo +nightly test --all-features || {
 	echo "Tests fail with features" >&2
 	exit 1
     }
-    export CARGO_TARGET_DIR="$MAIN_DIR/target/nightly"
+    export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.nightly"
     cargo +nightly bench --no-run -F rtlsdr || {
 	echo "Benchmark builds fail" >&2
 	exit 1
