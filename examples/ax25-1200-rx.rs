@@ -146,7 +146,7 @@ fn get_complex_input(
 fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
     if opt.audio {
         if let Some(ref read) = &opt.read {
-            let prev = add_block![g, FileSource::new(read, false)?];
+            let prev = add_block![g, FileSource::new(read, true)?];
             let prev = add_block![
                 g,
                 AuDecode::new(
@@ -202,6 +202,9 @@ fn main() -> Result<()> {
         .verbosity(opt.verbose)
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
+    rayon::ThreadPoolBuilder::new()
+        .thread_name(|n| format!("rayon-{n}"))
+        .build_global()?;
 
     let mut g: Box<dyn GraphRunner> = if opt.multithread {
         Box::new(MTGraph::new())
