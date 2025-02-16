@@ -155,7 +155,14 @@ impl crate::graph::GraphRunner for MTGraph {
                     let mut tt = std::time::Duration::default();
                     while !cancel_token.is_canceled() {
                         let st = Instant::now();
-                        let ret = b.work()?;
+                        let ret = match b.work() {
+                            Ok(v) => v,
+                            Err(e) => {
+                                error!("Block work function failed: {e}");
+                                return Err(e.into());
+                            }
+                        };
+
                         tt += st.elapsed();
                         em_tx
                             .send((index, ret.clone()))
