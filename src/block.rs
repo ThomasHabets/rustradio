@@ -45,9 +45,6 @@ pub enum BlockRet<'a> {
     /// This is basically the same as WaitForFunc, but with a simpler API.
     WaitForStream(&'a dyn StreamWait, usize),
 
-    /// Produced nothing, because not enough output space.
-    OutputFull,
-
     // More data may be produced even if no more data comes in.
     // Currently not used.
     // Background,

@@ -30,7 +30,7 @@ impl Block for RtlSdrDecode {
         let isamples = std::cmp::min(isamples, out.len() * 2);
         let osamples = isamples / 2;
         if osamples == 0 {
-            return Ok(BlockRet::OutputFull);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
 
         out.fill_from_iter(

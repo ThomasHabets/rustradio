@@ -115,7 +115,7 @@ where
         }
         let mut os = self.dst.write_buf()?;
         if os.is_empty() {
-            return Ok(BlockRet::OutputFull);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         let n = std::cmp::min(os.len(), self.data.len() - self.pos);
         os.fill_from_slice(&self.data[self.pos..(self.pos + n)]);
@@ -167,7 +167,7 @@ mod tests {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
         }
-        assert!(matches![src.work()?, BlockRet::OutputFull]);
+        assert!(matches![src.work()?, BlockRet::WaitForStream(_, _)]);
         {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);

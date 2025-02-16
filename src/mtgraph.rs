@@ -94,13 +94,6 @@ impl crate::graph::GraphRunner for MTGraph {
                             BlockRet::EOF => {
                                 break;
                             }
-                            BlockRet::OutputFull => {
-                                drop(ret);
-                                if b.eof() {
-                                    break;
-                                }
-                                std::thread::sleep(idle_sleep);
-                            }
                             BlockRet::WaitForStream(stream, need) => {
                                 stream.wait(need);
                                 drop(ret);

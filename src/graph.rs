@@ -140,7 +140,7 @@ impl GraphRunner for Graph {
                         done = false;
                         all_idle = false;
                     }
-                    BlockRet::Pending | BlockRet::OutputFull => {
+                    BlockRet::Pending => {
                         done = false;
                     }
                     BlockRet::WaitForFunc(_) => {
