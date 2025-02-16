@@ -69,7 +69,10 @@ where
                 warn!("EOF on {}. Repeat: {}", self.filename, self.repeat);
                 if self.repeat {
                     self.f.seek(std::io::SeekFrom::Start(0))?;
-                    return Ok(BlockRet::Noop);
+                    // This is not quite the definition of "pending", but I
+                    // wanted to get rid of Noop, and it'll do for now.
+                    // TODO: loop instead.
+                    return Ok(BlockRet::Pending);
                 } else {
                     return Ok(BlockRet::EOF);
                 }

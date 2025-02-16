@@ -22,7 +22,7 @@ where
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (v, _tags) = match self.src.pop() {
-            None => return Ok(BlockRet::Noop),
+            None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some(x) => x,
         };
 
@@ -96,7 +96,7 @@ where
         });
         let l = i.slice().len();
         i.consume(l);
-        Ok(BlockRet::Noop)
+        Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }
 
@@ -142,6 +142,6 @@ where
         });
         let l = i.slice().len();
         i.consume(l);
-        Ok(BlockRet::Noop)
+        Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }

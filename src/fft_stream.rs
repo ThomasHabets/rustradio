@@ -50,7 +50,7 @@ impl Block for FftStream {
         let (input, _tags) = self.src.read_buf()?;
         let ii = input.slice();
         if ii.len() < self.size {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, self.size - ii.len()));
         }
         let mut o = self.dst.write_buf()?;
         let oo = o.slice();

@@ -237,7 +237,7 @@ impl Block for HdlcDeframer {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
-            return Ok(BlockRet::Noop);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         for bit in input.iter().copied() {
             // This is a bit ugly in that it destructively creates the

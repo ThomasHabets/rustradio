@@ -63,7 +63,7 @@ where
             let mut o = self.dst.write_buf()?;
             let n = std::cmp::min(self.current_delay, o.len());
             if n == 0 {
-                return Ok(BlockRet::Noop);
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
             o.slice()[..n].fill(T::default());
             o.produce(n, &[]);
@@ -74,7 +74,7 @@ where
             let a = input.len();
             let n = std::cmp::min(a, self.skip);
             if n == 0 && a == 0 {
-                return Ok(BlockRet::Noop);
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
             input.consume(n);
             debug!("Delay: skipped {n}");
