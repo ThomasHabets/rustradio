@@ -27,6 +27,9 @@ cargo test
         cargo test
 )
 
+echo "Run E2E tests"
+cargo test -- --ignored
+
 git commit -a -m"Bump version to ${NEW?}"
 cargo semver-checks
 git tag "v${NEW?}"
