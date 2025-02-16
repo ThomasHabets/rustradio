@@ -102,7 +102,16 @@ impl<T: Copy> ReadStream<T> {
 
     /// Return a BufferReader allowing you to read from the stream, and
     /// "consume" from it.
+    ///
+    /// See [`WriteStream::write_buf`] for details about the refcount checks.
     pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
+        let refcount = Arc::strong_count(&self.circ);
+        debug_assert!(refcount < 4, "read_buf() called with refcount {refcount}");
+        if refcount > 3 {
+            return Err(Error::new(&format!(
+                "read_buf() called with refcount {refcount}"
+            )));
+        }
         Ok(Arc::clone(&self.circ).read_buf()?)
     }
 
@@ -136,7 +145,35 @@ impl<T: Copy> WriteStream<T> {
     }
 
     /// Return a BufferWriter for writing to the stream.
+    ///
+    /// Ideally having a BufferWriter active on a stream should be prevented
+    /// statically, but I've not come up with a way to do that.
+    ///
+    /// Having `write_buf` hold on to a mutable reference won't work, because
+    /// streams are owned by blocks, and blocks need to be able to call their
+    /// own mutable methods.
+    ///
+    /// BufferWriters do get an Arc to the circ buffer, though, so there should
+    /// never be more than four references:
+    /// * The source block.
+    /// * The destination block.
+    /// * The source BufferWriter.
+    /// * The destination BufferReader.
+    ///
+    /// So this function needs to be called when the refcount is 3 or lower.
+    ///
+    /// Having more than four references is a definite coding bug, and hopefully
+    /// will be caught by MTGraph testing during development.
+    ///
+    /// The above also goes for [`ReadStream::read_buf`].
     pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>, Error> {
+        let refcount = Arc::strong_count(&self.circ);
+        debug_assert!(refcount < 4, "write_buf() called with refcount {refcount}");
+        if refcount > 3 {
+            return Err(Error::new(&format!(
+                "write_buf() called with refcount {refcount}"
+            )));
+        }
         Ok(Arc::clone(&self.circ).write_buf()?)
     }
 }
