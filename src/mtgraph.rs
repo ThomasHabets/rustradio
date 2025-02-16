@@ -80,6 +80,7 @@ impl crate::graph::GraphRunner for MTGraph {
                     let mut stats = BlockStats::default();
                     while !cancel_token.is_canceled() {
                         let st = Instant::now();
+                        stats.work_calls += 1;
                         let ret = match b.work() {
                             Ok(v) => v,
                             Err(e) => {
@@ -87,8 +88,6 @@ impl crate::graph::GraphRunner for MTGraph {
                                 return Err(e.into());
                             }
                         };
-                        stats.work_calls += 1;
-                        let ret = b.work()?;
                         stats.elapsed += st.elapsed();
                         match ret {
                             BlockRet::Ok => {}
