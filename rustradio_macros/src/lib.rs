@@ -234,9 +234,10 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     //
     // Elements are of the form:
     // * out_names:          dst
+    // * out_names_samp:     dst_sample
     // * out_types_types:    WriteStream<Complex>
     // * outval_types:       Complex
-    let (out_names, _out_types, outval_types) = unzip_n![
+    let (out_names, out_names_samp, _out_types, outval_types) = unzip_n![
         fields_named
             .named
             .iter()
@@ -245,11 +246,18 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                 let inner = inner_type(&field.ty);
                 let ty = field.ty.clone();
                 let field_name = field.ident.clone().unwrap();
-                (field_name.clone(), quote! { #ty }, quote! { #inner })
+                let samp_name: syn::Ident = syn::parse_str(&format!("{field_name}_sample")).unwrap();
+                (
+                    field_name.clone(),
+                    samp_name,
+                    quote! { #ty },
+                    quote! { #inner },
+                )
             }),
         a,
         b,
-        c
+        c,
+        d
     ];
 
     // Ensure no field is marked both input and output.
@@ -323,7 +331,8 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
             extra.push(quote! {
                 impl #impl_generics #struct_name #ty_generics #where_clause {
                     fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types,)* std::borrow::Cow<'a, [#path::stream::Tag]>) {
-                        (self.process_sync(#(#in_names,)*), std::borrow::Cow::Borrowed(#first_tags))
+                        let (#(#out_names),*) = self.process_sync(#(#in_names,)*);
+                        (#(#out_names,)*std::borrow::Cow::Borrowed(#first_tags))
                     }
                 }
             });
@@ -352,26 +361,26 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                             // There may be opportunity to deduplicate some of
                             // the next couple of lines with the !empty_tags
                             // case.
-                            let (s, ts) = self.process_sync_tags(#(*#in_names, &[]),*);
+                            let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &[]),*);
                             for tag in ts.iter() {
                                 otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
                             }
-                            s
+                            (#(#out_names),*)
                         } else {
                             // TODO: This tag filtering is quite expensive.
                             #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
                               .filter(|t| t.pos() == pos)
                               .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
                               .collect();)*
-                            let (s, ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
+                            let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
                             for tag in ts.iter() {
                                 otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
                             }
-                            s
+                            (#(#out_names),*)
                         }
                     });
-                    for (samp, w) in it.zip(#(#out_names.slice().iter_mut())*) {
-                        *w = samp;
+                    for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
+                        (#(*#out_names),*) = (#(#out_names_samp),*);
                     }
                     #(#in_names.consume(n);)*
                     #(#out_names.produce(n, &otags);)*

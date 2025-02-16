@@ -28,6 +28,7 @@ cpal = { version = "0.15.3", features = ["jack"], optional=true }
 errno = "0.3.9"
 rustradio_macros = { version = "0.10.1", path = "rustradio_macros" }
 rayon = "1.10.0"
+itertools = "0.14.0"
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]
