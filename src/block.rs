@@ -19,24 +19,15 @@ TODO: Add state for "don't call me unless there's more input".
  */
 //#[derive(Debug)]
 pub enum BlockRet<'a> {
-    /// At least one sample was produced.
+    /// Everything is fine, but no information about when more data could be
+    /// created.
     ///
-    /// More data may be produced only if more data comes in.
-    ///
-    /// Ideally the difference between Noop and Ok would be inferred, but since
-    /// the input and output streams are owned by the block, we don't yet see
-    /// that.
+    /// TODO: This and Pending should work things out between each other.
     Ok,
 
     /// Block didn't produce anything this time, but has a background
     /// process that may suddenly produce.
     Pending,
-
-    /// Produced nothing, because not enough input.
-    ///
-    /// When all nodes in a graph produce either EOF or Noop, the graph is
-    /// considered done, and the `g.run()` returns.
-    Noop,
 
     /// Block indicates that there's no point calling it until the provided
     /// function has been run.

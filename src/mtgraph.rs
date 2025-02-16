@@ -94,7 +94,7 @@ impl crate::graph::GraphRunner for MTGraph {
                             BlockRet::EOF => {
                                 break;
                             }
-                            BlockRet::Noop | BlockRet::OutputFull => {
+                            BlockRet::OutputFull => {
                                 drop(ret);
                                 if b.eof() {
                                     break;
