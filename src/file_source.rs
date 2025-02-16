@@ -24,7 +24,10 @@ pub struct FileSource<T: Copy> {
 impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
     pub fn new(filename: &str, repeat: bool) -> Result<(Self, ReadStream<T>)> {
-        let f = BufReader::new(std::fs::File::open(filename)?);
+        let f = BufReader::new(
+            std::fs::File::open(filename)
+                .map_err(|e| Error::new(&format!("Failed to open {}: {:?}", filename, e)))?,
+        );
         debug!("Opening source {filename}");
         let (dst, dr) = crate::stream::new_stream();
         Ok((

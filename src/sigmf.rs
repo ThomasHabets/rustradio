@@ -162,8 +162,9 @@ pub struct SigMF {
 
 /// Parse metadata for SigMF file.
 pub fn parse_meta(base: &str) -> Result<SigMF> {
-    //let base = "data/1876954_7680KSPS_srsRAN_Project_gnb_short.sigmf";
-    let file = std::fs::File::open(format!("{}-meta", base))?;
+    let mfname = format!("{base}-meta");
+    let file = std::fs::File::open(&mfname)
+        .map_err(|e| Error::new(&format!("failed to open SigMF meta file {mfname}: {e}")))?;
     let reader = std::io::BufReader::new(file);
     Ok(serde_json::from_reader(reader)?)
 }
