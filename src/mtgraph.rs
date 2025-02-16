@@ -111,9 +111,6 @@ impl crate::graph::GraphRunner for MTGraph {
                             BlockRet::Pending => {
                                 std::thread::sleep(idle_sleep);
                             }
-                            BlockRet::InternalAwaiting => {
-                                panic!("blocks must never return InternalAwaiting")
-                            }
                         }
                     }
                     info!("Block {} done", b.block_name());

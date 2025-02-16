@@ -158,9 +158,6 @@ impl GraphRunner for Graph {
                     BlockRet::EOF => {
                         eof[n] = true;
                     }
-                    BlockRet::InternalAwaiting => {
-                        panic!("blocks must never return InternalAwaiting")
-                    }
                 };
             }
             if done {

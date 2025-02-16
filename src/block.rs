@@ -54,9 +54,6 @@ pub enum BlockRet<'a> {
     /// * reading from file, without repeating, and file reached EOF.
     /// * Head block reached its max.
     EOF,
-
-    /// Internal state for two-phase done-detection.
-    InternalAwaiting,
 }
 
 pub trait BlockName {
