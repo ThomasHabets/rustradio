@@ -25,7 +25,7 @@ impl<T> VecToStream<T> {
 impl<T: Copy> Block for VecToStream<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let n = match self.src.peek_size() {
-            None => return Ok(BlockRet::Noop),
+            None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some(x) => x,
         };
         let mut o = self.dst.write_buf()?;
