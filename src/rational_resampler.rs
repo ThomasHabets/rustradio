@@ -66,14 +66,14 @@ impl<T: Copy> Block for RationalResampler<T> {
         if i.len() < self.interp as usize {
             return Ok(BlockRet::WaitForStream(
                 &self.src,
-                i.len() - self.interp as usize,
+                self.interp as usize - i.len(),
             ));
         }
         let mut o = self.dst.write_buf()?;
         if o.len() < self.deci as usize {
             return Ok(BlockRet::WaitForStream(
                 &self.dst,
-                o.len() - self.deci as usize,
+                self.deci as usize - o.len(),
             ));
         }
         let n = std::cmp::min(i.len() - self.interp as usize, o.len() - self.deci as usize);
