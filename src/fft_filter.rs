@@ -417,7 +417,6 @@ impl<T: Engine> Block for FftFilterFloat<T> {
         }
 
         // Replace the inner stream wait with an outer stream wait.
-        // TODO: this always waits for the input, never the output.
 
         Ok(match ret {
             BlockRet::WaitForStream(_, need) => {
