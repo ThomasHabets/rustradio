@@ -21,7 +21,7 @@ impl Block for RtlSdrDecode {
         let (input, _tags) = self.src.read_buf()?;
         let isamples = input.len() & !1;
         if isamples == 0 {
-            return Ok(BlockRet::WaitForStream(&self.src, 1));
+            return Ok(BlockRet::WaitForStream(&self.src, 2));
         }
         let mut out = self.dst.write_buf()?;
         if out.is_empty() {
@@ -29,9 +29,7 @@ impl Block for RtlSdrDecode {
         }
         let isamples = std::cmp::min(isamples, out.len() * 2);
         let osamples = isamples / 2;
-        if osamples == 0 {
-            return Ok(BlockRet::WaitForStream(&self.dst, 1));
-        }
+        assert_ne!(osamples, 0);
 
         out.fill_from_iter(
             input

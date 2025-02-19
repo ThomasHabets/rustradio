@@ -63,18 +63,19 @@ impl<T: Copy> RationalResampler<T> {
 impl<T: Copy> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         let (i, _tags) = self.src.read_buf()?;
-        if i.len() < self.interp as usize {
-            return Ok(BlockRet::WaitForStream(
-                &self.src,
-                self.interp as usize - i.len(),
-            ));
+
+        {
+            let iwant = self.interp as usize + 1;
+            if i.len() < iwant {
+                return Ok(BlockRet::WaitForStream(&self.src, iwant));
+            }
         }
         let mut o = self.dst.write_buf()?;
-        if o.len() < self.deci as usize {
-            return Ok(BlockRet::WaitForStream(
-                &self.dst,
-                self.deci as usize - o.len(),
-            ));
+        {
+            let owant = self.deci as usize + 1;
+            if o.len() < owant {
+                return Ok(BlockRet::WaitForStream(&self.dst, owant));
+            }
         }
         let n = std::cmp::min(i.len() - self.interp as usize, o.len() - self.deci as usize);
         trace!("RationalResampler: n = {n}");
