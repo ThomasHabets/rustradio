@@ -9,7 +9,6 @@ MAIN_DIR="$(pwd)"
 cleanup() {
         rm -fr "$TEMP_DIR"
 }
-trap cleanup EXIT
 
 if [[ "${NOTEST:-}" = "true" ]]; then
     exit 0
@@ -20,6 +19,8 @@ if [[ "${1:-}" = "local" || "${NODIFF:-}" = "true" ]]; then
     true
 else
     TEMP_DIR="$(mktemp -d)"
+    trap cleanup EXIT
+
     # Set up directory with only what's being committed, and go there.
     git archive HEAD | tar -x -C "$TEMP_DIR"
     git diff --cached --binary | (cd "$TEMP_DIR" && git apply)
