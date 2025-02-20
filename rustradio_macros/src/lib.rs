@@ -86,7 +86,7 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
     }
     panic!(
         "Tried to get the inner type of a non-generic, probably non-Stream: {}",
-        quote! { #ty }.to_string()
+        quote! { #ty }
     )
 }
 
@@ -105,7 +105,7 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
         let segment: &mut syn::PathSegment = &mut p.path.segments[n - 1];
         segment.arguments = syn::PathArguments::None;
     }
-    return ty;
+    ty
 }
 
 /// Block derive macro.
