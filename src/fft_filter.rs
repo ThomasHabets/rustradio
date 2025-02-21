@@ -264,31 +264,16 @@ impl<T: Engine> Block for FftFilter<T> {
             }
             let (input, tags) = self.src.read_buf()?;
             // Read so that self.buf contains exactly self.nsamples samples.
-            //
-            // Yes, this part is weird. It evolved into this, but any
-            // cleanup I do to the next few lines just made it slower,
-            // even though I removed needless logic.
-            //
-            // E.g.:
-            // * self.buf.len() is *always* empty here, so that's a
-            //   needless subtraction.
-            // * We break if input available less than nsamples, so
-            //   why not just compare that?
-            // * Why do we even have self.buf? It's cleared on every round.
-            //   (well, that means no heap allocation, sure)
-            //
-            // Why are these things not fixed: Because then it's
-            // slower, for some reason. At least as of 2023-10-07, on
-            // amd64, with Rust 1.7.1.
             let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
-            if add < self.nsamples {
+            self.buf.extend(input.iter().take(add).copied());
+            input.consume(add);
+            if self.buf.len() < self.nsamples {
                 return Ok(BlockRet::WaitForStream(
                     &self.src,
                     self.nsamples - self.buf.len(),
                 ));
             }
-            self.buf.extend(input.iter().take(add).copied());
-            input.consume(add);
+            debug_assert_eq!(self.buf.len(), self.nsamples);
 
             // Run FFT.
             self.buf.resize(self.fft_size, Complex::default());
