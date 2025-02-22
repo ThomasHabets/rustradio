@@ -62,10 +62,12 @@ where
     Out: Copy,
     F: Fn(In) -> Out,
 {
-    /// Create new FloatToU32, scaled.
+    /// Create new Map block.
     ///
-    /// Return value is the input multiplied by the scale. E.g. with a
-    /// scale of 100.0, the input 0.123 becomes 12.
+    /// A Map block transforms one sample at a time, from input to output.
+    ///
+    /// If there's more than one input or output stream, then you have to make a
+    /// dedicated block.
     fn new(name: String, src: ReadStream<In>, map: F) -> (Self, ReadStream<Out>) {
         let dst = crate::stream::new_stream();
         (
