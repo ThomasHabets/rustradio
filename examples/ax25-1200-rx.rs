@@ -213,6 +213,19 @@ fn main() -> Result<()> {
     };
 
     let (prev, samp_rate) = get_input(&mut g, &opt)?;
+    /*
+    // Save audio floats to file.
+    let (tee, a, prev) = Tee::new(prev);
+    g.add(Box::new(tee));
+    {
+        g.add(Box::new(FileSink::new(
+            a,
+            "test.f32".into(),
+            rustradio::file_sink::Mode::Overwrite,
+        )?));
+    }
+    */
+
     let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
 
     // Can't use FastFM here, because it doesn't work well with
