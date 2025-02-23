@@ -2,78 +2,7 @@
 
 set -ueo pipefail
 
-export RUSTFLAGS="--deny warnings"
-export RR_BRANCH="$(git branch --show-current)"
-MAIN_DIR="$(pwd)"
-
-cleanup() {
-        rm -fr "$TEMP_DIR"
-}
-
-if [[ "${NOTEST:-}" = "true" ]]; then
-    exit 0
-fi
-
-if [[ "${1:-}" = "local" || "${NODIFF:-}" = "true" ]]; then
-    # Run with the local working dir.
-    true
-else
-    TEMP_DIR="$(mktemp -d)"
-    trap cleanup EXIT
-
-    # Set up directory with only what's being committed, and go there.
-    git archive HEAD | tar -x -C "$TEMP_DIR"
-    git diff --cached --binary | (cd "$TEMP_DIR" && git apply)
-    cd "$TEMP_DIR"
-fi
-
-# Regular fmt check.
-cargo fmt -- --check || {
-    echo "Run: cargo fmt" >&2
-    exit 1
-}
-
-# Test.
-export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.test.normal"
-for dir in . rustradio_macros; do
-        (
-                cd "${dir}"
-                cargo test || {
-                    echo "Tests fail without features" >&2
-                    exit 1
-                }
-        )
-done
-
-# Test with all features.
-export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.test.all"
-cargo test --features rtlsdr,soapysdr,fast-math,audio || {
-    echo "Tests fail with features" >&2
-    exit 1
-}
-
-# Build with nightly.
-# TODO: maybe add --all-targets
-cargo +nightly 2>/dev/null > /dev/null && {
-    export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.test.nightly.all"
-    cargo +nightly test --all-features || {
-	echo "Tests fail with features" >&2
-	exit 1
-    }
-    export CARGO_TARGET_DIR="$MAIN_DIR/target/${RR_BRANCH}.nightly"
-    cargo +nightly bench --no-run -F rtlsdr || {
-	echo "Benchmark builds fail" >&2
-	exit 1
-    }
-    for dir in . rustradio_macros; do
-            (
-                    cargo +nightly clippy -- -D warnings || {
-                        echo "Clippy fail" >&2
-                        exit 1
-                    }
-            )
-    done
-} || echo "Skipping nightly, because not installed"
+exec tickbox --dir tickbox/precommit
 
 if [[ ${AI_REVIEW:-} = true ]]; then
     exec < /dev/tty
