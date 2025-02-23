@@ -2,7 +2,6 @@
 use crate::stream::{ReadStream, WriteStream};
 
 /// Xors a constant value to every sample.
-// TODO: make this sync
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
 pub struct Xor<T>
