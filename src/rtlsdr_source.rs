@@ -18,9 +18,9 @@ use std::thread;
 use anyhow::Result;
 use log::{debug, warn};
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::Error;
 
 const CHUNK_SIZE: usize = 8192;
 const MAX_CHUNKS_IN_FLIGHT: usize = 1000;

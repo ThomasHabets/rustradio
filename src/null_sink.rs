@@ -2,9 +2,9 @@
 
 use anyhow::Result;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::ReadStream;
-use crate::Error;
 
 /// Discard anything written to this block.
 #[derive(rustradio_macros::Block)]

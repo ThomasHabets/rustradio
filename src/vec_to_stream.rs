@@ -2,9 +2,9 @@
 
 Turn stream of e.g. `Vec<u8>` to stream of `u8`.
  */
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, ReadStream, WriteStream};
-use crate::Error;
 
 /// Block for vector to stream.
 #[derive(rustradio_macros::Block)]

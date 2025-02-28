@@ -1,6 +1,6 @@
 use anyhow::Result;
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Sample;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use log::{debug, error, info, trace};
 
 use crate::block::{Block, BlockRet};
@@ -8,7 +8,7 @@ use crate::graph::CancellationToken;
 use crate::stream::ReadStream;
 use crate::{Error, Float};
 
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc::{SyncSender, sync_channel};
 
 struct CpalOutput {
     device: cpal::Device,

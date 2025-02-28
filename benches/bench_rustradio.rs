@@ -2,11 +2,11 @@
 
 extern crate rustradio;
 extern crate test;
+use rustradio::Complex;
 use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::stream::new_stream;
 use rustradio::window::WindowType;
-use rustradio::Complex;
 
 use test::Bencher;
 

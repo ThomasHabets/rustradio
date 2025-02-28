@@ -1,9 +1,9 @@
 //! Skip samples, then stream at full speed.
 use anyhow::Result;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::Error;
 
 /// Turn samples into text.
 #[derive(rustradio_macros::Block)]

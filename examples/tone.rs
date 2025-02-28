@@ -5,10 +5,10 @@ use anyhow::Result;
 use clap::Parser;
 use log::warn;
 
+use rustradio::Float;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::Float;
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]

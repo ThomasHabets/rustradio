@@ -45,11 +45,7 @@ impl CorrelateAccessCode {
             .zip(&self.code)
             .filter(|(a, b)| a != b)
             .count();
-        if diffs <= self.allowed_diffs {
-            1
-        } else {
-            0
-        }
+        if diffs <= self.allowed_diffs { 1 } else { 0 }
     }
 }
 

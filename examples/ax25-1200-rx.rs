@@ -38,13 +38,13 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
+use rustradio::Error;
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::stream::ReadStream;
 use rustradio::window::WindowType;
-use rustradio::Error;
-use rustradio::{graph::Graph, mtgraph::MTGraph};
 use rustradio::{Complex, Float};
+use rustradio::{graph::Graph, mtgraph::MTGraph};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -145,7 +145,7 @@ fn get_complex_input(
 
 fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
     if opt.audio {
-        if let Some(ref read) = &opt.read {
+        if let Some(read) = &opt.read {
             let prev = add_block![g, FileSource::new(read, false)?];
             let prev = add_block![
                 g,

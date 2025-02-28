@@ -242,11 +242,7 @@ pub fn low_pass_complex(
 fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> usize {
     let a = window_type.max_attenuation();
     let t = (a * samp_rate / (22.0 * twidth)) as usize;
-    if (t & 1) == 0 {
-        t + 1
-    } else {
-        t
-    }
+    if (t & 1) == 0 { t + 1 } else { t }
 }
 
 /// Create taps for a low pass filter.

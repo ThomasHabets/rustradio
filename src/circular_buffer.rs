@@ -9,12 +9,12 @@ use std::os::fd::AsRawFd;
 use std::sync::{Arc, Condvar, Mutex};
 
 use anyhow::Result;
-use libc::{c_uchar, c_void, size_t};
 use libc::{MAP_FAILED, MAP_FIXED, MAP_SHARED, PROT_READ, PROT_WRITE};
+use libc::{c_uchar, c_void, size_t};
 use log::error;
 
-use crate::stream::{Tag, TagPos};
 use crate::Error;
+use crate::stream::{Tag, TagPos};
 
 #[derive(Debug)]
 struct Map {
@@ -516,8 +516,8 @@ impl<T: Copy> Buffer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stream::TagValue;
     use crate::Float;
+    use crate::stream::TagValue;
 
     #[test]
     fn circ_reqlen() -> Result<()> {

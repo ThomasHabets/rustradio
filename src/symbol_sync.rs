@@ -180,8 +180,7 @@ impl Block for SymbolSync {
                         }
                         trace!(
                             "SymbolSync: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
-                            self.stream_pos,
-                            self.clock
+                            self.stream_pos, self.clock
                         );
                     }
                 }

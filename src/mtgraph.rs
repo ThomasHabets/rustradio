@@ -7,7 +7,7 @@ use anyhow::Result;
 use log::{debug, error, info};
 
 use crate::block::{Block, BlockRet};
-use crate::graph::{get_cpu_time, CancellationToken};
+use crate::graph::{CancellationToken, get_cpu_time};
 
 #[derive(Default, Debug)]
 struct BlockStats {

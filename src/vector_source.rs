@@ -1,9 +1,9 @@
 //! Generate values from a fixed vector.
 use anyhow::Result;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
-use crate::Error;
 
 /// Repeat or counts.
 pub enum Repeat {

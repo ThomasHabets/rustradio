@@ -1,10 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
 
+use rustradio::Complex;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::Complex;
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]

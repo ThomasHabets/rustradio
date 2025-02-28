@@ -7,8 +7,8 @@ thing, and you connect them together with streams to process the data.
 
 use anyhow::Result;
 
-use crate::stream::StreamWait;
 use crate::Error;
+use crate::stream::StreamWait;
 
 /** Return type for all blocks.
 

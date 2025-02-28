@@ -1,8 +1,8 @@
 //! Infinite Impulse Response (IIR) filter.
 use anyhow::Result;
 
-use crate::stream::{ReadStream, WriteStream};
 use crate::Float;
+use crate::stream::{ReadStream, WriteStream};
 
 struct SinglePoleIIR<Tout> {
     alpha: Float, // TODO: GNURadio uses double

@@ -66,9 +66,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Float;
     use crate::block::Block;
     use crate::blocks::VectorSource;
-    use crate::Float;
 
     #[test]
     fn add_float() -> crate::Result<()> {

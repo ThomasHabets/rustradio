@@ -3,9 +3,9 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos};
-use crate::Error;
 
 /// Nocopy version of DebugSink.
 // TODO: maybe merge with DebugSink using an enum?

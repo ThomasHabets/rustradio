@@ -5,9 +5,9 @@
 use anyhow::Result;
 use log::trace;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::Error;
 
 fn gcd(mut a: usize, mut b: usize) -> usize {
     while b != 0 {
@@ -119,7 +119,8 @@ mod tests {
             finalcount,
             res.len(),
             "inputsize={inputsize} interp={interp} deci={deci} finalcount={finalcount}: Actual={} values={:?}",
-            res.len(), res.slice()
+            res.len(),
+            res.slice()
         );
         Ok(())
     }

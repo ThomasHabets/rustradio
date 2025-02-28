@@ -3,9 +3,9 @@
 //! This block is really only useful for unit tests.
 use anyhow::Result;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag};
-use crate::Error;
 
 /// VectorSink.
 #[derive(rustradio_macros::Block)]

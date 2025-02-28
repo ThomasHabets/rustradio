@@ -1,9 +1,9 @@
 //! Generate the same value, forever.
 use anyhow::Result;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::WriteStream;
-use crate::Error;
 
 /// Generate the same value, forever.
 #[derive(rustradio_macros::Block)]

@@ -22,9 +22,9 @@ g.add(Box::new(sink));
 */
 use anyhow::Result;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::Error;
 
 /// Turn samples into text.
 ///

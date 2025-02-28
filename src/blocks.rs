@@ -1,6 +1,6 @@
 //! Convenient mod collecting all standard library blocks for import.
 pub use crate::add::Add;
-pub use crate::add_const::{add_const, AddConst};
+pub use crate::add_const::{AddConst, add_const};
 pub use crate::au::{AuDecode, AuEncode};
 pub use crate::binary_slicer::BinarySlicer;
 pub use crate::burst_tagger::BurstTagger;

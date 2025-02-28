@@ -2,9 +2,9 @@
 use anyhow::Result;
 use log::debug;
 
+use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::Error;
 
 /// Delay stream. Good for syncing up streams.
 #[derive(rustradio_macros::Block)]

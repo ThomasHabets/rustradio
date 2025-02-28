@@ -40,8 +40,8 @@ let pdus = StreamToPdu::new(burst_out, "burst".to_string(), 10_000, 50);
 
 use std::borrow::Cow;
 
-use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::Float;
+use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
 /// Burst tagger:
 #[derive(rustradio_macros::Block)]
@@ -93,9 +93,9 @@ impl<T: Copy> BurstTagger<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Result;
     use crate::block::Block;
     use crate::blocks::{VectorSink, VectorSource};
-    use crate::Result;
 
     fn tag_compare(left: &[Tag], right: &[Tag]) {
         let mut left = left.to_vec();

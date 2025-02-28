@@ -164,8 +164,8 @@ fn render(
     use ratatui::layout::Constraint::Fill;
     use ratatui::layout::Layout;
     use ratatui::style::Color;
-    use ratatui::widgets::canvas::{Canvas, Line};
     use ratatui::widgets::Block;
+    use ratatui::widgets::canvas::{Canvas, Line};
 
     let [top, bottom] = Layout::vertical([Fill(1); 2]).areas(frame.area());
 
@@ -385,7 +385,9 @@ fn main() -> Result<()> {
         // Save to file.
         g.add(Box::new(FileSink::new(prev, out, Mode::Overwrite)?));
     } else if !cfg!(feature = "audio") {
-        panic!("Rustradio build without feature 'audio'. Can only write to file with -o, not play live.");
+        panic!(
+            "Rustradio build without feature 'audio'. Can only write to file with -o, not play live."
+        );
     } else {
         #[cfg(feature = "audio")]
         {

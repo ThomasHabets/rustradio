@@ -90,7 +90,7 @@ impl Graph {
 
 #[must_use]
 pub(crate) fn get_cpu_time() -> std::time::Duration {
-    use libc::{clock_gettime, timespec, CLOCK_PROCESS_CPUTIME_ID};
+    use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
     // SAFETY: Zeroing out a timespec struct is just all zeroes.
     let mut ts: timespec = unsafe { std::mem::zeroed() };
     // SAFETY: Local variable written my C function.

@@ -173,11 +173,7 @@ impl Wpcr {
         let samples_per_symbol = bin as Float / samples.len() as Float;
         let mut clock_phase = {
             let t = 0.5 + d[bin].arg() / (std::f64::consts::PI * 2.0) as Float;
-            if t > 0.5 {
-                t
-            } else {
-                t + 1.0
-            }
+            if t > 0.5 { t } else { t + 1.0 }
         };
         debug!("WPCR: sps: {}", samples_per_symbol);
         if let Some(samp_rate) = self.samp_rate {

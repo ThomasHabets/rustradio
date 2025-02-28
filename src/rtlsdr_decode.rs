@@ -47,8 +47,8 @@ impl Block for RtlSdrDecode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blocks::VectorSource;
     use crate::Complex;
+    use crate::blocks::VectorSource;
 
     #[test]
     fn empty() -> crate::Result<()> {

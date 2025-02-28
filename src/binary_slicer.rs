@@ -3,8 +3,8 @@
 //! TODO: should this be replaced with a MapBuilder, like in add_const?
 use anyhow::Result;
 
-use crate::stream::{ReadStream, WriteStream};
 use crate::Float;
+use crate::stream::{ReadStream, WriteStream};
 
 /// Turn positive Float values into binary `1u8`, and negative into `0u8`.
 #[derive(rustradio_macros::Block)]
@@ -18,10 +18,6 @@ pub struct BinarySlicer {
 
 impl BinarySlicer {
     fn process_sync(&self, a: Float) -> u8 {
-        if a > 0.0 {
-            1
-        } else {
-            0
-        }
+        if a > 0.0 { 1 } else { 0 }
     }
 }
