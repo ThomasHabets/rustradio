@@ -7,6 +7,10 @@ for dir in . rustradio_macros; do
                 cd "$dir"
                 cargo doc --message-format=json --no-deps \
                         | jq '.message | select(.level == "warning") | .message' \
-                        | (grep . && exit 1 || true)
+                        | (grep -q . && {
+                                echo "There are warnings related to docs:"
+                                cargo doc --no-deps
+                                exit 1
+                        } || true)
         )
 done
