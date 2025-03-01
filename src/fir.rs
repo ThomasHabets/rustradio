@@ -208,7 +208,7 @@ where
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: is this right, with the "plus one"?
         let need = self.ntaps + 1;
-        let (input, tags) = self.src.read_buf()?;
+        let (input, mut tags) = self.src.read_buf()?;
         if input.len() < need {
             return Ok(BlockRet::WaitForStream(&self.src, need));
         }
@@ -220,12 +220,18 @@ where
 
         let n = std::cmp::min(input.len(), out.len());
         let n = n - (n % self.deci);
+        assert_eq!(n % self.deci, 0);
         let v = self.fir.filter_n(&input.slice()[..n], self.deci);
         assert!(v.len() <= n);
         let n = v.len();
         input.consume(n);
         out.fill_from_iter(v);
-        out.produce(n, &tags);
+        if self.deci == 1 {
+            out.produce(n, &tags);
+        } else {
+            tags.iter_mut().for_each(|t| t.set_pos(t.pos() / self.deci));
+            out.produce(n / self.deci, &tags);
+        }
         Ok(BlockRet::Ok)
     }
 }

@@ -49,6 +49,13 @@ impl Tag {
         self.pos
     }
 
+    /// Set pos.
+    ///
+    /// Relative to the current window.
+    pub fn set_pos(&mut self, pos: TagPos) {
+        self.pos = pos;
+    }
+
     /// Get tag key.
     pub fn key(&self) -> &str {
         &self.key
