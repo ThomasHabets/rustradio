@@ -2,8 +2,8 @@
 
 All functions are periodic, not symmetric.(?)
 
-https://en.wikipedia.org/wiki/Window_function
-https://en.wikipedia.org/wiki/Spectral_leakage
+<https://en.wikipedia.org/wiki/Window_function>
+<https://en.wikipedia.org/wiki/Spectral_leakage>
 
 Notable missing window functions:
 * Hann
@@ -38,7 +38,7 @@ const DEFAULT_HAMMING_PARM: Float = 25.0 / 46.0;
 
 /// Window type.
 ///
-/// See https://en.wikipedia.org/wiki/Window_function
+/// See <https://en.wikipedia.org/wiki/Window_function>
 pub enum WindowType {
     /// Blackman window.
     Blackman,
@@ -87,12 +87,12 @@ impl WindowType {
 /// Window functions are "weights" used for applying filters and other
 /// operations.
 ///
-/// https://en.wikipedia.org/wiki/Window_function
+/// <https://en.wikipedia.org/wiki/Window_function>
 pub struct Window(pub Vec<Float>);
 
 /// Create Hamming window.
 ///
-/// https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows
+/// <https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows>
 fn hamming(ntaps: usize, a0: Float) -> Window {
     let a1 = 1.0 - a0;
     let m = (ntaps - 1) as Float;
@@ -105,7 +105,7 @@ fn hamming(ntaps: usize, a0: Float) -> Window {
 
 /// Create Blackman window.
 ///
-/// https://en.wikipedia.org/wiki/Window_function#Blackman_window
+/// <https://en.wikipedia.org/wiki/Window_function#Blackman_window>
 fn blackman(m: usize) -> Window {
     // Blackman's "not very serious proposal" magic value: 0.16.
     const A: Float = 0.16;
@@ -140,7 +140,7 @@ fn blackman(m: usize) -> Window {
 
 /// Create Blackman-Harris window.
 ///
-/// https://en.wikipedia.org/wiki/Window_function#Blackman%E2%80%93Harris_window
+/// <https://en.wikipedia.org/wiki/Window_function#Blackman%E2%80%93Harris_window>
 fn blackman_harris(m: usize) -> Window {
     // Parameters.
     const A0: Float = 0.35875;

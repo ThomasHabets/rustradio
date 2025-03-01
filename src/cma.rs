@@ -1,7 +1,7 @@
 //! WIP. Completely untested.
 //!
 //! Links:
-//! * https://en.wikipedia.org/wiki/Blind_equalization
+//! * <https://en.wikipedia.org/wiki/Blind_equalization>
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};

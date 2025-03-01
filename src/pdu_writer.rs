@@ -18,7 +18,7 @@ use crate::{Error, Sample};
 
 /** PDU writer
 
-This block takes PDUs (as Vec<u8>), and writes them to an output
+This block takes PDUs (as `Vec<u8>`), and writes them to an output
 directory, named as microseconds since epoch.
 */
 #[derive(rustradio_macros::Block)]

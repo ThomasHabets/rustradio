@@ -67,7 +67,7 @@ fn find_right_crc(data: &[u8], got: u16, fix_bits: bool) -> (Option<Vec<u8>>, u1
 /** HDLC Deframer block.
 
 This block takes a stream of bits (as u8), and outputs any HDLC frames
-found as Vec<u8>.
+found as `Vec<u8>`.
 */
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
