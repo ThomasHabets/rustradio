@@ -214,11 +214,12 @@ where
         }
 
         let mut out = self.dst.write_buf()?;
-        if out.len() < need {
-            return Ok(BlockRet::WaitForStream(&self.dst, need));
+        let need_out = need / self.deci;
+        if out.len() < need_out {
+            return Ok(BlockRet::WaitForStream(&self.dst, need_out));
         }
 
-        let n = std::cmp::min(input.len(), out.len());
+        let n = std::cmp::min(input.len(), out.len() * self.deci);
         let n = n - (n % self.deci);
         assert_eq!(n % self.deci, 0);
         let v = self.fir.filter_n(&input.slice()[..n], self.deci);
