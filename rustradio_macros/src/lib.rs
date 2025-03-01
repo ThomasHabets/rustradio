@@ -4,7 +4,7 @@
 use proc_macro::TokenStream;
 
 use quote::quote;
-use syn::{parse_macro_input, Attribute, Data, DeriveInput, Fields, Meta};
+use syn::{Attribute, Data, DeriveInput, Fields, Meta, parse_macro_input};
 
 use paste::paste;
 
@@ -246,7 +246,8 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                 let inner = inner_type(&field.ty);
                 let ty = field.ty.clone();
                 let field_name = field.ident.clone().unwrap();
-                let samp_name: syn::Ident = syn::parse_str(&format!("{field_name}_sample")).unwrap();
+                let samp_name: syn::Ident =
+                    syn::parse_str(&format!("{field_name}_sample")).unwrap();
                 (
                     field_name.clone(),
                     samp_name,

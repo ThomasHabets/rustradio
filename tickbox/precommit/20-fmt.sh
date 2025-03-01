@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
 set -ueo pipefail
 cd "$TICKBOX_TEMPDIR/work"
-exec cargo fmt -- --check
+for dir in . rustradio_macros; do
+        (
+                cd "$dir"
+                cargo fmt -- --check
+        )
+done
