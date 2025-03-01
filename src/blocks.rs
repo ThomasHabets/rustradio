@@ -17,7 +17,7 @@ pub use crate::fft_filter::FftFilterFloat;
 pub use crate::fft_stream::FftStream;
 pub use crate::file_sink::{FileSink, NoCopyFileSink};
 pub use crate::file_source::FileSource;
-pub use crate::fir::FIRFilter;
+pub use crate::fir::{FIRFilter, FirFilterBuilder};
 pub use crate::hdlc_deframer::HdlcDeframer;
 pub use crate::hilbert::Hilbert;
 pub use crate::il2p_deframer::Il2pDeframer;
