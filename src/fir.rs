@@ -127,9 +127,44 @@ where
     }
 
     /// Call `filter()` multiple times, across an input range.
-    pub fn filter_n(&self, input: &[T]) -> Vec<T> {
+    pub fn filter_n(&self, input: &[T], deci: usize) -> Vec<T> {
         let n = input.len() - self.taps.len() + 1;
-        (0..n).map(|i| self.filter(&input[i..])).collect()
+        (0..n)
+            .step_by(deci)
+            .map(|i| self.filter(&input[i..]))
+            .collect()
+    }
+}
+
+pub struct FirFilterBuilder<T> {
+    taps: Vec<T>,
+    deci: usize,
+}
+
+impl<T> FirFilterBuilder<T>
+where
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+{
+    /// Create new FirFilterBuilder, with the supplied taps.
+    pub fn new(taps: &[T]) -> Self {
+        Self {
+            taps: taps.to_vec(),
+            deci: 1,
+        }
+    }
+    /// Set the decimation to the given value.
+    ///
+    /// The default is 1, meaning no decimation.
+    pub fn deci(mut self, deci: usize) -> Self {
+        self.deci = deci;
+        self
+    }
+
+    /// Build a `FIRFilter` with the provided settings.
+    pub fn build(self, src: ReadStream<T>) -> (FIRFilter<T>, ReadStream<T>) {
+        let (mut block, stream) = FIRFilter::new(src, &self.taps);
+        block.deci = self.deci;
+        (block, stream)
     }
 }
 
@@ -139,6 +174,7 @@ where
 pub struct FIRFilter<T: Copy> {
     fir: FIR<T>,
     ntaps: usize,
+    deci: usize,
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -157,6 +193,7 @@ where
                 src,
                 dst,
                 ntaps: taps.len(),
+                deci: 1,
                 fir: FIR::new(taps),
             },
             dr,
@@ -182,7 +219,8 @@ where
         }
 
         let n = std::cmp::min(input.len(), out.len());
-        let v = self.fir.filter_n(&input.slice()[..n]);
+        let n = n - (n % self.deci);
+        let v = self.fir.filter_n(&input.slice()[..n], self.deci);
         assert!(v.len() <= n);
         let n = v.len();
         input.consume(n);
@@ -328,13 +366,17 @@ mod tests {
         ];
         let filter = FIR::new(&taps);
         assert_almost_equal_complex(
-            &filter.filter_n(&input),
+            &filter.filter_n(&input, 1),
             &[
                 Complex::new(2.3, 0.22),
                 Complex::new(3.41, 0.6),
                 Complex::new(4.56, 0.6),
                 Complex::new(5.6, 0.84),
             ],
+        );
+        assert_almost_equal_complex(
+            &filter.filter_n(&input, 2),
+            &[Complex::new(2.3, 0.22), Complex::new(4.56, 0.6)],
         );
     }
 
