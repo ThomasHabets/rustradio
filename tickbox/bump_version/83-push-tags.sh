@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec echo git push --tags
+exec git push --tags
