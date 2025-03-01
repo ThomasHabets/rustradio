@@ -22,11 +22,16 @@ pub enum BlockRet<'a> {
     /// Everything is fine, but no information about when more data could be
     /// created.
     ///
-    /// TODO: This and Pending should work things out between each other.
+    /// The graph scheduler should feel free to call the `work` function again
+    /// without waiting or sleeping.
     Ok,
 
     /// Block didn't produce anything this time, but has a background
     /// process that may suddenly produce.
+    ///
+    /// The difference between `Ok` and `Pending` is that `Pending` implies to
+    /// the graph runner that it's reasonable to sleep a bit before calling
+    /// `work` again. And that activity on any stream won't help either way.
     Pending,
 
     /// Block indicates that there's no point calling it until the provided
@@ -45,9 +50,6 @@ pub enum BlockRet<'a> {
     /// This is basically the same as WaitForFunc, but with a simpler API.
     WaitForStream(&'a dyn StreamWait, usize),
 
-    // More data may be produced even if no more data comes in.
-    // Currently not used.
-    // Background,
     /// Block indicates that it will never produce more input.
     ///
     /// Examples:
