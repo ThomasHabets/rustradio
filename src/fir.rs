@@ -112,6 +112,7 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create new FIR.
+    #[must_use]
     pub fn new(taps: &[T]) -> Self {
         Self {
             taps: taps.iter().copied().rev().collect(),
@@ -119,6 +120,7 @@ where
     }
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
+    #[must_use]
     pub fn filter(&self, input: &[T]) -> T {
         assert!(
             input.len() >= self.taps.len(),
@@ -133,12 +135,20 @@ where
     }
 
     /// Call `filter()` multiple times, across an input range.
+    #[must_use]
     pub fn filter_n(&self, input: &[T], deci: usize) -> Vec<T> {
         let n = input.len() - self.taps.len();
         (0..=n)
             .step_by(deci)
             .map(|i| self.filter(&input[i..]))
             .collect()
+    }
+
+    /// Like filter_n, but avoids a copy when there's a destination in mind.
+    pub fn filter_n_inplace(&self, input: &[T], deci: usize, out: &mut [T]) {
+        out.iter_mut()
+            .enumerate()
+            .for_each(|(i, o)| *o = self.filter(&input[(i * deci)..]));
     }
 }
 
@@ -244,16 +254,14 @@ where
         assert_ne!(n, 0, "input: {} out: {}", input.len(), out.len());
 
         // Run the FIR.
-        // TODO: can we avoid the copy, here?
-        let v = self.fir.filter_n(&input.slice()[..need], self.deci);
+        let out_n = n / self.deci;
+        self.fir
+            .filter_n_inplace(&input.slice()[..need], self.deci, &mut out.slice()[..out_n]);
 
         // Sanity check the generated output.
-        let out_n = v.len();
-        assert_eq!(out_n * self.deci, n);
         assert!(out_n <= out.len());
 
         input.consume(n);
-        out.fill_from_iter(v);
         if self.deci == 1 {
             out.produce(out_n, &tags);
         } else {
