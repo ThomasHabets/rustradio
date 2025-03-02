@@ -120,6 +120,12 @@ where
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
     pub fn filter(&self, input: &[T]) -> T {
+        assert!(
+            input.len() >= self.taps.len(),
+            "input {} < taps {}",
+            input.len(),
+            self.taps.len()
+        );
         input
             .iter()
             .zip(self.taps.iter())
@@ -128,8 +134,8 @@ where
 
     /// Call `filter()` multiple times, across an input range.
     pub fn filter_n(&self, input: &[T], deci: usize) -> Vec<T> {
-        let n = input.len() - self.taps.len() + 1;
-        (0..n)
+        let n = input.len() - self.taps.len();
+        (0..=n)
             .step_by(deci)
             .map(|i| self.filter(&input[i..]))
             .collect()
@@ -206,33 +212,57 @@ where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        // TODO: is this right, with the "plus one"?
-        let need = self.ntaps + 1;
         let (input, mut tags) = self.src.read_buf()?;
-        if input.len() < need {
-            return Ok(BlockRet::WaitForStream(&self.src, need));
-        }
 
+        // Get number of input samples we intend to consume.
+        let n = {
+            // Carefully avoid underflow.
+            let absolute_minimum = self.ntaps + self.deci - 1;
+            if input.len() < absolute_minimum {
+                return Ok(BlockRet::WaitForStream(&self.src, absolute_minimum));
+            }
+            self.deci * ((input.len() - self.ntaps + 1) / self.deci)
+        };
+        assert_ne!(n, 0);
+
+        // To consume `n`, we may need more input samples than that.
+        let need = n + self.ntaps - 1;
+        assert!(input.len() >= need, "need {need}, have {}", input.len());
+
+        // Output must have room for at least one sample.
         let mut out = self.dst.write_buf()?;
-        let need_out = need / self.deci;
+        let need_out = 1;
         if out.len() < need_out {
             return Ok(BlockRet::WaitForStream(&self.dst, need_out));
         }
 
-        let n = std::cmp::min(input.len(), out.len() * self.deci);
-        let n = n - (n % self.deci);
+        // Cap by output capacity.
+        let n = std::cmp::min(n, out.len() * self.deci);
+
+        // Final `n` (samples to consume) calculated. Sanity check it.
         assert_eq!(n % self.deci, 0);
-        let v = self.fir.filter_n(&input.slice()[..n], self.deci);
-        assert!(v.len() <= n);
-        let n = v.len();
+        assert_ne!(n, 0, "input: {} out: {}", input.len(), out.len());
+
+        // Run the FIR.
+        // TODO: can we avoid the copy, here?
+        let v = self.fir.filter_n(&input.slice()[..need], self.deci);
+
+        // Sanity check the generated output.
+        let out_n = v.len();
+        assert_eq!(out_n * self.deci, n);
+        assert!(out_n <= out.len());
+
         input.consume(n);
         out.fill_from_iter(v);
         if self.deci == 1 {
-            out.produce(n, &tags);
+            out.produce(out_n, &tags);
         } else {
             tags.iter_mut().for_each(|t| t.set_pos(t.pos() / self.deci));
-            out.produce(n / self.deci, &tags);
+            out.produce(out_n, &tags);
         }
+        // While we could keep track of which stream is the constraining factor,
+        // the code is simpler if work() is just called again, and the right
+        // WaitForStream is returned above instead.
         Ok(BlockRet::Ok)
     }
 }
@@ -354,7 +384,139 @@ pub fn hilbert(window: &Window) -> Vec<Float> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blocks::{VectorSource, VectorSourceBuilder};
+    use crate::stream::{Tag, TagValue};
     use crate::tests::assert_almost_equal_complex;
+    use anyhow::Result;
+
+    #[test]
+    fn test_identity() -> Result<()> {
+        let input = vec![
+            Complex::new(1.0, 0.0),
+            Complex::new(2.0, 0.0),
+            Complex::new(3.0, 0.2),
+            Complex::new(4.1, 0.0),
+            Complex::new(5.0, 0.0),
+            Complex::new(6.0, 0.2),
+        ];
+        let taps = vec![Complex::new(1.0, 0.0)];
+        for deci in 1..=(3 * input.len()) {
+            let (mut src, src_out) = VectorSourceBuilder::new(input.clone()).repeat(2).build();
+            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::EOF]);
+
+            eprintln!("Testing identity with decimation {deci}");
+            let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
+            if deci <= 2 * input.len() {
+                assert!(matches![b.work()?, BlockRet::Ok]);
+            }
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
+            let (res, tags) = os.read_buf()?;
+            let max = 2 * input.len() / deci;
+            if res.len() > 0 {
+                assert_eq!(
+                    &tags,
+                    &[
+                        Tag::new(0, "VectorSource::start".into(), TagValue::Bool(true)),
+                        Tag::new(0, "VectorSource::repeat".into(), TagValue::U64(0)),
+                        Tag::new(0, "VectorSource::first".into(), TagValue::Bool(true)),
+                        Tag::new(6 / deci, "VectorSource::start".into(), TagValue::Bool(true)),
+                        Tag::new(6 / deci, "VectorSource::repeat".into(), TagValue::U64(1)),
+                    ]
+                );
+            }
+            assert_almost_equal_complex(
+                res.slice(),
+                &input
+                    .iter()
+                    .chain(input.iter())
+                    .copied()
+                    .step_by(deci)
+                    .take(max)
+                    .collect::<Vec<_>>(),
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_invert() -> Result<()> {
+        let input = vec![
+            Complex::new(1.0, 0.0),
+            Complex::new(2.0, 0.0),
+            Complex::new(3.0, 0.2),
+            Complex::new(4.1, 0.0),
+            Complex::new(5.0, 0.0),
+            Complex::new(6.0, 0.2),
+        ];
+        let taps = vec![Complex::new(-1.0, 0.0)];
+        for deci in 1..=(input.len() + 1) {
+            let (mut src, src_out) = VectorSource::new(input.clone());
+            src.work()?;
+
+            eprintln!("Testing identity with decimation {deci}");
+            let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
+            if deci <= input.len() {
+                assert!(matches![b.work()?, BlockRet::Ok]);
+            }
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
+            let (res, _) = os.read_buf()?;
+            let max = input.len() / deci;
+            assert_almost_equal_complex(
+                res.slice(),
+                &input
+                    .iter()
+                    .copied()
+                    .step_by(deci)
+                    .take(max)
+                    .map(|v| -v)
+                    .collect::<Vec<_>>(),
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn moving_avg() -> Result<()> {
+        let input = vec![
+            Complex::new(1.0, 0.0),
+            Complex::new(2.0, 0.0),
+            Complex::new(3.0, 0.2),
+            Complex::new(4.1, 0.0),
+            Complex::new(5.0, 0.0),
+            Complex::new(6.0, 0.2),
+        ];
+        let taps = vec![Complex::new(0.5, 0.0), Complex::new(0.5, 0.0)];
+        for deci in 1..=(input.len() + 1) {
+            let (mut src, src_out) = VectorSource::new(input.clone());
+            src.work()?;
+
+            eprintln!("Testing identity with decimation {deci}");
+            let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
+            if deci <= input.len() - 1 {
+                assert!(matches![b.work()?, BlockRet::Ok]);
+            }
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
+            let (res, _) = os.read_buf()?;
+            let max = (input.len() - 1) / deci;
+            assert_almost_equal_complex(
+                res.slice(),
+                &[
+                    Complex::new(1.5, 0.0),
+                    Complex::new(2.5, 0.1),
+                    Complex::new(3.55, 0.1),
+                    Complex::new(4.55, 0.0),
+                    Complex::new(5.5, 0.1),
+                ]
+                .into_iter()
+                .step_by(deci)
+                .take(max)
+                .collect::<Vec<_>>(),
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_complex() {
