@@ -343,28 +343,24 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                 fn work(&mut self) -> Result<#path::block::BlockRet, #path::Error> {
                     #( let #in_names = self.#in_names.read_buf()?;)*
                     #(let #in_tag_names = #in_names.1;)*
-                    #(let #in_names = #in_names.0;)*
+                    #(let #in_names = #in_names.0;
+                      if #in_names.len() == 0 {
+                          return Ok(#path::block::BlockRet::WaitForStream(&self.#in_names, 1));
+                      })*
 
                     // Clamp n to be no more than the input available.
                     let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
-                    if n ==  0 {
-                        return Ok(#path::block::BlockRet::WaitForFunc(Box::new(|| {
-                            // OPTIMIZE: This needlessly lock churns on any
-                            // input streams that already had data.
-                            #(self.#in_names.wait_for_read(1);)*
-                        })));
-                    }
-                    #( let mut #out_names = self.#out_names.write_buf()?;)*
+                    assert_ne!(n, 0, "Input stream len 0, but we already checked that.");
+
+                    #(let mut #out_names = self.#out_names.write_buf()?;
+                      if #out_names.len() == 0 {
+                          return Ok(#path::block::BlockRet::WaitForStream(&self.#out_names, 1));
+                      })*
 
                     // Clamp n to be no more than output space.
                     let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
-                    if n ==  0 {
-                        return Ok(#path::block::BlockRet::WaitForFunc(Box::new(|| {
-                            // OPTIMIZE: This needlessly lock churns on any
-                            // output streams that already had space.
-                            #(self.#out_names.wait_for_write(1);)*
-                        })));
-                    }
+                    assert_ne!(n, 0, "Output stream len 0, but we already checked that.");
+
                     let mut otags = Vec::new();
                     let empty_tags = true #(&&#in_tag_names.is_empty())*;
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
