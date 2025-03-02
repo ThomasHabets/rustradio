@@ -76,8 +76,9 @@ impl Block for Hilbert {
         // TODO: combine this check with the i.is_empty() check above.
         if n == 0 {
             return Ok(BlockRet::WaitForFunc(Box::new(|| {
-                self.src.wait_for_read(1);
-                self.dst.wait_for_write(1);
+                // TODO: instead check which stream needs to be waited for.
+                let _ = self.src.wait_for_read(1);
+                let _ = self.dst.wait_for_write(1);
             })));
         }
 

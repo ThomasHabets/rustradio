@@ -84,16 +84,30 @@ pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 /// For ReadStream, wait until there's enough to read.
 /// For WriteStream, wait until there's enough to write something.
 pub trait StreamWait {
-    fn wait(&self, need: usize);
+    /// Wait for "a while" or until `need` samples are available/space available.
+    ///
+    /// Return true if `need` will *never* be satisfied, and blocks waiting for
+    /// it should just go ahead and EOF.
+    #[must_use]
+    fn wait(&self, need: usize) -> bool;
+
+    #[must_use]
+    fn closed(&self) -> bool;
 }
 impl<T: Copy> StreamWait for ReadStream<T> {
-    fn wait(&self, need: usize) {
-        self.wait_for_read(need);
+    fn wait(&self, need: usize) -> bool {
+        self.wait_for_read(need)
+    }
+    fn closed(&self) -> bool {
+        self.refcount() == 1
     }
 }
 impl<T: Copy> StreamWait for WriteStream<T> {
-    fn wait(&self, need: usize) {
-        self.wait_for_write(need);
+    fn wait(&self, need: usize) -> bool {
+        self.wait_for_write(need)
+    }
+    fn closed(&self) -> bool {
+        self.refcount() == 1
     }
 }
 
@@ -140,8 +154,9 @@ impl<T: Copy> ReadStream<T> {
         Ok(Arc::clone(&self.circ).read_buf()?)
     }
 
-    pub fn wait_for_read(&self, need: usize) {
-        self.circ.wait_for_read(need);
+    #[must_use]
+    pub fn wait_for_read(&self, need: usize) -> bool {
+        self.circ.wait_for_read(need) < need && Arc::strong_count(&self.circ) == 1
     }
 
     /// Return true if there is nothing more ever to read from the stream.
@@ -158,6 +173,11 @@ impl<T: Copy> ReadStream<T> {
             .read_buf()
             .expect("can't happen: read_buf() failed");
         b.is_empty()
+    }
+
+    #[must_use]
+    pub(crate) fn refcount(&self) -> usize {
+        Arc::strong_count(&self.circ)
     }
 }
 
@@ -207,8 +227,14 @@ impl<T: Copy> WriteStream<T> {
         Ok(Arc::clone(&self.circ).write_buf()?)
     }
 
-    pub fn wait_for_write(&self, need: usize) {
-        self.circ.wait_for_write(need);
+    #[must_use]
+    pub fn wait_for_write(&self, need: usize) -> bool {
+        self.circ.wait_for_write(need) < need && Arc::strong_count(&self.circ) == 1
+    }
+
+    #[must_use]
+    pub(crate) fn refcount(&self) -> usize {
+        Arc::strong_count(&self.circ)
     }
 }
 
@@ -230,22 +256,30 @@ pub struct NCReadStream<T> {
 }
 
 impl<T> StreamWait for NCReadStream<T> {
-    fn wait(&self, need: usize) {
+    fn wait(&self, need: usize) -> bool {
         let (lock, cv) = &*self.q;
-        let _ = cv
+        let l = cv
             .wait_timeout_while(
                 lock.lock().unwrap(),
                 std::time::Duration::from_millis(100),
                 |s| s.len() < need,
             )
             .unwrap();
+        l.0.len() < need && Arc::strong_count(&self.q) == 1
+    }
+    fn closed(&self) -> bool {
+        Arc::strong_count(&self.q) == 1
     }
 }
 
 impl<T> StreamWait for NCWriteStream<T> {
-    fn wait(&self, _need: usize) {
+    fn wait(&self, _need: usize) -> bool {
         // TODO: we should have a maximum, shouldn't we?
         // For now, as much room as you need.
+        Arc::strong_count(&self.q) == 1
+    }
+    fn closed(&self) -> bool {
+        Arc::strong_count(&self.q) == 1
     }
 }
 

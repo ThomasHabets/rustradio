@@ -126,6 +126,7 @@ impl GraphRunner for Graph {
                 if eof[n] {
                     continue;
                 }
+                let name = b.block_name().to_owned();
                 let st = Instant::now();
                 let st_cpu = get_cpu_time();
                 let ret = b.work()?;
@@ -149,9 +150,12 @@ impl GraphRunner for Graph {
                             eof[n] = true;
                         }
                     }
-                    BlockRet::WaitForStream(_stream, _need) => {
+                    BlockRet::WaitForStream(stream, _need) => {
+                        let closed = stream.closed();
                         drop(ret);
-                        if b.eof() {
+                        if b.eof() || closed {
+                            // TODO: This doesn't actually drop the block. Maybe
+                            // self.blocks needs to contain `Option`s?
                             eof[n] = true;
                         }
                     }
@@ -159,6 +163,9 @@ impl GraphRunner for Graph {
                         eof[n] = true;
                     }
                 };
+                if eof[n] {
+                    info!("{} EOF, exiting", name);
+                }
             }
             if done {
                 break;

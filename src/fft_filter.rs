@@ -408,8 +408,9 @@ impl<T: Engine> Block for FftFilterFloat<T> {
                 let src = &self.src;
                 let dst = &self.dst;
                 BlockRet::WaitForFunc(Box::new(move || {
-                    src.wait_for_read(need);
-                    dst.wait_for_write(need);
+                    // TODO: instead check with stream needs to be waited for.
+                    let _ = src.wait_for_read(need);
+                    let _ = dst.wait_for_write(need);
                 }))
             }
             other => other,
