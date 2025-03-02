@@ -3,7 +3,6 @@
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
  */
 use anyhow::Result;
-use log::trace;
 
 use crate::Error;
 use crate::block::{Block, BlockRet};
@@ -62,26 +61,13 @@ impl<T: Copy> RationalResampler<T> {
 
 impl<T: Copy> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
+        // TODO: retain tags.
         let (i, _tags) = self.src.read_buf()?;
 
-        {
-            let iwant = self.interp as usize + 1;
-            if i.len() < iwant {
-                return Ok(BlockRet::WaitForStream(&self.src, iwant));
-            }
-        }
         let mut o = self.dst.write_buf()?;
-        {
-            let owant = self.deci as usize + 1;
-            if o.len() < owant {
-                return Ok(BlockRet::WaitForStream(&self.dst, owant));
-            }
-        }
-        let n = std::cmp::min(i.len() - self.interp as usize, o.len() - self.deci as usize);
-        trace!("RationalResampler: n = {n}");
-        assert_ne!(n, 0);
         let mut opos = 0;
         let mut taken = 0;
+        let mut out_full = false;
         'outer: for s in i.iter() {
             taken += 1;
             self.counter += self.interp;
@@ -90,13 +76,18 @@ impl<T: Copy> Block for RationalResampler<T> {
                 self.counter -= self.deci;
                 opos += 1;
                 if opos == o.len() {
+                    out_full = true;
                     break 'outer;
                 }
             }
         }
         i.consume(taken);
         o.produce(opos, &[]);
-        Ok(BlockRet::Ok)
+        Ok(if out_full {
+            BlockRet::WaitForStream(&self.dst, 1)
+        } else {
+            BlockRet::WaitForStream(&self.src, 1)
+        })
     }
 }
 
@@ -104,7 +95,110 @@ impl<T: Copy> Block for RationalResampler<T> {
 mod tests {
     use super::*;
     use crate::blocks::VectorSource;
+    use crate::tests::assert_almost_equal_complex;
     use crate::{Complex, Float};
+
+    #[test]
+    fn deci() -> Result<()> {
+        let input = vec![
+            Complex::new(1.0, 0.0),
+            Complex::new(2.0, 0.0),
+            Complex::new(3.0, 0.2),
+            Complex::new(4.1, 0.0),
+            Complex::new(5.0, 0.0),
+            Complex::new(6.0, 0.2),
+        ];
+        for deci in 1..=(input.len() + 1) {
+            let (mut src, src_out) = VectorSource::new(input.clone());
+            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::EOF]);
+            let (mut b, os) = RationalResampler::new(src_out, 1, deci)?;
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
+            let (res, _) = os.read_buf()?;
+            // TODO: test tags
+            assert_almost_equal_complex(
+                res.slice(),
+                &input.iter().copied().step_by(deci).collect::<Vec<_>>(),
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn example64() -> Result<()> {
+        let input: Vec<_> = (0..50).collect();
+        let (mut src, src_out) = VectorSource::new(input.clone());
+        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        let (mut b, os) = RationalResampler::new(src_out, 25, 64)?;
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
+        let (res, _) = os.read_buf()?;
+        // TODO: test tags
+        assert_eq!(
+            res.slice(),
+            &[
+                0, 2, 5, 7, 10, 12, 15, 17, 20, 23, 25, 28, 30, 33, 35, 38, 40, 43, 46, 48
+            ],
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn example128() -> Result<()> {
+        let input: Vec<_> = (0..50).collect();
+        let (mut src, src_out) = VectorSource::new(input.clone());
+        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
+        let (res, _) = os.read_buf()?;
+        assert_eq!(res.slice(), &[0, 5, 10, 15, 20, 25, 30, 35, 40, 46]);
+        Ok(())
+    }
+
+    #[test]
+    fn chained() -> Result<()> {
+        let input: Vec<_> = (0..5000).collect();
+
+        // Path 1: direct 25/128.
+        let path1 = {
+            let (mut src, src_out) = VectorSource::new(input.clone());
+            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::EOF]);
+
+            let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
+            os.read_buf()?.0
+        };
+
+        // Path 2: first 1/2, then 25/64.
+        let path2 = {
+            let (mut src, src_out) = VectorSource::new(input.clone());
+            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::EOF]);
+
+            let (mut b1, os1) = RationalResampler::new(src_out, 1, 2)?;
+            assert!(matches![b1.work()?, BlockRet::WaitForStream(_, _)]);
+
+            let (mut b2, os) = RationalResampler::new(os1, 25, 64)?;
+            assert!(matches![b2.work()?, BlockRet::WaitForStream(_, _)]);
+            os.read_buf()?.0
+        };
+        assert_eq!(path1.len(), path2.len());
+        path1
+            .iter()
+            .zip(path2.iter())
+            .enumerate()
+            .for_each(|(n, (&a, &b))| {
+                let abs = if a > b { a - b } else { b - a };
+                assert!(
+                    abs < 2,
+                    "mismatch as position {n}: diff of more than 1 for {a} vs {b}"
+                );
+            });
+        //assert_eq!(res.slice(), &[0, 5, 10, 15, 20, 25, 30, 35, 40, 46]);
+        Ok(())
+    }
 
     fn runtest(inputsize: usize, interp: usize, deci: usize, finalcount: usize) -> Result<()> {
         let input: Vec<_> = (0..inputsize)
@@ -126,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn foo() -> Result<()> {
+    fn rates() -> Result<()> {
         runtest(10, 1, 1, 10)?;
         runtest(10, 1, 2, 5)?;
         runtest(10, 2, 1, 20)?;
