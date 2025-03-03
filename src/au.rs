@@ -19,7 +19,7 @@ use crate::{Error, Float};
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Encoding {
     /// 16 bit linear PCM.
-    PCM16 = 3,
+    Pcm16 = 3,
 }
 
 /** Au encoder block.
@@ -36,7 +36,7 @@ use rustradio::Complex;
 let (src, src_out) = VectorSource::new(
     vec![10.0, 0.0, -20.0, 0.0, 100.0, -100.0],
 );
-let (au, au_out) = AuEncode::new(src_out, Encoding::PCM16, 48000, 1);
+let (au, au_out) = AuEncode::new(src_out, Encoding::Pcm16, 48000, 1);
 let sink = FileSink::new(au_out, "/dev/null".into(), Mode::Overwrite)?;
 let mut g = Graph::new();
 g.add(Box::new(src));
@@ -61,7 +61,7 @@ pub struct AuEncode {
 impl AuEncode {
     /// Create new Au encoder block.
     ///
-    /// * `encoding`: currently only `Encoding::PCM16` is implemented.
+    /// * `encoding`: currently only `Encoding::Pcm16` is implemented.
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
     pub fn new(
@@ -72,7 +72,7 @@ impl AuEncode {
     ) -> (Self, ReadStream<u8>) {
         assert_eq!(
             encoding,
-            Encoding::PCM16,
+            Encoding::Pcm16,
             "only encoding supported is PCM16"
         );
         assert_eq!(channels, 1, "only mono supported at the moment");
@@ -222,7 +222,7 @@ impl Block for AuDecode {
                     return Ok(BlockRet::WaitForStream(&self.src, header_rest_len));
                 }
                 let head = i.iter().take(header_rest_len).copied().collect::<Vec<_>>();
-                if Encoding::PCM16 as u32 != u32::from_be_bytes(head[4..8].try_into().unwrap()) {
+                if Encoding::Pcm16 as u32 != u32::from_be_bytes(head[4..8].try_into().unwrap()) {
                     return Err(Error::new("only PCM16 encoding supported"));
                 }
                 let bitrate = u32::from_be_bytes(head[8..12].try_into().unwrap());

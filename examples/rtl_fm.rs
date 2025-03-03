@@ -377,7 +377,7 @@ fn main() -> Result<()> {
             g,
             AuEncode::new(
                 prev,
-                rustradio::au::Encoding::PCM16,
+                rustradio::au::Encoding::Pcm16,
                 new_samp_rate as u32,
                 1
             )

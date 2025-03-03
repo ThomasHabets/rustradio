@@ -113,7 +113,7 @@ mod internal {
         // Convert to .au.
         let prev = blehbleh![
             g,
-            AuEncode::new(prev, rustradio::au::Encoding::PCM16, 48000, 1)
+            AuEncode::new(prev, rustradio::au::Encoding::Pcm16, 48000, 1)
         ];
 
         // Save to file.
