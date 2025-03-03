@@ -11,7 +11,6 @@ use crate::stream::StreamWait;
 ///
 /// This will let the scheduler know if more data could come out of this block,
 /// or if it should just never bother calling it again.
-//#[derive(Debug)]
 pub enum BlockRet<'a> {
     /// Everything is fine, but no information about when more data could be
     /// created.
@@ -76,6 +75,22 @@ pub enum BlockRet<'a> {
     /// * Reading from a `VectorSource` that reached its end.
     /// * Head block reached its max.
     EOF,
+}
+
+impl std::fmt::Debug for BlockRet<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{}",
+            match self {
+                BlockRet::Ok => "Ok",
+                BlockRet::Pending => "Pending",
+                BlockRet::WaitForFunc(_) => "WaitForFunc",
+                BlockRet::WaitForStream(_, _) => "WaitForStream",
+                BlockRet::EOF => "EOF",
+            }
+        )
+    }
 }
 
 /// Provide name of block.

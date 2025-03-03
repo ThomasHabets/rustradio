@@ -53,7 +53,8 @@ mod tests {
     #[test]
     fn empty() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![]);
-        assert!(matches![src.work()?, BlockRet::EOF]);
+        let r = src.work()?;
+        assert!(matches![r, BlockRet::EOF], "Want EOF, got {r:?}");
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = dec_out.read_buf()?;
