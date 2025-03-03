@@ -8,7 +8,7 @@ use anyhow::Result;
 use log::{trace, warn};
 
 use crate::block::{Block, BlockRet};
-use crate::iir_filter::CappedFilter;
+use crate::iir_filter::ClampedFilter;
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Float};
 
@@ -48,7 +48,7 @@ pub struct SymbolSync {
     max_deviation: Float,
     clock: Float,
     _ted: Box<dyn Ted>,
-    clock_filter: Box<dyn CappedFilter<Float>>,
+    clock_filter: Box<dyn ClampedFilter<Float>>,
     last_sign: bool,
     stream_pos: Float,
     last_sym_boundary_pos: Float,
@@ -72,7 +72,7 @@ impl SymbolSync {
         sps: Float,
         max_deviation: Float,
         ted: Box<dyn Ted>,
-        mut clock_filter: Box<dyn CappedFilter<Float>>,
+        mut clock_filter: Box<dyn ClampedFilter<Float>>,
     ) -> (Self, ReadStream<Float>) {
         assert!(sps > 1.0);
         clock_filter.fill(sps);
@@ -169,7 +169,7 @@ impl Block for SymbolSync {
                             self.stream_pos,
                             self.last_sym_boundary_pos
                         );
-                        self.clock = self.clock_filter.filter_capped(
+                        self.clock = self.clock_filter.filter_clamped(
                             t - self.sps,
                             mi - self.sps,
                             mx - self.sps,

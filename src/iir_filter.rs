@@ -1,47 +1,53 @@
-/*! Infinite impulse response filter
-
-*/
+//! Infinite impulse response filter.
+//!
+//! This module doesn't contain any blocks. It only has the IIR specific code.
+//! It can be used with the [`crate::blocks::SinglePoleIirFilter`] block.
 use std::collections::VecDeque;
 
 use crate::Float;
 
-/// Ability to call .min and .max, like floats.
-pub trait MinMax {
-    /// Return min of two values.
-    fn min(&self, o: Self) -> Self;
-
-    /// Return max of two values.
-    fn max(&self, o: Self) -> Self;
+/// Ability to call `.clamp()`.
+///
+/// Needed for `ClampedFilter`.
+pub trait Clamp {
+    /// Return clamped value.
+    fn clamp(&self, mi: Self, mx: Self) -> Self;
 }
-impl MinMax for Float {
-    fn max(&self, r: Float) -> Self {
-        r.max(*self)
-    }
-    fn min(&self, r: Float) -> Self {
-        r.min(*self)
+impl Clamp for Float {
+    fn clamp(&self, mi: Float, mx: Float) -> Self {
+        Float::clamp(*self as Float, mi, mx)
     }
 }
 
-/// General filter.
+/// General IIR filter.
 ///
 /// TODO: also add filter_n.
 pub trait Filter<T: Copy + Default>: Send {
     /// Filter from one input sample.
     fn filter(&mut self, input: T) -> T;
 
-    /// Fill filter history.
+    /// Fill filter history with the given value.
     fn fill(&mut self, s: T);
 }
 
-/// General filter.
+/// A ClampedFilter is like a regular filter, but clamps the output value to be
+/// between the minimum and the maximum.
 ///
 /// TODO: also add filter_n.
-pub trait CappedFilter<T: Copy + Default + MinMax>: Filter<T> {
+pub trait ClampedFilter<T: Copy + Default + Clamp>: Filter<T> {
     /// Filter from one input sample.
-    fn filter_capped(&mut self, input: T, mi: T, mx: T) -> T;
+    fn filter_clamped(&mut self, input: T, mi: T, mx: T) -> T;
 }
 
 /// Finite impulse response filter.
+///
+/// An IIR filter is like a FIR but feeds back the output, meaning while
+/// intended to dampen, it never full loses its "history". Hence "infinite".
+///
+/// IIR filters are a bit more complicated than FIR filters, but can also be
+/// more efficient.
+///
+/// For more info see <https://en.wikipedia.org/wiki/Infinite_impulse_response>.
 pub struct IirFilter<T: Copy> {
     taps: Vec<T>,
     buf: VecDeque<T>,
@@ -51,7 +57,7 @@ impl<T> IirFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    /// Create new IIR.
+    /// Create new IIR from the provided taps.
     pub fn new(taps: &[T]) -> Self {
         Self {
             taps: taps.to_vec(),
@@ -83,16 +89,16 @@ where
     }
 }
 
-impl<T> CappedFilter<T> for IirFilter<T>
+impl<T> ClampedFilter<T> for IirFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + MinMax + Send,
+    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + Clamp + Send,
 {
-    fn filter_capped(&mut self, sample: T, mi: T, mx: T) -> T {
+    fn filter_clamped(&mut self, sample: T, mi: T, mx: T) -> T {
         let mut ret = self.taps[0] * sample;
         for (i, s) in self.buf.iter().rev().enumerate() {
             ret = ret + *s * self.taps[i + 1];
         }
-        ret = ret.min(mx).max(mi);
+        ret = ret.clamp(mi, mx);
         self.buf.push_back(ret);
         if self.buf.len() == self.taps.len() {
             self.buf.pop_front();
