@@ -4,13 +4,13 @@ use anyhow::Result;
 use crate::Float;
 use crate::stream::{ReadStream, WriteStream};
 
-struct SinglePoleIIR<Tout> {
+struct SinglePoleIir<Tout> {
     alpha: Float, // TODO: GNURadio uses double
     one_minus_alpha: Float,
     prev_output: Tout,
 }
 
-impl<Tout> SinglePoleIIR<Tout>
+impl<Tout> SinglePoleIir<Tout>
 where
     Tout: Copy + Default + std::ops::Mul<Float, Output = Tout> + std::ops::Add<Output = Tout>,
 {
@@ -44,7 +44,7 @@ where
 /// Infinite Impulse Response (IIR) filter.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, sync)]
-pub struct SinglePoleIIRFilter<T>
+pub struct SinglePoleIirFilter<T>
 where
     T: Copy
         + Default
@@ -52,14 +52,14 @@ where
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>,
 {
-    iir: SinglePoleIIR<T>,
+    iir: SinglePoleIir<T>,
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
     dst: WriteStream<T>,
 }
 
-impl<T> SinglePoleIIRFilter<T>
+impl<T> SinglePoleIirFilter<T>
 where
     T: Copy
         + Default
@@ -75,7 +75,7 @@ where
             Self {
                 src,
                 dst,
-                iir: SinglePoleIIR::<T>::new(alpha)?,
+                iir: SinglePoleIir::<T>::new(alpha)?,
             },
             dr,
         ))
@@ -96,7 +96,7 @@ mod tests {
         // TODO: create an actual test.
         let src = ReadStream::from_slice(&[0.1, 0.2]);
         let (mut iir, _) =
-            SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
     }
@@ -106,7 +106,7 @@ mod tests {
         // TODO: create an actual test.
         let src = ReadStream::from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
         let (mut iir, _) =
-            SinglePoleIIRFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
         iir.work()?;
         Ok(())
     }
@@ -115,14 +115,14 @@ mod tests {
     fn reject_bad_alpha() -> Result<()> {
         for tv in [0.0, 0.1, 1.0] {
             let src = ReadStream::from_slice(&[0.1, 0.2]);
-            SinglePoleIIRFilter::new(src, tv).ok_or(Error::new("should accept {tv}"))?;
+            SinglePoleIirFilter::new(src, tv).ok_or(Error::new("should accept {tv}"))?;
         }
         let src = ReadStream::from_slice(&[0.1, 0.2]);
-        if SinglePoleIIRFilter::new(src, -0.1).is_some() {
+        if SinglePoleIirFilter::new(src, -0.1).is_some() {
             return Err(Error::new("should not accept -0.1").into());
         }
         let src = ReadStream::from_slice(&[0.1, 0.2]);
-        if SinglePoleIIRFilter::new(src, 1.1).is_some() {
+        if SinglePoleIirFilter::new(src, 1.1).is_some() {
             return Err(Error::new("should not accept 1.1").into());
         }
         Ok(())

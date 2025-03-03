@@ -17,12 +17,12 @@ Also see `examples/wpcr.rs`.
 
 ```
 use rustradio::graph::{Graph, GraphRunner};
-use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIIRFilter,BurstTagger,StreamToPdu};
+use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIirFilter,BurstTagger,StreamToPdu};
 use rustradio::Complex;
 let (src, src_out) = FileSource::new("/dev/null", false)?;
 let (tee, data, b) = Tee::new(src_out);
 let (c2m, c2m_out) = ComplexToMag2::new(b);
-let (iir, iir_out) = SinglePoleIIRFilter::new(c2m_out, 0.01).unwrap();
+let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
 let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst".to_string());
 let pdus = StreamToPdu::new(burst_out, "burst".to_string(), 10_000, 50);
 // pdus.out() now delivers bursts as Vec<Complex>

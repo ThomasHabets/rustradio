@@ -343,7 +343,7 @@ fn main() -> Result<()> {
         500.0,
         &rustradio::window::WindowType::Hamming,
     );
-    //let audio_filter = FIRFilter::new(prev, &taps);
+    //let audio_filter = FirFilter::new(prev, &taps);
     let prev = blehbleh![g, FftFilterFloat::new(prev, &taps)];
 
     // Resample audio.

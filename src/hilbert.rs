@@ -13,7 +13,7 @@ This implementation is a pretty inefficient.
 */
 
 use crate::block::{Block, BlockRet};
-use crate::fir::FIR;
+use crate::fir::Fir;
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::WindowType;
 use crate::{Complex, Error, Float};
@@ -27,7 +27,7 @@ pub struct Hilbert {
     #[rustradio(out)]
     dst: WriteStream<Complex>,
     history: Vec<Float>,
-    filter: FIR<Float>,
+    filter: Fir<Float>,
     ntaps: usize,
 }
 
@@ -48,7 +48,7 @@ impl Hilbert {
                 ntaps,
                 dst,
                 history: vec![0.0; ntaps],
-                filter: FIR::new(&taps),
+                filter: Fir::new(&taps),
             },
             dr,
         )

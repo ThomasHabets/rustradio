@@ -159,7 +159,7 @@ fn main() -> Result<()> {
 
     let baud = 9600.0;
     let (prev, mut block) = {
-        let clock_filter = rustradio::iir_filter::IIRFilter::new(&opt.symbol_taps);
+        let clock_filter = rustradio::iir_filter::IirFilter::new(&opt.symbol_taps);
         let (block, prev) = SymbolSync::new(
             prev,
             samp_rate / baud,

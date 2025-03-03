@@ -108,7 +108,7 @@ fn main() -> Result<()> {
     let burst_tee = add_block![g, ComplexToMag2::new(burst_tee)];
     let burst_tee = add_block![
         g,
-        SinglePoleIIRFilter::new(burst_tee, opt.iir_alpha)
+        SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)
             .ok_or(Error::new("bad IIR parameters"))?
     ];
 

@@ -12,7 +12,7 @@ use crate::window::{Window, WindowType};
 use crate::{Complex, Error, Float};
 
 /// Finite impulse response filter.
-pub struct FIR<T: Copy> {
+pub struct Fir<T: Copy> {
     taps: Vec<T>,
 }
 
@@ -70,7 +70,7 @@ fn sum_product_avx(vec1: &[f32], vec2: &[f32]) -> f32 {
     }
 }
 
-impl FIR<Float> {
+impl Fir<Float> {
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
     pub fn filter_float(&self, input: &[Float]) -> Float {
@@ -107,11 +107,11 @@ impl FIR<Float> {
     }
 }
 
-impl<T> FIR<T>
+impl<T> Fir<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    /// Create new FIR.
+    /// Create new Fir.
     #[must_use]
     pub fn new(taps: &[T]) -> Self {
         Self {
@@ -176,9 +176,9 @@ where
         self
     }
 
-    /// Build a `FIRFilter` with the provided settings.
-    pub fn build(self, src: ReadStream<T>) -> (FIRFilter<T>, ReadStream<T>) {
-        let (mut block, stream) = FIRFilter::new(src, &self.taps);
+    /// Build a `FirFilter` with the provided settings.
+    pub fn build(self, src: ReadStream<T>) -> (FirFilter<T>, ReadStream<T>) {
+        let (mut block, stream) = FirFilter::new(src, &self.taps);
         block.deci = self.deci;
         (block, stream)
     }
@@ -187,8 +187,8 @@ where
 /// Finite impulse response filter block.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FIRFilter<T: Copy> {
-    fir: FIR<T>,
+pub struct FirFilter<T: Copy> {
+    fir: Fir<T>,
     ntaps: usize,
     deci: usize,
     #[rustradio(in)]
@@ -197,11 +197,11 @@ pub struct FIRFilter<T: Copy> {
     dst: WriteStream<T>,
 }
 
-impl<T: Copy> FIRFilter<T>
+impl<T: Copy> FirFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    /// Create FIR block given taps.
+    /// Create Fir block given taps.
     pub fn new(src: ReadStream<T>, taps: &[T]) -> (Self, ReadStream<T>) {
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -210,14 +210,14 @@ where
                 dst,
                 ntaps: taps.len(),
                 deci: 1,
-                fir: FIR::new(taps),
+                fir: Fir::new(taps),
             },
             dr,
         )
     }
 }
 
-impl<T> Block for FIRFilter<T>
+impl<T> Block for FirFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
@@ -541,7 +541,7 @@ mod tests {
             Complex::new(1.0, 0.0),
             Complex::new(0.0, 0.2),
         ];
-        let filter = FIR::new(&taps);
+        let filter = Fir::new(&taps);
         assert_almost_equal_complex(
             &filter.filter_n(&input, 1),
             &[
