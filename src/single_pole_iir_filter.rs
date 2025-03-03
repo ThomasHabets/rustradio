@@ -1,4 +1,9 @@
 //! Infinite Impulse Response (IIR) filter.
+//!
+//! Also see:
+//! * <https://en.wikipedia.org/wiki/Infinite_impulse_response>
+//! * <https://www.wavewalkerdsp.com/2022/08/10/single-pole-iir-filter-substitute-for-moving-average-filter/>
+//! * [`iir_filter`](crate::iir_filter) module
 use anyhow::Result;
 
 use crate::Float;
@@ -41,7 +46,12 @@ where
     }
 }
 
-/// Infinite Impulse Response (IIR) filter.
+/// Single pole IIR filter.
+///
+/// This can be used as a more efficient moving average.
+///
+/// See
+/// <https://www.wavewalkerdsp.com/2022/08/10/single-pole-iir-filter-substitute-for-moving-average-filter/>
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, sync)]
 pub struct SinglePoleIirFilter<T>
@@ -67,8 +77,7 @@ where
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>,
 {
-    /// Create new IIR filter.
-    // TODO: have it take IIR, so that we can generate new()?
+    /// Create new block.
     pub fn new(src: ReadStream<T>, alpha: Float) -> Option<(Self, ReadStream<T>)> {
         let (dst, dr) = crate::stream::new_stream();
         Some((

@@ -1,7 +1,10 @@
 //! Infinite impulse response filter.
 //!
 //! This module doesn't contain any blocks. It only has the IIR specific code.
-//! It can be used with the [`crate::blocks::SinglePoleIirFilter`] block.
+//! Although when an IIR filter block is written, this module is likely where
+//! it'll end up.
+//!
+//! For blocks, see [`SinglePoleIirFilter`](crate::blocks::SinglePoleIirFilter).
 use std::collections::VecDeque;
 
 use crate::Float;
@@ -21,7 +24,7 @@ impl Clamp for Float {
 
 /// General IIR filter.
 ///
-/// TODO: also add filter_n.
+/// TODO: also add filter_n?
 pub trait Filter<T: Copy + Default>: Send {
     /// Filter from one input sample.
     fn filter(&mut self, input: T) -> T;
@@ -33,9 +36,9 @@ pub trait Filter<T: Copy + Default>: Send {
 /// A ClampedFilter is like a regular filter, but clamps the output value to be
 /// between the minimum and the maximum.
 ///
-/// TODO: also add filter_n.
+/// TODO: also add filter_n?
 pub trait ClampedFilter<T: Copy + Default + Clamp>: Filter<T> {
-    /// Filter from one input sample.
+    /// Filter from one input sample, but with clamped output.
     fn filter_clamped(&mut self, input: T, mi: T, mx: T) -> T;
 }
 
