@@ -114,7 +114,7 @@ fn main() -> Result<()> {
             prev,
             samp_rate / baud,
             opt.symbol_max_deviation,
-            Box::new(rustradio::symbol_sync::TEDZeroCrossing::new()),
+            Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
             Box::new(clock_filter),
         );
         g.add(Box::new(block));

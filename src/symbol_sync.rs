@@ -13,19 +13,19 @@ use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Float};
 
 /// Timing Error Detector.
-pub trait TED: Send {}
+pub trait Ted: Send {}
 
 /// ZeroCrossing TED.
-pub struct TEDZeroCrossing {}
+pub struct TedZeroCrossing {}
 
-impl TEDZeroCrossing {
+impl TedZeroCrossing {
     /// Create new TED.
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl Default for TEDZeroCrossing {
+impl Default for TedZeroCrossing {
     fn default() -> Self {
         Self::new()
     }
@@ -33,7 +33,7 @@ impl Default for TEDZeroCrossing {
 
 // Dummy implementation. Zerocrossing is actually the only
 // implementation.
-impl TED for TEDZeroCrossing {}
+impl Ted for TedZeroCrossing {}
 
 /** Pluggable clock recovery block.
 
@@ -47,7 +47,7 @@ pub struct SymbolSync {
     sps: Float,
     max_deviation: Float,
     clock: Float,
-    _ted: Box<dyn TED>,
+    _ted: Box<dyn Ted>,
     clock_filter: Box<dyn CappedFilter<Float>>,
     last_sign: bool,
     stream_pos: Float,
@@ -71,7 +71,7 @@ impl SymbolSync {
         src: ReadStream<Float>,
         sps: Float,
         max_deviation: Float,
-        ted: Box<dyn TED>,
+        ted: Box<dyn Ted>,
         mut clock_filter: Box<dyn CappedFilter<Float>>,
     ) -> (Self, ReadStream<Float>) {
         assert!(sps > 1.0);
