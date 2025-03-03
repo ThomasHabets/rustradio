@@ -34,6 +34,12 @@ pub enum BlockRet<'a> {
     /// Importantly, in both these examples, a second `work()` call is not
     /// expected to do nothing, and just return `Ok`. It'll either do useful
     /// work, or it'll properly return a status showing what it's blocked on.
+    ///
+    /// Bad examples of returning Ok:
+    /// * Can't be bothered identifying the stream we're waiting for.
+    ///
+    /// Returning Ok indefinitely wastes CPU, and means the graph will never
+    /// finish.
     Ok,
 
     /// Block didn't produce anything this time, but has a background
@@ -44,7 +50,9 @@ pub enum BlockRet<'a> {
     /// `work` again. And that activity on any stream won't help either way.
     ///
     /// Example: `RtlSdrSource` may not currently have any new data, but we
-    /// can't control when it does.
+    /// can't control when it does. But maybe this example would be better
+    /// served with WaitForFunc? That way at least a multithreaded graph
+    /// executor can sleep.
     Pending,
 
     /// Block indicates that there's no point calling it until the provided
@@ -61,6 +69,11 @@ pub enum BlockRet<'a> {
 
     /// Signal that we're waiting for a stream. Either an input or output
     /// stream.
+    ///
+    /// If a block is waiting for two streams, then pick one for this return. If
+    /// in the next invocation the other stream is the one preventing progress,
+    /// then return that then. Don't worry about not being able to return a
+    /// single status indicating both are being waited for.
     ///
     /// This is preferred over `WaitForFunc`, since graph executors know more
     /// about the stream. E.g. if a block says that it's waiting for more data
