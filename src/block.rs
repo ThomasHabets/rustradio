@@ -47,7 +47,10 @@ pub enum BlockRet<'a> {
     /// Signal that we're waiting for a stream. Either an input or output
     /// stream.
     ///
-    /// This is basically the same as WaitForFunc, but with a simpler API.
+    /// This is preferred over `WaitForFunc`, since graph executors know more
+    /// about the stream. E.g. if a block says that it's waiting for more data
+    /// on a stream, and the stream writer side goes away, then the waiting
+    /// block will never be satisfied, and is therefore also shut down.
     WaitForStream(&'a dyn StreamWait, usize),
 
     /// Block indicates that it will never produce more input.
