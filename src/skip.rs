@@ -23,6 +23,9 @@ impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         let mut o = self.dst.write_buf()?;
+        if o.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
 
         if self.skip == 0 {
             // Fast path, once skipping is done.
