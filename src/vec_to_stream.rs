@@ -4,22 +4,16 @@ Turn stream of e.g. `Vec<u8>` to stream of `u8`.
  */
 use crate::Error;
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, ReadStream, WriteStream};
+use crate::stream::{NCReadStream, WriteStream};
 
 /// Block for vector to stream.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct VecToStream<T> {
+    #[rustradio(in)]
     src: NCReadStream<Vec<T>>,
+    #[rustradio(out)]
     dst: WriteStream<T>,
-}
-
-impl<T> VecToStream<T> {
-    /// Create new VecToStream.
-    pub fn new(src: NCReadStream<Vec<T>>) -> (Self, ReadStream<T>) {
-        let (dst, dr) = crate::stream::new_stream();
-        (Self { src, dst }, dr)
-    }
 }
 
 impl<T: Copy> Block for VecToStream<T> {
