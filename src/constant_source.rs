@@ -23,6 +23,6 @@ where
         o.slice().fill(self.val);
         let n = o.len();
         o.produce(n, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::WaitForStream(&self.dst, 1))
     }
 }
