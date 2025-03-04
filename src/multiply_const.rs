@@ -2,8 +2,6 @@
 use crate::stream::{ReadStream, WriteStream};
 
 /// Multiply stream by a constant value.
-///
-/// TODO: replace with a mapper?
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
 pub struct MultiplyConst<T: Copy + std::ops::Mul<Output = T>> {

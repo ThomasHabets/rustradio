@@ -102,12 +102,10 @@ pub(crate) fn get_cpu_time() -> std::time::Duration {
 }
 
 impl GraphRunner for Graph {
-    /// Add a block to the flowgraph.
     fn add(&mut self, b: Box<dyn Block + Send>) {
         self.blocks.push(b);
     }
 
-    /// Run the graph until completion.
     fn run(&mut self) -> Result<()> {
         let st = Instant::now();
         let start_run_cpu = get_cpu_time();
@@ -190,7 +188,6 @@ impl GraphRunner for Graph {
         Ok(())
     }
 
-    /// Return a string with stats about where time went.
     fn generate_stats(&self) -> Option<String> {
         let elapsed = self.spent_time?;
         let elapsed_cpu = self.spent_cpu_time?.as_secs_f64();
@@ -268,22 +265,6 @@ impl GraphRunner for Graph {
         Some(s)
     }
 
-    /// Return a cancellation token, for asynchronously stopping the
-    /// graph, for example if the user presses Ctrl-C.
-    ///
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use rustradio::graph::GraphRunner;
-    /// let mut g = rustradio::graph::Graph::new();
-    /// let cancel = g.cancel_token();
-    /// ctrlc::set_handler(move || {
-    ///     cancel.cancel();
-    /// }).expect("failed to set Ctrl-C handler");
-    /// g.run()?;
-    /// # Ok::<(), anyhow::Error>(())
-    /// ```
     fn cancel_token(&self) -> CancellationToken {
         self.cancel_token.clone()
     }

@@ -1,5 +1,8 @@
 //! FFT stream.
-
+//!
+//! Takes a stream of data, runs an FFT on it, and outputs it as a stream.
+//! The consumer of the stream needs to know what the FFT size is, or it won't
+//! be able to make sense of it.
 use anyhow::Result;
 use rustfft::FftPlanner;
 
@@ -7,6 +10,9 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float};
 
+/// Takes a stream of data, runs an FFT on it, and outputs it as a stream.
+/// The consumer of the stream needs to know what the FFT size is, or it won't
+/// be able to make sense of it.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct FftStream {

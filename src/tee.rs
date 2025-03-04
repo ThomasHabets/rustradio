@@ -5,7 +5,6 @@ use anyhow::Result;
 use crate::stream::{ReadStream, WriteStream};
 
 /// Tee
-// TODO: make sync
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
 pub struct Tee<T: Copy> {

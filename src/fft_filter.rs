@@ -1,32 +1,12 @@
-/*! FFT filter. Like a FIR filter, but more efficient when there are many taps.
-
-```
-use rustradio::{Complex, Float};
-use rustradio::graph::{Graph, GraphRunner};
-use rustradio::fir::low_pass_complex;
-use rustradio::blocks::{ConstantSource, FftFilter, NullSink};
-
-let mut graph = Graph::new();
-
-// Create taps for a 100kHz low pass filter with 1kHz transition
-// width.
-let samp_rate: Float = 1_000_000.0;
-let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, &rustradio::window::WindowType::Hamming);
-
-// Set up dummy source and sink.
-let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0));
-
-// Create and connect fft.
-let (fft, fft_out) = FftFilter::new(src_out, &taps);
-
-// Set up dummy sink.
-let sink = NullSink::new(fft_out);
-```
-
-## Further reading:
-* <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
-* <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
-*/
+//! FFT filter. Like a FIR filter, but more efficient when there are many taps.
+//!
+//! Backend can be the rustfft crate, or FFTW, if the `fftw` feature is enabled.
+//! FFTW is a little bit faster, but requires the system library as a
+//! dependency.
+//!
+//! ## Further reading:
+//! * <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
+//! * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
 use anyhow::Result;
 use log::trace;
 
@@ -66,6 +46,7 @@ pub mod rr_fftw {
     use super::*;
     use fftw::plan::{C2CPlan, C2CPlan32};
 
+    /// FFT `Engine` for FFTW.
     pub struct FftwEngine {
         tap_len: usize,
         taps_fft: Vec<Complex>,
@@ -74,6 +55,7 @@ pub mod rr_fftw {
     }
 
     impl FftwEngine {
+        /// Create new FFTW engine, given taps.
         #[must_use]
         pub fn new(taps: &[Complex]) -> Self {
             let fft_size = calc_fft_size(taps.len());
@@ -138,6 +120,7 @@ pub mod rr_fftw {
 pub mod rr_rustfft {
     use super::*;
     use std::sync::Arc;
+    /// FFT `Engine` using crate `rustfft`.
     pub struct RustFftEngine {
         tap_len: usize,
         taps_fft: Vec<Complex>,
@@ -145,6 +128,7 @@ pub mod rr_rustfft {
         ifft: Arc<dyn rustfft::Fft<Float>>,
     }
     impl RustFftEngine {
+        /// Create new rustfft engine, given taps.
         #[must_use]
         pub fn new(taps: &[Complex]) -> Self {
             let fft_size = calc_fft_size(taps.len());
@@ -182,6 +166,32 @@ pub mod rr_rustfft {
 }
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
+/// ```
+/// use rustradio::{Complex, Float};
+/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::fir::low_pass_complex;
+/// use rustradio::blocks::{ConstantSource, FftFilter, NullSink};
+///
+/// let mut graph = Graph::new();
+///
+/// // Create taps for a 100kHz low pass filter with 1kHz transition
+/// // width.
+/// let samp_rate: Float = 1_000_000.0;
+/// let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, &rustradio::window::WindowType::Hamming);
+///
+/// // Set up dummy source and sink.
+/// let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0));
+///
+/// // Create and connect fft.
+/// let (fft, fft_out) = FftFilter::new(src_out, &taps);
+///
+/// // Set up dummy sink.
+/// let sink = NullSink::new(fft_out);
+/// ```
+///
+/// ## Further reading:
+/// * <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
+/// * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct FftFilter<T: Engine> {
@@ -222,7 +232,7 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
     }
 }
 impl<T: Engine> FftFilter<T> {
-    /// Create new FftFilter, given filter taps.
+    /// Create new FftFilter, given an engine.
     #[must_use]
     pub fn new_engine(src: ReadStream<Complex>, engine: T) -> (Self, ReadStream<Complex>) {
         // Set up FFT / batch size.
@@ -302,7 +312,7 @@ impl<T: Engine> Block for FftFilter<T> {
 
 /// FFT filter for float values.
 ///
-/// Works just like [FftFilter], but for Float input, output, and taps.
+/// Works just like [`FftFilter`], but for Float input, output, and taps.
 ///
 /// In fact, the current implementation of FftFilterFloat is just
 /// FftFilter hiding under a trenchcoat. Counter intuitively

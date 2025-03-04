@@ -1,49 +1,50 @@
-/*! Burst tagger.
-
-This block takes two inputs. One data stream, of any type, that will
-be passed through as-is. And a threshold stream, of type Float, that
-when it goes above the threshold, adds a tag to the data stream with
-the value `true`. When it goes below, it adds the same tag with the
-value `false`.
-
-The float input should likely be filtered with an IIR filter.
-
-## Example
-
-This example uses burst tagger to create the tags, and turn a stream
-into burst PDUs.
-
-Also see `examples/wpcr.rs`.
-
-```
-use rustradio::graph::{Graph, GraphRunner};
-use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIirFilter,BurstTagger,StreamToPdu};
-use rustradio::Complex;
-let (src, src_out) = FileSource::new("/dev/null", false)?;
-let (tee, data, b) = Tee::new(src_out);
-let (c2m, c2m_out) = ComplexToMag2::new(b);
-let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
-let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst".to_string());
-let pdus = StreamToPdu::new(burst_out, "burst".to_string(), 10_000, 50);
-// pdus.out() now delivers bursts as Vec<Complex>
-# Ok::<(), anyhow::Error>(())
-```
-
-## Constructor arguments
-
-* `src`: Source data stream, will pass through and get tags.
-* `trigger: Trigger stream.
-* `threshold`: Threshold on trigger stream.
-* `tag`: Tag name to add.
-
- */
+//! Burst tagger.
+//!
+//! Add tags to a stream to indicate stand and end of a burst. Does not
+//! otherwise modify the stream.
 
 use std::borrow::Cow;
 
 use crate::Float;
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
-/// Burst tagger:
+/// Burst tagger
+///
+/// This block takes two inputs. One data stream, of any type, that will
+/// be passed through as-is. And a threshold stream, of type Float, that
+/// when it goes above the threshold, adds a tag to the data stream with
+/// the value `true`. When it goes below, it adds the same tag with the
+/// value `false`.
+///
+/// The float input should likely be filtered with an IIR filter.
+///
+/// ## Example
+///
+/// This example uses burst tagger to create the tags, and turn a stream
+/// into burst PDUs.
+///
+/// Also see `examples/wpcr.rs`.
+///
+/// ```
+/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIirFilter,BurstTagger,StreamToPdu};
+/// use rustradio::Complex;
+/// let (src, src_out) = FileSource::new("/dev/null", false)?;
+/// let (tee, data, b) = Tee::new(src_out);
+/// let (c2m, c2m_out) = ComplexToMag2::new(b);
+/// let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
+/// let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst".to_string());
+/// let pdus = StreamToPdu::new(burst_out, "burst".to_string(), 10_000, 50);
+/// // pdus.out() now delivers bursts as Vec<Complex>
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+///
+/// ## Constructor arguments
+///
+/// * `src`: Source data stream, will pass through and get tags.
+/// * `trigger: Trigger stream.
+/// * `threshold`: Threshold on trigger stream.
+/// * `tag`: Tag name to add.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync_tag)]
 pub struct BurstTagger<T: Copy> {

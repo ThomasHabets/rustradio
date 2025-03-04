@@ -18,6 +18,9 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 }
 
 /// Resample by a fractional amount.
+///
+/// This can be used to easily convert from any sample rate to any other. Just
+/// set decimation to the current rate, and interpolation to the new rate.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct RationalResampler<T: Copy> {

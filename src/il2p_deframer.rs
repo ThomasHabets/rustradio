@@ -164,7 +164,7 @@ impl Drop for Il2pDeframer {
     }
 }
 impl Il2pDeframer {
-    /// New
+    /// Create new Il2pDeframer block.
     pub fn new(src: ReadStream<u8>) -> (Self, NCReadStream<Vec<u8>>) {
         let (dst, dr) = crate::stream::new_nocopy_stream();
         (

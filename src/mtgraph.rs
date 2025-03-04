@@ -60,12 +60,10 @@ impl MTGraph {
 }
 
 impl crate::graph::GraphRunner for MTGraph {
-    /// Add a block to the flowgraph.
     fn add(&mut self, b: Box<dyn Block + Send>) {
         self.blocks.push(b);
     }
 
-    /// Run the graph until completion.
     fn run(&mut self) -> Result<()> {
         let st = Instant::now();
         let run_start_cpu = get_cpu_time();
@@ -215,22 +213,6 @@ impl crate::graph::GraphRunner for MTGraph {
         Some(s)
     }
 
-    /// Return a cancellation token, for asynchronously stopping the
-    /// graph, for example if the user presses Ctrl-C.
-    ///
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use rustradio::graph::GraphRunner;
-    /// let mut g = rustradio::mtgraph::MTGraph::new();
-    /// let cancel = g.cancel_token();
-    /// ctrlc::set_handler(move || {
-    ///     cancel.cancel();
-    /// }).expect("failed to set Ctrl-C handler");
-    /// g.run()?;
-    /// # Ok::<(), anyhow::Error>(())
-    /// ```
     fn cancel_token(&self) -> CancellationToken {
         self.cancel_token.clone()
     }

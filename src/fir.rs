@@ -1,7 +1,7 @@
-/*! Finite impulse response filter.
-
-Use FftFilter if many taps are used, for better performance.
-*/
+//! Finite impulse response filter.
+//!
+//! If using many taps, [`FftFilter`](crate::blocks::FftFilter) probably has
+//! better performance.
 /*
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
@@ -152,6 +152,9 @@ where
     }
 }
 
+/// Builder for a FIR filter block.
+///
+/// A builder is needed to create a decimating FIR filter block.
 pub struct FirFilterBuilder<T> {
     taps: Vec<T>,
     deci: usize,

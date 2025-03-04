@@ -5,6 +5,15 @@ use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 
 /// Builder for Map.
+///
+/// ```
+/// use rustradio::blocks::ConstantSource;
+/// use rustradio::convert::MapBuilder;
+/// let (src_block, src) = ConstantSource::new(13);
+/// let (b, out) = MapBuilder::new(src, move |x| x + 10)
+///   .name("mymap".to_string())
+///   .build();
+/// ```
 pub struct MapBuilder<In, Out, F>
 where
     F: Fn(In) -> Out,
@@ -39,7 +48,9 @@ where
     }
 }
 
-/// Arbitrary mapping
+/// Arbitrary mapping.
+///
+/// Use [`MapBuilder`] to create a `Map` block.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, custom_name, sync)]
 pub struct Map<In, Out, F>
@@ -89,7 +100,15 @@ where
     }
 }
 
-/// Convert floats to complex.
+/// Convert two floats stream to one complex stream.
+///
+/// ```
+/// use rustradio::blocks::ConstantSource;
+/// use rustradio::blocks::FloatToComplex;
+/// let (re_block, re_src) = ConstantSource::new(1.0);
+/// let (im_block, im_src) = ConstantSource::new(42.0);
+/// let (b, out) = FloatToComplex::new(re_src, im_src);
+/// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
 pub struct FloatToComplex {

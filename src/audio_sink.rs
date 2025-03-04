@@ -86,6 +86,7 @@ impl CpalOutput {
     }
 }
 
+/// Audio sink. In other words: playback to speakers.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct AudioSink {
@@ -102,11 +103,15 @@ pub struct AudioSink {
 }
 
 impl AudioSink {
+    /// Create new audio sink.
+    ///
+    /// Input is a single channel (mono), with values between -1.0 and +1.0.
     pub fn new(src: ReadStream<Float>, sample_rate: u64) -> Result<Self> {
         let output = CpalOutput::new(sample_rate as u32)?;
         let (tx, rx) = std::sync::mpsc::channel();
         let cancel = CancellationToken::new();
         let c2 = cancel.clone();
+
         let audio_thread = std::thread::Builder::new()
             .name("audio_sink_stream".into())
             .spawn(move || {

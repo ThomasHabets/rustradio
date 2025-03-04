@@ -1,6 +1,4 @@
 //! Turn positive Float values into binary `1u8`, and negative into `0u8`.
-//!
-//! TODO: should this be replaced with a MapBuilder, like in add_const?
 use anyhow::Result;
 
 use crate::Float;
