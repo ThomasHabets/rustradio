@@ -89,8 +89,16 @@ impl Block for ZeroCrossing {
         }
         let mut n = 0;
         let mut opos = 0;
-        // TODO: get rid of unwrap.
-        let mut out_clock = self.out_clock.as_mut().map(|x| x.write_buf().unwrap());
+        let mut out_clock = match self.out_clock.as_mut().map(|x| x.write_buf()) {
+            None => None,
+            Some(Ok(x)) => Some(x),
+            Some(Err(e)) => return Err(e),
+        };
+        let max_out = if let Some(ref clock) = out_clock {
+            std::cmp::min(o.len(), clock.len())
+        } else {
+            o.len()
+        };
         for sample in input.iter() {
             n += 1;
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
@@ -100,7 +108,7 @@ impl Block for ZeroCrossing {
                 }
                 opos += 1;
                 self.last_cross += self.clock;
-                if opos == o.len() {
+                if opos == max_out {
                     break;
                 }
             }
