@@ -8,8 +8,15 @@ use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, Tag, TagValue, WriteStream};
 
-const TAG_START: &str = "VecToStream::start";
-const TAG_END: &str = "VecToStream::end";
+/// This tag gets added to the first output sample of a vec.
+///
+/// The value is the number of samples in the vector.
+pub const TAG_START: &str = "VecToStream::start";
+
+/// This tag gets added to the last output sample of a vec.
+///
+/// The value is the number of samples in the vector.
+pub const TAG_END: &str = "VecToStream::end";
 
 /// Block for vector to stream.
 ///
@@ -37,7 +44,7 @@ impl<T: Copy> Block for VecToStream<T> {
         if n > o.len() {
             return Ok(BlockRet::WaitForStream(&self.src, n));
         }
-        let (v, _tags) = self
+        let (v, mut tags) = self
             .src
             .pop()
             .expect("we just checked the size. It must exist");
@@ -47,13 +54,11 @@ impl<T: Copy> Block for VecToStream<T> {
             return Ok(BlockRet::Ok);
         }
         o.fill_from_iter(v);
-        o.produce(
-            n,
-            &[
-                Tag::new(0, TAG_START.to_string(), TagValue::U64(n as u64)),
-                Tag::new(n - 1, TAG_END.to_string(), TagValue::U64(n as u64)),
-            ],
-        );
+        tags.extend([
+            Tag::new(0, TAG_START.to_string(), TagValue::U64(n as u64)),
+            Tag::new(n - 1, TAG_END.to_string(), TagValue::U64(n as u64)),
+        ]);
+        o.produce(n, &tags);
         Ok(BlockRet::Ok)
     }
 }
