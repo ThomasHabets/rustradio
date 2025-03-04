@@ -73,15 +73,7 @@ impl<T: Copy> BurstTagger<T> {
         let cur = tv > self.threshold;
         let tags = if cur != self.last {
             let mut owned_tags: Vec<Tag> = tags.to_vec();
-            owned_tags.push(Tag::new(
-                0,
-                self.tag.clone(),
-                if cur {
-                    TagValue::Bool(true)
-                } else {
-                    TagValue::Bool(false)
-                },
-            ));
+            owned_tags.push(Tag::new(0, self.tag.clone(), TagValue::Bool(cur)));
             Cow::Owned(owned_tags)
         } else {
             Cow::Borrowed(tags)
