@@ -104,7 +104,18 @@ impl Block for MyBlock {
 TODO:
 * NoCopy blocks.
 
-## A block finishing
+## When a block is "done"
+
+A block is deemed "done" when it will never again produce any output on any
+stream. The block can signal this by returning `BlockRet::EOF`. It can also be
+detected by the graph executor. For example:
+* If all blocks return the status that they are waiting for a stream, either
+  more input or more space in output (`BlockRet::WaitForStream`), then none of
+  them will ever be able to make more progress. All blocks are then "done".
+* If a block signals that it's waiting for a stream (input or output), via
+  `BlockRet::WaitForStream`, and the block on the other side of that stream has
+  been dropped (e.g. by returning `BlockRet::EOF`), then there is no point in
+  waiting for that stream, and the block itself is deemed "done".
 
 ## SIMD
 
