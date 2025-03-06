@@ -117,6 +117,9 @@ detected by the graph executor. For example:
   been dropped (e.g. by returning `BlockRet::EOF`), then there is no point in
   waiting for that stream, and the block itself is deemed "done".
 
+When all blocks are "done", the graph is considered "done", and its `.run()`
+will return.
+
 ## SIMD
 
 If manual vectorization is needed for blocks in the main RustRadio library,
