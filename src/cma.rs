@@ -92,6 +92,6 @@ impl Block for CmaEqualizer {
         output.produce(len, &tags);
         input.consume(len);
 
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

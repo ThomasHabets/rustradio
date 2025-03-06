@@ -33,12 +33,12 @@ impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
             o.slice()[..len].copy_from_slice(&i.slice()[..len]);
             o.produce(len, &tags);
             i.consume(len);
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::Again);
         }
 
         let skip = std::cmp::min(self.skip, i.len());
         i.consume(skip);
         self.skip -= skip;
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

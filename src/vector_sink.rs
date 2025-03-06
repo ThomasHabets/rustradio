@@ -43,7 +43,7 @@ impl<T: Copy> Block for VectorSink<T> {
             self.tags.extend(tags);
         }
         i.consume(ilen);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 

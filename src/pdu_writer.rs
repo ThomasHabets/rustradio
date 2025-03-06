@@ -60,6 +60,6 @@ where
         });
         f.write_all(&v)?;
         self.files_written += 1;
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

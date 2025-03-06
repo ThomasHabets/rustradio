@@ -118,12 +118,12 @@ impl Block for SoapySdrSource {
             Ok(x) => x,
             Err(e) => {
                 if e.code == soapysdr::ErrorCode::Timeout {
-                    return Ok(BlockRet::Ok);
+                    return Ok(BlockRet::Again);
                 }
                 return Err(e.into());
             }
         };
         o.produce(n, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

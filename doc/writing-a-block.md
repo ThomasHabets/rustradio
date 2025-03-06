@@ -63,7 +63,8 @@ created block, and all output fields.
 
 This means that the input and output streams are part of the block's API.
 
-Even if not generating `new()`, blocks are expected to follow this standard.
+Even if a block implements `new()` manually instead of generating it, it's
+expected to follow this standard.
 
 Fields can be default-created instead of passed in, by tagging them with
 `#[rustradio(default)]`.
@@ -87,12 +88,23 @@ impl Block for MyBlock {
 
         input_buffer.consume(input_used);
         output_stream.produce(mydata.len());
+        if need_more_input {
+            Ok(BlockRet::WaitForStream(&self.src, how_much_more))
+        } else if need_more_output_space {
+            Ok(BlockRet::WaitForStream(&self.dst, space_needed))
+        } else {
+            // I guess I have both more input and output.
+            // Call me again, immediately. I'm ready.
+            Ok(BlockRet::Again)
+        }
     }
 }
 ```
 
 TODO:
 * NoCopy blocks.
+
+## A block finishing
 
 ## SIMD
 

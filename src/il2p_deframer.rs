@@ -240,7 +240,7 @@ impl Block for Il2pDeframer {
         } else if let Some(Err(e)) = header {
             info!("Failed to parse header: {}", e);
         }
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 /*

@@ -56,7 +56,7 @@ where
         {
             let o = self.dst.write_buf()?;
             if o.is_empty() {
-                return Ok(BlockRet::Ok);
+                return Ok(BlockRet::Again);
             }
         }
         if self.current_delay > 0 {
@@ -86,7 +86,7 @@ where
         o.fill_from_slice(input.slice());
         o.produce(n, &tags);
         input.consume(n);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 

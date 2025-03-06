@@ -204,7 +204,7 @@ impl Block for SymbolSync {
         if let Some(s) = out_clock {
             s.produce(opos, &[]);
         }
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 /* vim: textwidth=80

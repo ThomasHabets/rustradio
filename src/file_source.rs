@@ -86,7 +86,7 @@ where
                 );
                 trace!("FileSource: Produced {} in fast path", n / sample_size);
                 o.produce(n / sample_size, &[]);
-                return Ok(BlockRet::Ok);
+                return Ok(BlockRet::Again);
             }
             self.buf.extend(&buffer[..n]);
         }
@@ -107,7 +107,7 @@ where
         o.fill_from_iter(v);
         trace!("FileSource: Produced {}", n);
         o.produce(n, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 

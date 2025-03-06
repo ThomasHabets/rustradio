@@ -75,7 +75,7 @@ impl Block for Midpointer {
             self.dst
                 .push(v.iter().map(|t| t - offset).collect::<Vec<_>>(), &[]);
         }
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -219,7 +219,7 @@ impl Block for Wpcr {
         if let Some((packet, tags)) = self.process_one(&x) {
             self.dst.push(packet, &tags);
         }
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 

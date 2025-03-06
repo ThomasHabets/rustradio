@@ -38,7 +38,7 @@ where
                  */
 
         println!("debug: {:?}", v);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 

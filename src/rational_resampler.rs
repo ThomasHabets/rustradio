@@ -113,7 +113,7 @@ mod tests {
         ];
         for deci in 1..=(input.len() + 1) {
             let (mut src, src_out) = VectorSource::new(input.clone());
-            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::Again]);
             assert!(matches![src.work()?, BlockRet::EOF]);
             let (mut b, os) = RationalResampler::new(src_out, 1, deci)?;
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
@@ -131,7 +131,7 @@ mod tests {
     fn example64() -> Result<()> {
         let input: Vec<_> = (0..50).collect();
         let (mut src, src_out) = VectorSource::new(input.clone());
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut b, os) = RationalResampler::new(src_out, 25, 64)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
@@ -150,7 +150,7 @@ mod tests {
     fn example128() -> Result<()> {
         let input: Vec<_> = (0..50).collect();
         let (mut src, src_out) = VectorSource::new(input.clone());
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
@@ -166,7 +166,7 @@ mod tests {
         // Path 1: direct 25/128.
         let path1 = {
             let (mut src, src_out) = VectorSource::new(input.clone());
-            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::Again]);
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
@@ -177,7 +177,7 @@ mod tests {
         // Path 2: first 1/2, then 25/64.
         let path2 = {
             let (mut src, src_out) = VectorSource::new(input.clone());
-            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::Again]);
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             let (mut b1, os1) = RationalResampler::new(src_out, 1, 2)?;

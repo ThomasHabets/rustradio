@@ -126,7 +126,7 @@ where
             self.repeat_count += 1;
             self.pos = 0;
         }
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn some() -> Result<()> {
         let (mut src, os) = VectorSource::new(vec![1u8, 2, 3]);
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         let (res, _) = os.read_buf()?;
         assert_eq!(res.slice(), &[1, 2, 3]);
         Ok(())
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn max() -> Result<()> {
         let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE]);
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         let (res, _) = os.read_buf()?;
         assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
         Ok(())
@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn very_large() -> Result<()> {
         let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE + 100]);
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
@@ -173,7 +173,7 @@ mod tests {
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
             res.consume(crate::stream::DEFAULT_STREAM_SIZE);
         }
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), 100);

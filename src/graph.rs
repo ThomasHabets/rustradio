@@ -132,7 +132,7 @@ impl GraphRunner for Graph {
                 self.times[n] += st.elapsed();
                 self.cpu_times[n] += get_cpu_time() - st_cpu;
                 match ret {
-                    BlockRet::Ok => {
+                    BlockRet::Again => {
                         drop(ret);
                         // Block did something.
                         trace!("… {} was not starved", b.block_name());

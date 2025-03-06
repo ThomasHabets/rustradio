@@ -97,6 +97,6 @@ impl Block for Hilbert {
 
         self.history[..self.ntaps].clone_from_slice(&iv[n..len]);
         ii.consume(n);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

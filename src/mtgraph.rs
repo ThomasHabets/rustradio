@@ -88,7 +88,7 @@ impl crate::graph::GraphRunner for MTGraph {
                         };
                         stats.elapsed += st.elapsed();
                         match ret {
-                            BlockRet::Ok => {}
+                            BlockRet::Again => {}
                             BlockRet::EOF => {
                                 break;
                             }

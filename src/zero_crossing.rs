@@ -134,6 +134,6 @@ impl Block for ZeroCrossing {
         if let Some(s) = out_clock {
             s.produce(opos, &[]);
         }
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

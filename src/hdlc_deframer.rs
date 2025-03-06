@@ -247,7 +247,7 @@ impl Block for HdlcDeframer {
         }
         let n = input.len();
         input.consume(n);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 

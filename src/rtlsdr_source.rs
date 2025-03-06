@@ -129,7 +129,7 @@ impl Block for RtlSdrSource {
             o.fill_from_slice(&self.buf[..n]);
             self.buf.drain(0..n);
             o.produce(n, &[]);
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::Again);
         }
         match self.rx.try_recv() {
             Err(TryRecvError::Empty) => Ok(BlockRet::Pending),
@@ -139,7 +139,7 @@ impl Block for RtlSdrSource {
                 o.fill_from_slice(&buf[..n]);
                 self.buf.extend(&buf[n..]);
                 o.produce(n, &[]);
-                Ok(BlockRet::Ok)
+                Ok(BlockRet::Again)
             }
         }
     }

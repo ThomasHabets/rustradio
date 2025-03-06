@@ -18,10 +18,10 @@ pub enum BlockRet<'a> {
     /// The graph scheduler should feel free to call the `work` function again
     /// without waiting or sleeping.
     ///
-    /// Ok should not be returned for "polling". In other words, it should not
-    /// be returned repeatedly without data being consumed or produced.
+    /// `Again` should not be returned for "polling". In other words, it should
+    /// not be returned repeatedly without data being consumed or produced.
     ///
-    /// Good examples of returning Ok:
+    /// Good examples of returning `Again`:
     /// * A block finished being in a state (e.g. writing headers), and does not
     ///   want to deal with restarting `work()` under the new state. Next time
     ///   `work()` is called, it'll be in a new state, so it's just temporary.
@@ -32,21 +32,21 @@ pub enum BlockRet<'a> {
     ///   Examples: `RtlSdrDecode` and `FirFilter`.
     ///
     /// Importantly, in both these examples, a second `work()` call is not
-    /// expected to do nothing, and just return `Ok`. It'll either do useful
+    /// expected to do nothing, and just return `Again`. It'll either do useful
     /// work, or it'll properly return a status showing what it's blocked on.
     ///
-    /// Bad examples of returning Ok:
+    /// Bad examples of returning `Again`:
     /// * Can't be bothered identifying the stream we're waiting for.
     ///
-    /// Returning Ok indefinitely wastes CPU, and means the graph will never
-    /// finish.
-    Ok,
+    /// Returning `Again` indefinitely wastes CPU, and means the graph will
+    /// never finish.
+    Again,
 
     /// Block didn't produce anything this time, but has a background
     /// process that may suddenly produce.
     ///
-    /// The difference between `Ok` and `Pending` is that `Pending` implies to
-    /// the graph runner that it's reasonable to sleep a bit before calling
+    /// The difference between `Again` and `Pending` is that `Pending` implies
+    /// to the graph runner that it's reasonable to sleep a bit before calling
     /// `work` again. And that activity on any stream won't help either way.
     ///
     /// Example: `RtlSdrSource` may not currently have any new data, but we
@@ -62,7 +62,7 @@ pub enum BlockRet<'a> {
     /// prevents checking for exit conditions like stream EOF and Ctrl-C.
     ///
     /// For a single threaded graph, it would stall all blocks, so it's not
-    /// called at all, and thus becomes equivalent to returning `Ok`.
+    /// called at all, and thus becomes equivalent to returning `Again`.
     ///
     /// Discouraged: Prefer WaitForStream when possible.
     WaitForFunc(Box<dyn Fn() + 'a>),
@@ -96,7 +96,7 @@ impl std::fmt::Debug for BlockRet<'_> {
             f,
             "{}",
             match self {
-                BlockRet::Ok => "Ok",
+                BlockRet::Again => "Again",
                 BlockRet::Pending => "Pending",
                 BlockRet::WaitForFunc(_) => "WaitForFunc",
                 BlockRet::WaitForStream(_, _) => "WaitForStream",

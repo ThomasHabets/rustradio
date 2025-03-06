@@ -72,7 +72,7 @@ where
         self.f.write_all(&v)?;
         self.f.flush()?;
         i.consume(n);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -122,7 +122,7 @@ where
             v.push(10); // Newline.
             self.f.write_all(&v)?;
             self.f.flush()?;
-            Ok(BlockRet::Ok)
+            Ok(BlockRet::Again)
         } else {
             Ok(BlockRet::WaitForStream(&self.src, 1))
         }

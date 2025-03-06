@@ -61,7 +61,7 @@ impl Block for FftStream {
         let mut o = self.dst.write_buf()?;
         let oo = o.slice();
         if oo.len() < self.size {
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::Again);
         }
         let len = std::cmp::min(ii.len(), oo.len());
         let len = len - (len % self.size);
@@ -81,7 +81,7 @@ impl Block for FftStream {
         }
         input.consume(len);
         o.produce(len, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 /* vim: textwidth=80

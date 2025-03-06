@@ -392,7 +392,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     }
                     #(#in_names.consume(n);)*
                     #(#out_names.produce(n, &otags);)*
-                    Ok(#path::block::BlockRet::Ok)
+                    Ok(#path::block::BlockRet::Again)
                 }
             }
         });

@@ -40,7 +40,7 @@ impl Block for RtlSdrDecode {
         );
         input.consume(isamples);
         out.produce(osamples, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -65,10 +65,10 @@ mod tests {
     #[test]
     fn some_input() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0, 13]);
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
-        assert!(matches![dec.work()?, BlockRet::Ok]);
+        assert!(matches![dec.work()?, BlockRet::Again]);
         let (res, _) = dec_out.read_buf()?;
         // Probably this should compare close to, but not equal.
         assert_eq!(
@@ -94,10 +94,10 @@ mod tests {
     #[test]
     fn uneven() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0]);
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
-        assert!(matches![dec.work()?, BlockRet::Ok]);
+        assert!(matches![dec.work()?, BlockRet::Again]);
         let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 2);
         Ok(())
@@ -107,12 +107,12 @@ mod tests {
     fn overflow() -> crate::Result<()> {
         // Input is pairs of bytes. Output is complex, meaning a 4x increase. That won't fit.
         let (mut src, src_out) = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE]);
-        assert!(matches![src.work()?, BlockRet::Ok]);
+        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         for n in 0..4 {
             eprintln!("loop iter: {n}");
-            assert!(matches![dec.work()?, BlockRet::Ok]);
+            assert!(matches![dec.work()?, BlockRet::Again]);
             let (res, _) = dec_out.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE / 8);
             res.consume(crate::stream::DEFAULT_STREAM_SIZE / 8);

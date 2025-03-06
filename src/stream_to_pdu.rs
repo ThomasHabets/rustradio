@@ -139,6 +139,6 @@ where
         }
         let n = input.len();
         input.consume(n);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

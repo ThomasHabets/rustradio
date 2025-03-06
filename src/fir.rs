@@ -274,7 +274,7 @@ where
         // While we could keep track of which stream is the constraining factor,
         // the code is simpler if work() is just called again, and the right
         // WaitForStream is returned above instead.
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -413,14 +413,14 @@ mod tests {
         let taps = vec![Complex::new(1.0, 0.0)];
         for deci in 1..=(3 * input.len()) {
             let (mut src, src_out) = VectorSourceBuilder::new(input.clone()).repeat(2).build();
-            assert!(matches![src.work()?, BlockRet::Ok]);
-            assert!(matches![src.work()?, BlockRet::Ok]);
+            assert!(matches![src.work()?, BlockRet::Again]);
+            assert!(matches![src.work()?, BlockRet::Again]);
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             eprintln!("Testing identity with decimation {deci}");
             let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
             if deci <= 2 * input.len() {
-                assert!(matches![b.work()?, BlockRet::Ok]);
+                assert!(matches![b.work()?, BlockRet::Again]);
             }
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
             let (res, tags) = os.read_buf()?;
@@ -469,7 +469,7 @@ mod tests {
             eprintln!("Testing identity with decimation {deci}");
             let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
             if deci <= input.len() {
-                assert!(matches![b.work()?, BlockRet::Ok]);
+                assert!(matches![b.work()?, BlockRet::Again]);
             }
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
             let (res, _) = os.read_buf()?;
@@ -506,7 +506,7 @@ mod tests {
             eprintln!("Testing identity with decimation {deci}");
             let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
             if deci <= input.len() - 1 {
-                assert!(matches![b.work()?, BlockRet::Ok]);
+                assert!(matches![b.work()?, BlockRet::Again]);
             }
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
             let (res, _) = os.read_buf()?;

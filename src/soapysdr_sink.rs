@@ -114,7 +114,7 @@ impl Block for SoapySdrSink {
             Ok(x) => x,
             Err(e) => {
                 if e.code == soapysdr::ErrorCode::Timeout {
-                    return Ok(BlockRet::Ok);
+                    return Ok(BlockRet::Again);
                 }
                 return Err(e.into());
             }
@@ -123,7 +123,7 @@ impl Block for SoapySdrSink {
         if ilen == n {
             Ok(BlockRet::WaitForStream(&self.src, 1))
         } else {
-            Ok(BlockRet::Ok)
+            Ok(BlockRet::Again)
         }
     }
 }

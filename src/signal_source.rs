@@ -56,7 +56,7 @@ impl Block for SignalSourceComplex {
             *to = from;
         }
         o.produce(n, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -111,7 +111,7 @@ impl Block for SignalSourceFloat {
             })
             .for_each(drop);
         o.produce(n, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 /* vim: textwidth=80

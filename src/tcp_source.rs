@@ -70,7 +70,7 @@ where
         let n = v.len();
         o.fill_from_iter(v);
         o.produce(n, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 

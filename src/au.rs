@@ -123,7 +123,7 @@ impl Block for AuEncode {
             if self.header.as_ref().unwrap().is_empty() {
                 self.header = None;
             }
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::Again);
         }
 
         type S = i16;
@@ -145,7 +145,7 @@ impl Block for AuEncode {
         }
         i.consume(n);
         o.produce(n * ss, &[]);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -266,6 +266,6 @@ impl Block for AuDecode {
                 i.consume(n);
             }
         };
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }

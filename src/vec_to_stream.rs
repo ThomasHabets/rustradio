@@ -51,7 +51,7 @@ impl<T: Copy> Block for VecToStream<T> {
         debug_assert_eq!(v.len(), n);
         if n == 0 {
             trace!("VecToStream: discarded empty vector");
-            return Ok(BlockRet::Ok);
+            return Ok(BlockRet::Again);
         }
         o.fill_from_iter(v);
         tags.extend([
@@ -59,7 +59,7 @@ impl<T: Copy> Block for VecToStream<T> {
             Tag::new(n - 1, TAG_END.to_string(), TagValue::U64(n as u64)),
         ]);
         o.produce(n, &tags);
-        Ok(BlockRet::Ok)
+        Ok(BlockRet::Again)
     }
 }
 
@@ -83,7 +83,7 @@ mod tests {
         let (tx, rx) = new_nocopy_stream();
         tx.push(vec![], &[]);
         let (mut b, out) = VecToStream::<u8>::new(rx);
-        assert!(matches![b.work()?, BlockRet::Ok]);
+        assert!(matches![b.work()?, BlockRet::Again]);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         assert_eq!(out.read_buf()?.0.len(), 0);
         Ok(())
@@ -95,9 +95,9 @@ mod tests {
         tx.push(vec![11, 22, 33], &[]);
         tx.push(vec![3, 2, 1, 0], &[]);
         let (mut b, out) = VecToStream::<u8>::new(rx);
-        assert!(matches![b.work()?, BlockRet::Ok]);
+        assert!(matches![b.work()?, BlockRet::Again]);
         assert_eq!(out.read_buf()?.0.len(), 3);
-        assert!(matches![b.work()?, BlockRet::Ok]);
+        assert!(matches![b.work()?, BlockRet::Again]);
         assert_eq!(out.read_buf()?.0.len(), 7);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         let (o, tags) = out.read_buf()?;
