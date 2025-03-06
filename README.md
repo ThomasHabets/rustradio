@@ -23,5 +23,6 @@ A library for digital signals processing in the spirit of GNU Radio.
 ## Missing feature before declaring 1.0
 
 * A clear strategy for optional output streams.
+  * Is the current `Option`-based solution good enough for 1.0?
 * SymbolSync block at least have the right API.
-* Example AX.25 KISS modem written.
+* Example AX.25 KISS modem written, using soapysdr.
