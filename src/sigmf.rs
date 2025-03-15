@@ -37,19 +37,28 @@ pub struct Capture {
 
     /// Frequency of capture.
     #[serde(rename = "core:frequency", skip_serializing_if = "Option::is_none")]
-    core_frequency: Option<f64>,
+    pub core_frequency: Option<f64>,
 
     /// ISO8601 string for when this was captured.
     #[serde(rename = "core:datetime", skip_serializing_if = "Option::is_none")]
-    core_datetime: Option<String>,
+    pub core_datetime: Option<String>,
     // In my example, but not in the spec.
     //#[serde(rename="core:length")]
     //core_length: u64,
 }
 
+impl Capture {
+    pub fn new(start: u64) -> Self {
+        Self {
+            core_sample_start: start,
+            ..Default::default()
+        }
+    }
+}
+
 /// Annotation segment.
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Annotation {
     /// Sample offset.
     #[serde(rename = "core:sample_start")]
@@ -100,7 +109,7 @@ pub struct Global {
 
     /// Sample rate.
     #[serde(rename = "core:sample_rate", skip_serializing_if = "Option::is_none")]
-    core_sample_rate: Option<f64>,
+    pub core_sample_rate: Option<f64>,
 
     /// SigMF version.
     #[serde(rename = "core:version")]
@@ -108,34 +117,34 @@ pub struct Global {
 
     /// Number of channels.
     #[serde(rename = "core:num_channels", skip_serializing_if = "Option::is_none")]
-    core_num_channels: Option<u64>,
+    pub core_num_channels: Option<u64>,
 
     /// SHA512 of the data.
     #[serde(rename = "core:sha512", skip_serializing_if = "Option::is_none")]
-    core_sha512: Option<String>,
+    pub core_sha512: Option<String>,
 
     // offset
     /// Description.
     #[serde(rename = "core:description", skip_serializing_if = "Option::is_none")]
-    core_description: Option<String>,
+    pub core_description: Option<String>,
 
     /// Author of the recording.
     #[serde(rename = "core:author", skip_serializing_if = "Option::is_none")]
-    core_author: Option<String>,
+    pub core_author: Option<String>,
 
     // meta_doi
     // data_doi
     /// Recorder software.
     #[serde(rename = "core:recorder", skip_serializing_if = "Option::is_none")]
-    core_recorder: Option<String>,
+    pub core_recorder: Option<String>,
 
     /// License of the data.
     #[serde(rename = "core:license", skip_serializing_if = "Option::is_none")]
-    core_license: Option<String>,
+    pub core_license: Option<String>,
 
     /// Hardware used to make the recording.
     #[serde(rename = "core:hw", skip_serializing_if = "Option::is_none")]
-    core_hw: Option<String>,
+    pub core_hw: Option<String>,
     // dataset
     // trailing_bytes
     // metadata_only
@@ -149,15 +158,29 @@ pub struct Global {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SigMF {
     /// Global information.
-    global: Global,
+    pub global: Global,
 
     /// Capture segments.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    captures: Vec<Capture>,
+    pub captures: Vec<Capture>,
 
     /// Annotations on the data.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    annotations: Vec<Annotation>,
+    pub annotations: Vec<Annotation>,
+}
+
+impl SigMF {
+    pub fn new(typ: String) -> Self {
+        Self {
+            global: Global {
+                core_version: "1.1.0".to_owned(),
+                core_datatype: typ,
+                ..Default::default()
+            },
+            captures: vec![],
+            annotations: vec![],
+        }
+    }
 }
 
 /// Parse metadata for SigMF file.

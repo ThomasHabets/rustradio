@@ -38,6 +38,7 @@ features = ["system"]
 optional = true
 
 [dev-dependencies]
+chrono = "0.4.40"
 clap = { version = "4", features = ["derive"] }
 stderrlog = "0.6.0"
 ctrlc = "3.4.1"

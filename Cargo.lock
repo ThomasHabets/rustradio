@@ -1318,6 +1318,7 @@ name = "rustradio"
 version = "0.12.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "cpal",
  "crossterm",
