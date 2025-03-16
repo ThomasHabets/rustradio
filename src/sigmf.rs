@@ -300,7 +300,64 @@ impl Type for Float {
 
 impl<T: Default + Copy + Type> SigMFSource<T> {
     /// Create a new SigMF source block.
+    ///
+    /// If the exact file name exists, then treat it as an Archive.
+    /// If it does not, fall back to checking for separate Recording files.
     pub fn new(
+        filename: &str,
+        samp_rate: Option<f64>,
+        repeat: bool,
+    ) -> Result<(Self, ReadStream<T>)> {
+        if std::fs::exists(filename)? {
+            Self::from_archive(filename, samp_rate, repeat)
+        } else {
+            match Self::from_recording(filename, samp_rate, repeat) {
+                Err(e) => Err(Error::new(&format!("SigMF Archive '{filename}' doesn't exist, and trying to read separated Recording files failed too: {e}")).into()),
+                Ok(r) => Ok(r),
+            }
+        }
+    }
+    /// Create a new SigMF from separated Recording files.
+    ///
+    fn from_recording(
+        base: &str,
+        samp_rate: Option<f64>,
+        repeat: bool,
+    ) -> Result<(Self, ReadStream<T>)> {
+        let meta: SigMF = {
+            let file = std::fs::File::open(base.to_owned() + "-meta")?;
+            let reader = std::io::BufReader::new(file);
+            serde_json::from_reader(reader)?
+        };
+        if let Some(samp_rate) = samp_rate {
+            if let Some(t) = meta.global.core_sample_rate {
+                if t != samp_rate {
+                    return Err(Error::new(&format!(
+                        "sigmf file {} sample rate ({}) is not the expected {}",
+                        base, t, samp_rate
+                    ))
+                    .into());
+                }
+            }
+        }
+        let file = std::fs::File::open(base.to_owned() + "-data")?;
+        let range = (0, file.metadata()?.len());
+        let (dst, rx) = crate::stream::new_stream();
+        Ok((
+            Self {
+                file,
+                sample_rate: meta.global.core_sample_rate,
+                range,
+                repeat,
+                left: range.1,
+                buf: vec![],
+                dst,
+            },
+            rx,
+        ))
+    }
+    /// Create a new SigMF source block.
+    fn from_archive(
         filename: &str,
         samp_rate: Option<f64>,
         repeat: bool,
