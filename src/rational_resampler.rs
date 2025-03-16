@@ -66,8 +66,14 @@ impl<T: Copy> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
         // TODO: retain tags.
         let (i, _tags) = self.src.read_buf()?;
+        if i.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
+        }
 
         let mut o = self.dst.write_buf()?;
+        if o.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
         let mut opos = 0;
         let mut taken = 0;
         let mut out_full = false;
