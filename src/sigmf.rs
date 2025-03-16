@@ -5,16 +5,17 @@
  * create sink block.
  * add sigmf archive (tar) support.
  */
+use std::io::{Read, Seek, Write};
+
 use anyhow::Result;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 
 const DATATYPE_CF32: &str = "cf32";
 const VERSION: &str = "1.1.0";
 
 use crate::block::{Block, BlockRet};
-use crate::file_source::FileSource;
-use crate::stream::ReadStream;
+use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Error, Float, Sample};
 
 /// Capture segment.
@@ -184,12 +185,8 @@ impl SigMF {
 }
 
 /// Parse metadata for SigMF file.
-pub fn parse_meta(base: &str) -> Result<SigMF> {
-    let mfname = format!("{base}-meta");
-    let file = std::fs::File::open(&mfname)
-        .map_err(|e| Error::new(&format!("failed to open SigMF meta file {mfname}: {e}")))?;
-    let reader = std::io::BufReader::new(file);
-    Ok(serde_json::from_reader(reader)?)
+pub fn parse_meta(contents: &str) -> Result<SigMF> {
+    Ok(serde_json::from_str(contents)?)
 }
 
 /// Write metadata file.
@@ -249,9 +246,12 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct SigMFSource<T: Copy> {
-    // TODO: Can't continue to delegate reading the data, because tags.
-    file_source: FileSource<T>,
+    file: std::fs::File,
+    left: u64,
     sample_rate: Option<f64>,
+    buf: Vec<u8>,
+    #[rustradio(out)]
+    dst: WriteStream<T>,
 }
 
 /// Trait that needs implementing for all supported SigMF data types.
@@ -291,7 +291,104 @@ impl Type for Float {
 impl<T: Default + Copy + Type> SigMFSource<T> {
     /// Create a new SigMF source block.
     pub fn new(filename: &str, samp_rate: Option<f64>) -> Result<(Self, ReadStream<T>)> {
-        let meta = parse_meta(filename)?;
+        let (mut file, mut archive) = {
+            let file = std::fs::File::open(filename)?;
+            let file2 = file.try_clone()?;
+            let archive = tar::Archive::new(file);
+            (file2, archive)
+        };
+        let mut found = None;
+
+        // Find the sole metadata.
+        for entry in archive.entries_with_seek().unwrap() {
+            let mut entry = entry?;
+            if entry
+                .path()?
+                .extension()
+                .unwrap_or(std::ffi::OsStr::new(""))
+                != "sigmf-meta"
+            {
+                continue;
+            }
+            debug!("Tar contents: {:?}", entry.path()?);
+            match entry.header().entry_type() {
+                tar::EntryType::Regular => {}
+                other => {
+                    return Err(Error::new(&format!("data file is of bad type {other:?}")).into());
+                }
+            }
+            let mut s = String::new();
+            entry.read_to_string(&mut s)?;
+            let mut metaname = match entry.path()?.into_owned().into_os_string().into_string() {
+                Ok(s) => s,
+                Err(s) => {
+                    return Err(Error::new(&format!(
+                        "failed to convert OsStr '{s:?}' into string"
+                    ))
+                    .into());
+                }
+            };
+            metaname.truncate(metaname.len() - "-meta".len());
+            found = Some(match found {
+                Some(_) => {
+                    return Err(Error::new(
+                        "sigmf doesn't yet support multiple recordings in an archive",
+                    )
+                    .into());
+                }
+                None => (metaname, s),
+            });
+        }
+        let (base, meta_string) = match found {
+            None => return Err(Error::new("sigmf doesn't contain any recording").into()),
+            Some((b, m)) => (b, m),
+        };
+
+        // Find the matching data file.
+        let want = base + "-data";
+        let range = {
+            let mut range = None;
+            let mut file = file.try_clone()?;
+            file.seek(std::io::SeekFrom::Start(0))?;
+            let mut archive = tar::Archive::new(file);
+            for e in archive.entries_with_seek().unwrap() {
+                let e = e.unwrap();
+                let got = e
+                    .path()
+                    .unwrap()
+                    .into_owned()
+                    .into_os_string()
+                    .into_string()
+                    .unwrap();
+                if got != want {
+                    continue;
+                }
+                match e.header().entry_type() {
+                    tar::EntryType::Regular => {}
+                    tar::EntryType::GNUSparse => {
+                        return Err(Error::new(
+                            "SigMF source block doesn't support sparse tar files",
+                        )
+                        .into());
+                    }
+                    other => {
+                        return Err(
+                            Error::new(&format!("data file is of bad type {other:?}")).into()
+                        );
+                    }
+                }
+                range = match range {
+                    None => Some((e.raw_file_position(), e.size())),
+                    Some(_) => {
+                        panic!("Multiple files named '{want}' in archive");
+                    }
+                };
+            }
+            range
+        };
+        let range = range.unwrap();
+        file.seek(std::io::SeekFrom::Start(range.0))?;
+        let meta = parse_meta(&meta_string)?;
         if let Some(samp_rate) = samp_rate {
             if let Some(t) = meta.global.core_sample_rate {
                 if t != samp_rate {
@@ -312,13 +409,16 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             ))
             .into());
         }
-        let (file_source, dr) = FileSource::new(&format!["{}-data", filename], false)?;
+        let (dst, rx) = crate::stream::new_stream();
         Ok((
             Self {
+                file,
                 sample_rate: meta.global.core_sample_rate,
-                file_source,
+                left: range.1,
+                buf: vec![],
+                dst,
             },
-            dr,
+            rx,
         ))
     }
     /// Get the sample rate from the meta file.
@@ -327,11 +427,55 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
     }
 }
 
+fn u64_to_clamped_usize(v: u64) -> usize {
+    if v > (usize::MAX as u64) {
+        usize::MAX
+    } else {
+        v as usize
+    }
+}
+
 impl<T> Block for SigMFSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        self.file_source.work()
+        if self.left == 0 {
+            return Ok(BlockRet::EOF);
+        }
+        let mut o = self.dst.write_buf()?;
+        if o.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
+        let sample_size = T::size();
+        let have = self.buf.len() / sample_size;
+        let want = o.len();
+        if have == 0 {
+            // TODO: if self.left (an u64) is greater than max usize, use max
+            // usize.
+            let left = u64_to_clamped_usize(self.left);
+            let want_bytes = std::cmp::min(want * sample_size, left);
+            let mut buffer = vec![0; want_bytes];
+            let n = self.file.read(&mut buffer)?;
+            assert!(n <= left);
+            // TODO: implement repeat.
+            if n == 0 {
+                info!("SigMF got EOF");
+                return Ok(BlockRet::EOF);
+            }
+            self.left -= n as u64;
+            self.buf.extend(&buffer[..n]);
+        }
+        let have = self.buf.len() / sample_size;
+        let samples = std::cmp::min(have, want);
+        o.fill_from_iter(
+            self.buf
+                .chunks_exact(sample_size)
+                .take(samples)
+                .map(|d| T::parse(d).unwrap()),
+        );
+        o.produce(samples, &[]);
+        self.buf.drain(..(samples * sample_size));
+        Ok(BlockRet::WaitForStream(&self.dst, 1))
     }
 }
