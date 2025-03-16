@@ -165,7 +165,7 @@ pub struct SigMF {
     pub captures: Vec<Capture>,
 
     /// Annotations on the data.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<Annotation>,
 }
 
