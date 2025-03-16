@@ -272,10 +272,18 @@ fn main() -> Result<()> {
 
     let prev = if let Some(filename) = opt.filename {
         if opt.rtlsdr_file {
-            let prev = blehbleh!(g, FileSource::<u8>::new(&filename, opt.file_repeat)?);
+            let mut block = FileSource::<u8>::new(&filename)?;
+            if opt.file_repeat {
+                block.0.repeat(rustradio::Repeat::infinite());
+            }
+            let prev = blehbleh!(g, block);
             blehbleh![g, RtlSdrDecode::new(prev)]
         } else {
-            blehbleh!(g, FileSource::<Complex>::new(&filename, opt.file_repeat)?)
+            let mut block = FileSource::<Complex>::new(&filename)?;
+            if opt.file_repeat {
+                block.0.repeat(rustradio::Repeat::infinite());
+            }
+            blehbleh!(g, block)
         }
     } else if !cfg!(feature = "rtlsdr") {
         panic!("RTL SDR feature not enabled")

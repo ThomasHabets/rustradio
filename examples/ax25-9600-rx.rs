@@ -89,7 +89,7 @@ fn main() -> Result<()> {
     // TODO: this is a complete mess.
     let (prev, samp_rate) = if opt.audio {
         if let Some(read) = opt.read {
-            let prev = add_block![g, FileSource::new(&read, false)?];
+            let prev = add_block![g, FileSource::new(&read)?];
             let prev = add_block![g, AuDecode::new(prev, opt.samp_rate)];
 
             /*
@@ -107,7 +107,7 @@ fn main() -> Result<()> {
         }
     } else {
         let prev = if let Some(read) = opt.read {
-            add_block![g, FileSource::<Complex>::new(&read, false)?]
+            add_block![g, FileSource::<Complex>::new(&read)?]
         } else if opt.rtlsdr {
             #[cfg(feature = "rtlsdr")]
             {

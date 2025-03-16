@@ -70,7 +70,7 @@ fn main() -> Result<()> {
     };
 
     // Read file.
-    let prev = add_block![g, FileSource::new(&opt.read, false)?];
+    let prev = add_block![g, FileSource::new(&opt.read)?];
 
     // Filter.
     let taps = rustradio::fir::low_pass_complex(

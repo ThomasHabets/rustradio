@@ -69,7 +69,7 @@ fn main() -> Result<()> {
     // Source.
     //let prev = add_block![g, FileSource::new(&opt.read, false)?];
     let prev = if let Some(read) = opt.read {
-        add_block![g, FileSource::new(&read, false)?]
+        add_block![g, FileSource::new(&read)?]
     } else if opt.rtlsdr {
         #[cfg(feature = "rtlsdr")]
         {

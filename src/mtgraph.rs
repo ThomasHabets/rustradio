@@ -25,7 +25,7 @@ use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
-let (src, prev) = FileSource::<u8>::new("/dev/null", false)?;
+let (src, prev) = FileSource::<u8>::new("/dev/null")?;
 let (dec, prev) = RtlSdrDecode::new(prev);
 let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
 let sink = NullSink::new(prev);

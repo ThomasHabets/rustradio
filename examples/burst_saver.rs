@@ -73,7 +73,7 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     let (prev, samp_rate) = if let Some(read) = opt.read {
-        let prev = add_block![g, FileSource::<Complex>::new(&read, false)?];
+        let prev = add_block![g, FileSource::<Complex>::new(&read)?];
         (prev, opt.samp_rate as Float)
     } else if opt.rtlsdr {
         #[cfg(feature = "rtlsdr")]

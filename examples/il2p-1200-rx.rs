@@ -65,7 +65,7 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     // TODO: this is a complete mess.
-    let prev = add_block![g, FileSource::<Complex>::new(&opt.read, false)?];
+    let prev = add_block![g, FileSource::<Complex>::new(&opt.read)?];
     let samp_rate = opt.samp_rate as Float;
 
     // Filter RF.

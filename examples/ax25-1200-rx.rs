@@ -146,7 +146,7 @@ fn get_complex_input(
 fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
     if opt.audio {
         if let Some(read) = &opt.read {
-            let prev = add_block![g, FileSource::new(read, false)?];
+            let prev = add_block![g, FileSource::new(read)?];
             let prev = add_block![
                 g,
                 AuDecode::new(

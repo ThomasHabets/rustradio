@@ -224,6 +224,7 @@ impl From<std::io::Error> for Error {
 }
 
 /// Repeat between zero and infinite times.
+#[derive(Debug)]
 pub struct Repeat {
     repeater: Repeater,
     count: u64,
@@ -275,6 +276,7 @@ impl Repeat {
     }
 }
 
+#[derive(Debug)]
 enum Repeater {
     Finite(u64),
     Infinite,

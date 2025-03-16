@@ -52,7 +52,7 @@ other" via streams.
 use rustradio::graph::{Graph, GraphRunner};
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
-let (src, src_out) = FileSource::<u8>::new("/dev/null", false)?;
+let (src, src_out) = FileSource::<u8>::new("/dev/null")?;
 let (dec, dec_out) = RtlSdrDecode::new(src_out);
 let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0));
 let sink = Box::new(NullSink::new(add_out));

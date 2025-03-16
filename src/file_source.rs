@@ -7,7 +7,7 @@ use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Error, Sample};
+use crate::{Error, Repeat, Sample};
 
 /// Read stream from raw file.
 #[derive(rustradio_macros::Block)]
@@ -15,7 +15,7 @@ use crate::{Error, Sample};
 pub struct FileSource<T: Copy> {
     filename: std::path::PathBuf,
     f: BufReader<std::fs::File>,
-    repeat: bool,
+    repeat: Repeat,
     buf: Vec<u8>,
     #[rustradio(out)]
     dst: WriteStream<T>,
@@ -23,10 +23,7 @@ pub struct FileSource<T: Copy> {
 
 impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
-    pub fn new<P: AsRef<std::path::Path>>(
-        filename: P,
-        repeat: bool,
-    ) -> Result<(Self, ReadStream<T>)> {
+    pub fn new<P: AsRef<std::path::Path>>(filename: P) -> Result<(Self, ReadStream<T>)> {
         let f = BufReader::new(std::fs::File::open(&filename).map_err(|e| {
             Error::new(&format!(
                 "Failed to open {}: {:?}",
@@ -43,12 +40,16 @@ impl<T: Default + Copy> FileSource<T> {
             Self {
                 filename: filename.as_ref().to_path_buf(),
                 f,
-                repeat,
+                repeat: Repeat::finite(1),
                 buf: Vec::new(),
                 dst,
             },
             dr,
         ))
+    }
+    /// Set repeat mode.
+    pub fn repeat(&mut self, r: Repeat) {
+        self.repeat = r;
     }
 }
 
@@ -76,19 +77,18 @@ where
                 .map_err(|e| -> anyhow::Error { e.into() })?;
             if n == 0 {
                 warn!(
-                    "EOF on {}. Repeat: {}",
+                    "EOF on {}. Repeat: {:?}",
                     self.filename.display(),
                     self.repeat
                 );
-                if self.repeat {
+                if self.repeat.again() {
                     self.f.seek(std::io::SeekFrom::Start(0))?;
                     // This is not quite the definition of "pending", but I
                     // wanted to get rid of Noop, and it'll do for now.
                     // TODO: loop instead.
-                    return Ok(BlockRet::Pending);
-                } else {
-                    return Ok(BlockRet::EOF);
+                    return Ok(BlockRet::Again);
                 }
+                return Ok(BlockRet::EOF);
             }
             if self.buf.is_empty() && (n % sample_size) == 0 {
                 // Fast path when reading only whole samples.
@@ -141,7 +141,7 @@ mod tests {
             ],
         )?;
 
-        let (mut src, src_out) = FileSource::<Float>::new(&tmpfn, false)?;
+        let (mut src, src_out) = FileSource::<Float>::new(&tmpfn)?;
         src.work()?;
 
         let (res, _) = src_out.read_buf()?;
@@ -160,7 +160,7 @@ mod tests {
             vec![0, 0, 0, 0, 0, 0, 0, 0, 195, 245, 72, 64, 205, 204, 44, 192],
         )?;
 
-        let (mut src, src_out) = FileSource::<Complex>::new(&tmpfn, false)?;
+        let (mut src, src_out) = FileSource::<Complex>::new(&tmpfn)?;
         src.work()?;
 
         let (res, _) = src_out.read_buf()?;
