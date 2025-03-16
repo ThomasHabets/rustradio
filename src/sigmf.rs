@@ -256,9 +256,9 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
 #[rustradio(crate)]
 pub struct SigMFSource<T: Copy> {
     file: std::fs::File,
+    meta: SigMF,
     range: (u64, u64),
     left: u64,
-    sample_rate: Option<f64>,
     repeat: Repeat,
     buf: Vec<u8>,
     #[rustradio(out)]
@@ -360,7 +360,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         Ok((
             Self {
                 file,
-                sample_rate: meta.global.core_sample_rate,
+                meta,
                 range,
                 repeat: Repeat::finite(1),
                 left: range.1,
@@ -501,7 +501,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         Ok((
             Self {
                 file,
-                sample_rate: meta.global.core_sample_rate,
+                meta,
                 range,
                 repeat: Repeat::finite(1),
                 left: range.1,
@@ -512,8 +512,14 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         ))
     }
     /// Get the sample rate from the meta file.
+    #[must_use]
     pub fn sample_rate(&self) -> Option<f64> {
-        self.sample_rate
+        self.meta.global.core_sample_rate
+    }
+    /// Get the SigMF metadata.
+    #[must_use]
+    pub fn meta(&self) -> &SigMF {
+        &self.meta
     }
 }
 
