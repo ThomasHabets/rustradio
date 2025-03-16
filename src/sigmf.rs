@@ -8,7 +8,7 @@
 use std::io::{Read, Seek, Write};
 
 use anyhow::Result;
-use log::{debug, info};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 const DATATYPE_CF32: &str = "cf32";
@@ -218,6 +218,8 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
 /// SigMF source builder.
 pub struct SigMFSourceBuilder<T: Copy + Type> {
     filename: String,
+    // TODO: replace with Repeat::Infinite. Also FileSource.
+    repeat: bool,
     sample_rate: Option<f64>,
     dummy: std::marker::PhantomData<T>,
 }
@@ -227,6 +229,7 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
     pub fn new(filename: String) -> Self {
         Self {
             filename,
+            repeat: false,
             sample_rate: None,
             dummy: std::marker::PhantomData,
         }
@@ -236,9 +239,14 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
         self.sample_rate = Some(rate);
         self
     }
+    /// Force a certain sample rate.
+    pub fn repeat(mut self, repeat: bool) -> Self {
+        self.repeat = repeat;
+        self
+    }
     /// Build a SigMFSource.
     pub fn build(self) -> Result<(SigMFSource<T>, ReadStream<T>)> {
-        SigMFSource::new(&self.filename, self.sample_rate)
+        SigMFSource::new(&self.filename, self.sample_rate, self.repeat)
     }
 }
 
@@ -247,8 +255,10 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
 #[rustradio(crate)]
 pub struct SigMFSource<T: Copy> {
     file: std::fs::File,
+    range: (u64, u64),
     left: u64,
     sample_rate: Option<f64>,
+    repeat: bool,
     buf: Vec<u8>,
     #[rustradio(out)]
     dst: WriteStream<T>,
@@ -290,7 +300,11 @@ impl Type for Float {
 
 impl<T: Default + Copy + Type> SigMFSource<T> {
     /// Create a new SigMF source block.
-    pub fn new(filename: &str, samp_rate: Option<f64>) -> Result<(Self, ReadStream<T>)> {
+    pub fn new(
+        filename: &str,
+        samp_rate: Option<f64>,
+        repeat: bool,
+    ) -> Result<(Self, ReadStream<T>)> {
         let (mut file, mut archive) = {
             let file = std::fs::File::open(filename)?;
             let file2 = file.try_clone()?;
@@ -414,6 +428,8 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             Self {
                 file,
                 sample_rate: meta.global.core_sample_rate,
+                range,
+                repeat,
                 left: range.1,
                 buf: vec![],
                 dst,
@@ -441,7 +457,12 @@ where
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
         if self.left == 0 {
-            return Ok(BlockRet::EOF);
+            if self.repeat {
+                self.file.seek(std::io::SeekFrom::Start(self.range.0))?;
+                self.left = self.range.1;
+            } else {
+                return Ok(BlockRet::EOF);
+            }
         }
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
@@ -451,18 +472,14 @@ where
         let have = self.buf.len() / sample_size;
         let want = o.len();
         if have == 0 {
-            // TODO: if self.left (an u64) is greater than max usize, use max
-            // usize.
             let left = u64_to_clamped_usize(self.left);
             let want_bytes = std::cmp::min(want * sample_size, left);
+            assert_ne!(want_bytes, 0);
             let mut buffer = vec![0; want_bytes];
             let n = self.file.read(&mut buffer)?;
             assert!(n <= left);
-            // TODO: implement repeat.
-            if n == 0 {
-                info!("SigMF got EOF");
-                return Ok(BlockRet::EOF);
-            }
+            // Can't get EOF here.
+            assert_ne!(n, 0);
             self.left -= n as u64;
             self.buf.extend(&buffer[..n]);
         }
