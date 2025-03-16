@@ -217,7 +217,7 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
 
 /// SigMF source builder.
 pub struct SigMFSourceBuilder<T: Copy + Type> {
-    filename: String,
+    filename: std::path::PathBuf,
     // TODO: replace with Repeat::Infinite. Also FileSource.
     repeat: bool,
     sample_rate: Option<f64>,
@@ -226,7 +226,7 @@ pub struct SigMFSourceBuilder<T: Copy + Type> {
 
 impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
     /// Create new SigMF source builder.
-    pub fn new(filename: String) -> Self {
+    pub fn new(filename: std::path::PathBuf) -> Self {
         Self {
             filename,
             repeat: false,
@@ -298,34 +298,47 @@ impl Type for Float {
     }
 }
 
+fn base_append<P: AsRef<std::path::Path>>(path: P, s: &str) -> std::path::PathBuf {
+    let path_ref = path.as_ref();
+    let parent = path_ref.parent();
+    let filename = path_ref.file_name().unwrap_or_default();
+    let mut new_filename = filename.to_os_string();
+    new_filename.push(s);
+    if let Some(parent) = parent {
+        parent.join(new_filename)
+    } else {
+        std::path::PathBuf::from(new_filename)
+    }
+}
+
 impl<T: Default + Copy + Type> SigMFSource<T> {
     /// Create a new SigMF source block.
     ///
     /// If the exact file name exists, then treat it as an Archive.
     /// If it does not, fall back to checking for separate Recording files.
-    pub fn new(
-        filename: &str,
+    pub fn new<P: AsRef<std::path::Path>>(
+        path: P,
         samp_rate: Option<f64>,
         repeat: bool,
     ) -> Result<(Self, ReadStream<T>)> {
-        if std::fs::exists(filename)? {
-            Self::from_archive(filename, samp_rate, repeat)
+        if std::fs::exists(&path)? {
+            Self::from_archive(path, samp_rate, repeat)
         } else {
-            match Self::from_recording(filename, samp_rate, repeat) {
-                Err(e) => Err(Error::new(&format!("SigMF Archive '{filename}' doesn't exist, and trying to read separated Recording files failed too: {e}")).into()),
+            match Self::from_recording(&path, samp_rate, repeat) {
+                Err(e) => Err(Error::new(&format!("SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}", path.as_ref().display())).into()),
                 Ok(r) => Ok(r),
             }
         }
     }
     /// Create a new SigMF from separated Recording files.
     ///
-    fn from_recording(
-        base: &str,
+    fn from_recording<P: AsRef<std::path::Path>>(
+        base: P,
         samp_rate: Option<f64>,
         repeat: bool,
     ) -> Result<(Self, ReadStream<T>)> {
         let meta: SigMF = {
-            let file = std::fs::File::open(base.to_owned() + "-meta")?;
+            let file = std::fs::File::open(base_append(&base, "-meta"))?;
             let reader = std::io::BufReader::new(file);
             serde_json::from_reader(reader)?
         };
@@ -334,13 +347,15 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 if t != samp_rate {
                     return Err(Error::new(&format!(
                         "sigmf file {} sample rate ({}) is not the expected {}",
-                        base, t, samp_rate
+                        base.as_ref().display(),
+                        t,
+                        samp_rate
                     ))
                     .into());
                 }
             }
         }
-        let file = std::fs::File::open(base.to_owned() + "-data")?;
+        let file = std::fs::File::open(base_append(base, "-data"))?;
         let range = (0, file.metadata()?.len());
         let (dst, rx) = crate::stream::new_stream();
         Ok((
@@ -357,13 +372,13 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         ))
     }
     /// Create a new SigMF source block.
-    fn from_archive(
-        filename: &str,
+    fn from_archive<P: AsRef<std::path::Path>>(
+        filename: P,
         samp_rate: Option<f64>,
         repeat: bool,
     ) -> Result<(Self, ReadStream<T>)> {
         let (mut file, mut archive) = {
-            let file = std::fs::File::open(filename)?;
+            let file = std::fs::File::open(&filename)?;
             let file2 = file.try_clone()?;
             let archive = tar::Archive::new(file);
             (file2, archive)
@@ -465,7 +480,9 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 if t != samp_rate {
                     return Err(Error::new(&format!(
                         "sigmf file {} sample rate ({}) is not the expected {}",
-                        filename, t, samp_rate
+                        filename.as_ref().display(),
+                        t,
+                        samp_rate
                     ))
                     .into());
                 }
@@ -476,7 +493,9 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         if meta.global.core_datatype != expected_type {
             return Err(Error::new(&format!(
                 "sigmf file {} data type ({}) not the expected {}",
-                filename, meta.global.core_datatype, expected_type
+                filename.as_ref().display(),
+                meta.global.core_datatype,
+                expected_type
             ))
             .into());
         }

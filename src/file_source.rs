@@ -13,7 +13,7 @@ use crate::{Error, Sample};
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct FileSource<T: Copy> {
-    filename: String,
+    filename: std::path::PathBuf,
     f: BufReader<std::fs::File>,
     repeat: bool,
     buf: Vec<u8>,
@@ -23,16 +23,25 @@ pub struct FileSource<T: Copy> {
 
 impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
-    pub fn new(filename: &str, repeat: bool) -> Result<(Self, ReadStream<T>)> {
-        let f = BufReader::new(
-            std::fs::File::open(filename)
-                .map_err(|e| Error::new(&format!("Failed to open {}: {:?}", filename, e)))?,
+    pub fn new<P: AsRef<std::path::Path>>(
+        filename: P,
+        repeat: bool,
+    ) -> Result<(Self, ReadStream<T>)> {
+        let f = BufReader::new(std::fs::File::open(&filename).map_err(|e| {
+            Error::new(&format!(
+                "Failed to open {}: {:?}",
+                filename.as_ref().display(),
+                e
+            ))
+        })?);
+        debug!(
+            "Opening source {}",
+            format!("{}", filename.as_ref().display())
         );
-        debug!("Opening source {filename}");
         let (dst, dr) = crate::stream::new_stream();
         Ok((
             Self {
-                filename: filename.to_string(),
+                filename: filename.as_ref().to_path_buf(),
                 f,
                 repeat,
                 buf: Vec::new(),
@@ -66,7 +75,11 @@ where
                 .read(&mut buffer[..])
                 .map_err(|e| -> anyhow::Error { e.into() })?;
             if n == 0 {
-                warn!("EOF on {}. Repeat: {}", self.filename, self.repeat);
+                warn!(
+                    "EOF on {}. Repeat: {}",
+                    self.filename.display(),
+                    self.repeat
+                );
                 if self.repeat {
                     self.f.seek(std::io::SeekFrom::Start(0))?;
                     // This is not quite the definition of "pending", but I

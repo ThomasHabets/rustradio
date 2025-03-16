@@ -79,7 +79,7 @@ struct Opt {
     samp_rate: Option<u32>,
 
     #[arg(short = 'r', help = "Read I/Q from file")]
-    read: Option<String>,
+    read: Option<std::path::PathBuf>,
 
     #[arg(long = "fast_fm", help = "Use FastFM for the FM carrier demod")]
     fast_fm: bool,

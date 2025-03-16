@@ -16,7 +16,7 @@ struct Opt {
     samp_rate: f64,
 
     #[arg(short, help = "Read I/Q from file")]
-    read: String,
+    read: std::path::PathBuf,
 }
 
 macro_rules! add_block {
