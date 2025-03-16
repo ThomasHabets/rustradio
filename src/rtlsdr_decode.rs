@@ -65,7 +65,6 @@ mod tests {
     #[test]
     fn some_input() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0, 13]);
-        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         assert!(matches![dec.work()?, BlockRet::Again]);
@@ -94,7 +93,6 @@ mod tests {
     #[test]
     fn uneven() -> crate::Result<()> {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0]);
-        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         assert!(matches![dec.work()?, BlockRet::Again]);
@@ -107,7 +105,6 @@ mod tests {
     fn overflow() -> crate::Result<()> {
         // Input is pairs of bytes. Output is complex, meaning a 4x increase. That won't fit.
         let (mut src, src_out) = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE]);
-        assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         for n in 0..4 {

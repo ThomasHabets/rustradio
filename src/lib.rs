@@ -223,6 +223,63 @@ impl From<std::io::Error> for Error {
     }
 }
 
+/// Repeat between zero and infinite times.
+pub struct Repeat {
+    repeater: Repeater,
+    count: u64,
+}
+
+impl Repeat {
+    /// Repeat finite number of times. 0 Means not even once. 1 is default.
+    pub fn finite(n: u64) -> Self {
+        Self {
+            repeater: Repeater::Finite(n),
+            count: 0,
+        }
+    }
+
+    /// Repeat infinite number of times.
+    pub fn infinite() -> Self {
+        Self {
+            repeater: Repeater::Infinite,
+            count: 0,
+        }
+    }
+
+    /// Register a repeat being done, and return true if we should continue.
+    #[must_use]
+    pub fn again(&mut self) -> bool {
+        self.count += 1;
+        match self.repeater {
+            Repeater::Finite(n) => {
+                self.repeater = Repeater::Finite(n - 1);
+                n > 1
+            }
+            Repeater::Infinite => true,
+        }
+    }
+
+    /// Return true if repeating is done.
+    #[must_use]
+    pub fn done(&self) -> bool {
+        match self.repeater {
+            Repeater::Finite(n) => n == 0,
+            Repeater::Infinite => false,
+        }
+    }
+
+    /// Return how many repeats have fully completed.
+    #[must_use]
+    pub fn count(&self) -> u64 {
+        self.count
+    }
+}
+
+enum Repeater {
+    Finite(u64),
+    Infinite,
+}
+
 pub struct Feature {
     name: String,
     build: bool,

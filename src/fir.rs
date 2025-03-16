@@ -395,6 +395,7 @@ pub fn hilbert(window: &Window) -> Vec<Float> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Repeat;
     use crate::blocks::{VectorSource, VectorSourceBuilder};
     use crate::stream::{Tag, TagValue};
     use crate::tests::assert_almost_equal_complex;
@@ -412,8 +413,9 @@ mod tests {
         ];
         let taps = vec![Complex::new(1.0, 0.0)];
         for deci in 1..=(3 * input.len()) {
-            let (mut src, src_out) = VectorSourceBuilder::new(input.clone()).repeat(2).build();
-            assert!(matches![src.work()?, BlockRet::Again]);
+            let (mut src, src_out) = VectorSourceBuilder::new(input.clone())
+                .repeat(Repeat::finite(2))
+                .build();
             assert!(matches![src.work()?, BlockRet::Again]);
             assert!(matches![src.work()?, BlockRet::EOF]);
 

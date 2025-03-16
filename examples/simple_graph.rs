@@ -21,7 +21,7 @@ fn simple_copy() -> Result<()> {
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),
     ])
-    .repeat(2)
+    .repeat(rustradio::Repeat::finite(2))
     .build();
     let src = Box::new(src);
 
@@ -43,7 +43,7 @@ fn simple_noncopy() -> Result<()> {
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),
     ])
-    .repeat(2)
+    .repeat(rustradio::Repeat::finite(2))
     .build();
     let (to_pdu, prev) = StreamToPdu::new(src_out, "burst".to_string(), 10_000, 50);
     g.add(Box::new(to_pdu));
