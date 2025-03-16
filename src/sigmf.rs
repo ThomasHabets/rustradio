@@ -190,7 +190,7 @@ pub fn parse_meta(contents: &str) -> Result<SigMF> {
 }
 
 /// Write metadata file.
-pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
+pub fn write<P: AsRef<std::path::Path>>(path: P, samp_rate: f64, freq: f64) -> Result<()> {
     let data = SigMF {
         global: Global {
             core_version: VERSION.to_string(),
@@ -210,7 +210,7 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
     let serialized = serde_json::to_string(&data).unwrap();
 
     // Create a file and write the serialized string to it.
-    let mut file = std::fs::File::create(fname)?;
+    let mut file = std::fs::File::create(path)?;
     file.write_all(serialized.as_bytes())?;
     Ok(())
 }
