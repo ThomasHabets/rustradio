@@ -16,7 +16,7 @@ const VERSION: &str = "1.1.0";
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float, Sample};
+use crate::{Complex, Error, Float, Repeat, Sample};
 
 /// Capture segment.
 #[allow(dead_code)]
@@ -218,8 +218,7 @@ pub fn write(fname: &str, samp_rate: f64, freq: f64) -> Result<()> {
 /// SigMF source builder.
 pub struct SigMFSourceBuilder<T: Copy + Type> {
     filename: std::path::PathBuf,
-    // TODO: replace with Repeat::Infinite. Also FileSource.
-    repeat: bool,
+    repeat: Repeat,
     sample_rate: Option<f64>,
     dummy: std::marker::PhantomData<T>,
 }
@@ -229,7 +228,7 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
     pub fn new(filename: std::path::PathBuf) -> Self {
         Self {
             filename,
-            repeat: false,
+            repeat: Repeat::finite(1),
             sample_rate: None,
             dummy: std::marker::PhantomData,
         }
@@ -240,13 +239,15 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
         self
     }
     /// Force a certain sample rate.
-    pub fn repeat(mut self, repeat: bool) -> Self {
+    pub fn repeat(mut self, repeat: Repeat) -> Self {
         self.repeat = repeat;
         self
     }
     /// Build a SigMFSource.
     pub fn build(self) -> Result<(SigMFSource<T>, ReadStream<T>)> {
-        SigMFSource::new(&self.filename, self.sample_rate, self.repeat)
+        let mut ret = SigMFSource::new(&self.filename, self.sample_rate)?;
+        ret.0.repeat = self.repeat;
+        Ok(ret)
     }
 }
 
@@ -258,7 +259,7 @@ pub struct SigMFSource<T: Copy> {
     range: (u64, u64),
     left: u64,
     sample_rate: Option<f64>,
-    repeat: bool,
+    repeat: Repeat,
     buf: Vec<u8>,
     #[rustradio(out)]
     dst: WriteStream<T>,
@@ -319,12 +320,11 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
     pub fn new<P: AsRef<std::path::Path>>(
         path: P,
         samp_rate: Option<f64>,
-        repeat: bool,
     ) -> Result<(Self, ReadStream<T>)> {
         if std::fs::exists(&path)? {
-            Self::from_archive(path, samp_rate, repeat)
+            Self::from_archive(path, samp_rate)
         } else {
-            match Self::from_recording(&path, samp_rate, repeat) {
+            match Self::from_recording(&path, samp_rate) {
                 Err(e) => Err(Error::new(&format!("SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}", path.as_ref().display())).into()),
                 Ok(r) => Ok(r),
             }
@@ -335,7 +335,6 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
     fn from_recording<P: AsRef<std::path::Path>>(
         base: P,
         samp_rate: Option<f64>,
-        repeat: bool,
     ) -> Result<(Self, ReadStream<T>)> {
         let meta: SigMF = {
             let file = std::fs::File::open(base_append(&base, "-meta"))?;
@@ -363,7 +362,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 file,
                 sample_rate: meta.global.core_sample_rate,
                 range,
-                repeat,
+                repeat: Repeat::finite(1),
                 left: range.1,
                 buf: vec![],
                 dst,
@@ -375,7 +374,6 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
     fn from_archive<P: AsRef<std::path::Path>>(
         filename: P,
         samp_rate: Option<f64>,
-        repeat: bool,
     ) -> Result<(Self, ReadStream<T>)> {
         let (mut file, mut archive) = {
             let file = std::fs::File::open(&filename)?;
@@ -505,7 +503,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 file,
                 sample_rate: meta.global.core_sample_rate,
                 range,
-                repeat,
+                repeat: Repeat::finite(1),
                 left: range.1,
                 buf: vec![],
                 dst,
@@ -533,7 +531,7 @@ where
 {
     fn work(&mut self) -> Result<BlockRet, Error> {
         if self.left == 0 {
-            if self.repeat {
+            if self.repeat.again() {
                 self.file.seek(std::io::SeekFrom::Start(self.range.0))?;
                 self.left = self.range.1;
             } else {
