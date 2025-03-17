@@ -207,7 +207,7 @@ pub fn write<P: AsRef<std::path::Path>>(path: P, samp_rate: f64, freq: f64) -> R
     };
 
     // Serialize the data to a JSON string.
-    let serialized = serde_json::to_string(&data).unwrap();
+    let serialized = serde_json::to_string(&data)?;
 
     // Create a file and write the serialized string to it.
     let mut file = std::fs::File::create(path)?;
@@ -318,6 +318,7 @@ impl Type for Float {
 fn base_append<P: AsRef<std::path::Path>>(path: P, s: &str) -> std::path::PathBuf {
     let path_ref = path.as_ref();
     let parent = path_ref.parent();
+    // "Or default", or return error?
     let filename = path_ref.file_name().unwrap_or_default();
     let mut new_filename = filename.to_os_string();
     new_filename.push(s);
@@ -420,14 +421,9 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         let mut found = None;
 
         // Find the sole metadata.
-        for entry in archive.entries_with_seek().unwrap() {
+        for entry in archive.entries_with_seek()? {
             let mut entry = entry?;
-            if entry
-                .path()?
-                .extension()
-                .unwrap_or(std::ffi::OsStr::new(""))
-                != "sigmf-meta"
-            {
+            if entry.path()?.extension().unwrap_or_default() != "sigmf-meta" {
                 continue;
             }
             debug!("Tar contents: {:?}", entry.path()?);
@@ -439,16 +435,20 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             }
             let mut s = String::new();
             entry.read_to_string(&mut s)?;
-            let mut metaname = match entry.path()?.into_owned().into_os_string().into_string() {
-                Ok(s) => s,
-                Err(s) => {
-                    return Err(Error::new(&format!(
-                        "failed to convert OsStr '{s:?}' into string"
-                    ))
-                    .into());
-                }
+            let metaname = {
+                let mut metaname = entry.path()?.into_owned();
+                // Not sure what to do with bad file names. Presumably we can't
+                // count on the encoding allowing us to remove "-meta"?
+                let new_filename = metaname
+                    .file_name()
+                    .expect("can't happen: we know it ends in sigmf-meta")
+                    .to_str()
+                    .ok_or(Error::msg("file name with bad UTF-8?"))?
+                    .to_owned();
+                let new_filename = &new_filename[..(new_filename.len() - 5)];
+                metaname.set_file_name(new_filename);
+                metaname
             };
-            metaname.truncate(metaname.len() - "-meta".len());
             found = Some(match found {
                 Some(_) => {
                     return Err(Error::new(
@@ -465,21 +465,15 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         };
 
         // Find the matching data file.
-        let want = base + "-data";
+        let want = base_append(&base, "-data");
         let range = {
             let mut range = None;
             let mut file = file.try_clone()?;
             file.seek(std::io::SeekFrom::Start(0))?;
             let mut archive = tar::Archive::new(file);
-            for e in archive.entries_with_seek().unwrap() {
-                let e = e.unwrap();
-                let got = e
-                    .path()
-                    .unwrap()
-                    .into_owned()
-                    .into_os_string()
-                    .into_string()
-                    .unwrap();
+            for e in archive.entries_with_seek()? {
+                let e = e?;
+                let got = e.path()?.into_owned().into_os_string();
                 if got != want {
                     continue;
                 }
@@ -500,13 +494,20 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 range = match range {
                     None => Some((e.raw_file_position(), e.size())),
                     Some(_) => {
-                        panic!("Multiple files named '{want}' in archive");
+                        return Err(Error::msg(&format!(
+                            "Multiple files named '{}' in archive",
+                            want.display()
+                        ))
+                        .into());
                     }
                 };
             }
             range
         };
-        let range = range.unwrap();
+        let range = range.ok_or(Error::msg(&format!(
+            "data file for base {} missing",
+            base.display()
+        )))?;
         file.seek(std::io::SeekFrom::Start(range.0))?;
         let meta = parse_meta(&meta_string)?;
         let (dst, rx) = crate::stream::new_stream();
@@ -581,7 +582,7 @@ where
             self.buf
                 .chunks_exact(sample_size)
                 .take(samples)
-                .map(|d| T::parse(d).unwrap()),
+                .map(|d| T::parse(d).expect("failed to parse a sample")),
         );
         o.produce(samples, &[]);
         self.buf.drain(..(samples * sample_size));
