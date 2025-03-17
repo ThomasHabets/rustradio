@@ -1,12 +1,30 @@
 use std::io::Write;
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 use clap::Parser;
 
+use rustradio::Error;
+use rustradio::block::{Block, BlockRet};
 use rustradio::sigmf::{Capture, SigMF};
+use rustradio::stream::NCReadStream;
+
+macro_rules! add_block {
+    ($g:ident, $cons:expr) => {{
+        let (block, prev) = $cons;
+        let block = Box::new(block);
+        $g.add(block);
+        prev
+    }};
+}
 
 #[derive(clap::Parser)]
 struct Opt {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(clap::Args)]
+struct CreateOpts {
     /// Sample rate.
     #[arg(long)]
     sample_rate: f64,
@@ -56,6 +74,15 @@ struct Opt {
 
     raw: std::path::PathBuf,
 }
+#[derive(clap::Subcommand)]
+enum Commands {
+    Create(CreateOpts),
+    Check(CheckOpts),
+}
+#[derive(clap::Args)]
+struct CheckOpts {
+    archive: std::path::PathBuf,
+}
 
 fn validate_iso8601(s: &str) -> Result<String, String> {
     match chrono::DateTime::parse_from_rfc3339(s) {
@@ -66,6 +93,57 @@ fn validate_iso8601(s: &str) -> Result<String, String> {
 
 fn main() -> Result<()> {
     let opt = Opt::parse();
+    match opt.command {
+        Commands::Create(opt) => cmd_create(opt),
+        Commands::Check(opt) => cmd_check(opt),
+    }
+}
+
+use rustradio::block;
+use rustradio::rustradio_macros;
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
+pub struct CheckHash {
+    #[rustradio(in)]
+    src: NCReadStream<Vec<u8>>,
+
+    correct: String,
+}
+
+impl Block for CheckHash {
+    fn work(&mut self) -> Result<BlockRet, Error> {
+        let (v, _tags) = match self.src.pop() {
+            None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
+            Some(x) => x,
+        };
+        assert_eq!(
+            v.iter().map(|v| format!("{v:02x}")).collect::<String>(),
+            self.correct
+        );
+        println!("Hash is correct!");
+        Ok(BlockRet::EOF)
+    }
+}
+
+fn cmd_check(opt: CheckOpts) -> Result<()> {
+    use rustradio::blocks::*;
+    use rustradio::graph::GraphRunner;
+    let mut g = rustradio::mtgraph::MTGraph::new();
+    let src = SigMFSourceBuilder::<u8>::new(opt.archive)
+        .ignore_type_error()
+        .build()?;
+    let Some(ref in_meta) = src.0.meta().global.core_sha512 else {
+        eprintln!("Metadata file doesn't have sha512. Nothing to check");
+        return Ok(());
+    };
+    let in_meta = in_meta.to_owned();
+    let prev = add_block![g, src];
+    let prev = add_block![g, sha512(prev)];
+    g.add(Box::new(CheckHash::new(prev, in_meta)));
+    g.run()
+}
+
+fn cmd_create(opt: CreateOpts) -> Result<()> {
     let mut sigmf = SigMF::new(opt.datatype.clone());
     sigmf.global.core_sample_rate = Some(opt.sample_rate);
     sigmf.global.core_author = opt.author;
@@ -84,7 +162,9 @@ fn main() -> Result<()> {
     let metaname = opt.out.clone() + ".sigmf-meta";
 
     if std::path::Path::new(&dataname).exists() {
-        return Err(Error::msg(format!("Data file '{dataname}' already exists")));
+        return Err(anyhow::Error::msg(format!(
+            "Data file '{dataname}' already exists"
+        )));
     }
 
     {
@@ -92,14 +172,14 @@ fn main() -> Result<()> {
             .write(true)
             .create_new(true)
             .open(&metaname)
-            .map_err(|e| Error::msg(format!("Failed to create {metaname}: {e}")))?;
+            .map_err(|e| Error::msg(&format!("Failed to create {metaname}: {e}")))?;
         meta.write_all(ser.as_bytes())?;
         meta.flush()?;
     }
 
     if let Err(e) = std::fs::rename(&opt.raw, &dataname) {
         std::fs::remove_file(&metaname).map_err(|e2|
-            Error::msg(format!("Failed to delete meta file '{metaname}': {e2} in the error path for renaming '{:?}' to '{dataname}': {e}", opt.raw)))?;
+            anyhow::Error::msg(format!("Failed to delete meta file '{metaname}': {e2} in the error path for renaming '{:?}' to '{dataname}': {e}", opt.raw)))?;
         return Err(e.into());
     }
 

@@ -219,6 +219,7 @@ pub fn write<P: AsRef<std::path::Path>>(path: P, samp_rate: f64, freq: f64) -> R
 pub struct SigMFSourceBuilder<T: Copy + Type> {
     filename: std::path::PathBuf,
     repeat: Repeat,
+    ignore_type_error: bool,
     sample_rate: Option<f64>,
     dummy: std::marker::PhantomData<T>,
 }
@@ -228,6 +229,7 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
     pub fn new(filename: std::path::PathBuf) -> Self {
         Self {
             filename,
+            ignore_type_error: false,
             repeat: Repeat::finite(1),
             sample_rate: None,
             dummy: std::marker::PhantomData,
@@ -243,9 +245,17 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
         self.repeat = repeat;
         self
     }
+    /// Ignore type error.
+    ///
+    /// This is used e.g. if you just want the bytes of the data stream, to
+    /// checksum or something.
+    pub fn ignore_type_error(mut self) -> Self {
+        self.ignore_type_error = true;
+        self
+    }
     /// Build a SigMFSource.
     pub fn build(self) -> Result<(SigMFSource<T>, ReadStream<T>)> {
-        let mut ret = SigMFSource::new(&self.filename, self.sample_rate)?;
+        let mut ret = SigMFSource::new2(&self.filename, self.sample_rate, self.ignore_type_error)?;
         ret.0.repeat = self.repeat;
         Ok(ret)
     }
@@ -274,6 +284,12 @@ pub trait Type {
 impl Type for i32 {
     fn type_string() -> &'static str {
         "ri32"
+    }
+}
+
+impl Type for u8 {
+    fn type_string() -> &'static str {
+        "ru8"
     }
 }
 
@@ -317,36 +333,36 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
     ///
     /// If the exact file name exists, then treat it as an Archive.
     /// If it does not, fall back to checking for separate Recording files.
+    ///
+    /// If samp_rate is provided, and the metadata also provides a sample rate,
+    /// then they *must* match, or an error is returned.
     pub fn new<P: AsRef<std::path::Path>>(
         path: P,
         samp_rate: Option<f64>,
     ) -> Result<(Self, ReadStream<T>)> {
-        if std::fs::exists(&path)? {
-            Self::from_archive(path, samp_rate)
-        } else {
-            match Self::from_recording(&path, samp_rate) {
-                Err(e) => Err(Error::new(&format!("SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}", path.as_ref().display())).into()),
-                Ok(r) => Ok(r),
-            }
-        }
+        Self::new2(path, samp_rate, false)
     }
-    /// Create a new SigMF from separated Recording files.
-    ///
-    fn from_recording<P: AsRef<std::path::Path>>(
-        base: P,
+
+    fn new2<P: AsRef<std::path::Path>>(
+        path: P,
         samp_rate: Option<f64>,
+        ignore_type_error: bool,
     ) -> Result<(Self, ReadStream<T>)> {
-        let meta: SigMF = {
-            let file = std::fs::File::open(base_append(&base, "-meta"))?;
-            let reader = std::io::BufReader::new(file);
-            serde_json::from_reader(reader)?
+        let (block, dst) = if std::fs::exists(&path)? {
+            Self::from_archive(&path)?
+        } else {
+            match Self::from_recording(&path) {
+                Err(e) => return Err(Error::new(&format!("SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}", path.as_ref().display())).into()),
+                Ok(r) => r,
+            }
         };
+        let meta = block.meta();
         if let Some(samp_rate) = samp_rate {
             if let Some(t) = meta.global.core_sample_rate {
                 if t != samp_rate {
                     return Err(Error::new(&format!(
                         "sigmf file {} sample rate ({}) is not the expected {}",
-                        base.as_ref().display(),
+                        path.as_ref().display(),
                         t,
                         samp_rate
                     ))
@@ -354,6 +370,29 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 }
             }
         }
+        // TODO: support i8/u8 and _be.
+        if !ignore_type_error {
+            let expected_type = T::type_string().to_owned() + "_le";
+            if meta.global.core_datatype != expected_type {
+                return Err(Error::new(&format!(
+                    "sigmf file {} data type ({}) not the expected {}",
+                    path.as_ref().display(),
+                    meta.global.core_datatype,
+                    expected_type
+                ))
+                .into());
+            }
+        }
+        Ok((block, dst))
+    }
+    /// Create a new SigMF from separated Recording files.
+    ///
+    fn from_recording<P: AsRef<std::path::Path>>(base: P) -> Result<(Self, ReadStream<T>)> {
+        let meta: SigMF = {
+            let file = std::fs::File::open(base_append(&base, "-meta"))?;
+            let reader = std::io::BufReader::new(file);
+            serde_json::from_reader(reader)?
+        };
         let file = std::fs::File::open(base_append(base, "-data"))?;
         let range = (0, file.metadata()?.len());
         let (dst, rx) = crate::stream::new_stream();
@@ -371,10 +410,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         ))
     }
     /// Create a new SigMF source block.
-    fn from_archive<P: AsRef<std::path::Path>>(
-        filename: P,
-        samp_rate: Option<f64>,
-    ) -> Result<(Self, ReadStream<T>)> {
+    fn from_archive<P: AsRef<std::path::Path>>(filename: P) -> Result<(Self, ReadStream<T>)> {
         let (mut file, mut archive) = {
             let file = std::fs::File::open(&filename)?;
             let file2 = file.try_clone()?;
@@ -473,30 +509,6 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         let range = range.unwrap();
         file.seek(std::io::SeekFrom::Start(range.0))?;
         let meta = parse_meta(&meta_string)?;
-        if let Some(samp_rate) = samp_rate {
-            if let Some(t) = meta.global.core_sample_rate {
-                if t != samp_rate {
-                    return Err(Error::new(&format!(
-                        "sigmf file {} sample rate ({}) is not the expected {}",
-                        filename.as_ref().display(),
-                        t,
-                        samp_rate
-                    ))
-                    .into());
-                }
-            }
-        }
-        // TODO: support i8/u8 and _be.
-        let expected_type = T::type_string().to_owned() + "_le";
-        if meta.global.core_datatype != expected_type {
-            return Err(Error::new(&format!(
-                "sigmf file {} data type ({}) not the expected {}",
-                filename.as_ref().display(),
-                meta.global.core_datatype,
-                expected_type
-            ))
-            .into());
-        }
         let (dst, rx) = crate::stream::new_stream();
         Ok((
             Self {

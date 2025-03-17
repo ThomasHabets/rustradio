@@ -106,6 +106,7 @@ impl GraphRunner for Graph {
         self.blocks.push(b);
     }
 
+    // TODO: fix this so that Drop is run for blocks that EOF.
     fn run(&mut self) -> Result<()> {
         let st = Instant::now();
         let start_run_cpu = get_cpu_time();

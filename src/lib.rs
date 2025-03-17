@@ -135,6 +135,7 @@ pub mod fft_stream;
 pub mod file_sink;
 pub mod file_source;
 pub mod fir;
+pub mod hasher;
 pub mod hdlc_deframer;
 pub mod hilbert;
 pub mod iir_filter;
@@ -197,10 +198,15 @@ pub struct Error {
 
 impl Error {
     /// Create new error with message.
+    // TODO: remove in favour of msg()
     pub fn new(msg: &str) -> Self {
         Self {
             msg: msg.to_string(),
         }
+    }
+    /// Create error from message.
+    pub fn msg(msg: &str) -> Self {
+        Self::new(msg)
     }
 }
 
