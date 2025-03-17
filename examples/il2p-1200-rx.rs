@@ -138,7 +138,7 @@ fn main() -> Result<()> {
     let clock = add_block![g, ToText::new(vec![a])];
     g.add(Box::new(FileSink::new(
         clock,
-        "test.u8".into(),
+        "test.u8",
         rustradio::file_sink::Mode::Overwrite,
     )?));
 

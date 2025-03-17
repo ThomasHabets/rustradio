@@ -32,8 +32,12 @@ pub struct FileSink<T: Copy> {
 
 impl<T: Copy> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new(src: ReadStream<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
-        debug!("Opening sink {}", filename.display());
+    pub fn new<P: AsRef<std::path::Path>>(
+        src: ReadStream<T>,
+        filename: P,
+        mode: Mode,
+    ) -> Result<Self> {
+        debug!("Opening sink {}", filename.as_ref().display());
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
                 .read(false)
@@ -87,8 +91,12 @@ pub struct NoCopyFileSink<T> {
 
 impl<T> NoCopyFileSink<T> {
     /// Create new NoCopyFileSink block.
-    pub fn new(src: NCReadStream<T>, filename: std::path::PathBuf, mode: Mode) -> Result<Self> {
-        debug!("Opening sink {}", filename.display());
+    pub fn new<P: AsRef<std::path::Path>>(
+        src: NCReadStream<T>,
+        filename: P,
+        mode: Mode,
+    ) -> Result<Self> {
+        debug!("Opening sink {}", filename.as_ref().display());
         let f = BufWriter::new(match mode {
             Mode::Create => std::fs::File::options()
                 .read(false)

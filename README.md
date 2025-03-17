@@ -20,9 +20,10 @@ A library for digital signals processing in the spirit of GNU Radio.
 * GNU Radio is obviously way more mature.
 * GNU Radio has a very nice UI for iterating on graphs.
 
-## Missing feature before declaring 1.0
+## Missing stuff before declaring 1.0
 
 * A clear strategy for optional output streams.
   * Is the current `Option`-based solution good enough for 1.0?
 * SymbolSync block at least have the right API.
 * Example AX.25 KISS modem written, using soapysdr.
+* `AsRef<Path>` vs `Into<PathBuf>`?
