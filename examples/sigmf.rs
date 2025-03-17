@@ -76,11 +76,15 @@ struct CreateOpts {
 }
 #[derive(clap::Subcommand)]
 enum Commands {
+    /// Create a metadata file for a raw data file, making a Recording.
     Create(CreateOpts),
+    /// Parse a SigMF Archive/Recording, and check any checksum.
     Check(CheckOpts),
 }
+
 #[derive(clap::Args)]
 struct CheckOpts {
+    /// Archive or base name for Recording.
     archive: std::path::PathBuf,
 }
 
