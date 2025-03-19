@@ -65,17 +65,17 @@ pub struct CorrelateAccessCodeTag {
 
 impl CorrelateAccessCodeTag {
     /// Create new correlate access block.
-    pub fn new(
+    pub fn new<S: Into<String>>(
         src: ReadStream<u8>,
         code: Vec<u8>,
-        tag: String,
+        tag: S,
         allowed_diffs: usize,
     ) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
                 src,
-                tag,
+                tag: tag.into(),
                 dst,
                 slide: vec![0; code.len()],
                 code,

@@ -378,8 +378,7 @@ mod tests {
     #[test]
     fn test_header_decode() -> Result<()> {
         let src = ReadStream::from_slice(&read_binary_file_as_u8("testdata/il2p.bits")?);
-        let (mut cac, cac_out) =
-            CorrelateAccessCodeTag::new(src, SYNC_WORD.into(), "sync".into(), 0);
+        let (mut cac, cac_out) = CorrelateAccessCodeTag::new(src, SYNC_WORD.into(), "sync", 0);
         let (mut deframer, o) = Il2pDeframer::new(cac_out);
         cac.work()?;
         deframer.work()?;

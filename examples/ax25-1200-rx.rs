@@ -220,7 +220,7 @@ fn main() -> Result<()> {
     {
         g.add(Box::new(FileSink::new(
             a,
-            "test.f32".into(),
+            "test.f32",
             rustradio::file_sink::Mode::Overwrite,
         )?));
     }
