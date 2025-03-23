@@ -38,8 +38,12 @@ pub struct Tag {
 
 impl Tag {
     /// Create new tag.
-    pub fn new(pos: TagPos, key: String, val: TagValue) -> Self {
-        Self { pos, key, val }
+    pub fn new<T: Into<String>>(pos: TagPos, key: T, val: TagValue) -> Self {
+        Self {
+            pos,
+            key: key.into(),
+            val,
+        }
     }
 
     /// Get pos.

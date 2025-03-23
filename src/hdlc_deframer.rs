@@ -199,7 +199,7 @@ impl HdlcDeframer {
                         .map(|i| bits2byte(&bits[i..i + 8]))
                         .collect();
                     debug!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
-                    let tags = &[Tag::new(0, "packet_pos".into(), TagValue::U64(stream_pos))];
+                    let tags = &[Tag::new(0, "packet_pos", TagValue::U64(stream_pos))];
                     if self.strip_checksum {
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);

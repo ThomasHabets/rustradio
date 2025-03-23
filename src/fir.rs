@@ -431,11 +431,11 @@ mod tests {
                 assert_eq!(
                     &tags,
                     &[
-                        Tag::new(0, "VectorSource::start".into(), TagValue::Bool(true)),
-                        Tag::new(0, "VectorSource::repeat".into(), TagValue::U64(0)),
-                        Tag::new(0, "VectorSource::first".into(), TagValue::Bool(true)),
-                        Tag::new(6 / deci, "VectorSource::start".into(), TagValue::Bool(true)),
-                        Tag::new(6 / deci, "VectorSource::repeat".into(), TagValue::U64(1)),
+                        Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                        Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                        Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
+                        Tag::new(6 / deci, "VectorSource::start", TagValue::Bool(true)),
+                        Tag::new(6 / deci, "VectorSource::repeat", TagValue::U64(1)),
                     ]
                 );
             }

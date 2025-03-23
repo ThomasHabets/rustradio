@@ -448,7 +448,7 @@ impl<T: Copy> Buffer<T> {
         );
         for tag in tags {
             let pos = (tag.pos() + s.wpos) % s.capacity();
-            let tag = Tag::new(pos, tag.key().into(), tag.val().clone());
+            let tag = Tag::new(pos, tag.key(), tag.val().clone());
             s.tags.entry(pos).or_default().push(tag);
         }
         s.wpos = (s.wpos + n) % s.capacity();
@@ -491,7 +491,7 @@ impl<T: Copy> Buffer<T> {
             for tag in ts {
                 tags.push(Tag::new(
                     (tag.pos() + s.capacity() - start) % s.capacity(),
-                    tag.key().into(),
+                    tag.key(),
                     tag.val().clone(),
                 ));
             }
@@ -587,11 +587,11 @@ mod tests {
         {
             let mut buf = b.clone().write_buf()?;
             buf.slice()[0] = 123;
-            buf.produce(1, &[Tag::new(0, "start".into(), TagValue::Bool(true))]);
+            buf.produce(1, &[Tag::new(0, "start", TagValue::Bool(true))]);
             assert_eq!(b.clone().read_buf()?.0.slice(), vec![123]);
             assert_eq!(
                 b.clone().read_buf()?.1,
-                vec![Tag::new(0, "start".into(), TagValue::Bool(true))]
+                vec![Tag::new(0, "start", TagValue::Bool(true))]
             );
             assert_eq!(b.clone().write_buf()?.len(), 4095);
         }
@@ -609,19 +609,13 @@ mod tests {
             for i in 0..n {
                 wb.slice()[i] = (i & 0xff) as u8;
             }
-            wb.produce(
-                n,
-                &[Tag::new(1, "foo".into(), TagValue::String("bar".into()))],
-            );
+            wb.produce(n, &[Tag::new(1, "foo", TagValue::String("bar".into()))]);
             let (rb, rt) = b.clone().read_buf()?;
             assert_eq!(rb.len(), n);
             for i in 0..n {
                 assert_eq!(rb.slice()[i], (i & 0xff) as u8);
             }
-            assert_eq!(
-                rt,
-                vec![Tag::new(1, "foo".into(), TagValue::String("bar".into()))]
-            );
+            assert_eq!(rt, vec![Tag::new(1, "foo", TagValue::String("bar".into()))]);
             assert_eq!(b.clone().write_buf()?.len(), 4096 - n);
         }
         b.consume(4000);
@@ -636,8 +630,8 @@ mod tests {
             wb.produce(
                 n,
                 &[
-                    Tag::new(0, "first".into(), TagValue::Bool(true)),
-                    Tag::new(99, "last".into(), TagValue::Bool(false)),
+                    Tag::new(0, "first", TagValue::Bool(true)),
+                    Tag::new(99, "last", TagValue::Bool(false)),
                 ],
             );
             let (rb, rt) = b.clone().read_buf()?;
@@ -648,8 +642,8 @@ mod tests {
             assert_eq!(
                 rt,
                 vec![
-                    Tag::new(0, "first".into(), TagValue::Bool(true)),
-                    Tag::new(99, "last".into(), TagValue::Bool(false))
+                    Tag::new(0, "first", TagValue::Bool(true)),
+                    Tag::new(99, "last", TagValue::Bool(false))
                 ]
             );
             drop(rb);
@@ -677,14 +671,14 @@ mod tests {
         {
             let mut buf = b.clone().write_buf()?;
             buf.slice()[1] = 123;
-            buf.produce(10, &[Tag::new(1, "first".into(), TagValue::Bool(true))]);
+            buf.produce(10, &[Tag::new(1, "first", TagValue::Bool(true))]);
             assert_eq!(
                 b.clone().read_buf()?.0.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0]
             );
             assert_eq!(
                 b.clone().read_buf()?.1,
-                vec![Tag::new(1, "first".into(), TagValue::Bool(true))]
+                vec![Tag::new(1, "first", TagValue::Bool(true))]
             );
             assert_eq!(b.clone().write_buf()?.len(), 4086);
         }
@@ -693,7 +687,7 @@ mod tests {
         {
             let mut buf = b.clone().write_buf()?;
             buf.slice()[2] = 42;
-            buf.produce(5, &[Tag::new(2, "second".into(), TagValue::Bool(false))]);
+            buf.produce(5, &[Tag::new(2, "second", TagValue::Bool(false))]);
             assert_eq!(
                 b.clone().read_buf()?.0.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42, 0, 0]
@@ -701,8 +695,8 @@ mod tests {
             assert_eq!(
                 b.clone().read_buf()?.1,
                 vec![
-                    Tag::new(1, "first".into(), TagValue::Bool(true)),
-                    Tag::new(12, "second".into(), TagValue::Bool(false))
+                    Tag::new(1, "first", TagValue::Bool(true)),
+                    Tag::new(12, "second", TagValue::Bool(false))
                 ]
             );
             assert_eq!(b.clone().write_buf()?.len(), 4081);

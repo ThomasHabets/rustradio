@@ -446,7 +446,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                             // case.
                             let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &[]),*);
                             for tag in ts.iter() {
-                                otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
+                                otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
                             }
                             (#(#out_names),*)
                         } else {
@@ -457,7 +457,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                               .collect();)*
                             let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
                             for tag in ts.iter() {
-                                otags.push(#path::stream::Tag::new(pos, tag.key().into(), tag.val().clone()));
+                                otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
                             }
                             (#(#out_names),*)
                         }
