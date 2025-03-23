@@ -33,8 +33,8 @@ use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 /// let (tee, data, b) = Tee::new(src_out);
 /// let (c2m, c2m_out) = ComplexToMag2::new(b);
 /// let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
-/// let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst".to_string());
-/// let pdus = StreamToPdu::new(burst_out, "burst".to_string(), 10_000, 50);
+/// let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst");
+/// let pdus = StreamToPdu::new(burst_out, "burst", 10_000, 50);
 /// // pdus.out() now delivers bursts as Vec<Complex>
 /// # Ok::<(), anyhow::Error>(())
 /// ```
@@ -56,6 +56,8 @@ pub struct BurstTagger<T: Copy> {
     dst: WriteStream<T>,
 
     threshold: Float,
+
+    #[rustradio(into)]
     tag: String,
 
     #[rustradio(default)]
@@ -110,7 +112,7 @@ mod tests {
                 })
                 .collect(),
         );
-        let (mut b, b_out) = BurstTagger::new(src_out, trigger_out, 0.25, "burst".to_string());
+        let (mut b, b_out) = BurstTagger::new(src_out, trigger_out, 0.25, "burst");
         let mut sink = VectorSink::new(b_out, 1000);
         src.work()?;
         trigger.work()?;
@@ -121,11 +123,11 @@ mod tests {
         tag_compare(
             &sink.tags(),
             &[
-                Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
-                Tag::new(0, "VectorSource::first".to_string(), TagValue::Bool(true)),
-                Tag::new(0, "VectorSource::repeat".to_string(), TagValue::U64(0)),
-                Tag::new(90, "burst".to_string(), TagValue::Bool(false)),
-                Tag::new(80, "burst".to_string(), TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                Tag::new(90, "burst", TagValue::Bool(false)),
+                Tag::new(80, "burst", TagValue::Bool(true)),
             ],
         );
         Ok(())

@@ -52,9 +52,9 @@ pub struct StreamToPdu<T> {
 
 impl<T> StreamToPdu<T> {
     /// Make new Stream to PDU block.
-    pub fn new(
+    pub fn new<S: Into<String>>(
         src: ReadStream<T>,
-        tag: String,
+        tag: S,
         max_size: usize,
         tail: usize,
     ) -> (Self, NCReadStream<Vec<T>>) {
@@ -62,7 +62,7 @@ impl<T> StreamToPdu<T> {
         (
             Self {
                 src,
-                tag,
+                tag: tag.into(),
                 dst,
                 buf: Vec::with_capacity(max_size),
                 endcounter: None,
