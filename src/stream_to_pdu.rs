@@ -19,8 +19,8 @@ let (src, src_out) = FileSource::new("/dev/null")?;
 let (tee, data, b) = Tee::new(src_out);
 let (c2m, c2m_out) = ComplexToMag2::new(b);
 let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
-let (burst, prev) = BurstTagger::new(data, iir_out, 0.0001, "burst".to_string());
-let pdus = StreamToPdu::new(prev, "burst".to_string(), 10_000, 50);
+let (burst, prev) = BurstTagger::new(data, iir_out, 0.0001, "burst");
+let pdus = StreamToPdu::new(prev, "burst", 10_000, 50);
 // pdus.out() now delivers bursts as Vec<Complex>
 # Ok::<(), anyhow::Error>(())
 ```
