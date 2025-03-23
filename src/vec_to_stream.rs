@@ -55,8 +55,8 @@ impl<T: Copy> Block for VecToStream<T> {
         }
         o.fill_from_iter(v);
         tags.extend([
-            Tag::new(0, TAG_START.to_string(), TagValue::U64(n as u64)),
-            Tag::new(n - 1, TAG_END.to_string(), TagValue::U64(n as u64)),
+            Tag::new(0, TAG_START, TagValue::U64(n as u64)),
+            Tag::new(n - 1, TAG_END, TagValue::U64(n as u64)),
         ]);
         o.produce(n, &tags);
         Ok(BlockRet::Again)
@@ -105,10 +105,10 @@ mod tests {
         assert_eq!(
             tags,
             &[
-                Tag::new(0, "VecToStream::start".to_string(), TagValue::U64(3)),
-                Tag::new(2, "VecToStream::end".to_string(), TagValue::U64(3)),
-                Tag::new(3, "VecToStream::start".to_string(), TagValue::U64(4)),
-                Tag::new(6, "VecToStream::end".to_string(), TagValue::U64(4)),
+                Tag::new(0, "VecToStream::start", TagValue::U64(3)),
+                Tag::new(2, "VecToStream::end", TagValue::U64(3)),
+                Tag::new(3, "VecToStream::start", TagValue::U64(4)),
+                Tag::new(6, "VecToStream::end", TagValue::U64(4)),
             ]
         );
         Ok(())
