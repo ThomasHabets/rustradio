@@ -63,9 +63,9 @@ mod tests {
         assert_eq!(
             sink.tags(),
             &[
-                Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
-                Tag::new(0, "VectorSource::repeat".to_string(), TagValue::U64(0)),
-                Tag::new(0, "VectorSource::first".to_string(), TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
             ]
         );
         Ok(())
