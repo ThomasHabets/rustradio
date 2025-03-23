@@ -78,10 +78,10 @@ where
         }
         let mut tags = if self.pos == 0 {
             vec![
-                Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
                 Tag::new(
                     0,
-                    "VectorSource::repeat".to_string(),
+                    "VectorSource::repeat",
                     TagValue::U64(self.repeat.count()),
                 ),
             ]
@@ -89,11 +89,7 @@ where
             vec![]
         };
         if self.repeat.count() == 0 {
-            tags.push(Tag::new(
-                0,
-                "VectorSource::first".to_string(),
-                TagValue::Bool(true),
-            ));
+            tags.push(Tag::new(0, "VectorSource::first", TagValue::Bool(true)));
         }
         let mut os = self.dst.write_buf()?;
         if os.is_empty() {
@@ -135,9 +131,9 @@ mod tests {
         assert_eq!(
             tags,
             &[
-                Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
-                Tag::new(0, "VectorSource::repeat".to_string(), TagValue::U64(0)),
-                Tag::new(0, "VectorSource::first".to_string(), TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
             ]
         );
         Ok(())
@@ -177,11 +173,11 @@ mod tests {
         assert_eq!(
             tags,
             &[
-                Tag::new(0, "VectorSource::start".to_string(), TagValue::Bool(true)),
-                Tag::new(0, "VectorSource::repeat".to_string(), TagValue::U64(0)),
-                Tag::new(0, "VectorSource::first".to_string(), TagValue::Bool(true)),
-                Tag::new(3, "VectorSource::start".to_string(), TagValue::Bool(true)),
-                Tag::new(3, "VectorSource::repeat".to_string(), TagValue::U64(1)),
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
+                Tag::new(3, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(3, "VectorSource::repeat", TagValue::U64(1)),
             ]
         );
         Ok(())
@@ -205,23 +201,11 @@ mod tests {
             (0usize..10)
                 .flat_map(|n| {
                     let mut ret = vec![
-                        Tag::new(
-                            n * 3,
-                            "VectorSource::start".to_string(),
-                            TagValue::Bool(true),
-                        ),
-                        Tag::new(
-                            n * 3,
-                            "VectorSource::repeat".to_string(),
-                            TagValue::U64(n as u64),
-                        ),
+                        Tag::new(n * 3, "VectorSource::start", TagValue::Bool(true)),
+                        Tag::new(n * 3, "VectorSource::repeat", TagValue::U64(n as u64)),
                     ];
                     if n == 0 {
-                        ret.push(Tag::new(
-                            n * 3,
-                            "VectorSource::first".to_string(),
-                            TagValue::Bool(true),
-                        ));
+                        ret.push(Tag::new(n * 3, "VectorSource::first", TagValue::Bool(true)));
                     }
                     ret
                 })
