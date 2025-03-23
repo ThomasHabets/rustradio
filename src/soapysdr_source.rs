@@ -8,7 +8,7 @@ use crate::{Complex, Error};
 
 impl From<soapysdr::Error> for Error {
     fn from(e: soapysdr::Error) -> Self {
-        Error::new(&format!("Soapy SDR Error: {}", e))
+        Error::msg(format!("Soapy SDR Error: {}", e))
     }
 }
 

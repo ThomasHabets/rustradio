@@ -120,7 +120,7 @@ fn get_complex_input(
         let (b, prev) = b.build()?;
         let samp_rate = b
             .sample_rate()
-            .ok_or(Error::new("SigMF file does not specify sample rate"))?;
+            .ok_or(Error::msg("SigMF file does not specify sample rate"))?;
         g.add(Box::new(b));
         return Ok((prev, samp_rate as f32));
     }
@@ -130,7 +130,7 @@ fn get_complex_input(
         {
             let samp = opt
                 .samp_rate
-                .ok_or(Error::new("Sample rate must be provided for RTLSDR input"))?;
+                .ok_or(Error::msg("Sample rate must be provided for RTLSDR input"))?;
             let prev = add_block![g, RtlSdrSource::new(opt.freq, samp, opt.gain)?];
 
             // Decode.
@@ -157,7 +157,7 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
             // TODO: AuDecode should be providing the bitrate.
             return Ok((
                 prev,
-                opt.samp_rate.ok_or(Error::new(
+                opt.samp_rate.ok_or(Error::msg(
                     "audio input requires providing a sample rate, for now",
                 ))? as f32,
             ));

@@ -113,7 +113,7 @@ fn main() -> Result<()> {
     let magpath = add_block![g, ComplexToMag2::new(magpath)];
     let magpath = add_block![
         g,
-        SinglePoleIirFilter::new(magpath, opt.iir_alpha).ok_or(Error::new("bad IIR parameters"))?
+        SinglePoleIirFilter::new(magpath, opt.iir_alpha).ok_or(Error::msg("bad IIR parameters"))?
     ];
     let datapath = add_block![g, Delay::new(datapath, opt.delay)];
     let prev = add_block![

@@ -203,7 +203,7 @@ impl Block for AuDecode {
                 let magic = u32::from_be_bytes(magic.try_into().unwrap());
                 i.consume(4);
                 if magic != 0x2e736e64u32 {
-                    return Err(Error::new(".au magic value not found"));
+                    return Err(Error::msg(".au magic value not found"));
                 }
                 self.state = DecodeState::WaitingSize;
             }
@@ -223,18 +223,18 @@ impl Block for AuDecode {
                 }
                 let head = i.iter().take(header_rest_len).copied().collect::<Vec<_>>();
                 if Encoding::Pcm16 as u32 != u32::from_be_bytes(head[4..8].try_into().unwrap()) {
-                    return Err(Error::new("only PCM16 encoding supported"));
+                    return Err(Error::msg("only PCM16 encoding supported"));
                 }
                 let bitrate = u32::from_be_bytes(head[8..12].try_into().unwrap());
                 if self.bitrate != bitrate {
-                    return Err(Error::new(&format![
+                    return Err(Error::msg(format![
                         "AU block initialized with bitrate {}, got {bitrate}",
                         self.bitrate
                     ]));
                 }
                 let channels = u32::from_be_bytes(head[12..16].try_into().unwrap());
                 if channels != 1 {
-                    return Err(Error::new(&format!(
+                    return Err(Error::msg(format!(
                         "AU block only supports one channel currently, got {channels}"
                     )));
                 }

@@ -27,24 +27,24 @@ const MAX_CHUNKS_IN_FLIGHT: usize = 1000;
 
 impl From<rtlsdr::RTLSDRError> for Error {
     fn from(e: rtlsdr::RTLSDRError) -> Self {
-        Error::new(&format!("RTL SDR Error: {}", e))
+        Error::msg(format!("RTL SDR Error: {}", e))
     }
 }
 
 impl From<RecvError> for Error {
     fn from(e: RecvError) -> Self {
-        Error::new(&format!("recv error: {}", e))
+        Error::msg(format!("recv error: {}", e))
     }
 }
 impl From<TryRecvError> for Error {
     fn from(e: TryRecvError) -> Self {
-        Error::new(&format!("recv error: {}", e))
+        Error::msg(format!("recv error: {}", e))
     }
 }
 
 impl<T> From<SendError<T>> for Error {
     fn from(e: SendError<T>) -> Self {
-        Error::new(&format!("send error: {}", e))
+        Error::msg(format!("send error: {}", e))
     }
 }
 
@@ -71,7 +71,7 @@ impl RtlSdrSource {
         let index = 0;
         let found = rtlsdr::get_device_count();
         if index >= found {
-            return Err(Error::new(&format!(
+            return Err(Error::msg(format!(
                 "RTL SDR index {} doesn't exist, found {}",
                 index, found
             )));
@@ -82,7 +82,7 @@ impl RtlSdrSource {
             .name("RtlSdrSource-reader".to_string())
             .spawn(move || -> Result<(), Error> {
                 let mut dev =
-                    rtlsdr::open(index).map_err(|e| Error::new(&format!("RTL SDR open: {e}")))?;
+                    rtlsdr::open(index).map_err(|e| Error::msg(format!("RTL SDR open: {e}")))?;
                 debug!("Tuner type: {:?}", dev.get_tuner_type());
                 dev.set_center_freq(freq as u32)?;
                 debug!("Allowed tuner gains: {:?}", dev.get_tuner_gains()?);

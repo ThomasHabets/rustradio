@@ -151,7 +151,7 @@ impl<T: Copy> ReadStream<T> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "read_buf() called with refcount {refcount}");
         if refcount > 3 {
-            return Err(Error::new(&format!(
+            return Err(Error::msg(format!(
                 "read_buf() called with refcount {refcount}"
             )));
         }
@@ -224,7 +224,7 @@ impl<T: Copy> WriteStream<T> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "write_buf() called with refcount {refcount}");
         if refcount > 3 {
-            return Err(Error::new(&format!(
+            return Err(Error::msg(format!(
                 "write_buf() called with refcount {refcount}"
             )));
         }

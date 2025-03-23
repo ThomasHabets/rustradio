@@ -105,7 +105,7 @@ mod tests {
         // TODO: create an actual test.
         let src = ReadStream::from_slice(&[0.1, 0.2]);
         let (mut iir, _) =
-            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::msg("alpha out of range"))?;
         iir.work()?;
         Ok(())
     }
@@ -115,7 +115,7 @@ mod tests {
         // TODO: create an actual test.
         let src = ReadStream::from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
         let (mut iir, _) =
-            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::new("alpha out of range"))?;
+            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::msg("alpha out of range"))?;
         iir.work()?;
         Ok(())
     }
@@ -124,15 +124,15 @@ mod tests {
     fn reject_bad_alpha() -> Result<()> {
         for tv in [0.0, 0.1, 1.0] {
             let src = ReadStream::from_slice(&[0.1, 0.2]);
-            SinglePoleIirFilter::new(src, tv).ok_or(Error::new("should accept {tv}"))?;
+            SinglePoleIirFilter::new(src, tv).ok_or(Error::msg("should accept {tv}"))?;
         }
         let src = ReadStream::from_slice(&[0.1, 0.2]);
         if SinglePoleIirFilter::new(src, -0.1).is_some() {
-            return Err(Error::new("should not accept -0.1").into());
+            return Err(Error::msg("should not accept -0.1").into());
         }
         let src = ReadStream::from_slice(&[0.1, 0.2]);
         if SinglePoleIirFilter::new(src, 1.1).is_some() {
-            return Err(Error::new("should not accept 1.1").into());
+            return Err(Error::msg("should not accept 1.1").into());
         }
         Ok(())
     }

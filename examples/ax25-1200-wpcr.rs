@@ -96,7 +96,7 @@ fn main() -> Result<()> {
     let burst_tee = add_block![
         g,
         SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)
-            .ok_or(Error::new("bad IIR parameters"))?
+            .ok_or(Error::msg("bad IIR parameters"))?
     ];
 
     // Save burst stream

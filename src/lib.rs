@@ -197,16 +197,9 @@ pub struct Error {
 }
 
 impl Error {
-    /// Create new error with message.
-    // TODO: remove in favour of msg()
-    pub fn new(msg: &str) -> Self {
-        Self {
-            msg: msg.to_string(),
-        }
-    }
     /// Create error from message.
-    pub fn msg(msg: &str) -> Self {
-        Self::new(msg)
+    pub fn msg<S: Into<String>>(msg: S) -> Self {
+        Self { msg: msg.into() }
     }
 }
 
@@ -220,12 +213,12 @@ impl std::error::Error for Error {}
 
 impl From<anyhow::Error> for Error {
     fn from(e: anyhow::Error) -> Error {
-        Error::new(&format!("{}", e))
+        Error::msg(format!("{}", e))
     }
 }
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
-        Error::new(&format!("IO error: {}", e))
+        Error::msg(format!("IO error: {}", e))
     }
 }
 
@@ -380,7 +373,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
     if errs.is_empty() {
         Ok(assumptions)
     } else {
-        Err(Error::new(&format!("{:?}", errs)).into())
+        Err(Error::msg(format!("{:?}", errs)).into())
     }
 }
 

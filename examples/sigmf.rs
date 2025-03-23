@@ -176,7 +176,7 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
             .write(true)
             .create_new(true)
             .open(&metaname)
-            .map_err(|e| Error::msg(&format!("Failed to create {metaname}: {e}")))?;
+            .map_err(|e| Error::msg(format!("Failed to create {metaname}: {e}")))?;
         meta.write_all(ser.as_bytes())?;
         meta.flush()?;
     }

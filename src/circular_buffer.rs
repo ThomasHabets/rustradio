@@ -44,7 +44,7 @@ impl Map {
         let buf = unsafe { libc::mmap(ptr, len as size_t, PROT_READ | PROT_WRITE, flags, fd, 0) };
         if buf == MAP_FAILED {
             let e = errno::errno();
-            return Err(Error::new(&format!(
+            return Err(Error::msg(format!(
                 "mmap(){}: {e}",
                 if ptr.is_null() {
                     ""
@@ -63,7 +63,7 @@ impl Map {
                 let e = errno::errno();
                 panic!("Failed to unmap buffer just mapped in the failure path: {e}");
             }
-            return Err(Error::new("mmap() allocated in the wrong place").into());
+            return Err(Error::msg("mmap() allocated in the wrong place").into());
         }
         Ok(Self {
             base: buf as *mut c_uchar,

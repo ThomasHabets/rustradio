@@ -353,7 +353,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             Self::from_archive(&path)?
         } else {
             match Self::from_recording(&path) {
-                Err(e) => return Err(Error::new(&format!("SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}", path.as_ref().display())).into()),
+                Err(e) => return Err(Error::msg(format!("SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}", path.as_ref().display())).into()),
                 Ok(r) => r,
             }
         };
@@ -361,7 +361,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         if let Some(samp_rate) = samp_rate {
             if let Some(t) = meta.global.core_sample_rate {
                 if t != samp_rate {
-                    return Err(Error::new(&format!(
+                    return Err(Error::msg(format!(
                         "sigmf file {} sample rate ({}) is not the expected {}",
                         path.as_ref().display(),
                         t,
@@ -375,7 +375,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         if !ignore_type_error {
             let expected_type = T::type_string().to_owned() + "_le";
             if meta.global.core_datatype != expected_type {
-                return Err(Error::new(&format!(
+                return Err(Error::msg(format!(
                     "sigmf file {} data type ({}) not the expected {}",
                     path.as_ref().display(),
                     meta.global.core_datatype,
@@ -430,7 +430,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             match entry.header().entry_type() {
                 tar::EntryType::Regular => {}
                 other => {
-                    return Err(Error::new(&format!("data file is of bad type {other:?}")).into());
+                    return Err(Error::msg(format!("data file is of bad type {other:?}")).into());
                 }
             }
             let mut s = String::new();
@@ -451,7 +451,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             };
             found = Some(match found {
                 Some(_) => {
-                    return Err(Error::new(
+                    return Err(Error::msg(
                         "sigmf doesn't yet support multiple recordings in an archive",
                     )
                     .into());
@@ -460,7 +460,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             });
         }
         let (base, meta_string) = match found {
-            None => return Err(Error::new("sigmf doesn't contain any recording").into()),
+            None => return Err(Error::msg("sigmf doesn't contain any recording").into()),
             Some((b, m)) => (b, m),
         };
 
@@ -480,21 +480,21 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 match e.header().entry_type() {
                     tar::EntryType::Regular => {}
                     tar::EntryType::GNUSparse => {
-                        return Err(Error::new(
+                        return Err(Error::msg(
                             "SigMF source block doesn't support sparse tar files",
                         )
                         .into());
                     }
                     other => {
                         return Err(
-                            Error::new(&format!("data file is of bad type {other:?}")).into()
+                            Error::msg(format!("data file is of bad type {other:?}")).into()
                         );
                     }
                 }
                 range = match range {
                     None => Some((e.raw_file_position(), e.size())),
                     Some(_) => {
-                        return Err(Error::msg(&format!(
+                        return Err(Error::msg(format!(
                             "Multiple files named '{}' in archive",
                             want.display()
                         ))
@@ -504,7 +504,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             }
             range
         };
-        let range = range.ok_or(Error::msg(&format!(
+        let range = range.ok_or(Error::msg(format!(
             "data file for base {} missing",
             base.display()
         )))?;

@@ -25,7 +25,7 @@ impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
     pub fn new<P: AsRef<std::path::Path>>(filename: P) -> Result<(Self, ReadStream<T>)> {
         let f = BufReader::new(std::fs::File::open(&filename).map_err(|e| {
-            Error::new(&format!(
+            Error::msg(format!(
                 "Failed to open {}: {:?}",
                 filename.as_ref().display(),
                 e
