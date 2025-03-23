@@ -74,8 +74,10 @@ impl<T> StreamToPdu<T> {
     }
 }
 
-fn get_tag_val_bool(tags: &HashMap<(TagPos, String), Tag>, pos: TagPos, key: &str) -> Option<bool> {
-    if let Some(tag) = tags.get(&(pos, key.to_string())) {
+// If a given tag exists at the given position, return Some(that bool). Else
+// return None.
+fn get_tag_val_bool(tags: &HashMap<(TagPos, &str), &Tag>, pos: TagPos, key: &str) -> Option<bool> {
+    if let Some(tag) = tags.get(&(pos, key)) {
         match tag.val() {
             TagValue::Bool(b) => Some(*b),
             _ => None,
@@ -98,9 +100,9 @@ where
         // TODO: we actually only care about one single tag,
         // and I think we should drop the rest no matter what.
         let tags = tags
-            .into_iter()
-            .map(|t| ((t.pos(), t.key().to_string()), t))
-            .collect::<HashMap<(TagPos, String), Tag>>();
+            .iter()
+            .map(|t| ((t.pos(), t.key()), t))
+            .collect::<HashMap<(TagPos, &str), &Tag>>();
         trace!("StreamToPdu: tags: {:?}", tags);
 
         for (i, sample) in input.iter().enumerate() {
