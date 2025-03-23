@@ -193,16 +193,12 @@ impl Wpcr {
             clock_phase += samples_per_symbol;
         }
         let mut tags = vec![
-            Tag::new(0, "sps".to_string(), TagValue::Float(samples_per_symbol)),
-            Tag::new(0, "phase".to_string(), TagValue::Float(clock_phase)),
+            Tag::new(0, "sps", TagValue::Float(samples_per_symbol)),
+            Tag::new(0, "phase", TagValue::Float(clock_phase)),
         ];
         if let Some(samp_rate) = self.samp_rate {
             let frequency = samples_per_symbol * samp_rate;
-            tags.push(Tag::new(
-                0,
-                "frequency".to_string(),
-                TagValue::Float(frequency),
-            ));
+            tags.push(Tag::new(0, "frequency", TagValue::Float(frequency)));
         }
         debug!("WPCR: Bits: {}", syms.len());
         Some((syms, tags))
