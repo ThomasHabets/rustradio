@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn source_f32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
-        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+        let tmpfn = tmpd.path().join("delme.bin");
 
         std::fs::write(
             &tmpfn,
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn source_c32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
-        let tmpfn = tmpd.path().join("delme.bin").display().to_string();
+        let tmpfn = tmpd.path().join("delme.bin");
 
         std::fs::write(
             &tmpfn,
