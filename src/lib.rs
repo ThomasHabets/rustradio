@@ -294,6 +294,16 @@ pub struct Feature {
     detected: bool,
 }
 
+impl Feature {
+    fn new<S: Into<String>>(name: S, build: bool, detected: bool) -> Self {
+        Self {
+            name: name.into(),
+            build,
+            detected,
+        }
+    }
+}
+
 pub fn environment_str(features: &[Feature]) -> String {
     let mut s = "Feature   Build Detected\n".to_string();
     for feature in features {
@@ -310,31 +320,31 @@ pub fn check_environment() -> Result<Vec<Feature>> {
     let mut assumptions: Vec<Feature> = Vec::new();
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
-        assumptions.push(Feature {
-            name: "FMA".to_string(),
-            build: cfg!(target_feature = "fma"),
-            detected: is_x86_feature_detected!("fma"),
-        });
-        assumptions.push(Feature {
-            name: "SSE".to_string(),
-            build: cfg!(target_feature = "sse"),
-            detected: is_x86_feature_detected!("sse"),
-        });
-        assumptions.push(Feature {
-            name: "SSE3".to_string(),
-            build: cfg!(target_feature = "sse3"),
-            detected: is_x86_feature_detected!("sse3"),
-        });
-        assumptions.push(Feature {
-            name: "AVX".to_string(),
-            build: cfg!(target_feature = "avx"),
-            detected: is_x86_feature_detected!("avx"),
-        });
-        assumptions.push(Feature {
-            name: "AVX2".to_string(),
-            build: cfg!(target_feature = "avx2"),
-            detected: is_x86_feature_detected!("avx2"),
-        });
+        assumptions.push(Feature::new(
+            "FMA",
+            cfg!(target_feature = "fma"),
+            is_x86_feature_detected!("fma"),
+        ));
+        assumptions.push(Feature::new(
+            "SSE",
+            cfg!(target_feature = "sse"),
+            is_x86_feature_detected!("sse"),
+        ));
+        assumptions.push(Feature::new(
+            "SSE3",
+            cfg!(target_feature = "sse3"),
+            is_x86_feature_detected!("sse3"),
+        ));
+        assumptions.push(Feature::new(
+            "AVX",
+            cfg!(target_feature = "avx"),
+            is_x86_feature_detected!("avx"),
+        ));
+        assumptions.push(Feature::new(
+            "AVX2",
+            cfg!(target_feature = "avx2"),
+            is_x86_feature_detected!("avx2"),
+        ));
     }
 
     // TODO: ideally we don't duplicate this test here, but reuse it from the
@@ -347,11 +357,11 @@ pub fn check_environment() -> Result<Vec<Feature>> {
         any(target_arch = "riscv32", target_arch = "riscv64")
     ))]
     {
-        assumptions.push(Feature {
-            name: "Vector".to_string(),
-            build: cfg!(target_feature = "v"),
-            detected: std::arch::is_riscv_feature_detected!("v"),
-        });
+        assumptions.push(Feature::new(
+            "Vector",
+            cfg!(target_feature = "v"),
+            std::arch::is_riscv_feature_detected!("v"),
+        ));
     }
 
     let errs: Vec<_> = assumptions
