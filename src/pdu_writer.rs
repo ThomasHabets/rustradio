@@ -26,6 +26,7 @@ directory, named as microseconds since epoch.
 pub struct PduWriter<T> {
     #[rustradio(in)]
     src: NCReadStream<Vec<T>>,
+    #[rustradio(into)]
     dir: PathBuf,
     #[rustradio(default)]
     files_written: usize,

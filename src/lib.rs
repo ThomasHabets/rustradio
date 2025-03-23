@@ -337,7 +337,11 @@ pub fn check_environment() -> Result<Vec<Feature>> {
         });
     }
 
-    // TODO: ideally we don't duplicate this test here, but reuse it from the top of the file.
+    // TODO: ideally we don't duplicate this test here, but reuse it from the
+    // top of the file.
+    //
+    // We check for feature `simd` here as a substitute for checking we're on
+    // nightly, where the feature stuff is allowed.
     #[cfg(all(
         feature = "simd",
         any(target_arch = "riscv32", target_arch = "riscv64")
