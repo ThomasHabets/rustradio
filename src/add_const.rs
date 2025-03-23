@@ -13,7 +13,7 @@ where
     T: Copy + std::ops::Add<Output = T>,
 {
     crate::convert::MapBuilder::new(src, move |x| x + val)
-        .name("add_const".into())
+        .name("add_const")
         .build()
 }
 

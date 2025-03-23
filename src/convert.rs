@@ -11,7 +11,7 @@ use crate::{Complex, Float};
 /// use rustradio::convert::MapBuilder;
 /// let (src_block, src) = ConstantSource::new(13);
 /// let (b, out) = MapBuilder::new(src, move |x| x + 10)
-///   .name("mymap".to_string())
+///   .name("mymap")
 ///   .build();
 /// ```
 pub struct MapBuilder<In, Out, F>
@@ -38,8 +38,8 @@ where
         }
     }
     /// Set name.
-    pub fn name(mut self, name: String) -> MapBuilder<In, Out, F> {
-        self.name = name;
+    pub fn name<T: Into<String>>(mut self, name: T) -> MapBuilder<In, Out, F> {
+        self.name = name.into();
         self
     }
     /// Build Map.
