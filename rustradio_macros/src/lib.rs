@@ -34,43 +34,6 @@ static STRUCT_ATTRS: &[&str] = &[
 ];
 static FIELD_ATTRS: &[&str] = &["in", "out", "default", "into"];
 
-/*
-use syn::{Type, TypePath};
-use quote::format_ident;
-fn prefixed_into_type(ty: &Type) -> Option<syn::Type> {
-    if let Type::Path(TypePath { qself: None, path }) = ty {
-        // Get the last segment of the path (e.g., "MyType" in "my::path::MyType")
-        if let Some(last_segment) = path.segments.last() {
-            let original_ident = &last_segment.ident;
-            let new_ident = format_ident!("Into{}", original_ident);
-
-            // Build a new path with the new ident
-            let new_path = syn::Path {
-                leading_colon: None,
-                segments: {
-                    let mut segments = path.segments.clone();
-                    // Replace only the last segment with the new ident
-                    let mut last = segments.pop().unwrap().into_value();
-                    last.ident = new_ident;
-                    segments.push_value(last);
-                    segments
-                },
-            };
-
-            let new_type = Type::Path(TypePath {
-                qself: None,
-                path: new_path,
-            });
-
-            return Some(new_type);
-        }
-    }
-
-    // If it's not a TypePath or something weird, return None or handle differently
-    None
-}
-*/
-
 /// Check if named attribute is in the list of attributes.
 ///
 /// Panic if there's an attribute not in the valid list provided.
