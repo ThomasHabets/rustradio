@@ -162,11 +162,11 @@ pub struct SigMF {
     pub global: Global,
 
     /// Capture segments.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde()]
     pub captures: Vec<Capture>,
 
     /// Annotations on the data.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub annotations: Vec<Annotation>,
 }
 
