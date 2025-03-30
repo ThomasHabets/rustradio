@@ -72,6 +72,10 @@ struct CreateOpts {
     #[arg(long)]
     out: String,
 
+    /// Only print metadata. Don't create or rename files.
+    #[arg(long)]
+    print: bool,
+
     raw: std::path::PathBuf,
 }
 #[derive(clap::Subcommand)]
@@ -171,6 +175,10 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
         )));
     }
 
+    if opt.print {
+        println!("{}", ser);
+        return Ok(());
+    }
     {
         let mut meta = std::fs::OpenOptions::new()
             .write(true)
