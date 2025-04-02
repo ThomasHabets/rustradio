@@ -141,5 +141,36 @@ pub trait Block: BlockName + BlockEOF {
     /// A block implementation keeps track of its own inputs and outputs.
     fn work(&mut self) -> Result<BlockRet, Error>;
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+
+    struct FakeWait {}
+    impl StreamWait for FakeWait {
+        fn wait(&self, _need: usize) -> bool {
+            true
+        }
+        fn closed(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn blockret_fmt() {
+        assert_eq!(format!("{:?}", BlockRet::Again), "Again");
+        assert_eq!(format!("{:?}", BlockRet::Pending), "Pending");
+        assert_eq!(
+            format!("{:?}", BlockRet::WaitForFunc(Box::new(|| {}))),
+            "WaitForFunc"
+        );
+        assert_eq!(
+            format!("{:?}", BlockRet::WaitForStream(&FakeWait {}, 1)),
+            "WaitForStream"
+        );
+        assert_eq!(format!("{:?}", BlockRet::EOF), "EOF");
+    }
+}
 /* vim: textwidth=80
  */

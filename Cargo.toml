@@ -92,3 +92,6 @@ overflow-checks = true
 [lints.clippy]
 missing-safety-doc = "warn"
 undocumented-unsafe-blocks = "warn"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }

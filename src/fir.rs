@@ -393,6 +393,7 @@ pub fn hilbert(window: &Window) -> Vec<Float> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::Repeat;

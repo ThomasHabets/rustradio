@@ -8,6 +8,7 @@
     ),
     feature(stdarch_riscv_feature_detection)
 )]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 /*! This create provides a framework for running SDR (software defined
 radio) applications.
@@ -485,7 +486,7 @@ impl Sample for u32 {
 impl Sample for i32 {
     type Type = i32;
     fn size() -> usize {
-        4
+        std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
         if data.len() != Self::size() {
@@ -531,6 +532,7 @@ impl<T> Len for Vec<T> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub mod tests {
     //! Test helper functions.
     use super::*;

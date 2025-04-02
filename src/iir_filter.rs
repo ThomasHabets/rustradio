@@ -71,7 +71,12 @@ where
 
 impl<T> Filter<T> for IirFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + Send,
+    T: Copy
+        + Default
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>
+        + Send
+        + std::fmt::Debug,
 {
     fn filter(&mut self, sample: T) -> T {
         let mut ret = self.taps[0] * sample;
@@ -94,7 +99,13 @@ where
 
 impl<T> ClampedFilter<T> for IirFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + Clamp + Send,
+    T: Copy
+        + Default
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>
+        + Clamp
+        + Send
+        + std::fmt::Debug,
 {
     fn filter_clamped(&mut self, sample: T, mi: T, mx: T) -> T {
         let mut ret = self.taps[0] * sample;
@@ -111,6 +122,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use anyhow::Result;
@@ -143,6 +155,16 @@ mod tests {
     }
 
     #[test]
+    fn single_pole_clamped() -> Result<()> {
+        let mut f = IirFilter::new(&[1.0, 0.0]);
+        assert_eq!(f.filter_clamped(10.0, 0.0, 1.0), 1.0);
+        assert_eq!(f.filter_clamped(10.0, 0.0, 1.0), 1.0);
+        assert_eq!(f.filter_clamped(10.0, 0.0, 1.0), 1.0);
+
+        Ok(())
+    }
+
+    #[test]
     fn multi_pole() -> Result<()> {
         let mut f = IirFilter::new(&[1.0, 0.0, 0.0]);
         assert_eq!(f.filter(10.0), 10.0);
@@ -156,6 +178,16 @@ mod tests {
         assert_eq!(f.filter(100.0), 281.0);
         assert_eq!(f.filter(100.0), 371.9);
 
+        Ok(())
+    }
+
+    #[test]
+    fn filled() -> Result<()> {
+        let mut f = IirFilter::new(&[1.0f32, 0.9, 0.1]);
+        f.fill(100.0);
+        assert_eq!(f.filter(100.0), 200.0);
+        assert_eq!(f.filter(100.0), 290.0);
+        assert_eq!(f.filter(200.0), 481.0);
         Ok(())
     }
 }
