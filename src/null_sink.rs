@@ -8,20 +8,13 @@ use crate::stream::ReadStream;
 
 /// Discard anything written to this block.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct NullSink<T>
 where
     T: Copy,
 {
     #[rustradio(in)]
     src: ReadStream<T>,
-}
-
-impl<T: Default + Copy> NullSink<T> {
-    /// Create new NullSink block.
-    pub fn new(src: ReadStream<T>) -> Self {
-        Self { src }
-    }
 }
 
 impl<T> Block for NullSink<T>
