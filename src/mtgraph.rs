@@ -223,5 +223,37 @@ impl Default for MTGraph {
         Self::new()
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+    use crate::graph::GraphRunner;
+
+    #[test]
+    fn small_test() -> Result<()> {
+        use crate::Complex;
+        use crate::blocks::{AddConst, NullSink, VectorSource, add_const};
+        let (src, src_out) = VectorSource::new(vec![Complex::default()]);
+        let (add1, add1_out) = AddConst::new(src_out, Complex::new(1.1, 2.0));
+        let (add2, add2_out) = add_const(add1_out, Complex::new(1.1, 2.0));
+        let sink = Box::new(NullSink::new(add2_out));
+        let mut g = MTGraph::new();
+        g.add(Box::new(src));
+        g.add(Box::new(add1));
+        g.add(Box::new(add2));
+        g.add(sink);
+        g.run()?;
+        Ok(())
+    }
+
+    #[test]
+    fn default_graph() -> Result<()> {
+        let g = MTGraph::default();
+        let cancel = g.cancel_token();
+        assert!(!cancel.is_canceled());
+        Ok(())
+    }
+}
 /* vim: textwidth=80
  */

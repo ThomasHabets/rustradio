@@ -331,5 +331,45 @@ impl Default for CancellationToken {
         Self::new()
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn small_test() -> Result<()> {
+        use crate::Complex;
+        use crate::blocks::{AddConst, FileSource, NullSink, RtlSdrDecode};
+        let (src, src_out) = FileSource::<u8>::new("/dev/null")?;
+        let (dec, dec_out) = RtlSdrDecode::new(src_out);
+        let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0));
+        let sink = Box::new(NullSink::new(add_out));
+        let mut g = Graph::new();
+        g.add(Box::new(src));
+        g.add(Box::new(dec));
+        g.add(Box::new(add));
+        g.add(sink);
+        g.run()?;
+        Ok(())
+    }
+
+    #[test]
+    fn canceller() -> Result<()> {
+        let cancel = CancellationToken::default();
+        assert!(!cancel.is_canceled());
+        cancel.cancel();
+        assert!(cancel.is_canceled());
+        Ok(())
+    }
+
+    #[test]
+    fn default_graph() -> Result<()> {
+        let g = Graph::default();
+        let cancel = g.cancel_token();
+        assert!(!cancel.is_canceled());
+        Ok(())
+    }
+}
 /* vim: textwidth=80
  */
