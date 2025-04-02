@@ -229,21 +229,37 @@ impl Default for MTGraph {
 mod tests {
     use super::*;
     use crate::graph::GraphRunner;
+    use crate::stream::{Tag, TagValue};
+    use crate::tests::assert_almost_equal_complex;
+    use crate::{Complex, Float};
 
     #[test]
     fn small_test() -> Result<()> {
-        use crate::Complex;
-        use crate::blocks::{AddConst, NullSink, VectorSource, add_const};
-        let (src, src_out) = VectorSource::new(vec![Complex::default()]);
-        let (add1, add1_out) = AddConst::new(src_out, Complex::new(1.1, 2.0));
-        let (add2, add2_out) = add_const(add1_out, Complex::new(1.1, 2.0));
-        let sink = Box::new(NullSink::new(add2_out));
+        use crate::blocks::{AddConst, FloatToComplex, VectorSink, VectorSource, add_const};
+        let (src1, src1_out) = VectorSource::new(vec![2.0 as Float]);
+        let (src2, src2_out) = VectorSource::new(vec![-1.0 as Float]);
+        let (conv, conv_out) = FloatToComplex::new(src1_out, src2_out);
+        let (add1, add1_out) = AddConst::new(conv_out, Complex::new(1.1, 2.0));
+        let (add2, add2_out) = add_const(add1_out, Complex::new(1.3, -10.0));
+        let sink = VectorSink::new(add2_out, 100);
+        let hook = sink.hook();
         let mut g = MTGraph::new();
-        g.add(Box::new(src));
+        g.add(Box::new(src1));
+        g.add(Box::new(src2));
+        g.add(Box::new(conv));
         g.add(Box::new(add1));
         g.add(Box::new(add2));
-        g.add(sink);
+        g.add(Box::new(sink));
         g.run()?;
+        assert_almost_equal_complex(hook.data().samples(), &[Complex::new(4.4, -9.0)]);
+        assert_eq!(
+            hook.data().tags(),
+            &[
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
+            ]
+        );
         Ok(())
     }
 

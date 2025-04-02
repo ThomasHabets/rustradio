@@ -1,6 +1,8 @@
 //! Sink values into a vector.
 //!
 //! This block is really only useful for unit tests.
+use std::sync::{Arc, Mutex, MutexGuard};
+
 use anyhow::Result;
 
 use crate::Error;
@@ -18,36 +20,69 @@ pub struct VectorSink<T: Copy> {
     src: ReadStream<T>,
 
     #[rustradio(default)]
-    storage: Vec<T>,
-
-    #[rustradio(default)]
-    tags: Vec<Tag>,
+    storage: Arc<Mutex<(Vec<T>, Vec<Tag>)>>,
 
     /// Max number of samples and/or tags to store.
     max_size: usize,
 }
 
-impl<T: Copy> VectorSink<T> {
-    pub fn data(&self) -> &[T] {
-        &self.storage
+/// Hook is a hook into getting the data and tags written to the VectorSink.
+pub struct Hook<T: Copy> {
+    inner: Arc<Mutex<(Vec<T>, Vec<Tag>)>>,
+}
+impl<T: Copy> Hook<T> {
+    /// Get a locked read only reference to the samples and the data.
+    #[must_use]
+    pub fn data(&self) -> Data<'_, T> {
+        Data {
+            inner: self.inner.lock().unwrap(),
+        }
     }
+}
+
+/// Lock a read only reference to the samples and tags written to the
+/// VectorSink.
+///
+/// The VectorSink is unable to write anything new while the Data is alive.
+pub struct Data<'a, T: Copy> {
+    inner: MutexGuard<'a, (Vec<T>, Vec<Tag>)>,
+}
+impl<T: Copy> Data<'_, T> {
+    /// Get a slice of the data written to the VectorSink.
+    #[must_use]
+    pub fn samples(&self) -> &[T] {
+        &self.inner.0
+    }
+    /// Get a slice of the tags written to the VectorSink.
+    #[must_use]
     pub fn tags(&self) -> &[Tag] {
-        &self.tags
+        &self.inner.1
+    }
+}
+
+impl<T: Copy> VectorSink<T> {
+    /// Get a Hook into the data that will be written.
+    #[must_use]
+    pub fn hook(&self) -> Hook<T> {
+        Hook {
+            inner: self.storage.clone(),
+        }
     }
 }
 
 impl<T: Copy> Block for VectorSink<T> {
     fn work(&mut self) -> Result<BlockRet, Error> {
+        let mut storage = self.storage.lock().unwrap();
         let (i, tags) = self.src.read_buf()?;
         let ilen = i.len();
-        let n = std::cmp::min(ilen, self.max_size - self.storage.len());
+        let n = std::cmp::min(ilen, self.max_size - storage.0.len());
         // Maybe limit number of tags, too?
         if n > 0 {
-            self.storage.extend(&i.slice()[..n]);
-            self.tags.extend(tags);
+            storage.0.extend(&i.slice()[..n]);
+            storage.1.extend(tags);
             i.consume(ilen);
         }
-        Ok(BlockRet::Again)
+        Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }
 
@@ -64,9 +99,9 @@ mod tests {
         let mut sink = VectorSink::new(src_out, 100);
         src.work()?;
         sink.work()?;
-        assert_eq!(sink.data(), &[0, 1, 2, 3, 4, 5]);
+        assert_eq!(sink.hook().data().samples(), &[0, 1, 2, 3, 4, 5]);
         assert_eq!(
-            sink.tags(),
+            sink.hook().data().tags(),
             &[
                 Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
                 Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
@@ -83,14 +118,14 @@ mod tests {
         let r = src.work()?;
         assert!(matches![r, BlockRet::EOF], "Got {r:?}");
         let r = sink.work()?;
-        assert!(matches![r, BlockRet::Again], "Got {r:?}");
+        assert!(matches![r, BlockRet::WaitForStream(_, 1)], "Got {r:?}");
         drop(r);
         let r = sink.work()?;
-        assert!(matches![r, BlockRet::Again], "Got {r:?}");
+        assert!(matches![r, BlockRet::WaitForStream(_, 1)], "Got {r:?}");
         drop(r);
-        assert_eq!(sink.data(), &[0, 1, 2]);
+        assert_eq!(sink.hook().data().samples(), &[0, 1, 2]);
         assert_eq!(
-            sink.tags(),
+            sink.hook().data().tags(),
             &[
                 Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
                 Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
