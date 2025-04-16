@@ -20,7 +20,7 @@ use crate::{Complex, Float};
 /// standard implementation written in C.
 ///
 /// FFTW is a little bit faster.
-pub trait Engine {
+pub trait Engine: Send {
     /// Run runs an FFT round. Input and output is always the size of the FFT.
     fn run(&mut self, i: &mut [Complex]);
 
@@ -272,11 +272,13 @@ impl<T: Engine> Block for FftFilter<T> {
         loop {
             let mut o = self.dst.write_buf()?;
             if self.nsamples > o.len() {
+                /*
                 trace!(
                     "FftFilter: Need {} output space, only have {}",
                     self.nsamples,
                     o.len()
                 );
+                */
                 return Ok(BlockRet::WaitForStream(&self.dst, self.nsamples));
             }
             let (input, tags) = self.src.read_buf()?;
@@ -285,11 +287,19 @@ impl<T: Engine> Block for FftFilter<T> {
             self.buf.extend(input.iter().take(add).copied());
             input.consume(add);
             if self.buf.len() < self.nsamples {
+                /*
+                trace!(
+                    "FftFilter: Need {} input samples, only have {}, {add}",
+                    self.nsamples,
+                    self.buf.len()
+                );
+                */
                 return Ok(BlockRet::WaitForStream(
                     &self.src,
                     self.nsamples - self.buf.len(),
                 ));
             }
+            //trace!("FftFilter: ok, running");
             debug_assert_eq!(self.buf.len(), self.nsamples);
 
             // Run FFT.
@@ -369,7 +379,9 @@ impl<T: Engine> FftFilterFloat<T> {
     /// Use `new()` if to make your application code engine agnostic.
     #[must_use]
     pub fn new_engine(src: ReadStream<Float>, engine: T) -> (Self, ReadStream<Float>) {
+        use crate::stream::StreamWait;
         let (inner_in, r) = crate::stream::new_stream();
+        assert_eq!(inner_in.id(), r.id(), "{}", inner_in.id() - r.id());
         let (complex, inner_out) = FftFilter::new_engine(r, engine);
         let (dst, dr) = crate::stream::new_stream();
         (

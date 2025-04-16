@@ -181,6 +181,9 @@ pub mod mtgraph;
 pub mod stream;
 pub mod window;
 
+#[cfg(feature = "async")]
+pub mod agraph;
+
 /// Float type used. Usually f32, but not guaranteed.
 pub type Float = f32;
 
@@ -460,7 +463,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 }
 
 /// A trait all sample types must implement.
-pub trait Sample: Copy + Default {
+pub trait Sample: Copy + Default + Send + Sync + 'static {
     /// The type of the sample.
     type Type;
 

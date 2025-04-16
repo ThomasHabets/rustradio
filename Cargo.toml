@@ -34,6 +34,8 @@ itertools = "0.13.0"
 tar = "0.4.44"
 sha2 = "0.10.8"
 thiserror = "2.0.12"
+tokio = { version = "1.44.2", optional=true, features = ["full"] }
+async-trait = "0.1.88"
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]
@@ -66,10 +68,15 @@ soapysdr = ["dep:soapysdr"]
 fast-math = ["dep:fast-math"]
 audio = ["dep:cpal"]
 fftw = ["dep:fftw"]
+async = ["dep:tokio"]
 
 [[example]]
 name = "bell202"
 required-features = ["soapysdr"]
+
+[[example]]
+name = "rtl_fm_async"
+required-features = ["async"]
 
 [[example]]
 name = "tone"

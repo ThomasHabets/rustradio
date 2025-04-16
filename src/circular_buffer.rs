@@ -311,11 +311,25 @@ impl<T: Copy> BufferWriter<T> {
     }
 }
 
+#[derive(Debug)]
+struct BufferInner {
+    lock: Mutex<BufferState>,
+    cv: Condvar,
+
+    // Waiting for read.
+    #[cfg(feature = "async")]
+    acvr: tokio::sync::Notify,
+
+    // Waiting for write.
+    #[cfg(feature = "async")]
+    acvw: tokio::sync::Notify,
+}
+
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
     id: usize,
-    state: Arc<(Mutex<BufferState>, Condvar)>,
+    state: Arc<BufferInner>,
     circ: Circ,
     member_size: usize,
     dummy: std::marker::PhantomData<T>,
@@ -329,8 +343,8 @@ impl<T> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            state: Arc::new((
-                Mutex::new(BufferState {
+            state: Arc::new(BufferInner {
+                lock: Mutex::new(BufferState {
                     rpos: 0,
                     wpos: 0,
                     used: 0,
@@ -338,8 +352,12 @@ impl<T> Buffer<T> {
                     member_size: std::mem::size_of::<T>(),
                     tags: BTreeMap::new(),
                 }),
-                Condvar::new(),
-            )),
+                cv: Condvar::new(),
+                #[cfg(feature = "async")]
+                acvr: tokio::sync::Notify::new(),
+                #[cfg(feature = "async")]
+                acvw: tokio::sync::Notify::new(),
+            }),
             member_size: std::mem::size_of::<T>(),
             circ: Circ::new(size)?,
             dummy: std::marker::PhantomData,
@@ -360,29 +378,49 @@ impl<T> Buffer<T> {
     /// Available space to write, in bytes.
     #[must_use]
     pub fn free(&self) -> usize {
-        self.state.0.lock().unwrap().free()
+        self.state.lock.lock().unwrap().free()
     }
     pub fn wait_for_write(&self, need: usize) -> usize {
-        let (lock, cv) = &*self.state;
-        cv.wait_timeout_while(
-            lock.lock().unwrap(),
-            std::time::Duration::from_millis(100),
-            |s| s.free() < need,
-        )
-        .unwrap()
-        .0
-        .free()
+        self.state
+            .cv
+            .wait_timeout_while(
+                self.state.lock.lock().unwrap(),
+                std::time::Duration::from_millis(100),
+                |s| s.free() < need,
+            )
+            .unwrap()
+            .0
+            .free()
+    }
+    #[cfg(feature = "async")]
+    pub async fn wait_for_write_async(&self, _need: usize) -> usize {
+        // TODO: loop or something.
+        let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+        tokio::select! {
+            _ = sleep => 0,
+            _ = self.state.acvw.notified() => 1,
+        }
     }
     pub fn wait_for_read(&self, need: usize) -> usize {
-        let (lock, cv) = &*self.state;
-        cv.wait_timeout_while(
-            lock.lock().unwrap(),
-            std::time::Duration::from_millis(100),
-            |s| s.used < need,
-        )
-        .unwrap()
-        .0
-        .used
+        self.state
+            .cv
+            .wait_timeout_while(
+                self.state.lock.lock().unwrap(),
+                std::time::Duration::from_millis(100),
+                |s| s.used < need,
+            )
+            .unwrap()
+            .0
+            .used
+    }
+    #[cfg(feature = "async")]
+    pub async fn wait_for_read_async(&self, _need: usize) -> usize {
+        // TODO: loop or something.
+        let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+        tokio::select! {
+            _ = sleep => 0,
+            _ = self.state.acvr.notified() => 1,
+        }
     }
 }
 
@@ -391,8 +429,7 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the read buffer.
     pub(in crate::circular_buffer) fn consume(&self, n: usize) {
-        let (lock, cv) = &*self.state;
-        let mut s = lock.lock().unwrap();
+        let mut s = self.state.lock.lock().unwrap();
         assert!(
             n <= s.used,
             "trying to consume {}, but only have {}",
@@ -425,7 +462,9 @@ impl<T: Copy> Buffer<T> {
         }
         s.rpos = newpos;
         s.used -= n;
-        cv.notify_all();
+        self.state.cv.notify_all();
+        #[cfg(feature = "async")]
+        self.state.acvw.notify_one();
     }
 
     /// Produce samples (commit writes).
@@ -442,8 +481,7 @@ impl<T: Copy> Buffer<T> {
             }
             return;
         }
-        let (lock, cv) = &*self.state;
-        let mut s = lock.lock().unwrap();
+        let mut s = self.state.lock.lock().unwrap();
         assert!(
             s.free() >= n,
             "tried to produce {n}, but only {} is free out of {}",
@@ -463,7 +501,9 @@ impl<T: Copy> Buffer<T> {
         }
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
-        cv.notify_all();
+        self.state.cv.notify_all();
+        #[cfg(feature = "async")]
+        self.state.acvr.notify_waiters();
     }
 
     pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
@@ -478,7 +518,7 @@ impl<T: Copy> Buffer<T> {
     ///
     /// TODO: no need for Result in API.
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let s = self.state.0.lock().unwrap();
+        let s = self.state.lock.lock().unwrap();
         let (start, end) = s.read_range();
         let mut tags = Vec::with_capacity(s.tags.len());
 
@@ -513,7 +553,7 @@ impl<T: Copy> Buffer<T> {
 
     /// Get the write slice.
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
-        let s = self.state.0.lock().unwrap();
+        let s = self.state.lock.lock().unwrap();
         let (start, end) = s.write_range();
         drop(s);
         Ok(BufferWriter::new(

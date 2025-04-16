@@ -60,7 +60,7 @@ impl<T: Sample> FileSink<T> {
 
 impl<T> Block for FileSink<T>
 where
-    T: Sample + Sample<Type = T> + std::fmt::Debug,
+    T: Sample<Type = T> + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, _tags) = self.src.read_buf()?;

@@ -3,6 +3,7 @@
 Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
 */
+use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -87,6 +88,7 @@ pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 ///
 /// For ReadStream, wait until there's enough to read.
 /// For WriteStream, wait until there's enough to write something.
+#[async_trait]
 pub trait StreamWait {
     /// ID shared between read and write side.
     #[must_use]
@@ -102,8 +104,14 @@ pub trait StreamWait {
     /// Return true if the other end of this stream is disconnected.
     #[must_use]
     fn closed(&self) -> bool;
+
+    #[cfg(feature = "async")]
+    #[must_use]
+    async fn wait_async(&self, need: usize) -> bool;
 }
-impl<T: Copy> StreamWait for ReadStream<T> {
+
+#[async_trait]
+impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     fn id(&self) -> usize {
         self.circ.id()
     }
@@ -113,8 +121,16 @@ impl<T: Copy> StreamWait for ReadStream<T> {
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
+    #[cfg(feature = "async")]
+    async fn wait_async(&self, need: usize) -> bool {
+        let have = self.circ.wait_for_read_async(need).await;
+        let r = Arc::strong_count(&self.circ);
+        have < need && r == 1
+    }
 }
-impl<T: Copy> StreamWait for WriteStream<T> {
+
+#[async_trait]
+impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     fn id(&self) -> usize {
         self.circ.id()
     }
@@ -123,6 +139,10 @@ impl<T: Copy> StreamWait for WriteStream<T> {
     }
     fn closed(&self) -> bool {
         self.refcount() == 1
+    }
+    #[cfg(feature = "async")]
+    async fn wait_async(&self, need: usize) -> bool {
+        self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
 }
 
@@ -169,9 +189,17 @@ impl<T: Copy> ReadStream<T> {
         Arc::clone(&self.circ).read_buf()
     }
 
+    /// Return true if the needed number of samples will *never* arrive.
     #[must_use]
     pub fn wait_for_read(&self, need: usize) -> bool {
         self.circ.wait_for_read(need) < need && Arc::strong_count(&self.circ) == 1
+    }
+
+    /// Return true if the needed number of samples will *never* arrive.
+    #[cfg(feature = "async")]
+    #[must_use]
+    pub async fn wait_for_read_async(&self, need: usize) -> bool {
+        self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
 
     /// Return true if there is nothing more ever to read from the stream.
@@ -259,6 +287,11 @@ impl<T: Copy> WriteStream<T> {
         self.circ.wait_for_write(need) < need && Arc::strong_count(&self.circ) == 1
     }
 
+    #[cfg(feature = "async")]
+    pub async fn wait_for_write_async(&self, need: usize) -> bool {
+        self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
+    }
+
     #[must_use]
     pub(crate) fn refcount(&self) -> usize {
         Arc::strong_count(&self.circ)
@@ -277,50 +310,87 @@ pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
     (WriteStream { circ: circ.clone() }, ReadStream { circ })
 }
 
+struct NCInner<T> {
+    lock: Mutex<VecDeque<T>>,
+    cv: Condvar,
+
+    // Waiting for read.
+    #[cfg(feature = "async")]
+    acvr: tokio::sync::Notify,
+}
+
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NCReadStream<T> {
     id: usize,
-    q: Arc<(Mutex<VecDeque<T>>, Condvar)>,
+    inner: Arc<NCInner<T>>,
 }
 
-impl<T> StreamWait for NCReadStream<T> {
+#[async_trait]
+impl<T: Send + Sync> StreamWait for NCReadStream<T> {
     fn id(&self) -> usize {
         self.id
     }
     fn wait(&self, need: usize) -> bool {
-        let (lock, cv) = &*self.q;
-        let l = cv
+        let l = self
+            .inner
+            .cv
             .wait_timeout_while(
-                lock.lock().unwrap(),
+                self.inner.lock.lock().unwrap(),
                 std::time::Duration::from_millis(100),
                 |s| s.len() < need,
             )
             .unwrap();
-        l.0.len() < need && Arc::strong_count(&self.q) == 1
+        l.0.len() < need && Arc::strong_count(&self.inner) == 1
+    }
+
+    #[cfg(feature = "async")]
+    async fn wait_async(&self, need: usize) -> bool {
+        if self.inner.lock.lock().unwrap().len() >= need {
+            return false;
+        }
+        loop {
+            // TODO: count down time, don't reset to same on every iteration.
+            let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+            tokio::select! {
+                _ = sleep => break,
+                _ = self.inner.acvr.notified() => {
+                    if self.inner.lock.lock().unwrap().len() >= need {
+                        return false;
+                    }
+                },
+            }
+        }
+        self.inner.lock.lock().unwrap().len() < need && self.closed()
     }
     fn closed(&self) -> bool {
-        Arc::strong_count(&self.q) == 1
+        Arc::strong_count(&self.inner) == 1
     }
 }
 
-impl<T> StreamWait for NCWriteStream<T> {
+#[async_trait]
+impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
     fn id(&self) -> usize {
         self.id
     }
     fn wait(&self, _need: usize) -> bool {
         // TODO: we should have a maximum, shouldn't we?
         // For now, as much room as you need.
-        Arc::strong_count(&self.q) == 1
+        Arc::strong_count(&self.inner) == 1
+    }
+    #[cfg(feature = "async")]
+    async fn wait_async(&self, _need: usize) -> bool {
+        // Never full. TODO: max capacity?
+        self.closed()
     }
     fn closed(&self) -> bool {
-        Arc::strong_count(&self.q) == 1
+        Arc::strong_count(&self.inner) == 1
     }
 }
 
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NCWriteStream<T> {
     id: usize,
-    q: Arc<(Mutex<VecDeque<T>>, Condvar)>,
+    inner: Arc<NCInner<T>>,
 }
 
 /// Create a new stream for data elements that do not implement Copy.
@@ -329,10 +399,23 @@ pub struct NCWriteStream<T> {
 /// which you would not want to just copy willy nilly.
 #[must_use]
 pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
-    let q = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
+    let inner = Arc::new(NCInner {
+        lock: Mutex::new(VecDeque::new()),
+        cv: Condvar::new(),
+
+        // Waiting for read.
+        #[cfg(feature = "async")]
+        acvr: tokio::sync::Notify::new(),
+    });
     let id =
         crate::circular_buffer::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    (NCWriteStream { id, q: q.clone() }, NCReadStream { id, q })
+    (
+        NCWriteStream {
+            id,
+            inner: inner.clone(),
+        },
+        NCReadStream { id, inner },
+    )
 }
 
 impl<T> NCReadStream<T> {
@@ -340,20 +423,25 @@ impl<T> NCReadStream<T> {
     /// Ideally this should only be NoCopy.
     #[must_use]
     pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
-        let (lock, cv) = &*self.q;
         // TODO: attach tags.
-        let ret = lock.lock().unwrap().pop_front().map(|v| (v, Vec::new()));
-        cv.notify_all();
+        let ret = self
+            .inner
+            .lock
+            .lock()
+            .unwrap()
+            .pop_front()
+            .map(|v| (v, Vec::new()));
+        self.inner.cv.notify_all();
         ret
     }
 
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
-        if !self.q.0.lock().unwrap().is_empty() {
+        if !self.inner.lock.lock().unwrap().is_empty() {
             false
         } else {
-            Arc::strong_count(&self.q) == 1
+            Arc::strong_count(&self.inner) == 1
         }
     }
 }
@@ -378,16 +466,15 @@ impl<T> NCWriteStream<T> {
     ///
     /// TODO: Actually store the tags.
     pub fn push(&self, val: T, _tags: &[Tag]) {
-        let (lock, cv) = &*self.q;
         // TODO: attach tags.
-        lock.lock().unwrap().push_back(val);
-        cv.notify_all();
+        self.inner.lock.lock().unwrap().push_back(val);
+        self.inner.cv.notify_all();
     }
 }
 
 impl<T: Len> NCReadStream<T> {
     /// Get the size of the front packet.
     pub fn peek_size(&self) -> Option<usize> {
-        self.q.0.lock().unwrap().front().map(|e| e.len())
+        self.inner.lock.lock().unwrap().front().map(|e| e.len())
     }
 }

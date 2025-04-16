@@ -131,7 +131,7 @@ pub trait BlockEOF {
 /// Block trait. Must be implemented for all blocks.
 ///
 /// Simpler blocks can use macros to avoid needing to implement `work()`.
-pub trait Block: BlockName + BlockEOF {
+pub trait Block: BlockName + BlockEOF + Send {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.
@@ -144,11 +144,17 @@ mod tests {
     use super::*;
 
     struct FakeWait {}
+
+    #[async_trait::async_trait]
     impl StreamWait for FakeWait {
         fn id(&self) -> usize {
             123
         }
         fn wait(&self, _need: usize) -> bool {
+            true
+        }
+        #[cfg(feature = "async")]
+        async fn wait_async(&self, _need: usize) -> bool {
             true
         }
         fn closed(&self) -> bool {

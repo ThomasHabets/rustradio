@@ -27,7 +27,7 @@ pub const TAG_END: &str = "VecToStream::end";
 /// Empty vectors are silently discarded.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct VecToStream<T> {
+pub struct VecToStream<T: Sample> {
     #[rustradio(in)]
     src: NCReadStream<Vec<T>>,
     #[rustradio(out)]
