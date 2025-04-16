@@ -5,6 +5,7 @@ streams, and write to zero or more output streams.
 */
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
+use std::pin::Pin;
 
 use crate::circular_buffer;
 use crate::{Error, Float, Len, Result};
@@ -83,6 +84,8 @@ impl Tag {
 /// *    400KiB: 1.228s
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
+type AsyncWaitRet = Box<dyn Fn(usize) -> Pin<Box<dyn Future<Output = bool> + Send>>+ Sync>;
+
 /// Wait on a stream.
 ///
 /// For ReadStream, wait until there's enough to read.
@@ -97,13 +100,23 @@ pub trait StreamWait {
 
     #[must_use]
     fn closed(&self) -> bool;
+
+    #[must_use]
+    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet;
 }
-impl<T: Copy> StreamWait for ReadStream<T> {
+impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     fn wait(&self, need: usize) -> bool {
         self.wait_for_read(need)
     }
     fn closed(&self) -> bool {
         self.refcount() == 1
+    }
+    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
+        Box::new(move |need| Box::pin({
+        let circ = self.circ.clone();
+            async move {
+            circ.wait_for_read_async(need).await < need
+            }}))
     }
 }
 impl<T: Copy> StreamWait for WriteStream<T> {
@@ -112,6 +125,9 @@ impl<T: Copy> StreamWait for WriteStream<T> {
     }
     fn closed(&self) -> bool {
         self.refcount() == 1
+    }
+    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
+        todo!()
     }
 }
 
@@ -123,6 +139,7 @@ impl<T: Copy> StreamWait for WriteStream<T> {
 pub struct ReadStream<T> {
     circ: Arc<circular_buffer::Buffer<T>>,
 }
+unsafe impl <T> Sync for ReadStream<T> {}
 
 impl<T: Copy> ReadStream<T> {
     /// Create a new stream with initial data in it.
@@ -161,6 +178,10 @@ impl<T: Copy> ReadStream<T> {
     #[must_use]
     pub fn wait_for_read(&self, need: usize) -> bool {
         self.circ.wait_for_read(need) < need && Arc::strong_count(&self.circ) == 1
+    }
+    #[must_use]
+    pub async fn wait_for_read_async(&self, need: usize) -> bool {
+        todo!()
     }
 
     /// Return true if there is nothing more ever to read from the stream.
@@ -248,6 +269,10 @@ impl<T: Copy> WriteStream<T> {
         self.circ.wait_for_write(need) < need && Arc::strong_count(&self.circ) == 1
     }
 
+    pub async fn wait_for_write_async(&self, need: usize) -> bool {
+        self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
+    }
+
     #[must_use]
     pub(crate) fn refcount(&self) -> usize {
         Arc::strong_count(&self.circ)
@@ -286,6 +311,9 @@ impl<T> StreamWait for NCReadStream<T> {
     fn closed(&self) -> bool {
         Arc::strong_count(&self.q) == 1
     }
+    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
+        todo!()
+    }
 }
 
 impl<T> StreamWait for NCWriteStream<T> {
@@ -296,6 +324,9 @@ impl<T> StreamWait for NCWriteStream<T> {
     }
     fn closed(&self) -> bool {
         Arc::strong_count(&self.q) == 1
+    }
+    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
+        todo!()
     }
 }
 

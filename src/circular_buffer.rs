@@ -364,6 +364,9 @@ impl<T> Buffer<T> {
         .0
         .free()
     }
+    pub async fn wait_for_write_async(&self, need: usize) -> usize {
+        todo!()
+    }
     pub fn wait_for_read(&self, need: usize) -> usize {
         let (lock, cv) = &*self.state;
         cv.wait_timeout_while(
@@ -374,6 +377,9 @@ impl<T> Buffer<T> {
         .unwrap()
         .0
         .used
+    }
+    pub async fn wait_for_read_async(&self, need: usize) -> usize {
+        todo!()
     }
 }
 
