@@ -16,7 +16,7 @@ use crate::block::{Block, BlockRet};
 use crate::fir::Fir;
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::WindowType;
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float, Result};
 
 /// Hilbert transformer block.
 #[derive(rustradio_macros::Block)]
@@ -56,7 +56,7 @@ impl Hilbert {
 }
 
 impl Block for Hilbert {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         debug_assert_eq!(self.ntaps, self.history.len());
         let (ii, tags) = self.src.read_buf()?;
         let i = ii.slice();

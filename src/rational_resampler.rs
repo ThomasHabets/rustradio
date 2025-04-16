@@ -2,9 +2,8 @@
 /*
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
  */
-use anyhow::Result;
+use crate::Result;
 
-use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
@@ -63,7 +62,7 @@ impl<T: Copy> RationalResampler<T> {
 }
 
 impl<T: Copy> Block for RationalResampler<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         // TODO: retain tags.
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {

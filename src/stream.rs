@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::circular_buffer;
-use crate::{Error, Float, Len};
+use crate::{Error, Float, Len, Result};
 
 /// Tag position in the current stream.
 pub type TagPos = usize;
@@ -147,7 +147,7 @@ impl<T: Copy> ReadStream<T> {
     /// "consume" from it.
     ///
     /// See [`WriteStream::write_buf`] for details about the refcount checks.
-    pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>), Error> {
+    pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>)> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "read_buf() called with refcount {refcount}");
         if refcount > 3 {
@@ -155,7 +155,7 @@ impl<T: Copy> ReadStream<T> {
                 "read_buf() called with refcount {refcount}"
             )));
         }
-        Ok(Arc::clone(&self.circ).read_buf()?)
+        Arc::clone(&self.circ).read_buf()
     }
 
     #[must_use]
@@ -220,7 +220,7 @@ impl<T: Copy> WriteStream<T> {
     /// will be caught by MTGraph testing during development.
     ///
     /// The above also goes for [`ReadStream::read_buf`].
-    pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>, Error> {
+    pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "write_buf() called with refcount {refcount}");
         if refcount > 3 {
@@ -228,7 +228,7 @@ impl<T: Copy> WriteStream<T> {
                 "write_buf() called with refcount {refcount}"
             )));
         }
-        Ok(Arc::clone(&self.circ).write_buf()?)
+        Arc::clone(&self.circ).write_buf()
     }
 
     #[must_use]

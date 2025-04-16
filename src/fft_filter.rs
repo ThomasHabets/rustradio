@@ -7,12 +7,12 @@
 //! ## Further reading:
 //! * <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
 //! * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
-use anyhow::Result;
+use crate::Result;
 use log::trace;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float};
 
 /// FFT engine.
 ///
@@ -260,7 +260,7 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
 }
 
 impl<T: Engine> Block for FftFilter<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         // TODO: multithread this.
         loop {
             let mut o = self.dst.write_buf()?;
@@ -379,7 +379,7 @@ impl<T: Engine> FftFilterFloat<T> {
 }
 
 impl<T: Engine> Block for FftFilterFloat<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         // Convert input to Complex.
         {
             let (outer_in, tags) = self.src.read_buf()?;

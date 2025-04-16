@@ -2,12 +2,11 @@
 use std::io::BufWriter;
 use std::io::Write;
 
-use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, ReadStream};
-use crate::{Error, Sample};
+use crate::{Result, Sample};
 
 /// File write mode.
 pub enum Mode {
@@ -63,7 +62,7 @@ impl<T> Block for FileSink<T>
 where
     T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
         if n == 0 {
@@ -122,7 +121,7 @@ impl<T> Block for NoCopyFileSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Default,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         if let Some((s, _tags)) = self.src.pop() {
             // TODO: write tags.
             //let s2 = format!["{:?}", s].into();

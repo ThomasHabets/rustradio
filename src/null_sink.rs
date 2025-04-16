@@ -1,8 +1,6 @@
 //! Discard anything written to this block.
 
-use anyhow::Result;
-
-use crate::Error;
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::ReadStream;
 
@@ -21,7 +19,7 @@ impl<T> Block for NullSink<T>
 where
     T: Copy,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, _) = self.src.read_buf()?;
         let n = i.len();
         i.consume(n);

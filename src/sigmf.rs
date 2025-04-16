@@ -7,7 +7,6 @@
  */
 use std::io::{Read, Seek, Write};
 
-use anyhow::Result;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +15,13 @@ const VERSION: &str = "1.1.0";
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float, Repeat, Sample};
+use crate::{Complex, Error, Float, Repeat, Result, Sample};
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Error::wrap(e, "sigmf")
+    }
+}
 
 /// Capture segment.
 #[allow(dead_code)]
@@ -353,7 +358,12 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             Self::from_archive(&path)?
         } else {
             match Self::from_recording(&path) {
-                Err(e) => return Err(Error::msg(format!("SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}", path.as_ref().display())).into()),
+                Err(e) => {
+                    return Err(Error::msg(format!(
+                        "SigMF Archive '{}' doesn't exist, and trying to read separated Recording files failed too: {e}",
+                        path.as_ref().display()
+                    )));
+                }
                 Ok(r) => r,
             }
         };
@@ -366,8 +376,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                         path.as_ref().display(),
                         t,
                         samp_rate
-                    ))
-                    .into());
+                    )));
                 }
             }
         }
@@ -380,8 +389,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                     path.as_ref().display(),
                     meta.global.core_datatype,
                     expected_type
-                ))
-                .into());
+                )));
             }
         }
         Ok((block, dst))
@@ -430,7 +438,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
             match entry.header().entry_type() {
                 tar::EntryType::Regular => {}
                 other => {
-                    return Err(Error::msg(format!("data file is of bad type {other:?}")).into());
+                    return Err(Error::msg(format!("data file is of bad type {other:?}")));
                 }
             }
             let mut s = String::new();
@@ -453,14 +461,13 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                 Some(_) => {
                     return Err(Error::msg(
                         "sigmf doesn't yet support multiple recordings in an archive",
-                    )
-                    .into());
+                    ));
                 }
                 None => (metaname, s),
             });
         }
         let (base, meta_string) = match found {
-            None => return Err(Error::msg("sigmf doesn't contain any recording").into()),
+            None => return Err(Error::msg("sigmf doesn't contain any recording")),
             Some((b, m)) => (b, m),
         };
 
@@ -482,13 +489,10 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                     tar::EntryType::GNUSparse => {
                         return Err(Error::msg(
                             "SigMF source block doesn't support sparse tar files",
-                        )
-                        .into());
+                        ));
                     }
                     other => {
-                        return Err(
-                            Error::msg(format!("data file is of bad type {other:?}")).into()
-                        );
+                        return Err(Error::msg(format!("data file is of bad type {other:?}")));
                     }
                 }
                 range = match range {
@@ -497,8 +501,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
                         return Err(Error::msg(format!(
                             "Multiple files named '{}' in archive",
                             want.display()
-                        ))
-                        .into());
+                        )));
                     }
                 };
             }
@@ -548,7 +551,7 @@ impl<T> Block for SigMFSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         if self.left == 0 {
             if self.repeat.again() {
                 self.file.seek(std::io::SeekFrom::Start(self.range.0))?;

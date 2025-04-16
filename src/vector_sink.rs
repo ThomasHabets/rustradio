@@ -3,9 +3,7 @@
 //! This block is really only useful for unit tests.
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use anyhow::Result;
-
-use crate::Error;
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag};
 
@@ -71,7 +69,7 @@ impl<T: Copy> VectorSink<T> {
 }
 
 impl<T: Copy> Block for VectorSink<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut storage = self.storage.lock().unwrap();
         let (i, tags) = self.src.read_buf()?;
         let ilen = i.len();

@@ -1,9 +1,9 @@
 //! Generate values from a fixed vector.
-use anyhow::Result;
+use crate::Result;
 
+use crate::Repeat;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
-use crate::{Error, Repeat};
 
 /// VectorSource builder.
 pub struct VectorSourceBuilder<T: Copy> {
@@ -69,7 +69,7 @@ impl<T> Block for VectorSource<T>
 where
     T: Copy,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         if self.data.is_empty() {
             return Ok(BlockRet::EOF);
         }

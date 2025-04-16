@@ -4,12 +4,11 @@ Currently only implements TCP client mode.
 */
 use std::io::Read;
 
-use anyhow::Result;
 use log::warn;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Error, Sample};
+use crate::{Result, Sample};
 
 /// TCP Source, connecting to a server and streaming the data.
 #[derive(rustradio_macros::Block)]
@@ -40,15 +39,12 @@ impl<T> Block for TcpSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;
         let size = T::size();
         let mut buffer = vec![0; o.len()];
         // TODO: this read blocks.
-        let n = self
-            .stream
-            .read(&mut buffer[..])
-            .map_err(|e| -> anyhow::Error { e.into() })?;
+        let n = self.stream.read(&mut buffer[..])?;
         if n == 0 {
             warn!("TCP connection closed?");
             return Ok(BlockRet::EOF);

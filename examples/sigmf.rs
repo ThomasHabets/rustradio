@@ -148,7 +148,7 @@ fn cmd_check(opt: CheckOpts) -> Result<()> {
     let prev = add_block![g, src];
     let prev = add_block![g, sha512(prev)];
     g.add(Box::new(CheckHash::new(prev, in_meta)));
-    g.run()
+    g.run().map_err(Into::into)
 }
 
 fn cmd_create(opt: CreateOpts) -> Result<()> {

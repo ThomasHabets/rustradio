@@ -4,13 +4,12 @@
 * https://youtu.be/jag3btxSsig
 * https://youtu.be/uMEfx_l5Oxk
 */
-use anyhow::Result;
 use log::{trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::iir_filter::ClampedFilter;
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Error, Float};
+use crate::{Float, Result};
 
 /// Timing Error Detector.
 pub trait Ted: Send {}
@@ -112,7 +111,7 @@ impl SymbolSync {
 }
 
 impl Block for SymbolSync {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

@@ -2,12 +2,11 @@
 use std::io::BufReader;
 use std::io::{Read, Seek};
 
-use anyhow::Result;
 use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Error, Repeat, Sample};
+use crate::{Error, Repeat, Result, Sample};
 
 /// Read stream from raw file.
 #[derive(rustradio_macros::Block)]
@@ -24,13 +23,9 @@ pub struct FileSource<T: Copy> {
 impl<T: Default + Copy> FileSource<T> {
     /// Create new FileSource block.
     pub fn new<P: AsRef<std::path::Path>>(filename: P) -> Result<(Self, ReadStream<T>)> {
-        let f = BufReader::new(std::fs::File::open(&filename).map_err(|e| {
-            Error::msg(format!(
-                "Failed to open {}: {:?}",
-                filename.as_ref().display(),
-                e
-            ))
-        })?);
+        let f = BufReader::new(
+            std::fs::File::open(&filename).map_err(|e| Error::file_io(e, filename.as_ref()))?,
+        );
         debug!(
             "Opening source {}",
             format!("{}", filename.as_ref().display())
@@ -57,7 +52,7 @@ impl<T> Block for FileSource<T>
 where
     T: Sample<Type = T> + Copy + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;
         let sample_size = T::size();
         let have = self.buf.len() / sample_size;
@@ -71,10 +66,7 @@ where
             let get = want - have;
             let get_bytes = get * sample_size;
             let mut buffer = vec![0; get_bytes];
-            let n = self
-                .f
-                .read(&mut buffer[..])
-                .map_err(|e| -> anyhow::Error { e.into() })?;
+            let n = self.f.read(&mut buffer[..])?;
             if n == 0 {
                 warn!(
                     "EOF on {}. Repeat: {:?}",

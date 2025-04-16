@@ -1,8 +1,7 @@
 //! Delay stream. Good for syncing up streams.
-use anyhow::Result;
+use crate::Result;
 use log::debug;
 
-use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
@@ -52,7 +51,7 @@ impl<T> Block for Delay<T>
 where
     T: Copy + Default,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         {
             let o = self.dst.write_buf()?;
             if o.is_empty() {

@@ -1,7 +1,5 @@
 //! Tee a stream
 
-use anyhow::Result;
-
 use crate::stream::{ReadStream, WriteStream};
 
 /// Tee

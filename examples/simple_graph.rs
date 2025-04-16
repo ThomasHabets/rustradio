@@ -32,7 +32,7 @@ fn simple_copy() -> Result<()> {
     g.add(Box::new(add));
     g.add(Box::new(sink));
 
-    g.run()
+    g.run().map_err(Into::into)
 }
 
 fn simple_noncopy() -> Result<()> {
@@ -55,7 +55,7 @@ fn simple_noncopy() -> Result<()> {
     g.add(Box::new(src));
     //g.add(add);
     //g.add(sink);
-    g.run()
+    g.run().map_err(Into::into)
 }
 
 fn main() -> Result<()> {

@@ -1,5 +1,4 @@
 //! Turn positive Float values into binary `1u8`, and negative into `0u8`.
-use anyhow::Result;
 
 use crate::Float;
 use crate::stream::{ReadStream, WriteStream};

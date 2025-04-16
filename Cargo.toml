@@ -13,7 +13,6 @@ keywords = ["SDR", "radio"]
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
 log = "0.4.20"
 num-complex = "0.4.4"
 rustfft = "6.2.0"
@@ -31,6 +30,7 @@ rayon = "1.10.0"
 itertools = "0.14.0"
 tar = "0.4.44"
 sha2 = "0.10.8"
+thiserror = "2.0.12"
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]
@@ -40,6 +40,7 @@ features = ["system"]
 optional = true
 
 [dev-dependencies]
+anyhow = "1.0.75"
 chrono = "0.4.40"
 clap = { version = "4", features = ["derive"] }
 stderrlog = "0.6.0"

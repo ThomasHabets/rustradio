@@ -112,8 +112,6 @@ g.run()?;
 [sparslog]: https://github.com/ThomasHabets/sparslog
 [gnuradio]: https://www.gnuradio.org/
  */
-use anyhow::Result;
-
 // Macro.
 pub use rustradio_macros;
 
@@ -192,36 +190,114 @@ pub type Float = f32;
 pub type Complex = num_complex::Complex<Float>;
 
 /// RustRadio error.
-#[derive(Debug, Clone)]
-pub struct Error {
-    msg: String,
+#[derive(thiserror::Error, Debug)]
+#[non_exhaustive]
+pub enum Error {
+    /// File error annotated with a specific path.
+    #[error("IO Error on {path:?}: {source:?}")]
+    FileIo {
+        source: std::io::Error,
+        path: std::path::PathBuf,
+    },
+
+    /// An error happened with a device such as SDR or audio device.
+    #[error("DeviceError: {msg:?}: {source:?}")]
+    DeviceError {
+        source: Box<dyn std::error::Error + Send + Sync>,
+        msg: Option<String>,
+    },
+
+    /// An IO error without a known file associated.
+    #[error("IO Error: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// An error with only a plain text message.
+    #[error("An error occurred: {0}")]
+    Plain(String),
+
+    /// A wrapper around another error.
+    #[error("{msg:?}: {source:?}")]
+    Other {
+        source: Box<dyn std::error::Error + Send + Sync>,
+        msg: Option<String>,
+    },
 }
 
 impl Error {
     /// Create error from message.
+    #[must_use]
     pub fn msg<S: Into<String>>(msg: S) -> Self {
-        Self { msg: msg.into() }
+        Self::Plain(msg.into())
+    }
+
+    /// Wrap an IO error also including the path.
+    #[must_use]
+    pub fn file_io<P: Into<std::path::PathBuf>>(source: std::io::Error, path: P) -> Self {
+        Self::FileIo {
+            path: path.into(),
+            source,
+        }
+    }
+
+    /// Wrap another error into an `Error::Other`.
+    ///
+    /// The underlying error is provided, as well as optional extra context.
+    #[must_use]
+    pub fn wrap<S: Into<String>>(
+        source: impl std::error::Error + Send + Sync + 'static,
+        msg: S,
+    ) -> Self {
+        let msg = msg.into();
+        Self::Other {
+            source: Box::new(source),
+            msg: if msg.is_empty() { None } else { Some(msg) },
+        }
+    }
+
+    /// Wrap an error blaming some hardware or simulated hardware.
+    ///
+    /// The underlying error is provided, as well as optional extra context.
+    #[must_use]
+    pub fn device<S: Into<String>>(
+        source: impl std::error::Error + Send + Sync + 'static,
+        msg: S,
+    ) -> Self {
+        let msg = msg.into();
+        Self::DeviceError {
+            source: Box::new(source),
+            msg: if msg.is_empty() { None } else { Some(msg) },
+        }
     }
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "RustRadio Error: {}", self.msg)
-    }
+#[macro_export]
+macro_rules! error_from {
+    ($ctx:literal, $($err_ty:ty),* $(,)?) => {
+        $(
+            impl From<$err_ty> for Error {
+                fn from(e: $err_ty) -> Self {
+                    let s = if $ctx.is_empty() {
+                        format!("{}", std::any::type_name::<$err_ty>())
+                    } else {
+                        format!("{} in {}", std::any::type_name::<$err_ty>(), $ctx)
+                    };
+                    Error::wrap(e, s)
+                }
+            }
+        )*
+    };
 }
 
-impl std::error::Error for Error {}
+error_from!(
+    "", // Can't attribute to a specific set of blocks.
+    std::sync::mpsc::RecvError,
+    std::sync::mpsc::TryRecvError,
+    std::string::FromUtf8Error,
+    std::array::TryFromSliceError,
+    std::num::TryFromIntError,
+);
 
-impl From<anyhow::Error> for Error {
-    fn from(e: anyhow::Error) -> Error {
-        Error::msg(format!("{}", e))
-    }
-}
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::msg(format!("IO error: {}", e))
-    }
-}
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Repeat between zero and infinite times.
 #[derive(Debug)]
@@ -374,7 +450,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
     if errs.is_empty() {
         Ok(assumptions)
     } else {
-        Err(Error::msg(format!("{:?}", errs)).into())
+        Err(Error::msg(format!("{:?}", errs)))
     }
 }
 

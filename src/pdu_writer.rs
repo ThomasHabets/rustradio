@@ -5,16 +5,16 @@ receive time.
 
 TODO: in the future the file naming should be configurable.
 */
-use anyhow::Result;
+use crate::Result;
 use log::{debug, info};
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use crate::Sample;
 use crate::block::{Block, BlockRet};
 use crate::stream::NCReadStream;
-use crate::{Error, Sample};
 
 /** PDU writer
 
@@ -42,7 +42,7 @@ impl<T> Block for PduWriter<T>
 where
     T: Sample,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let packet = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some((x, _tags)) => x,

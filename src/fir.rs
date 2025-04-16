@@ -9,7 +9,7 @@
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float, Result};
 
 /// Finite impulse response filter.
 pub struct Fir<T: Copy> {
@@ -224,7 +224,7 @@ impl<T> Block for FirFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, mut tags) = self.src.read_buf()?;
 
         // Get number of input samples we intend to consume.
@@ -400,7 +400,6 @@ mod tests {
     use crate::blocks::{VectorSource, VectorSourceBuilder};
     use crate::stream::{Tag, TagValue};
     use crate::tests::assert_almost_equal_complex;
-    use anyhow::Result;
 
     #[test]
     fn test_identity() -> Result<()> {

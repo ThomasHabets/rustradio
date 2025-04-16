@@ -2,7 +2,7 @@
  */
 use std::time::Instant;
 
-use anyhow::Result;
+use crate::Result;
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};

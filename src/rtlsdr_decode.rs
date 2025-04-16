@@ -1,9 +1,9 @@
 //! Decode RTL-SDR's byte based format into Complex I/Q.
-use anyhow::Result;
+use crate::Result;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
 #[derive(rustradio_macros::Block)]
@@ -16,7 +16,7 @@ pub struct RtlSdrDecode {
 }
 
 impl Block for RtlSdrDecode {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         // TODO: handle tags.
         let (input, _tags) = self.src.read_buf()?;
         let isamples = input.len() & !1;

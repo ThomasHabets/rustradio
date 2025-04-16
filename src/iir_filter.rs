@@ -125,7 +125,7 @@ where
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use anyhow::Result;
+    use crate::Result;
 
     #[test]
     fn zero_pole() -> Result<()> {

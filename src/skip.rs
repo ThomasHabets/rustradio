@@ -1,7 +1,6 @@
 //! Skip samples, then stream at full speed.
-use anyhow::Result;
+use crate::Result;
 
-use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
@@ -17,7 +16,7 @@ pub struct Skip<T: Copy> {
 }
 
 impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

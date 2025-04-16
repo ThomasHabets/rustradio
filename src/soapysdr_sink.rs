@@ -1,12 +1,12 @@
 //! SoapySDR sink.
 
-use anyhow::Result;
+use crate::Result;
 use log::debug;
 use soapysdr::Direction;
 
+use crate::Complex;
 use crate::block::{Block, BlockRet};
 use crate::stream::ReadStream;
-use crate::{Complex, Error};
 
 fn ai_string(ai: &soapysdr::ArgInfo) -> String {
     format!(
@@ -97,7 +97,7 @@ pub struct SoapySdrSink {
 }
 
 impl Block for SoapySdrSink {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let timeout_us = 10_000;
         let (i, _tags) = self.src.read_buf()?;
         let ilen = i.len();

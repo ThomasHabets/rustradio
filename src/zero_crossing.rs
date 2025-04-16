@@ -1,9 +1,9 @@
 //! Very simple clock recovery.
-use anyhow::Result;
+use crate::Result;
 
+use crate::Float;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Error, Float};
 
 /** Very simple clock recovery by looking at zero crossings.
 
@@ -78,7 +78,7 @@ impl ZeroCrossing {
 }
 
 impl Block for ZeroCrossing {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

@@ -5,7 +5,7 @@
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float, Result};
 
 /// CMA Equalizer.
 #[derive(rustradio_macros::Block)]
@@ -46,7 +46,7 @@ impl CmaEqualizer {
 }
 
 impl Block for CmaEqualizer {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, tags) = self.src.read_buf()?;
         let mut output = self.dst.write_buf()?;
 

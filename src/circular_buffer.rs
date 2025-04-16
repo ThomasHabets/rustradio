@@ -8,13 +8,12 @@ use std::collections::BTreeMap;
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, Condvar, Mutex};
 
-use anyhow::Result;
 use libc::{MAP_FAILED, MAP_FIXED, MAP_SHARED, PROT_READ, PROT_WRITE};
 use libc::{c_uchar, c_void, size_t};
 use log::error;
 
-use crate::Error;
 use crate::stream::{Tag, TagPos};
+use crate::{Error, Result};
 
 #[derive(Debug)]
 struct Map {
@@ -51,8 +50,7 @@ impl Map {
                 } else {
                     " at fixed address"
                 }
-            ))
-            .into());
+            )));
         }
         assert!(!buf.is_null());
         if !ptr.is_null() && ptr != buf {
@@ -63,7 +61,7 @@ impl Map {
                 let e = errno::errno();
                 panic!("Failed to unmap buffer just mapped in the failure path: {e}");
             }
-            return Err(Error::msg("mmap() allocated in the wrong place").into());
+            return Err(Error::msg("mmap() allocated in the wrong place"));
         }
         Ok(Self {
             base: buf as *mut c_uchar,
@@ -95,7 +93,10 @@ impl Circ {
     /// Create a new circular buffer.
     fn new(size: usize) -> Result<Self> {
         let size_x2 = size * 2;
-        let f = tempfile::tempfile()?;
+        // Annotating the temp dir directory may help in case of not enough
+        // space, permissions, etc.
+        let errfix = |e| Error::file_io(e, std::env::temp_dir());
+        let f = tempfile::tempfile().map_err(errfix)?;
         f.set_len(size_x2 as u64)?;
 
         // Map first half.
@@ -110,7 +111,7 @@ impl Circ {
         map.len = size;
 
         // Shrink file.
-        f.set_len(size as u64)?;
+        f.set_len(size as u64).map_err(errfix)?;
 
         Ok(Self {
             len: size_x2,

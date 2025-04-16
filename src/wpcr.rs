@@ -39,7 +39,7 @@ use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, Tag, TagValue};
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float, Result};
 
 /// Midpointer is a block re-center a NRZ burst around 0.
 #[derive(rustradio_macros::Block)]
@@ -56,7 +56,7 @@ impl Midpointer {
     }
 }
 impl Block for Midpointer {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let v = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some((x, _tags)) => x,
@@ -206,7 +206,7 @@ impl Wpcr {
 }
 
 impl Block for Wpcr {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         // TODO: handle tags.
         let x = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),

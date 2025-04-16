@@ -1,7 +1,6 @@
 //! Generate the same value, forever.
-use anyhow::Result;
+use crate::Result;
 
-use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::WriteStream;
 
@@ -18,7 +17,7 @@ impl<T> Block for ConstantSource<T>
 where
     T: Copy,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;
         o.slice().fill(self.val);
         let n = o.len();

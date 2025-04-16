@@ -12,39 +12,29 @@ The best places to get RTL SDRs are probably:
 * <https://www.nooelec.com/store/>
 */
 use std::sync::mpsc;
-use std::sync::mpsc::{RecvError, SendError, TryRecvError};
+use std::sync::mpsc::{SendError, TryRecvError};
 use std::thread;
 
-use anyhow::Result;
 use log::{debug, warn};
 
-use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
+use crate::{Error, Result};
 
 const CHUNK_SIZE: usize = 8192;
 const MAX_CHUNKS_IN_FLIGHT: usize = 1000;
 
 impl From<rtlsdr::RTLSDRError> for Error {
     fn from(e: rtlsdr::RTLSDRError) -> Self {
-        Error::msg(format!("RTL SDR Error: {}", e))
+        // For some reason RTLSDRError doesn't implement Error.
+        Error::device(Error::msg(format!("{e}")), "rtlsdr")
     }
 }
 
-impl From<RecvError> for Error {
-    fn from(e: RecvError) -> Self {
-        Error::msg(format!("recv error: {}", e))
-    }
-}
-impl From<TryRecvError> for Error {
-    fn from(e: TryRecvError) -> Self {
-        Error::msg(format!("recv error: {}", e))
-    }
-}
-
-impl<T> From<SendError<T>> for Error {
+impl<T: Send + Sync + 'static> From<SendError<T>> for Error {
     fn from(e: SendError<T>) -> Self {
-        Error::msg(format!("send error: {}", e))
+        // Macro above doesn't deal with generics.
+        Error::device(e, "RTL-SDR")
     }
 }
 
@@ -67,7 +57,7 @@ impl RtlSdrSource {
     ///
     /// If given frequency of 100Mhz, and sample rate of 1Msps, the
     /// received spectrum is 99.5Mhz to 100.5Mhz.
-    pub fn new(freq: u64, samp_rate: u32, igain: i32) -> Result<(Self, ReadStream<u8>), Error> {
+    pub fn new(freq: u64, samp_rate: u32, igain: i32) -> Result<(Self, ReadStream<u8>)> {
         let index = 0;
         let found = rtlsdr::get_device_count();
         if index >= found {
@@ -80,7 +70,7 @@ impl RtlSdrSource {
         let (tx, rx) = mpsc::sync_channel(MAX_CHUNKS_IN_FLIGHT);
         thread::Builder::new()
             .name("RtlSdrSource-reader".to_string())
-            .spawn(move || -> Result<(), Error> {
+            .spawn(move || -> Result<()> {
                 let mut dev =
                     rtlsdr::open(index).map_err(|e| Error::msg(format!("RTL SDR open: {e}")))?;
                 debug!("Tuner type: {:?}", dev.get_tuner_type());
@@ -119,7 +109,7 @@ impl RtlSdrSource {
 }
 
 impl Block for RtlSdrSource {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));

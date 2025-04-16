@@ -9,11 +9,9 @@ without seeking back to the file header to update data sizes.
 It's also much simpler.
 */
 
-use anyhow::Result;
-
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Error, Float};
+use crate::{Error, Float, Result};
 
 /// Au support several encodings. This code currently has only one.
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -113,7 +111,7 @@ impl AuEncode {
 }
 
 impl Block for AuEncode {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;
         if let Some(h) = &self.header {
             let n = std::cmp::min(h.len(), o.len());
@@ -188,7 +186,7 @@ impl AuDecode {
 }
 
 impl Block for AuDecode {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

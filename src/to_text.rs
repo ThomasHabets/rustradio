@@ -20,9 +20,8 @@ g.add(Box::new(sink));
 # Ok::<(), anyhow::Error>(())
 ```
 */
-use anyhow::Result;
+use crate::Result;
 
-use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
@@ -47,7 +46,7 @@ impl<T: Copy> ToText<T> {
 }
 
 impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         // TODO: This implementation locks and unlocks a lot, as it
         // aquires samples.  Ideally it should process
         // min(self.srcs...) samples, or until output buffer is full,

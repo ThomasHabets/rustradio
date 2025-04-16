@@ -1,9 +1,8 @@
 //! Print values to stdout, for debugging.
 use std::collections::HashMap;
 
-use anyhow::Result;
+use crate::Result;
 
-use crate::Error;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos};
 
@@ -20,7 +19,7 @@ impl<T> Block for DebugSinkNoCopy<T>
 where
     T: std::fmt::Debug + Default,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (v, _tags) = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some(x) => x,
@@ -71,7 +70,7 @@ impl<T> Block for DebugFilter<T>
 where
     T: Copy + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;
 
         let tags: HashMap<usize, Vec<Tag>> =
@@ -117,7 +116,7 @@ impl<T> Block for DebugSink<T>
 where
     T: Copy + std::fmt::Debug + Default,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;
 
         let tags: HashMap<usize, Vec<Tag>> =

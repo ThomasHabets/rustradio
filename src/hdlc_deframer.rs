@@ -9,9 +9,9 @@ therefore [APRS][aprs].
  */
 use log::{debug, info, trace};
 
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
-use crate::{Error, Result};
 
 enum State {
     /// Looking for flag pattern.
@@ -234,7 +234,7 @@ impl HdlcDeframer {
 }
 
 impl Block for HdlcDeframer {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

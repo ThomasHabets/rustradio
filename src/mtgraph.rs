@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use anyhow::Result;
+use crate::Result;
 use log::{debug, error, info};
 
 use crate::block::{Block, BlockRet};
@@ -83,7 +83,7 @@ impl crate::graph::GraphRunner for MTGraph {
                             Ok(v) => v,
                             Err(e) => {
                                 error!("Block work function failed: {e}");
-                                return Err(e.into());
+                                return Err(e);
                             }
                         };
                         stats.elapsed += st.elapsed();

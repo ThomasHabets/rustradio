@@ -1,14 +1,13 @@
 //! SoapySDR source.
-use anyhow::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error};
+use crate::{Complex, Error, Result};
 
 impl From<soapysdr::Error> for Error {
     fn from(e: soapysdr::Error) -> Self {
-        Error::msg(format!("Soapy SDR Error: {}", e))
+        Error::device(e, "soapysdr")
     }
 }
 
@@ -111,7 +110,7 @@ fn ai_string(ai: &soapysdr::ArgInfo) -> String {
 }
 
 impl Block for SoapySdrSource {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let timeout_us = 10_000;
         let mut o = self.dst.write_buf()?;
         let n = match self.stream.read(&mut [&mut o.slice()], timeout_us) {

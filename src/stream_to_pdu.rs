@@ -32,7 +32,7 @@ use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos, TagValue};
-use crate::{Error, Sample};
+use crate::{Result, Sample};
 
 /// Stream to PDU block.
 // TODO: implement proper EOF.
@@ -91,7 +91,7 @@ impl<T> Block for StreamToPdu<T>
 where
     T: Copy + Sample,
 {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

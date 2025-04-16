@@ -4,7 +4,7 @@ Turn stream of e.g. `Vec<u8>` to stream of `u8`.
  */
 use log::trace;
 
-use crate::Error;
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, Tag, TagValue, WriteStream};
 
@@ -35,7 +35,7 @@ pub struct VecToStream<T> {
 }
 
 impl<T: Copy> Block for VecToStream<T> {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let n = match self.src.peek_size() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some(x) => x,
@@ -66,8 +66,8 @@ impl<T: Copy> Block for VecToStream<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Result;
     use crate::stream::new_nocopy_stream;
-    use anyhow::Result;
 
     #[test]
     fn empty_input() -> Result<()> {

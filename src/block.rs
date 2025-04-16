@@ -2,9 +2,7 @@
 //!
 //! Blocks are the main building blocks of rustradio. They each do one
 //! thing, and you connect them together with streams to process the data.
-use anyhow::Result;
-
-use crate::Error;
+use crate::Result;
 use crate::stream::StreamWait;
 
 /// Return type for all blocks.
@@ -139,7 +137,7 @@ pub trait Block: BlockName + BlockEOF {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.
-    fn work(&mut self) -> Result<BlockRet, Error>;
+    fn work(&mut self) -> Result<BlockRet>;
 }
 
 #[cfg(test)]

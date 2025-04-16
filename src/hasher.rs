@@ -1,8 +1,7 @@
 //! Hash input until EOF, outputting the results.
-use anyhow::Result;
 use sha2::Digest;
 
-use crate::Error;
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream};
 
@@ -45,7 +44,7 @@ impl Hasher {
 }
 
 impl Block for Hasher {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, _) = self.src.read_buf()?;
         let n = i.len();
         self.hasher.update(i.slice());

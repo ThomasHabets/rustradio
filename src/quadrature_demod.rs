@@ -1,5 +1,4 @@
 //! Quadrature demod, the core of an FM demodulator.
-use anyhow::Result;
 
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};

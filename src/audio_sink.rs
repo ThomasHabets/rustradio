@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::Result;
 use cpal::Sample;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use log::{debug, error, info, trace};
@@ -15,6 +15,16 @@ struct CpalOutput {
     config: cpal::StreamConfig,
 }
 
+crate::error_from!(
+    "audio",
+    cpal::PlayStreamError,
+    cpal::BuildStreamError,
+    cpal::DevicesError,
+    cpal::DeviceNameError,
+    cpal::SupportedStreamConfigsError,
+    cpal::DefaultStreamConfigError,
+);
+
 impl CpalOutput {
     fn new(sample_rate: u32) -> Result<Self> {
         for host in cpal::platform::ALL_HOSTS {
@@ -30,9 +40,9 @@ impl CpalOutput {
                 debug!("Audio sink device: {:?}", dev.name()?);
             }
         }
-        let device = host.default_output_device().ok_or(anyhow::Error::msg(
-            "audio sink: failed to find output device",
-        ))?;
+        let device = host
+            .default_output_device()
+            .ok_or(Error::msg("audio sink: failed to find output device"))?;
         info!("Audio sink output device: {}", device.name()?);
 
         trace!("Audio sink supported output configs:");
@@ -165,7 +175,7 @@ impl Drop for AudioSink {
 }
 
 impl Block for AudioSink {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
         for (pos, x) in i.iter().enumerate() {

@@ -1,5 +1,4 @@
 //! Blocks for converting from one type to another.
-use anyhow::Result;
 
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};

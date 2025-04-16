@@ -4,7 +4,6 @@
 //! * <https://en.wikipedia.org/wiki/Infinite_impulse_response>
 //! * <https://www.wavewalkerdsp.com/2022/08/10/single-pole-iir-filter-substitute-for-moving-average-filter/>
 //! * [`iir_filter`](crate::iir_filter) module
-use anyhow::Result;
 
 use crate::Float;
 use crate::stream::{ReadStream, WriteStream};
@@ -98,7 +97,7 @@ where
 mod tests {
     use super::*;
     use crate::block::Block;
-    use crate::{Complex, Error};
+    use crate::{Complex, Error, Result};
 
     #[test]
     fn iir_ff() -> Result<()> {

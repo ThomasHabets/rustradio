@@ -3,9 +3,9 @@
 */
 use log::info;
 
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag};
-use crate::{Error, Result};
 
 const HEADER_SIZE: usize = 15 * 8;
 
@@ -180,7 +180,7 @@ impl Il2pDeframer {
 }
 
 impl Block for Il2pDeframer {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

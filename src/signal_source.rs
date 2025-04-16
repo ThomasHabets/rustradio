@@ -1,9 +1,9 @@
 //! Generate a pure signal.
-use anyhow::Result;
+use crate::Result;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float};
 
 /// Generate a pure complex sine wave.
 #[derive(rustradio_macros::Block)]
@@ -49,7 +49,7 @@ impl Iterator for SignalSourceComplex {
 }
 
 impl Block for SignalSourceComplex {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;
         let n = o.len();
         for (to, from) in o.slice().iter_mut().zip(self.take(n)) {
@@ -100,7 +100,7 @@ impl Iterator for SignalSourceFloat {
 }
 
 impl Block for SignalSourceFloat {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;
         let n = o.len();
         o.slice()

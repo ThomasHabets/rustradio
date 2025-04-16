@@ -412,7 +412,7 @@ fn main() -> Result<()> {
     })
     .expect("failed to set Ctrl-C handler");
     eprintln!("Running loop");
-    g.run()?;
+    g.run().map_err(Into::<rustradio::Error>::into)?;
     ui_thread.join().expect("Failed to join UI thread");
     eprintln!("{}", g.generate_stats().unwrap());
     Ok(())

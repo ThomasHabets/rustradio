@@ -3,12 +3,12 @@
 //! Takes a stream of data, runs an FFT on it, and outputs it as a stream.
 //! The consumer of the stream needs to know what the FFT size is, or it won't
 //! be able to make sense of it.
-use anyhow::Result;
+use crate::Result;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float};
+use crate::{Complex, Float};
 
 /// Takes a stream of data, runs an FFT on it, and outputs it as a stream.
 /// The consumer of the stream needs to know what the FFT size is, or it won't
@@ -52,7 +52,7 @@ impl FftStream {
 }
 
 impl Block for FftStream {
-    fn work(&mut self) -> Result<BlockRet, Error> {
+    fn work(&mut self) -> Result<BlockRet> {
         let (input, _tags) = self.src.read_buf()?;
         let ii = input.slice();
         if ii.len() < self.size {
