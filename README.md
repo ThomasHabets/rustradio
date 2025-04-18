@@ -27,4 +27,3 @@ A library for digital signals processing in the spirit of GNU Radio.
 * SymbolSync block at least have the right API.
 * Example AX.25 KISS modem written, using soapysdr.
 * `AsRef<Path>` vs `Into<PathBuf>`?
-* Error/Result strategy? Continue using anyhow?
