@@ -43,7 +43,7 @@ where
 
 /// Debug filter turning samples into strings.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct DebugFilter<T>
 where
     T: Copy,
@@ -52,18 +52,6 @@ where
     src: ReadStream<T>,
     #[rustradio(out)]
     dst: NCWriteStream<String>,
-}
-
-// TODO: fix derive macro so that new() can be generated.
-impl<T> DebugFilter<T>
-where
-    T: Copy,
-{
-    /// Create new debug block.
-    pub fn new(src: ReadStream<T>) -> (Self, NCReadStream<String>) {
-        let (dst, dr) = crate::stream::new_nocopy_stream();
-        (Self { src, dst }, dr)
-    }
 }
 
 impl<T> Block for DebugFilter<T>

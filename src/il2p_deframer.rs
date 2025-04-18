@@ -5,7 +5,7 @@ use log::info;
 
 use crate::Result;
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag};
+use crate::stream::{NCWriteStream, ReadStream, Tag};
 
 const HEADER_SIZE: usize = 15 * 8;
 
@@ -140,7 +140,9 @@ fn bits_to_bytes(bits: &[u8]) -> Vec<u8> {
     bytes
 }
 
+#[derive(Default)]
 enum State {
+    #[default]
     Unsynced,
     Header(Vec<u8>),
     //Data(Vec<u8>, usize),
@@ -148,34 +150,21 @@ enum State {
 
 /// IL2P deframer block
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct Il2pDeframer {
     #[rustradio(in)]
     src: ReadStream<u8>,
     #[rustradio(out)]
     dst: NCWriteStream<Vec<u8>>,
+    #[rustradio(default)]
     decoded: usize,
+    #[rustradio(default)]
     state: State,
 }
 
 impl Drop for Il2pDeframer {
     fn drop(&mut self) {
         info!("IL2P Deframer: Decoded {}", self.decoded);
-    }
-}
-impl Il2pDeframer {
-    /// Create new Il2pDeframer block.
-    pub fn new(src: ReadStream<u8>) -> (Self, NCReadStream<Vec<u8>>) {
-        let (dst, dr) = crate::stream::new_nocopy_stream();
-        (
-            Self {
-                src,
-                dst,
-                decoded: 0,
-                state: State::Unsynced,
-            },
-            dr,
-        )
     }
 }
 

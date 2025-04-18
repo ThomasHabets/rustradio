@@ -43,17 +43,12 @@ use crate::{Complex, Float, Result};
 
 /// Midpointer is a block re-center a NRZ burst around 0.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct Midpointer {
+    #[rustradio(in)]
     src: NCReadStream<Vec<Float>>,
+    #[rustradio(out)]
     dst: NCWriteStream<Vec<Float>>,
-}
-impl Midpointer {
-    /// Create new midpointer.
-    pub fn new(src: NCReadStream<Vec<Float>>) -> (Self, NCReadStream<Vec<Float>>) {
-        let (dst, dr) = crate::stream::new_nocopy_stream();
-        (Self { src, dst }, dr)
-    }
 }
 impl Block for Midpointer {
     fn work(&mut self) -> Result<BlockRet> {
@@ -106,27 +101,17 @@ impl WpcrBuilder {
 
 /// Whole packet clock recovery block.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct Wpcr {
+    #[rustradio(in)]
     src: NCReadStream<Vec<Float>>,
+    #[rustradio(out)]
     dst: NCWriteStream<Vec<Float>>,
+    #[rustradio(default)]
     samp_rate: Option<Float>,
 }
 
 impl Wpcr {
-    /// Create new WPCR block.
-    pub fn new(src: NCReadStream<Vec<Float>>) -> (Self, NCReadStream<Vec<Float>>) {
-        let (dst, dr) = crate::stream::new_nocopy_stream();
-        (
-            Self {
-                src,
-                dst,
-                samp_rate: None,
-            },
-            dr,
-        )
-    }
-
     /// Set sample rate. Only used for tagging purposes
     pub fn set_samp_rate(&mut self, s: Option<Float>) {
         self.samp_rate = s;
