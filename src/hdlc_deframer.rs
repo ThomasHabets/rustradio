@@ -11,7 +11,7 @@ use log::{debug, info, trace};
 
 use crate::Result;
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
+use crate::stream::{NCWriteStream, ReadStream, Tag, TagValue};
 
 enum State {
     /// Looking for flag pattern.
@@ -23,6 +23,12 @@ enum State {
     /// Six ones in a row seen. Check the final bit for a 0, and emit
     /// packet if so.
     FinalCheck(Vec<u8>),
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State::Unsynced(0xff)
+    }
 }
 
 // Calculate CRC. If a bitflip helps the CRC match, then return the
@@ -70,20 +76,27 @@ This block takes a stream of bits (as u8), and outputs any HDLC frames
 found as `Vec<u8>`.
 */
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, new)]
 pub struct HdlcDeframer {
     #[rustradio(in)]
     src: ReadStream<u8>,
     #[rustradio(out)]
     dst: NCWriteStream<Vec<u8>>,
+    #[rustradio(default)]
     state: State,
     min_size: usize,
     max_size: usize,
-    strip_checksum: bool,
+    #[rustradio(default)]
+    keep_checksum: bool,
+    #[rustradio(default)]
     decoded: usize,
+    #[rustradio(default)]
     crc_error: usize,
+    #[rustradio(default)]
     bitfixed: usize,
+    #[rustradio(default)]
     stream_pos: u64,
+    #[rustradio(default)]
     fix_bits: bool,
 }
 
@@ -97,41 +110,14 @@ impl Drop for HdlcDeframer {
 }
 
 impl HdlcDeframer {
-    /// Create new HdlcDeframer.
-    ///
-    /// min_size and max_size is size in bytes.
-    pub fn new(
-        src: ReadStream<u8>,
-        min_size: usize,
-        max_size: usize,
-    ) -> (Self, NCReadStream<Vec<u8>>) {
-        let (dst, dr) = crate::stream::new_nocopy_stream();
-        (
-            Self {
-                src,
-                dst,
-                min_size,
-                max_size,
-                state: State::Unsynced(0xff),
-                strip_checksum: true,
-                decoded: 0,
-                crc_error: 0,
-                bitfixed: 0,
-                stream_pos: 0,
-                fix_bits: false,
-            },
-            dr,
-        )
-    }
-
     /// Set fix bits.
     pub fn set_fix_bits(&mut self, v: bool) {
         self.fix_bits = v;
     }
 
     /// Set whether to check/strip checksum
-    pub fn set_checksum(&mut self, val: bool) {
-        self.strip_checksum = val;
+    pub fn set_keep_checksum(&mut self, val: bool) {
+        self.keep_checksum = val;
     }
 
     fn update_state(&mut self, bit: u8, stream_pos: u64) -> Result<State> {
@@ -200,7 +186,7 @@ impl HdlcDeframer {
                         .collect();
                     debug!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
                     let tags = &[Tag::new(0, "packet_pos", TagValue::U64(stream_pos))];
-                    if self.strip_checksum {
+                    if !self.keep_checksum {
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);
                         let (newdata, crc, fixed) = find_right_crc(data, got_crc, self.fix_bits);
@@ -332,7 +318,7 @@ mod tests {
         ] {
             let s = ReadStream::from_slice(&str2bits(bits));
             let (mut b, o) = HdlcDeframer::new(s, 1, 10);
-            b.set_checksum(false);
+            b.set_keep_checksum(true);
             b.work()?;
             let (res, _) = o.pop().unwrap();
             assert_eq!(res, vec![0xaa, 0x7]);
@@ -353,7 +339,7 @@ mod tests {
         ] {
             let s = ReadStream::from_slice(&str2bits(bits));
             let (mut b, o) = HdlcDeframer::new(s, 1, 10);
-            b.set_checksum(false);
+            b.set_keep_checksum(true);
             b.work()?;
             let (t, _tags) = o.pop().unwrap();
             assert_eq!(t, vec![0xaa, 0x7]);
@@ -369,7 +355,7 @@ mod tests {
             let bits = &"01111110111110111110111110101111110";
             let s = ReadStream::from_slice(&str2bits(bits));
             let (mut b, o) = HdlcDeframer::new(s, 1, 10);
-            b.set_checksum(false);
+            b.set_keep_checksum(true);
             b.work()?;
             let (res, _tags) = o.pop().unwrap();
             assert_eq!(res, vec![0xff, 0xff]);
@@ -383,7 +369,7 @@ mod tests {
             let bits = &"01111110111110111110111110101111110";
             let s = ReadStream::from_slice(&str2bits(bits));
             let (mut b, o) = HdlcDeframer::new(s, 1, 10);
-            b.set_checksum(false);
+            b.set_keep_checksum(true);
             b.work()?;
             let (res, _tags) = o.pop().unwrap();
             assert_eq!(res, vec![0xff, 0xff]);
@@ -396,7 +382,7 @@ mod tests {
             let bits = &"01111110111110111110111110101111110";
             let s = ReadStream::from_slice(&str2bits(bits));
             let (mut b, o) = HdlcDeframer::new(s, 3, 10);
-            b.set_checksum(false);
+            b.set_keep_checksum(true);
             b.work()?;
             let res = o.pop();
             assert!(res.is_none(), "expected to discard short packet: {:?}", res);
@@ -409,7 +395,7 @@ mod tests {
             let bits = &"01111110111110111110111110101111110";
             let s = ReadStream::from_slice(&str2bits(bits));
             let (mut b, o) = HdlcDeframer::new(s, 1, 1);
-            b.set_checksum(false);
+            b.set_keep_checksum(true);
             b.work()?;
             let res = o.pop();
             assert!(res.is_none(), "expected to discard long packet: {:?}", res);
