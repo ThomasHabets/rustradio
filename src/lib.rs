@@ -16,9 +16,6 @@ radio) applications.
 It's heavily inspired by [GNURadio][gnuradio], except of course
 written in Rust.
 
-It currently has very few blocks, and is missing tags, and PDU
-messages.
-
 In addition to the example applications in this crate, there's also a
 [sparslog][sparslog] project using this framework, that decodes IKEA
 Sparsnäs electricity meter RF signals.
