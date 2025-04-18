@@ -126,6 +126,7 @@ pub mod correlate_access_code;
 pub mod debug_sink;
 pub mod delay;
 pub mod descrambler;
+pub mod fft;
 pub mod fft_filter;
 pub mod fft_stream;
 pub mod file_sink;

@@ -12,6 +12,7 @@ pub use crate::correlate_access_code::{CorrelateAccessCode, CorrelateAccessCodeT
 pub use crate::debug_sink::{DebugFilter, DebugSink, DebugSinkNoCopy};
 pub use crate::delay::Delay;
 pub use crate::descrambler::Descrambler;
+pub use crate::fft::Fft;
 pub use crate::fft_filter::FftFilter;
 pub use crate::fft_filter::FftFilterFloat;
 pub use crate::fft_stream::FftStream;
