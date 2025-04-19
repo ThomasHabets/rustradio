@@ -640,4 +640,18 @@ pub mod tests {
         assert!(!environment_str(&check_environment()?).is_empty());
         Ok(())
     }
+
+    #[test]
+    fn error_wrap() {
+        use std::error::Error as SysError;
+        let e = Error::msg("foo");
+        assert!(matches![e, Error::Plain(_)]);
+        let _e2: &dyn std::error::Error = &e;
+        let e_str = e.to_string();
+        assert_eq!(e_str, "An error occurred: foo");
+        let e3 = Error::wrap(e, "foo");
+        assert!(matches![e3, Error::Other { source: _, msg: _ }]);
+        let e4 = e3.source().unwrap();
+        assert_eq!(e_str, e4.to_string());
+    }
 }
