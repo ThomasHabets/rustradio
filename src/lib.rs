@@ -194,6 +194,7 @@ pub enum Error {
     /// File error annotated with a specific path.
     #[error("IO Error on {path:?}: {source:?}")]
     FileIo {
+        #[source]
         source: std::io::Error,
         path: std::path::PathBuf,
     },
@@ -201,6 +202,7 @@ pub enum Error {
     /// An error happened with a device such as SDR or audio device.
     #[error("DeviceError: {msg:?}: {source:?}")]
     DeviceError {
+        #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
         msg: Option<String>,
     },
@@ -216,6 +218,7 @@ pub enum Error {
     /// A wrapper around another error.
     #[error("{msg:?}: {source:?}")]
     Other {
+        #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
         msg: Option<String>,
     },
