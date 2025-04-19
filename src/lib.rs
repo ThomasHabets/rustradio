@@ -653,5 +653,7 @@ pub mod tests {
         assert!(matches![e3, Error::Other { source: _, msg: _ }]);
         let e4 = e3.source().unwrap();
         assert_eq!(e_str, e4.to_string());
+        let e5 = e4.downcast_ref::<Error>().unwrap();
+        assert!(matches![e5, Error::Plain(_)]);
     }
 }
