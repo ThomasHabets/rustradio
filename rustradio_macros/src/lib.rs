@@ -3,7 +3,7 @@
 //! Most blocks should derive from this macro.
 use proc_macro::TokenStream;
 
-use quote::quote;
+use quote::{quote, format_ident};
 use syn::{Attribute, Data, DeriveInput, Fields, Meta, parse_macro_input};
 
 use paste::paste;
@@ -108,6 +108,179 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
     ty
 }
 
+struct Stream (syn::Ident, syn::Type);
+enum Sync {
+    Sync,
+    SyncTag,
+    No,
+}
+
+struct Parsed<'a> {
+    name: &'a syn::Ident,
+    generics: (syn::ImplGenerics<'a>, syn::TypeGenerics<'a>, Option<&'a syn::WhereClause>),
+    internal: bool,
+    generate_new: bool,
+    sync: Sync,
+    inputs: Vec<&'a syn::Field>,
+    outputs: Vec<&'a syn::Field>,
+    defaults: Vec<&'a syn::Field>,
+    parms: Vec<(bool, &'a syn::Field)>,
+}
+
+impl<'a> Parsed<'a> {
+    fn parse(input: &'a DeriveInput) -> Self {
+        let Data::Struct(data_struct) = &input.data else {
+            panic!("derive block can only be used on structs");
+        };
+        let Fields::Named(fields_named) = &data_struct.fields else {
+            panic!("Fields is what? {:?}", data_struct.fields);
+        };
+        let mut ret = Parsed {
+            name: &input.ident,
+            generics: input.generics.split_for_impl(),
+            internal: has_attr(&input.attrs, "crate", STRUCT_ATTRS),
+            generate_new: has_attr(&input.attrs, "new", STRUCT_ATTRS),
+            sync: if has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
+                Sync::Sync
+            } else if has_attr(&input.attrs, "sync_tag", STRUCT_ATTRS) {
+                Sync::SyncTag
+            } else {
+                Sync::No
+            },
+            inputs: fields_named.named.iter().filter(|field| 
+                has_attr(&field.attrs, "in", FIELD_ATTRS))
+                .collect(),
+            outputs: fields_named.named.iter().filter(|field| 
+                has_attr(&field.attrs, "out", FIELD_ATTRS) )
+                .collect(),
+            defaults: fields_named.named.iter().filter(|field| 
+                has_attr(&field.attrs, "default", FIELD_ATTRS))
+                .collect(),
+            parms: fields_named.named.iter().filter(|field| !has_attr(&field.attrs, "in", FIELD_ATTRS)
+                && !has_attr(&field.attrs, "out", FIELD_ATTRS)
+                && !has_attr(&field.attrs, "default", FIELD_ATTRS))
+                .map(|field| (has_attr(&field.attrs, "into", FIELD_ATTRS), field))
+                .collect(),
+        };
+        ret
+    }
+    fn gen_defaulted(&self) -> Vec<proc_macro2::TokenStream> {
+        self.defaults.iter().map(|field| {
+            let field_name = field.ident.clone();
+            let ty = field.ty.clone();
+            quote! { #field_name: <#ty>::default() }
+        }).collect()
+    }
+    fn gen_input(&self) -> (
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        ) {
+        todo!()
+    }
+    fn gen_output(&self) -> (
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        ) {
+        todo!()
+    }
+    fn gen_parm_nametypes(&self) -> Vec<proc_macro2::TokenStream> {
+        self.parms.iter().map(|(into, field)| {
+            let field_name = field.ident.clone().unwrap();
+            let ty = field.ty.clone();
+            if *into {
+                let gen_name: syn::Type =
+                    syn::parse_str(&format!("Into{field_name}")).expect("creating Into type");
+                quote! { #field_name: #gen_name }
+            } else {
+                quote! { #field_name: #ty }
+            }
+        }).collect()
+    }
+    fn gen_parm_nointo_names(&self) -> Vec<proc_macro2::TokenStream> {
+        self.parms.iter().filter_map(|(into, field)| {
+            if !*into {
+                let field_name = field.ident.clone().unwrap();
+                Some(quote! { #field_name })
+            } else {
+                None
+            }
+        }).collect()
+    }
+    fn gen_parm_into_name_types(&self) -> (
+        Vec<proc_macro2::TokenStream>,
+        Vec<proc_macro2::TokenStream>,
+        ){
+        self.parms.iter()
+            .filter_map(|(into, field)| if *into { Some(field)} else {None})
+            .map(|field| {
+            let field_name = field.ident.clone().unwrap();
+            let ty = field.ty.clone();
+            let gen_name: syn::Type = syn::parse_str(&format!("Into{field_name}")).unwrap();
+            (quote! { #field_name }, quote! { #gen_name: Into<#ty> })
+        }).collect()
+    }
+}
+
+#[proc_macro_derive(Block2, attributes(rustradio))]
+pub fn derive_block2(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let parsed = Parsed::parse(&input);
+    let mut fragments = vec![];
+
+    // Create a bunch of local variables.
+    let parsed_name = parsed.name;
+
+    // Input streams.
+    let (in_names, in_nametypes, in_inner_types, in_tag_names, intag_nametypes) = parsed.gen_input();
+
+    // Parms.
+    let parm_nametypes = parsed.gen_parm_nametypes();
+    let (parm_into_names, parm_into_types) = parsed.gen_parm_into_name_types();
+    let parm_nointo_names = parsed.gen_parm_nointo_names();
+
+    // Defaulted.
+    let defaulted = parsed.gen_defaulted();
+
+    // Output streams.
+    let (out_names, out_stream_type, out_factory, outval_types) = parsed.gen_output();
+    let out_names_samp: Vec<_> = out_names.iter().map(|q| format_ident!("{q}_sample")).collect();
+
+    let (impl_generics, ty_generics, where_clause) = parsed.generics;
+
+    if parsed.generate_new {
+        fragments.push(quote! {
+            impl #impl_generics #parsed_name #ty_generics #where_clause {
+                /// Create a new block.
+                ///
+                /// The arguments to this function are the mandatory input
+                /// streams, and the mandatory parameters.
+                ///
+                /// The return values are the block itself, plus any mandatory
+                /// output streams.
+                ///
+                /// This function is automatically generated by a macro.
+                pub fn new #(<#parm_into_types>),*(#(#in_nametypes,)*#(#parm_nametypes),*) -> (Self #(,#out_stream_type)*) {
+                    #(let #out_names = #out_factory;)*
+                    (Self {
+                    #(#in_names,)*
+                    #(#out_names: #out_names.0,)*
+                    #(#parm_into_names: #parm_into_names.into(),)*
+                    #(#parm_nointo_names,)*
+                    #(#defaulted,)*
+                    }#(,#out_names.1)*)
+                }
+            }
+        });
+    }
+
+    panic!()
+}
+
 /// Block derive macro.
 ///
 /// Most blocks should derive from `Block`. Example use:
@@ -157,6 +330,7 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 #[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_block(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    let _parsed = Parsed::parse(&input);
     // eprintln!("{:?}", input.generics.split_for_impl());
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
