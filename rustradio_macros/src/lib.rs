@@ -23,15 +23,7 @@ macro_rules! unzip_n {
     }};
 }
 
-static STRUCT_ATTRS: &[&str] = &[
-    "new",
-    "crate",
-    "sync",
-    "sync_tag",
-    "custom_name",
-    "noeof",
-    "nevereof",
-];
+static STRUCT_ATTRS: &[&str] = &["new", "crate", "sync", "sync_tag", "custom_name", "noeof"];
 static FIELD_ATTRS: &[&str] = &["in", "out", "default", "into"];
 
 /// Check if named attribute is in the list of attributes.
@@ -144,7 +136,6 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 /// * `custom_name`: Call `custom_name()` instead of using the struct name, as
 ///   name.
 /// * `noeof`: Don't generate `eof()` logic.
-/// * `nevereof`: Generate `eof()` that always returns false.
 ///
 /// Field attributes:
 /// * `in`: Input stream.
@@ -464,13 +455,13 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         });
     }
 
-    extra.push(match (in_names.is_empty(), has_attr(&input.attrs, "noeof", STRUCT_ATTRS), has_attr(&input.attrs, "nevereof", STRUCT_ATTRS)) {
+    extra.push(match (in_names.is_empty(), has_attr(&input.attrs, "noeof", STRUCT_ATTRS)) {
         // No inputs.
-        (true, _, _) => quote! {
+        (true, _) => quote! {
             impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {}
         },
         // Has inputs, eof generation (implicitly) requested.
-        (false, false, false) => quote! {
+        (false, false) => quote! {
                  impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
                     fn eof(&mut self) -> bool {
                         if true #(&&self.#in_names.eof())* {
@@ -482,13 +473,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                  }
             },
         // Has inputs, no eof requested.
-        (false, true, false) => quote! {},
-        // Has inputs, "nevereof" requested.
-        (false, false, true) => quote! {
-            impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {}
-        },
-        // Invalid combination.
-        (false, true, true) => panic!("Providing noeof and nevereof is not valid"),
+        (false, true) => quote! {},
     });
 
     TokenStream::from(quote! { #(#extra)* })

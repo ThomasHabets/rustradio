@@ -1,5 +1,5 @@
 //! Generate values from a fixed vector.
-use crate::Result;
+use crate::{Error, Result};
 
 use crate::Repeat;
 use crate::block::{Block, BlockRet};
@@ -22,9 +22,23 @@ impl<T: Copy> VectorSourceBuilder<T> {
         self.block.set_repeat(r);
         self
     }
+    /// Populate tags.
+    pub fn tags(mut self, tags: &[Tag]) -> VectorSourceBuilder<T> {
+        self.block.tags.extend(tags.iter().cloned());
+        self
+    }
     /// Build the VectorSource.
-    pub fn build(self) -> (VectorSource<T>, ReadStream<T>) {
-        (self.block, self.out)
+    pub fn build(self) -> Result<(VectorSource<T>, ReadStream<T>)> {
+        if !self.block.tags.is_empty() {
+            let maxtag = self.block.tags.iter().map(|t| t.pos()).max().unwrap_or(0);
+            if maxtag >= self.block.data.len() {
+                return Err(Error::msg(format!(
+                    "provided tags with position up to {maxtag}, but the data is only {} samples",
+                    self.block.data.len()
+                )));
+            }
+        }
+        Ok((self.block, self.out))
     }
 }
 
@@ -40,6 +54,7 @@ where
     data: Vec<T>,
     repeat: Repeat,
     pos: usize,
+    tags: Vec<Tag>,
 }
 
 impl<T: Copy> VectorSource<T> {
@@ -54,6 +69,7 @@ impl<T: Copy> VectorSource<T> {
                 data,
                 repeat: Repeat::finite(1),
                 pos: 0,
+                tags: vec![],
             },
             dr,
         )
@@ -97,6 +113,11 @@ where
         }
         let n = std::cmp::min(os.len(), self.data.len() - self.pos);
         os.fill_from_slice(&self.data[self.pos..(self.pos + n)]);
+        self.tags.iter().for_each(|tag| {
+            if tag.pos() >= self.pos && tag.pos() < (self.pos + n) {
+                tags.push(Tag::new(tag.pos() - self.pos, tag.key(), tag.val().clone()));
+            }
+        });
         os.produce(n, &tags);
 
         self.pos += n;
@@ -144,7 +165,7 @@ mod tests {
     fn repeat0() -> Result<()> {
         let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
             .repeat(Repeat::finite(0))
-            .build();
+            .build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (res, _) = os.read_buf()?;
         assert!(res.is_empty());
@@ -155,7 +176,7 @@ mod tests {
     fn repeat1() -> Result<()> {
         let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
             .repeat(Repeat::finite(1))
-            .build();
+            .build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (res, _) = os.read_buf()?;
         assert_eq!(res.slice(), &[1u8, 2, 3]);
@@ -166,7 +187,7 @@ mod tests {
     fn repeat2() -> Result<()> {
         let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
             .repeat(Repeat::finite(2))
-            .build();
+            .build()?;
         assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (res, tags) = os.read_buf()?;
@@ -188,7 +209,7 @@ mod tests {
     fn repeat_infinite() -> Result<()> {
         let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
             .repeat(Repeat::infinite())
-            .build();
+            .build()?;
         for _ in 0..10 {
             assert!(matches![src.work()?, BlockRet::Again]);
         }

@@ -1,31 +1,4 @@
-/*! Stream to PDU.
-
-Turn a tagged stream to PDUs.
-
-PDUs are marked in the stream as `true` when they start, and `false` when they end.
-
-## Example
-
-This example uses burst tagger to create the tags, and turn a stream
-into burst PDUs.
-
-Also see `examples/wpcr.rs`.
-
-```
-use rustradio::graph::{Graph, GraphRunner};
-use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIirFilter,BurstTagger,StreamToPdu};
-use rustradio::Complex;
-let (src, src_out) = FileSource::new("/dev/null")?;
-let (tee, data, b) = Tee::new(src_out);
-let (c2m, c2m_out) = ComplexToMag2::new(b);
-let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
-let (burst, prev) = BurstTagger::new(data, iir_out, 0.0001, "burst");
-let pdus = StreamToPdu::new(prev, "burst", 10_000, 50);
-// pdus.out() now delivers bursts as Vec<Complex>
-# Ok::<(), anyhow::Error>(())
-```
-
- */
+//! Stream to PDU.
 use std::collections::HashMap;
 
 use log::{debug, trace};
@@ -35,10 +8,40 @@ use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos, TagVal
 use crate::{Result, Sample};
 
 /// Stream to PDU block.
-// TODO: implement proper EOF.
+///
+/// Turn a tagged stream to PDUs.
+///
+/// PDUs are marked in the stream as `true` when they start, and `false` when
+/// they end. Optionally an extra `tail` samples are also included.
+///
+/// The sample with the `false` tag is not included, unless `tail` is greater
+/// than zero.
+///
+/// Samples between bursts are discarded.
+///
+/// ## Example
+///
+/// This example uses burst tagger to create the tags, and turn a stream
+/// into burst PDUs.
+///
+/// Also see `examples/wpcr.rs`.
+///
+/// ```
+/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIirFilter,BurstTagger,StreamToPdu};
+/// use rustradio::Complex;
+/// let (src, src_out) = FileSource::new("/dev/null")?;
+/// let (tee, data, b) = Tee::new(src_out);
+/// let (c2m, c2m_out) = ComplexToMag2::new(b);
+/// let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
+/// let (burst, prev) = BurstTagger::new(data, iir_out, 0.0001, "burst");
+/// let pdus = StreamToPdu::new(prev, "burst", 10_000, 50);
+/// // pdus.out() now delivers bursts as Vec<Complex>
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, nevereof)]
-pub struct StreamToPdu<T> {
+#[rustradio(crate)]
+pub struct StreamToPdu<T: Copy> {
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -50,7 +53,7 @@ pub struct StreamToPdu<T> {
     tail: usize,
 }
 
-impl<T> StreamToPdu<T> {
+impl<T: Copy + Sample> StreamToPdu<T> {
     /// Make new Stream to PDU block.
     pub fn new<S: Into<String>>(
         src: ReadStream<T>,
@@ -71,6 +74,20 @@ impl<T> StreamToPdu<T> {
             },
             dr,
         )
+    }
+
+    /// Burst has arrived. File it.
+    fn done(&mut self) {
+        let mut delme = Vec::with_capacity(self.max_size);
+        std::mem::swap(&mut delme, &mut self.buf);
+        debug!(
+            "StreamToPdu> got burst of size {} samples, {} bytes",
+            delme.len(),
+            delme.len() * T::size()
+        );
+        // TODO: record stream pos.
+        self.dst.push(delme, &[]);
+        self.endcounter = None;
     }
 }
 
@@ -106,25 +123,24 @@ where
         trace!("StreamToPdu: tags: {:?}", tags);
 
         for (i, sample) in input.iter().enumerate() {
-            if let Some(0) = self.endcounter {
-                let mut delme = Vec::with_capacity(self.max_size);
-                std::mem::swap(&mut delme, &mut self.buf);
-                debug!(
-                    "StreamToPdu> got burst of size {} samples, {} bytes",
-                    delme.len(),
-                    delme.len() * T::size()
-                );
-                // TODO: record stream pos.
-                self.dst.push(delme, &[]);
-                self.endcounter = None;
-            }
+            //eprintln!("sample: {i} {sample:?}, {:?}", self.endcounter);
             if let Some(c) = self.endcounter {
                 self.buf.push(*sample);
                 self.endcounter = Some(c - 1);
+                if c == 1 {
+                    self.done();
+                }
             } else if let Some(tv) = get_tag_val_bool(&tags, i as TagPos, &self.tag) {
                 if !tv {
                     // End of burst.
-                    self.endcounter = Some(self.tail);
+                    if self.tail > 0 {
+                        self.buf.push(*sample);
+                    }
+                    if self.tail <= 1 {
+                        self.done();
+                    } else {
+                        self.endcounter = Some(self.tail - 1);
+                    }
                 } else {
                     // Start of burst, save first sample.
                     self.buf.push(*sample);
@@ -142,5 +158,103 @@ where
         let n = input.len();
         input.consume(n);
         Ok(BlockRet::Again)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Complex;
+    use crate::blocks::VectorSourceBuilder;
+
+    #[test]
+    fn no_pdu() -> Result<()> {
+        let (mut src, src_out) = VectorSourceBuilder::new(vec![Complex::default(); 100]).build()?;
+        let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, 0);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        assert!(matches![b.work()?, BlockRet::Again]);
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        assert!(matches![out.pop(), None]);
+        Ok(())
+    }
+
+    #[test]
+    fn single() -> Result<()> {
+        for (start, end, tail, want) in [
+            (0, 7, 0, vec![1, 2, 3, 4, 5, 6, 7]),
+            (0, 0, 0, vec![]),
+            (0, 0, 1, vec![1]),
+            (1, 1, 0, vec![]),
+            (1, 1, 1, vec![2]),
+            (1, 1, 9, vec![2, 3, 4, 5, 6, 7, 8, 9, 10]),
+            (7, 7, 0, vec![]),
+            (7, 7, 1, vec![8]),
+            (7, 7, 2, vec![8, 9]),
+            (7, 7, 3, vec![8, 9, 10]),
+            (7, 8, 0, vec![8]),
+            (7, 8, 1, vec![8, 9]),
+            (7, 8, 2, vec![8, 9, 10]),
+            (7, 9, 0, vec![8, 9]),
+            (7, 9, 1, vec![8, 9, 10]),
+        ] {
+            eprintln!("Testing with end={end}, tail={tail}, want={want:?}");
+            let (mut src, src_out) =
+                VectorSourceBuilder::new(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+                    .tags(&[
+                        Tag::new(start, "burst", TagValue::Bool(true)),
+                        Tag::new(4, "test", TagValue::Bool(true)),
+                        Tag::new(end, "burst", TagValue::Bool(false)),
+                    ])
+                    .build()?;
+            let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, tail);
+            assert!(matches![src.work()?, BlockRet::EOF]);
+            assert!(matches![b.work()?, BlockRet::Again]);
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+            let (burst, tags) = out.pop().unwrap();
+            assert_eq!(burst, want);
+            assert_eq!(tags, &[]);
+            assert!(matches![out.pop(), None]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ended_too_soon() -> Result<()> {
+        for (end, tail) in [(7, 4), (8, 3), (9, 2)] {
+            eprintln!("Testing with end={end}, tail={tail}");
+            let (mut src, src_out) =
+                VectorSourceBuilder::new(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+                    .tags(&[
+                        Tag::new(7, "burst", TagValue::Bool(true)),
+                        Tag::new(4, "test", TagValue::Bool(true)),
+                        Tag::new(end, "burst", TagValue::Bool(false)),
+                    ])
+                    .build()?;
+            let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, tail);
+            assert!(matches![src.work()?, BlockRet::EOF]);
+            assert!(matches![b.work()?, BlockRet::Again]);
+            assert!(matches![out.pop(), None]);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn mid_pdu() -> Result<()> {
+        let (mut src, src_out) = VectorSourceBuilder::new(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+            .tags(&[
+                Tag::new(3, "burst", TagValue::Bool(true)),
+                Tag::new(4, "test", TagValue::Bool(true)),
+                Tag::new(7, "burst", TagValue::Bool(false)),
+            ])
+            .build()?;
+        let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, 0);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        assert!(matches![b.work()?, BlockRet::Again]);
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        let (burst, tags) = out.pop().unwrap();
+        assert_eq!(burst, &[4, 5, 6, 7]);
+        assert_eq!(tags, &[]);
+        assert!(matches![out.pop(), None]);
+        Ok(())
     }
 }

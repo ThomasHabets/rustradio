@@ -415,7 +415,7 @@ mod tests {
         for deci in 1..=(3 * input.len()) {
             let (mut src, src_out) = VectorSourceBuilder::new(input.clone())
                 .repeat(Repeat::finite(2))
-                .build();
+                .build()?;
             assert!(matches![src.work()?, BlockRet::Again]);
             assert!(matches![src.work()?, BlockRet::EOF]);
 
