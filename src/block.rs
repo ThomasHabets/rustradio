@@ -125,9 +125,7 @@ pub trait BlockEOF {
     ///
     /// Mutable because if eof, the block is also responsible setting EOF on its
     /// output streams.
-    fn eof(&mut self) -> bool {
-        false
-    }
+    fn eof(&mut self) -> bool;
 }
 
 /// Block trait. Must be implemented for all blocks.

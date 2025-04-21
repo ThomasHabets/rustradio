@@ -458,7 +458,11 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     extra.push(match (in_names.is_empty(), has_attr(&input.attrs, "noeof", STRUCT_ATTRS)) {
         // No inputs.
         (true, _) => quote! {
-            impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {}
+            impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
+                fn eof(&mut self) -> bool {
+                    false
+                }
+            }
         },
         // Has inputs, eof generation (implicitly) requested.
         (false, false) => quote! {
@@ -472,7 +476,8 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                     }
                  }
             },
-        // Has inputs, no eof requested.
+        // Has inputs, noeof requested. The block will have to manually
+        // implement eof.
         (false, true) => quote! {},
     });
 
