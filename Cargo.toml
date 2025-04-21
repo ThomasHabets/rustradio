@@ -75,6 +75,11 @@ required-features = ["audio"]
 [profile.release]
 # debug = true
 
+[profile.nodebug]
+inherits = "dev"
+debug = 0
+strip = "debuginfo"
+
 # Disabled overflow checks help speed by like 8%.
 overflow-checks = true
 

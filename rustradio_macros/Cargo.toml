@@ -20,3 +20,8 @@ rustradio = { path = ".." }
 
 [lib]
 proc-macro = true
+
+[profile.nodebug]
+inherits = "dev"
+debug = 0
+strip = "debuginfo"
