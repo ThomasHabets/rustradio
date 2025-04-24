@@ -4,7 +4,8 @@ use crate::stream::{ReadStream, WriteStream};
 
 /// Tee a stream into two.
 ///
-/// Every input sample is copied into each output stream.
+/// Every input sample is copied into each output stream. Tags are written to
+/// both streams.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
 pub struct Tee<T: Copy> {
@@ -15,6 +16,7 @@ pub struct Tee<T: Copy> {
     #[rustradio(out)]
     dst2: WriteStream<T>,
 }
+
 impl<T: Copy> Tee<T> {
     fn process_sync(&self, s: T) -> (T, T) {
         (s, s)
@@ -25,9 +27,37 @@ impl<T: Copy> Tee<T> {
 mod tests {
     use super::*;
 
+    use std::borrow::Cow;
+
     use crate::block::{Block, BlockRet};
     use crate::blocks::{VectorSink, VectorSource};
+    use crate::stream::Tag;
     use crate::{Float, Result};
+
+    /// A version of Tee that uses process_sync_tags.
+    ///
+    /// It's just here for unit tests to assure multiple return values works as
+    /// expected.
+    #[derive(rustradio_macros::Block)]
+    #[rustradio(crate, new, sync_tag)]
+    struct Tee<T: Copy> {
+        #[rustradio(in)]
+        src: ReadStream<T>,
+        #[rustradio(out)]
+        dst1: WriteStream<T>,
+        #[rustradio(out)]
+        dst2: WriteStream<T>,
+    }
+
+    impl<T: Copy> Tee<T> {
+        fn process_sync_tags<'a>(
+            &self,
+            s: T,
+            ts: &'a [Tag],
+        ) -> (T, Cow<'a, [Tag]>, T, Cow<'a, [Tag]>) {
+            (s, Cow::Borrowed(ts), s, Cow::Owned(vec![]))
+        }
+    }
 
     #[test]
     fn simple() -> Result<()> {

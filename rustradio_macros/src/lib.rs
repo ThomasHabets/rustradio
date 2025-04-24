@@ -145,6 +145,77 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 /// * `into`: When the `new()` function is generated, let non-stream values
 ///   accept anything `.into()`-convertable into the given type, not just the
 ///   generated type directly.
+///
+/// ## Sync blocks
+///
+/// A block using the `sync` attribute does not implement the standard `work()`
+/// function, but instead implements `process_sync()`. This greatly simplifies
+/// the API, at the cost of only being able to process samples one-for-one, with
+/// no history.
+///
+/// `process_sync()` takes one sample from each `in` stream, and returns one
+/// value for each `out` stream.
+///
+/// All output streams get the tags from the *first* input stream. For more
+/// control of tag propagation, use `sync_tag` instead.
+///
+/// For an example of a sync block taking two input streams and producing one
+/// output stream, see the `Add` block. Repeated here in simplified form:
+///
+/// ```rust,ignore
+/// #[derive(rustradio_macros::Block)]
+/// #[rustradio(crate, new, sync)]
+/// pub struct Add {
+///     #[rustradio(in)]
+///     a: ReadStream<Float>,
+///     #[rustradio(in)]
+///     b: ReadStream<Float>,
+///     #[rustradio(out)]
+///     dst: WriteStream<Float>,
+/// }
+///
+/// impl Add {
+///     fn process_sync(&self, a: Float, b: Float) -> Float {
+///         a + b
+///     }
+/// }
+/// ```
+///
+/// ## Tags on a sync block
+///
+/// A `sync_tag` is like a `sync` block but takes control of tag propagation.
+/// This enables:
+/// * Reading of tags.
+/// * Writing of tags (e.g. `BurstTagger` and `CorrelateAccessCode` blocks).
+/// * Using different tags for different output streams.
+///
+/// A version of `Tee` that only writes tags to the first stream could be:
+///
+/// ```rust,ignore
+/// #[derive(rustradio_macros::Block)]
+/// #[rustradio(crate, new, sync_tag)]
+/// struct Tee {
+///     #[rustradio(in)]
+///     src: ReadStream<Float>,
+///     #[rustradio(out)]
+///     dst1: WriteStream<Float>,
+///     #[rustradio(out)]
+///     dst2: WriteStream<Float>,
+/// }
+///
+/// impl Tee {
+///     fn process_sync_tags<'a>(
+///         &self,
+///         s: Float,
+///         ts: &'a [Tag],
+///     ) -> (Float, Cow<'a, [Tag]>, Float, Cow<'a, [Tag]>) {
+///         (s, Cow::Borrowed(ts), s, Cow::Owned(vec![]))
+///     }
+/// }
+/// ```
+///
+/// But a better solution for that case would likely be to use regular `Tee`,
+/// and then have a second block filter the tags of the second stream.
 #[proc_macro_derive(Block, attributes(rustradio))]
 pub fn derive_block(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -231,10 +302,12 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     //
     // Produces:
     // * out_names:          dst
+    // * out_tag_names:      dst_tag
+    // * out_tag_names_tmp:  dst_tag_tmp
     // * out_names_samp:     dst_sample
     // * out_types:          WriteStream<Complex>
     // * outval_types:       Complex
-    let (out_names, out_names_samp, out_types, outval_types) = unzip_n![
+    let (out_names, out_tag_names, out_tag_names_tmp, out_names_samp, out_types, outval_types) = unzip_n![
         fields_named
             .named
             .iter()
@@ -246,8 +319,13 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                 let field_name = field.ident.clone().unwrap();
                 let samp_name: syn::Ident =
                     syn::parse_str(&format!("{field_name}_sample")).unwrap();
+                let tag_name: syn::Ident = syn::parse_str(&format!("{field_name}_tag")).unwrap();
+                let tag_name_tmp: syn::Ident =
+                    syn::parse_str(&format!("{field_name}_tag_tmp")).unwrap();
                 (
                     field_name.clone(),
+                    tag_name,
+                    tag_name_tmp,
                     samp_name,
                     quote! { #ty },
                     quote! { #inner },
@@ -256,7 +334,9 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         a,
         b,
         c,
-        d
+        d,
+        e,
+        f
     ];
 
     // Ensure no field is marked both input and output.
@@ -365,9 +445,9 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
             let first_tags = &in_tag_names[0];
             extra.push(quote! {
                 impl #impl_generics #struct_name #ty_generics #where_clause {
-                    fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types,)* std::borrow::Cow<'a, [#path::stream::Tag]>) {
+                    fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types, std::borrow::Cow<'a, [#path::stream::Tag]>),*) {
                         let (#(#out_names),*) = self.process_sync(#(#in_names,)*);
-                        (#(#out_names,)*std::borrow::Cow::Borrowed(#first_tags))
+                        (#(#out_names,std::borrow::Cow::Borrowed(#first_tags)),*)
                     }
                 }
             });
@@ -375,6 +455,7 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         extra.push(quote! {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> #path::Result<#path::block::BlockRet> {
+                    let empty = vec![];
                     loop {
                         #(let #in_names = self.#in_names.read_buf()?;)*
                         #(let #in_tag_names = #in_names.1;)*
@@ -396,37 +477,36 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
                         let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
                         assert_ne!(n, 0, "Output stream len 0, but we already checked that.");
 
-                        let mut otags = Vec::new();
+                        #(let mut #out_tag_names = Vec::new();)*
                         let empty_tags = true #(&&#in_tag_names.is_empty())*;
                         let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                            if empty_tags {
+                            let (#(#in_tag_names),*) = if empty_tags {
                                 // Fast path for input without tags.
                                 // There may be opportunity to deduplicate some of
                                 // the next couple of lines with the !empty_tags
                                 // case.
-                                let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &[]),*);
-                                for tag in ts.iter() {
-                                    otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
-                                }
-                                (#(#out_names),*)
+                                (#({
+                                    let _ = &#in_tag_names;
+                                    std::borrow::Cow::Borrowed(&empty)
+                                }),*)
                             } else {
                                 // TODO: This tag filtering is quite expensive.
-                                #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
+                                (#(std::borrow::Cow::Owned(#in_tag_names.iter()
                                   .filter(|t| t.pos() == pos)
                                   .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
-                                  .collect();)*
-                                let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
-                                for tag in ts.iter() {
-                                    otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
-                                }
-                                (#(#out_names),*)
-                            }
+                                  .collect::<Vec<_>>())),*)
+                            };
+                            let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
+                            #(for tag in #out_tag_names_tmp.iter() {
+                                #out_tag_names.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
+                            })*
+                            (#(#out_names),*)
                         });
                         for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
                             (#(*#out_names),*) = (#(#out_names_samp),*);
                         }
                         #(#in_names.consume(n);)*
-                        #(#out_names.produce(n, &otags);)*
+                        #(#out_names.produce(n, &#out_tag_names);)*
                     }
                 }
             }
