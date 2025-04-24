@@ -191,6 +191,18 @@ pub struct WriteStream<T> {
     circ: Arc<circular_buffer::Buffer<T>>,
 }
 
+impl<T> WriteStream<T> {
+    /// Create new stream pair.
+    #[must_use]
+    pub fn new() -> (WriteStream<T>, ReadStream<T>) {
+        new_stream()
+    }
+}
+
+impl<T> StreamReadSide for WriteStream<T> {
+    type ReadSide = ReadStream<T>;
+}
+
 impl<T: Copy> WriteStream<T> {
     /// Return free space in the stream, in samples.
     #[must_use]
@@ -325,7 +337,21 @@ impl<T> NCReadStream<T> {
     }
 }
 
+/// Trait that helps finding the read side type of a write stream.
+///
+/// Used to simplify macros. You're unlikely to want to use this directly.
+pub trait StreamReadSide {
+    type ReadSide;
+}
+
+impl<T> StreamReadSide for NCWriteStream<T> {
+    type ReadSide = NCReadStream<T>;
+}
 impl<T> NCWriteStream<T> {
+    /// Create a new stream pair.
+    pub fn new() -> (NCWriteStream<T>, NCReadStream<T>) {
+        new_nocopy_stream()
+    }
     /// Push one sample, handing off ownership.
     /// Ideally this should only be NoCopy.
     ///
