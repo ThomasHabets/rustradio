@@ -375,58 +375,59 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
         extra.push(quote! {
             impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
                 fn work(&mut self) -> #path::Result<#path::block::BlockRet> {
-                    #( let #in_names = self.#in_names.read_buf()?;)*
-                    #(let #in_tag_names = #in_names.1;)*
-                    #(let #in_names = #in_names.0;
-                      if #in_names.len() == 0 {
-                          return Ok(#path::block::BlockRet::WaitForStream(&self.#in_names, 1));
-                      })*
+                    loop {
+                        #(let #in_names = self.#in_names.read_buf()?;)*
+                        #(let #in_tag_names = #in_names.1;)*
+                        #(let #in_names = #in_names.0;
+                          if #in_names.len() == 0 {
+                              return Ok(#path::block::BlockRet::WaitForStream(&self.#in_names, 1));
+                          })*
 
-                    // Clamp n to be no more than the input available.
-                    let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
-                    assert_ne!(n, 0, "Input stream len 0, but we already checked that.");
+                        // Clamp n to be no more than the input available.
+                        let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
+                        assert_ne!(n, 0, "Input stream len 0, but we already checked that.");
 
-                    #(let mut #out_names = self.#out_names.write_buf()?;
-                      if #out_names.len() == 0 {
-                          return Ok(#path::block::BlockRet::WaitForStream(&self.#out_names, 1));
-                      })*
+                        #(let mut #out_names = self.#out_names.write_buf()?;
+                          if #out_names.len() == 0 {
+                              return Ok(#path::block::BlockRet::WaitForStream(&self.#out_names, 1));
+                          })*
 
-                    // Clamp n to be no more than output space.
-                    let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
-                    assert_ne!(n, 0, "Output stream len 0, but we already checked that.");
+                        // Clamp n to be no more than output space.
+                        let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
+                        assert_ne!(n, 0, "Output stream len 0, but we already checked that.");
 
-                    let mut otags = Vec::new();
-                    let empty_tags = true #(&&#in_tag_names.is_empty())*;
-                    let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                        if empty_tags {
-                            // Fast path for input without tags.
-                            // There may be opportunity to deduplicate some of
-                            // the next couple of lines with the !empty_tags
-                            // case.
-                            let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &[]),*);
-                            for tag in ts.iter() {
-                                otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
+                        let mut otags = Vec::new();
+                        let empty_tags = true #(&&#in_tag_names.is_empty())*;
+                        let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
+                            if empty_tags {
+                                // Fast path for input without tags.
+                                // There may be opportunity to deduplicate some of
+                                // the next couple of lines with the !empty_tags
+                                // case.
+                                let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &[]),*);
+                                for tag in ts.iter() {
+                                    otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
+                                }
+                                (#(#out_names),*)
+                            } else {
+                                // TODO: This tag filtering is quite expensive.
+                                #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
+                                  .filter(|t| t.pos() == pos)
+                                  .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
+                                  .collect();)*
+                                let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
+                                for tag in ts.iter() {
+                                    otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
+                                }
+                                (#(#out_names),*)
                             }
-                            (#(#out_names),*)
-                        } else {
-                            // TODO: This tag filtering is quite expensive.
-                            #(let #in_tag_names: Vec<_> = #in_tag_names.iter()
-                              .filter(|t| t.pos() == pos)
-                              .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
-                              .collect();)*
-                            let (#(#out_names,)* ts) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
-                            for tag in ts.iter() {
-                                otags.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
-                            }
-                            (#(#out_names),*)
+                        });
+                        for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
+                            (#(*#out_names),*) = (#(#out_names_samp),*);
                         }
-                    });
-                    for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
-                        (#(*#out_names),*) = (#(#out_names_samp),*);
+                        #(#in_names.consume(n);)*
+                        #(#out_names.produce(n, &otags);)*
                     }
-                    #(#in_names.consume(n);)*
-                    #(#out_names.produce(n, &otags);)*
-                    Ok(#path::block::BlockRet::Again)
                 }
             }
         });

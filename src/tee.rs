@@ -39,9 +39,6 @@ mod tests {
         // Run tee.
         let (mut tee, out1, out2) = Tee::new(i);
         let ret = tee.work()?;
-        assert!(matches![ret, BlockRet::Again], "{:?}", ret);
-        drop(ret);
-        let ret = tee.work()?;
         assert!(matches![ret, BlockRet::WaitForStream(_, 1)], "{:?}", ret);
 
         // Check left side.
