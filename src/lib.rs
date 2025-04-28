@@ -309,6 +309,7 @@ pub struct Repeat {
 
 impl Repeat {
     /// Repeat finite number of times. 0 Means not even once. 1 is default.
+    #[must_use]
     pub fn finite(n: u64) -> Self {
         Self {
             repeater: Repeater::Finite(n),
@@ -317,6 +318,7 @@ impl Repeat {
     }
 
     /// Repeat infinite number of times.
+    #[must_use]
     pub fn infinite() -> Self {
         Self {
             repeater: Repeater::Infinite,
@@ -366,6 +368,7 @@ pub struct Feature {
 }
 
 impl Feature {
+    #[must_use]
     fn new<S: Into<String>>(name: S, build: bool, detected: bool) -> Self {
         Self {
             name: name.into(),
@@ -375,6 +378,7 @@ impl Feature {
     }
 }
 
+#[must_use]
 pub fn environment_str(features: &[Feature]) -> String {
     let mut s = "Feature   Build Detected\n".to_string();
     for feature in features {
@@ -461,12 +465,14 @@ pub trait Sample {
     type Type;
 
     /// The serialized size of one sample.
+    #[must_use]
     fn size() -> usize;
 
     /// Parse one sample.
     fn parse(data: &[u8]) -> Result<Self::Type>;
 
     /// Serialize one sample.
+    #[must_use]
     fn serialize(&self) -> Vec<u8>;
 }
 
@@ -579,6 +585,7 @@ impl Sample for String {
 #[allow(clippy::len_without_is_empty)]
 pub trait Len {
     /// Get the length.
+    #[must_use]
     fn len(&self) -> usize;
 }
 impl<T> Len for Vec<T> {
