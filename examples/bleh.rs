@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         //use rustradio::graph::Graph;
         use rustradio::Complex;
         //let mut g = Graph::new();
-        let (mut src, prev) = RtlSdrSource::new(868_000_000, 1024_000, 30)?;
+        let (mut src, prev) = RtlSdrSource::new(868_000_000, 1_024_000, 30)?;
         let (mut dec, prev) = RtlSdrDecode::new(prev);
         let (mut add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
         let mut sink = NullSink::new(prev);

@@ -106,7 +106,7 @@ impl Block for SoapySdrSink {
         }
         // debug!("writing {}", i.slice().len());
         let n = match self.stream.write(
-            &mut [i.slice()],
+            &[i.slice()],
             None,  // at_ns
             false, // end_burst
             timeout_us,

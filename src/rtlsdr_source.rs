@@ -62,8 +62,7 @@ impl RtlSdrSource {
         let found = rtlsdr::get_device_count();
         if index >= found {
             return Err(Error::msg(format!(
-                "RTL SDR index {} doesn't exist, found {}",
-                index, found
+                "RTL SDR index {index} doesn't exist, found {found}"
             )));
         }
 

@@ -97,11 +97,18 @@ pub mod rr_fftw {
 
     impl Engine for FftwEngine {
         fn run(&mut self, i: &mut [Complex]) {
+            use std::mem::MaybeUninit;
+
             let fft_size = self.taps_fft.len();
 
             // Ugly option: create un-initialized.
-            let mut tmp = Vec::with_capacity(fft_size);
-            unsafe { tmp.set_len(fft_size) };
+            let mut tmp: Vec<MaybeUninit<Complex>> = Vec::with_capacity(fft_size);
+            // SAFETy:
+            // It'll be filled.
+            let mut tmp = unsafe {
+                tmp.set_len(fft_size);
+                std::mem::transmute::<Vec<MaybeUninit<Complex>>, Vec<Complex>>(tmp)
+            };
 
             // Safer option: Create zeroed.
             // let mut tmp: Vec<Complex> = vec![Complex::default(); fft_size];

@@ -115,8 +115,7 @@ fn main() -> Result<()> {
                 let prev = add_block![g, RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?];
 
                 // Decode.
-                let prev = add_block![g, RtlSdrDecode::new(prev)];
-                prev
+                add_block![g, RtlSdrDecode::new(prev)]
             }
             #[cfg(not(feature = "rtlsdr"))]
             panic!("rtlsdr feature not enabled")
