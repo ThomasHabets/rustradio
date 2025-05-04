@@ -127,11 +127,11 @@ mod tests {
         }
         let src = ReadStream::from_slice(&[0.1, 0.2]);
         if SinglePoleIirFilter::new(src, -0.1).is_some() {
-            return Err(Error::msg("should not accept -0.1").into());
+            return Err(Error::msg("should not accept -0.1"));
         }
         let src = ReadStream::from_slice(&[0.1, 0.2]);
         if SinglePoleIirFilter::new(src, 1.1).is_some() {
-            return Err(Error::msg("should not accept 1.1").into());
+            return Err(Error::msg("should not accept 1.1"));
         }
         Ok(())
     }

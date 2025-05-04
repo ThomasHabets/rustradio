@@ -144,32 +144,23 @@ mod tests {
 
     #[test]
     fn fail_create() -> Result<()> {
-        let ssrc = ReadStream::from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
-        assert!(matches![
-            FileSink::<Float>::new(ssrc, "/dev/null", Mode::Create),
-            Err(_)
-        ]);
+        let ssrc = ReadStream::from_slice(&[1.0 as Float, 3.0, 2.14, -2.14]);
+        assert!(FileSink::<Float>::new(ssrc, "/dev/null", Mode::Create).is_err());
         Ok(())
     }
 
     #[test]
     fn overwrite() -> Result<()> {
-        let ssrc = ReadStream::from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
-        assert!(matches![
-            FileSink::<Float>::new(ssrc, "/dev/null", Mode::Overwrite),
-            Ok(_)
-        ]);
+        let ssrc = ReadStream::from_slice(&[1.0 as Float, 3.0, 2.14, -2.14]);
+        assert!(FileSink::<Float>::new(ssrc, "/dev/null", Mode::Overwrite).is_ok());
         // TODO: check that it's not open for append.
         Ok(())
     }
 
     #[test]
     fn append() -> Result<()> {
-        let ssrc = ReadStream::from_slice(&[1.0 as Float, 3.0, 3.14, -3.14]);
-        assert!(matches![
-            FileSink::<Float>::new(ssrc, "/dev/null", Mode::Append),
-            Ok(_)
-        ]);
+        let ssrc = ReadStream::from_slice(&[1.0 as Float, 3.0, 2.14, -2.14]);
+        assert!(FileSink::<Float>::new(ssrc, "/dev/null", Mode::Append).is_ok());
         // TODO: check that it's open for append.
         Ok(())
     }

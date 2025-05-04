@@ -36,7 +36,7 @@ where
                         });
                  */
 
-        println!("debug: {:?}", v);
+        println!("debug: {v:?}");
         Ok(BlockRet::Again)
     }
 }
@@ -79,7 +79,7 @@ where
                         .join(",")
                 })
                 .unwrap_or("".to_string());
-            self.dst.push(format!["{:?} {}", s, ts], &[]);
+            self.dst.push(format!["{s:?} {ts}"], &[]);
         });
         let l = i.slice().len();
         i.consume(l);
@@ -125,7 +125,7 @@ where
                         .join(",")
                 })
                 .unwrap_or("".to_string());
-            println!("debug: {:?} {}", s, ts);
+            println!("debug: {s:?} {ts}");
         });
         let l = i.slice().len();
         i.consume(l);

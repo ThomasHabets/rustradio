@@ -473,8 +473,7 @@ mod tests {
                 .unwrap();
             assert!(
                 (0.0..0.0002).contains(&m),
-                "Signal insufficiently suppressed. Got magnitude {}",
-                m
+                "Signal insufficiently suppressed. Got magnitude {m}"
             );
             if total > samp_rate as usize {
                 break;

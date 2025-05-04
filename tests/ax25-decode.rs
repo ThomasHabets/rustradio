@@ -34,7 +34,7 @@ fn e2e_test_wa8lmf_intact() -> Result<()> {
             hasher.update(&buffer[..rc]);
         }
         let hash = hasher.finalize();
-        assert_eq!(format!("{:x}", hash), want);
+        assert_eq!(format!("{hash:x}"), want);
     }
     Ok(())
 }
@@ -44,13 +44,12 @@ fn count_files_in_dir(dir_path: &Path) -> usize {
         Ok(entries) => entries
             .filter_map(Result::ok)
             .filter(|e| e.path().is_file())
-            .map(|e| {
+            .inspect(|e| {
                 println!("File: {e:?}");
-                e
             })
             .count(),
         Err(err) => {
-            eprintln!("Failed to read directory: {}", err);
+            eprintln!("Failed to read directory: {err}");
             0
         }
     }

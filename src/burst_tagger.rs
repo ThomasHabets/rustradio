@@ -121,7 +121,7 @@ mod tests {
         let want: Vec<_> = (0..100).map(|i| i as u32).collect();
         assert_eq!(sink.hook().data().samples(), want);
         tag_compare(
-            &sink.hook().data().tags(),
+            sink.hook().data().tags(),
             &[
                 Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
                 Tag::new(0, "VectorSource::first", TagValue::Bool(true)),

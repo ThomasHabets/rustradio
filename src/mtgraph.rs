@@ -161,7 +161,7 @@ impl crate::graph::GraphRunner for MTGraph {
         let names: Vec<String> = self
             .block_stats
             .keys()
-            .map(|(n, name)| format!("{}/{}", name, n))
+            .map(|(n, name)| format!("{name}/{n}"))
             .collect();
         let ml = names.iter().map(|b| b.len()).max().unwrap(); // unwrap: can only fail if block list is empty.
         let ml = std::cmp::max(ml, "Elapsed seconds".len());

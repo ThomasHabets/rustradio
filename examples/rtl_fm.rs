@@ -118,20 +118,18 @@ fn run_ui(
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => return Ok(()),
             }
         }
-        if !(paused && pause_msg) {
-            if last_update.elapsed() > update_rate {
-                // Clearing the screen manually creates blinking.
-                //terminal.clear()?;
+        if !(paused && pause_msg) && last_update.elapsed() > update_rate {
+            // Clearing the screen manually creates blinking.
+            //terminal.clear()?;
 
-                // TODO: why doesn't altscreen remove screen tearing?
-                let mut stdout = std::io::stdout();
-                crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-                terminal.draw(|frame| render(frame, &data, &data_spec, paused))?;
-                if paused {
-                    pause_msg = true;
-                }
-                last_update = std::time::Instant::now();
+            // TODO: why doesn't altscreen remove screen tearing?
+            let mut stdout = std::io::stdout();
+            crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
+            terminal.draw(|frame| render(frame, &data, &data_spec, paused))?;
+            if paused {
+                pause_msg = true;
             }
+            last_update = std::time::Instant::now();
         }
         if crossterm::event::poll(std::time::Duration::from_millis(50))? {
             let event = crossterm::event::read()?;
@@ -257,6 +255,8 @@ fn main() -> Result<()> {
             let result = run_ui(terminal, rx, rx_spec, opt.fps);
             ratatui::restore();
             result.unwrap();
+            // SAFETY:
+            // It's a self-kill. Perfectly safe, I assure you.
             unsafe {
                 libc::kill(pid as i32, libc::SIGINT);
             }
@@ -412,7 +412,7 @@ fn main() -> Result<()> {
     })
     .expect("failed to set Ctrl-C handler");
     eprintln!("Running loop");
-    g.run().map_err(Into::<rustradio::Error>::into)?;
+    g.run()?;
     ui_thread.join().expect("Failed to join UI thread");
     eprintln!("{}", g.generate_stats().unwrap());
     Ok(())

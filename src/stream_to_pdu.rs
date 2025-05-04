@@ -174,7 +174,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         assert!(matches![b.work()?, BlockRet::Again]);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
-        assert!(matches![out.pop(), None]);
+        assert!(out.pop().is_none());
         Ok(())
     }
 
@@ -213,7 +213,7 @@ mod tests {
             let (burst, tags) = out.pop().unwrap();
             assert_eq!(burst, want);
             assert_eq!(tags, &[]);
-            assert!(matches![out.pop(), None]);
+            assert!(out.pop().is_none());
         }
         Ok(())
     }
@@ -233,7 +233,7 @@ mod tests {
             let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, tail);
             assert!(matches![src.work()?, BlockRet::EOF]);
             assert!(matches![b.work()?, BlockRet::Again]);
-            assert!(matches![out.pop(), None]);
+            assert!(out.pop().is_none());
         }
         Ok(())
     }
@@ -254,7 +254,7 @@ mod tests {
         let (burst, tags) = out.pop().unwrap();
         assert_eq!(burst, &[4, 5, 6, 7]);
         assert_eq!(tags, &[]);
-        assert!(matches![out.pop(), None]);
+        assert!(out.pop().is_none());
         Ok(())
     }
 }

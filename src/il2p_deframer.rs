@@ -377,7 +377,7 @@ mod tests {
         let _ = o.pop().expect("expected to get a parsed packet");
         // TODO: confirm parsing.
         if let Some(res) = o.pop() {
-            panic!("got a second packet: {:?}", res);
+            panic!("got a second packet: {res:?}");
         }
         Ok(())
     }

@@ -78,6 +78,8 @@ struct CreateOpts {
 
     raw: std::path::PathBuf,
 }
+
+#[allow(clippy::large_enum_variant)]
 #[derive(clap::Subcommand)]
 enum Commands {
     /// Create a metadata file for a raw data file, making a Recording.
@@ -95,14 +97,14 @@ struct CheckOpts {
 fn validate_iso8601(s: &str) -> Result<String, String> {
     match chrono::DateTime::parse_from_rfc3339(s) {
         Ok(_) => Ok(s.to_string()),
-        Err(e) => Err(format!("Invalid ISO8601 datetime: {}", e)),
+        Err(e) => Err(format!("Invalid ISO8601 datetime: {e}")),
     }
 }
 
 fn parse_float_with_underscores(s: &str) -> Result<f64, String> {
     use std::str::FromStr;
     let cleaned = s.replace('_', "");
-    f64::from_str(&cleaned).map_err(|e| format!("Invalid float: {}", e))
+    f64::from_str(&cleaned).map_err(|e| format!("Invalid float: {e}"))
 }
 
 fn main() -> Result<()> {
@@ -167,7 +169,7 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
     sigmf.global.core_description = opt.description;
     let hash = match opt.sha512 {
         Some(ref x) => {
-            if x.len() != 128 && x.len() != 0 {
+            if x.len() != 128 && !x.is_empty() {
                 return Err(Error::msg(
                     "SHA512 string needs to be empty or 128 hex characters (64 bytes)",
                 )
@@ -199,7 +201,7 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
                 .collect()
         }
     };
-    if hash != "" {
+    if !hash.is_empty() {
         sigmf.global.core_sha512 = Some(hash);
     }
     let mut cap = Capture::new(0);
@@ -218,7 +220,7 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
     }
 
     if opt.print {
-        println!("{}", ser);
+        println!("{ser}");
         return Ok(());
     }
     {

@@ -302,7 +302,7 @@ mod tests {
             .map(|ch| match ch {
                 '1' => 1,
                 '0' => 0,
-                _ => panic!("invalid bitstring: {}", s),
+                _ => panic!("invalid bitstring: {s}"),
             })
             .collect::<Vec<_>>()
     }
@@ -385,7 +385,7 @@ mod tests {
             b.set_keep_checksum(true);
             b.work()?;
             let res = o.pop();
-            assert!(res.is_none(), "expected to discard short packet: {:?}", res);
+            assert!(res.is_none(), "expected to discard short packet: {res:?}");
         }
         Ok(())
     }
@@ -398,7 +398,7 @@ mod tests {
             b.set_keep_checksum(true);
             b.work()?;
             let res = o.pop();
-            assert!(res.is_none(), "expected to discard long packet: {:?}", res);
+            assert!(res.is_none(), "expected to discard long packet: {res:?}");
         }
         Ok(())
     }

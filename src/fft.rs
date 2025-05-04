@@ -47,9 +47,9 @@ mod tests {
         let fft = planner.plan_fft_forward(size);
         let (root, r) = new_nocopy_stream();
         let (mut f, out) = Fft::new(r, fft);
-        assert!(matches![out.pop(), None]);
+        assert!(out.pop().is_none());
         assert!(matches![f.work()?, BlockRet::WaitForStream(_, 1)]);
-        assert!(matches![out.pop(), None]);
+        assert!(out.pop().is_none());
         root.push(vec![Complex::default(); size], &[]);
         assert!(matches![f.work()?, BlockRet::WaitForStream(_, 1)]);
         // Get the results.
@@ -59,7 +59,7 @@ mod tests {
         assert_eq!(tags, &[]);
 
         // Should be empty now.
-        assert!(matches![out.pop(), None]);
+        assert!(out.pop().is_none());
         Ok(())
     }
 }

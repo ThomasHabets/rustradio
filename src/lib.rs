@@ -455,7 +455,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
     if errs.is_empty() {
         Ok(assumptions)
     } else {
-        Err(Error::msg(format!("{:?}", errs)))
+        Err(Error::msg(format!("{errs:?}")))
     }
 }
 
@@ -607,17 +607,14 @@ pub mod tests {
         assert_eq!(
             left.len(),
             right.len(),
-            "\nleft: {:?}\nright: {:?}",
-            left,
-            right
+            "\nleft: {left:?}\nright: {right:?}",
         );
         for i in 0..left.len() {
             let dist = (left[i] - right[i]).norm_sqr().sqrt();
             if dist > 0.001 {
                 assert_eq!(
                     left[i], right[i],
-                    "\nElement {i}:\nleft: {:?}\nright: {:?}",
-                    left, right
+                    "\nElement {i}:\nleft: {left:?}\nright: {right:?}",
                 );
             }
         }
@@ -630,14 +627,12 @@ pub mod tests {
         assert_eq!(
             left.len(),
             right.len(),
-            "\nleft: {:?}\nright: {:?}",
-            left,
-            right
+            "\nleft: {left:?}\nright: {right:?}",
         );
         for i in 0..left.len() {
             let dist = (left[i] - right[i]).sqrt();
             if dist > 0.001 {
-                assert_eq!(left[i], right[i], "\nleft: {:?}\nright: {:?}", left, right);
+                assert_eq!(left[i], right[i], "\nleft: {left:?}\nright: {right:?}");
             }
         }
     }

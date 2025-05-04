@@ -427,7 +427,7 @@ mod tests {
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
             let (res, tags) = os.read_buf()?;
             let max = 2 * input.len() / deci;
-            if res.len() > 0 {
+            if !res.is_empty() {
                 assert_eq!(
                     &tags,
                     &[
@@ -507,7 +507,7 @@ mod tests {
 
             eprintln!("Testing identity with decimation {deci}");
             let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
-            if deci <= input.len() - 1 {
+            if deci < input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);

@@ -24,10 +24,14 @@ fn sum_vec_avx_fma(left: &[Complex], right: &[Complex]) -> Vec<Complex> {
     use std::mem::MaybeUninit;
     let len = left.len();
     let mut ret: Vec<MaybeUninit<Complex>> = Vec::with_capacity(len);
+    // SAFETY:
+    // We're filling all of this.
     let ret = unsafe {
         ret.set_len(left.len());
         std::mem::transmute::<Vec<MaybeUninit<Complex>>, Vec<Complex>>(ret)
     };
+    // SAFETY:
+    // SIMD stuff, always unsafe in theory.
     (0..len).step_by(4).for_each(|i| unsafe {
         // All instrucions are AVX except fmsub/fmadd.
         use core::arch::x86_64::*;
