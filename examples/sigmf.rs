@@ -166,7 +166,18 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
     sigmf.global.core_recorder = opt.recorder;
     sigmf.global.core_description = opt.description;
     let hash = match opt.sha512 {
-        Some(ref x) => x.to_string(),
+        Some(ref x) => {
+            if x.len() != 128 && x.len() != 0 {
+                return Err(Error::msg(
+                    "SHA512 string needs to be empty or 128 hex characters (64 bytes)",
+                )
+                .into());
+            }
+            if !x.chars().all(|ch| ch.is_ascii_hexdigit()) {
+                return Err(Error::msg("SHA512 string needs to be hex bytes").into());
+            }
+            x.to_string().to_lowercase()
+        }
         None => {
             use sha2::Digest;
             use std::io::Read;
