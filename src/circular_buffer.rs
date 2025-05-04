@@ -41,7 +41,7 @@ impl Map {
         // * Replace this function with a Map `.split()`, so that the fixed
         //   pointer assumption is restricted to Map.
         let buf = unsafe { libc::mmap(ptr, len as size_t, PROT_READ | PROT_WRITE, flags, fd, 0) };
-        if buf == MAP_FAILED {
+        if std::ptr::eq(buf, MAP_FAILED) {
             let e = errno::errno();
             return Err(Error::msg(format!(
                 "mmap(){}: {e}",
@@ -53,7 +53,7 @@ impl Map {
             )));
         }
         assert!(!buf.is_null());
-        if !ptr.is_null() && ptr != buf {
+        if !ptr.is_null() && !std::ptr::eq(ptr, buf) {
             // SAFETY: we literally just allocated using this pointer and
             // length, so this has to be fine.
             let rc = unsafe { libc::munmap(buf, len as size_t) };

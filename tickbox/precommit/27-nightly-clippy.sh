@@ -5,6 +5,6 @@ for dir in . rustradio_macros; do
         (
                 export CARGO_TARGET_DIR="$TICKBOX_CWD/${dir}/target/${TICKBOX_BRANCH}.clippy"
                 cd "$dir"
-                cargo clippy -- -D warnings
+                cargo +nightly clippy -- -D warnings
         )
 done
