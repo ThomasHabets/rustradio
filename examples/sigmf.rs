@@ -63,8 +63,8 @@ struct CreateOpts {
     #[arg(long)]
     description: Option<String>,
 
-    /// SHA512 of the data.
-    // TODO: verify format. And allow calculating it.
+    /// SHA512 of the data. If empty, it'll be calculated.
+    // TODO: verify format.
     #[arg(long)]
     sha512: Option<String>,
 
@@ -165,7 +165,32 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
     sigmf.global.core_license = opt.license;
     sigmf.global.core_recorder = opt.recorder;
     sigmf.global.core_description = opt.description;
-    sigmf.global.core_sha512 = opt.sha512;
+    let hash = match opt.sha512 {
+        Some(ref x) => x.to_string(),
+        None => {
+            use sha2::Digest;
+            use std::io::Read;
+            let file = std::fs::File::open(&opt.raw).map_err(|e| Error::file_io(e, &opt.raw))?;
+            let mut reader = std::io::BufReader::new(file);
+            let mut hasher = sha2::Sha512::new();
+            let mut buffer = [0u8; 8192];
+            loop {
+                let count = reader.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..count]);
+            }
+            hasher
+                .finalize()
+                .iter()
+                .map(|v| format!("{v:02x}"))
+                .collect()
+        }
+    };
+    if hash != "" {
+        sigmf.global.core_sha512 = Some(hash);
+    }
     let mut cap = Capture::new(0);
     cap.core_frequency = opt.frequency;
     cap.core_datetime = opt.datetime;
