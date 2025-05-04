@@ -26,7 +26,7 @@ struct Opt {
 #[derive(clap::Args)]
 struct CreateOpts {
     /// Sample rate.
-    #[arg(long)]
+    #[arg(long, value_parser = parse_float_with_underscores)]
     sample_rate: f64,
 
     /// Data type.
@@ -40,7 +40,7 @@ struct CreateOpts {
     datetime: Option<String>,
 
     /// Frequency of capture.
-    #[arg(long)]
+    #[arg(long, value_parser = parse_float_with_underscores)]
     frequency: Option<f64>,
 
     /// Author.
@@ -97,6 +97,12 @@ fn validate_iso8601(s: &str) -> Result<String, String> {
         Ok(_) => Ok(s.to_string()),
         Err(e) => Err(format!("Invalid ISO8601 datetime: {}", e)),
     }
+}
+
+fn parse_float_with_underscores(s: &str) -> Result<f64, String> {
+    use std::str::FromStr;
+    let cleaned = s.replace('_', "");
+    f64::from_str(&cleaned).map_err(|e| format!("Invalid float: {}", e))
 }
 
 fn main() -> Result<()> {
