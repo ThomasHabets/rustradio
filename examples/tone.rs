@@ -65,7 +65,7 @@ fn main() -> Result<()> {
         ];
         add_block![
             g,
-            MapBuilder::new(prev, |x| x.re)
+            Map::builder(prev, |x| x.re)
                 .name("ComplexToReal".to_owned())
                 .build()
         ]

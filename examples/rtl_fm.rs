@@ -309,7 +309,7 @@ fn main() -> Result<()> {
         let prev = blehbleh![g, FftStream::new(spec_tee, SPECTRUM_SIZE)];
         let prev = blehbleh![
             g,
-            MapBuilder::new(prev, move |x| {
+            Map::builder(prev, move |x| {
                 if opt.tui {
                     if let Err(e) = ui_tx_spec.send(x.norm()) {
                         trace!("Failed to write data to UI (probably exiting): {e}");
@@ -364,7 +364,7 @@ fn main() -> Result<()> {
     // Send data to audio UI.
     let prev = blehbleh![
         g,
-        MapBuilder::new(prev, move |x| {
+        Map::builder(prev, move |x| {
             if opt.tui {
                 if let Err(e) = ui_tx.send(x) {
                     trace!("Failed to write data to UI (probably exiting): {e}");

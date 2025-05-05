@@ -7,9 +7,9 @@ use crate::{Complex, Float};
 ///
 /// ```
 /// use rustradio::blocks::ConstantSource;
-/// use rustradio::convert::MapBuilder;
+/// use rustradio::convert::Map;
 /// let (src_block, src) = ConstantSource::new(13);
-/// let (b, out) = MapBuilder::new(src, move |x| x + 10)
+/// let (b, out) = Map::builder(src, move |x| x + 10)
 ///   .name("mymap")
 ///   .build();
 /// ```
@@ -28,14 +28,6 @@ where
     Out: Copy,
     F: Fn(In) -> Out,
 {
-    /// Create new MapBuilder.
-    pub fn new(src: ReadStream<In>, map: F) -> Self {
-        Self {
-            src,
-            map,
-            name: "Map".into(),
-        }
-    }
     /// Set name.
     pub fn name<T: Into<String>>(mut self, name: T) -> MapBuilder<In, Out, F> {
         self.name = name.into();
@@ -72,6 +64,14 @@ where
     Out: Copy,
     F: Fn(In) -> Out,
 {
+    /// Create new MapBuilder.
+    pub fn builder(src: ReadStream<In>, map: F) -> MapBuilder<In, Out, F> {
+        MapBuilder {
+            src,
+            map,
+            name: "Map".into(),
+        }
+    }
     /// Create new Map block.
     ///
     /// A Map block transforms one sample at a time, from input to output.

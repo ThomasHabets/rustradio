@@ -12,7 +12,7 @@ pub fn add_const<T>(
 where
     T: Copy + std::ops::Add<Output = T>,
 {
-    crate::convert::MapBuilder::new(src, move |x| x + val)
+    crate::convert::Map::builder(src, move |x| x + val)
         .name("add_const")
         .build()
 }
