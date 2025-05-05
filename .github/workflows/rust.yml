@@ -26,16 +26,6 @@ jobs:
       run:  sudo apt-get update
     - name: Dependencies
       run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev
-    - name: Build all features
-      run: cargo build --features rtlsdr,soapysdr,fast-math,audio --verbose
-    - name: Build examples, all features
-      run: cargo build --features rtlsdr,soapysdr,fast-math,audio --verbose --examples
-    - name: Run tests
-      run: cargo test --verbose
-    - name: Run tests all features
-      run: cargo test --features rtlsdr,soapysdr,fast-math,audio --verbose
-    - name: Run tests all features on nightly
-      run: cargo +nightly test --all-features --verbose
     - name: Install tickbox
       run: cargo install tickbox
     - name: Run tickbox
