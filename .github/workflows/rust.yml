@@ -37,6 +37,6 @@ jobs:
     - name: Install tickbox
       run: cargo install tickbox
     - name: Run tickbox
-      run: tickbox --dir tickbox/precommit --disable-tui
+      run: NODIFF=true tickbox --dir tickbox/precommit --disable-tui
 #    - name: Check semver
 #      uses: obi1kenobi/cargo-semver-checks-action@v2
