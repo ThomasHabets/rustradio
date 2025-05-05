@@ -165,11 +165,11 @@ where
 mod tests {
     use super::*;
     use crate::Complex;
-    use crate::blocks::VectorSourceBuilder;
+    use crate::blocks::VectorSource;
 
     #[test]
     fn no_pdu() -> Result<()> {
-        let (mut src, src_out) = VectorSourceBuilder::new(vec![Complex::default(); 100]).build()?;
+        let (mut src, src_out) = VectorSource::builder(vec![Complex::default(); 100]).build()?;
         let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, 0);
         assert!(matches![src.work()?, BlockRet::EOF]);
         assert!(matches![b.work()?, BlockRet::Again]);
@@ -198,14 +198,13 @@ mod tests {
             (7, 9, 1, vec![8, 9, 10]),
         ] {
             eprintln!("Testing with end={end}, tail={tail}, want={want:?}");
-            let (mut src, src_out) =
-                VectorSourceBuilder::new(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-                    .tags(&[
-                        Tag::new(start, "burst", TagValue::Bool(true)),
-                        Tag::new(4, "test", TagValue::Bool(true)),
-                        Tag::new(end, "burst", TagValue::Bool(false)),
-                    ])
-                    .build()?;
+            let (mut src, src_out) = VectorSource::builder(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+                .tags(&[
+                    Tag::new(start, "burst", TagValue::Bool(true)),
+                    Tag::new(4, "test", TagValue::Bool(true)),
+                    Tag::new(end, "burst", TagValue::Bool(false)),
+                ])
+                .build()?;
             let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, tail);
             assert!(matches![src.work()?, BlockRet::EOF]);
             assert!(matches![b.work()?, BlockRet::Again]);
@@ -222,14 +221,13 @@ mod tests {
     fn ended_too_soon() -> Result<()> {
         for (end, tail) in [(7, 4), (8, 3), (9, 2)] {
             eprintln!("Testing with end={end}, tail={tail}");
-            let (mut src, src_out) =
-                VectorSourceBuilder::new(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-                    .tags(&[
-                        Tag::new(7, "burst", TagValue::Bool(true)),
-                        Tag::new(4, "test", TagValue::Bool(true)),
-                        Tag::new(end, "burst", TagValue::Bool(false)),
-                    ])
-                    .build()?;
+            let (mut src, src_out) = VectorSource::builder(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+                .tags(&[
+                    Tag::new(7, "burst", TagValue::Bool(true)),
+                    Tag::new(4, "test", TagValue::Bool(true)),
+                    Tag::new(end, "burst", TagValue::Bool(false)),
+                ])
+                .build()?;
             let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, tail);
             assert!(matches![src.work()?, BlockRet::EOF]);
             assert!(matches![b.work()?, BlockRet::Again]);
@@ -240,7 +238,7 @@ mod tests {
 
     #[test]
     fn mid_pdu() -> Result<()> {
-        let (mut src, src_out) = VectorSourceBuilder::new(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        let (mut src, src_out) = VectorSource::builder(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
             .tags(&[
                 Tag::new(3, "burst", TagValue::Bool(true)),
                 Tag::new(4, "test", TagValue::Bool(true)),

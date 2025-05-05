@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use rustradio::Complex;
-use rustradio::blocks::{AddConst, DebugSink, PduWriter, StreamToPdu, VectorSourceBuilder};
+use rustradio::blocks::{AddConst, DebugSink, PduWriter, StreamToPdu, VectorSource};
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 
@@ -16,7 +16,7 @@ struct Opt {
 fn simple_copy() -> Result<()> {
     let mut g = Graph::new();
 
-    let (src, src_out) = VectorSourceBuilder::new(vec![
+    let (src, src_out) = VectorSource::builder(vec![
         Complex::new(10.0, 0.0),
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),
@@ -38,7 +38,7 @@ fn simple_copy() -> Result<()> {
 fn simple_noncopy() -> Result<()> {
     let mut g = Graph::new();
 
-    let (src, src_out) = VectorSourceBuilder::new(vec![
+    let (src, src_out) = VectorSource::builder(vec![
         Complex::new(10.0, 0.0),
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),

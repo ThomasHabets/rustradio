@@ -12,11 +12,6 @@ pub struct VectorSourceBuilder<T: Copy> {
 }
 
 impl<T: Copy> VectorSourceBuilder<T> {
-    /// New VectorSource builder.
-    pub fn new(data: Vec<T>) -> Self {
-        let (block, out) = VectorSource::new(data);
-        Self { block, out }
-    }
     /// Set a finite repeat count.
     pub fn repeat(mut self, r: Repeat) -> VectorSourceBuilder<T> {
         self.block.set_repeat(r);
@@ -58,6 +53,12 @@ where
 }
 
 impl<T: Copy> VectorSource<T> {
+    /// New VectorSource builder.
+    pub fn builder(data: Vec<T>) -> VectorSourceBuilder<T> {
+        let (block, out) = VectorSource::new(data);
+        VectorSourceBuilder { block, out }
+    }
+
     /// Create new Vector Source block.
     ///
     /// Optionally the data can repeat.
@@ -163,7 +164,7 @@ mod tests {
 
     #[test]
     fn repeat0() -> Result<()> {
-        let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
+        let (mut src, os) = VectorSource::builder(vec![1u8, 2, 3])
             .repeat(Repeat::finite(0))
             .build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
@@ -174,7 +175,7 @@ mod tests {
 
     #[test]
     fn repeat1() -> Result<()> {
-        let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
+        let (mut src, os) = VectorSource::builder(vec![1u8, 2, 3])
             .repeat(Repeat::finite(1))
             .build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
@@ -185,7 +186,7 @@ mod tests {
 
     #[test]
     fn repeat2() -> Result<()> {
-        let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
+        let (mut src, os) = VectorSource::builder(vec![1u8, 2, 3])
             .repeat(Repeat::finite(2))
             .build()?;
         assert!(matches![src.work()?, BlockRet::Again]);
@@ -207,7 +208,7 @@ mod tests {
 
     #[test]
     fn repeat_infinite() -> Result<()> {
-        let (mut src, os) = VectorSourceBuilder::new(vec![1u8, 2, 3])
+        let (mut src, os) = VectorSource::builder(vec![1u8, 2, 3])
             .repeat(Repeat::infinite())
             .build()?;
         for _ in 0..10 {
