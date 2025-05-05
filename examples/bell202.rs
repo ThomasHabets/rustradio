@@ -37,7 +37,7 @@ pub fn main() -> Result<()> {
     {
         let prev = add_block![g, ConstantSource::new(Complex::new(0.0, 0.0))];
         g.add(Box::new(
-            SoapySdrSinkBuilder::new(opt.driver.clone(), 100000000.0, 300000.0).build(prev)?,
+            SoapySdrSink::builder(opt.driver.clone(), 100000000.0, 300000.0).build(prev)?,
         ));
     }
 

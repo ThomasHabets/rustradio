@@ -51,7 +51,7 @@ pub use crate::zero_crossing::ZeroCrossing;
 pub use crate::rtlsdr_source::RtlSdrSource;
 
 #[cfg(feature = "soapysdr")]
-pub use crate::soapysdr_sink::{SoapySdrSink, SoapySdrSinkBuilder};
+pub use crate::soapysdr_sink::SoapySdrSink;
 #[cfg(feature = "soapysdr")]
 pub use crate::soapysdr_source::{SoapySdrSource, SoapySdrSourceBuilder};
 

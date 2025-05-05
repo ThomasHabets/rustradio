@@ -26,15 +26,6 @@ pub struct SoapySdrSinkBuilder {
 }
 
 impl SoapySdrSinkBuilder {
-    /// Create new builder.
-    pub fn new(dev: String, freq: f64, samp_rate: f64) -> Self {
-        Self {
-            dev,
-            freq,
-            samp_rate,
-            ..Default::default()
-        }
-    }
     /// Build block.
     pub fn build(self, src: ReadStream<Complex>) -> Result<SoapySdrSink> {
         let dev = soapysdr::Device::new(&*self.dev)?;
@@ -94,6 +85,18 @@ pub struct SoapySdrSink {
     #[rustradio(in)]
     src: ReadStream<Complex>,
     stream: soapysdr::TxStream<Complex>,
+}
+
+impl SoapySdrSink {
+    /// Create new builder.
+    pub fn builder(dev: String, freq: f64, samp_rate: f64) -> SoapySdrSinkBuilder {
+        SoapySdrSinkBuilder {
+            dev,
+            freq,
+            samp_rate,
+            ..Default::default()
+        }
+    }
 }
 
 impl Block for SoapySdrSink {
