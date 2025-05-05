@@ -22,15 +22,6 @@ pub struct SoapySdrSourceBuilder {
 }
 
 impl SoapySdrSourceBuilder {
-    /// Create new builder.
-    pub fn new(dev: String, freq: f64, samp_rate: f64) -> Self {
-        Self {
-            dev,
-            freq,
-            samp_rate,
-            ..Default::default()
-        }
-    }
     /// Set channel number.
     pub fn channel(mut self, channel: usize) -> Self {
         self.channel = channel;
@@ -100,6 +91,18 @@ pub struct SoapySdrSource {
     stream: soapysdr::RxStream<Complex>,
     #[rustradio(out)]
     dst: WriteStream<Complex>,
+}
+
+impl SoapySdrSource {
+    /// Create new SoapySdrSource builder.
+    pub fn builder(dev: String, freq: f64, samp_rate: f64) -> SoapySdrSourceBuilder {
+        SoapySdrSourceBuilder {
+            dev,
+            freq,
+            samp_rate,
+            ..Default::default()
+        }
+    }
 }
 
 fn ai_string(ai: &soapysdr::ArgInfo) -> String {

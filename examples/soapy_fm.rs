@@ -63,7 +63,7 @@ mod internal {
 
         let prev = blehbleh![
             g,
-            SoapySdrSourceBuilder::new(opt.driver.clone(), opt.freq as f64, samp_rate as f64)
+            SoapySdrSource::builder(opt.driver.clone(), opt.freq as f64, samp_rate as f64)
                 .igain(opt.gain as f64)
                 .build()?
         ];

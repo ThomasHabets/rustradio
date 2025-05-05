@@ -45,7 +45,7 @@ pub fn main() -> Result<()> {
     if false {
         let prev = add_block![
             g,
-            SoapySdrSourceBuilder::new(opt.driver, 10000000.0, 300000.0).build()?
+            SoapySdrSource::builder(opt.driver, 10000000.0, 300000.0).build()?
         ];
         g.add(Box::new(NullSink::new(prev)));
     }

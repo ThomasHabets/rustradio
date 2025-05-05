@@ -53,7 +53,7 @@ pub use crate::rtlsdr_source::RtlSdrSource;
 #[cfg(feature = "soapysdr")]
 pub use crate::soapysdr_sink::SoapySdrSink;
 #[cfg(feature = "soapysdr")]
-pub use crate::soapysdr_source::{SoapySdrSource, SoapySdrSourceBuilder};
+pub use crate::soapysdr_source::SoapySdrSource;
 
 #[cfg(feature = "audio")]
 pub use crate::audio_sink::AudioSink;
