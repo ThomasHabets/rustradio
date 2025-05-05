@@ -81,12 +81,6 @@ pub struct WpcrBuilder {
 }
 
 impl WpcrBuilder {
-    /// Create new WpcrBuilder
-    pub fn new(src: NCReadStream<Vec<Float>>) -> Self {
-        let (wpcr, out) = Wpcr::new(src);
-        Self { wpcr, out }
-    }
-
     /// Set sample rate. Used to tag with frequency.
     pub fn samp_rate(mut self, s: Float) -> WpcrBuilder {
         self.wpcr.set_samp_rate(Some(s));
@@ -112,6 +106,12 @@ pub struct Wpcr {
 }
 
 impl Wpcr {
+    /// Create new WpcrBuilder.
+    pub fn builder(src: NCReadStream<Vec<Float>>) -> WpcrBuilder {
+        let (wpcr, out) = Wpcr::new(src);
+        WpcrBuilder { wpcr, out }
+    }
+
     /// Set sample rate. Only used for tagging purposes
     pub fn set_samp_rate(&mut self, s: Option<Float>) {
         self.samp_rate = s;

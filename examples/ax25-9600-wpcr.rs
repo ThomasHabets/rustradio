@@ -136,7 +136,7 @@ fn main() -> Result<()> {
     let prev = add_block![g, Midpointer::new(prev)];
 
     // Symbol sync.
-    let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(samp_rate).build()];
+    let prev = add_block![g, Wpcr::builder(prev).samp_rate(samp_rate).build()];
 
     // Turn Vec<Float> into Float.
     let prev = add_block![g, VecToStream::new(prev)];

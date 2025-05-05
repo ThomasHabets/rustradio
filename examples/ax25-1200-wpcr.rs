@@ -132,7 +132,7 @@ fn main() -> Result<()> {
 
     // Symbol sync.
     let prev = add_block![g, Midpointer::new(prev)];
-    let prev = add_block![g, WpcrBuilder::new(prev).samp_rate(opt.sample_rate).build()];
+    let prev = add_block![g, Wpcr::builder(prev).samp_rate(opt.sample_rate).build()];
     let prev = add_block![g, VecToStream::new(prev)];
     let prev = add_block![g, BinarySlicer::new(prev)];
 
