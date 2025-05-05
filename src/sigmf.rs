@@ -176,6 +176,9 @@ pub struct SigMF {
 }
 
 impl SigMF {
+    /// Create new SigMF object from a data type.
+    ///
+    /// TODO: Should probably not be done from outside the crate.
     pub fn new(typ: String) -> Self {
         Self {
             global: Global {
@@ -230,16 +233,6 @@ pub struct SigMFSourceBuilder<T: Copy + Type> {
 }
 
 impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
-    /// Create new SigMF source builder.
-    pub fn new(filename: std::path::PathBuf) -> Self {
-        Self {
-            filename,
-            ignore_type_error: false,
-            repeat: Repeat::finite(1),
-            sample_rate: None,
-            dummy: std::marker::PhantomData,
-        }
-    }
     /// Force a certain sample rate.
     pub fn sample_rate(mut self, rate: f64) -> Self {
         self.sample_rate = Some(rate);
@@ -335,6 +328,20 @@ fn base_append<P: AsRef<std::path::Path>>(path: P, s: &str) -> std::path::PathBu
 }
 
 impl<T: Default + Copy + Type> SigMFSource<T> {
+    /// Create new SigMF source builder.
+    ///
+    /// If the exact file name exists, then treat it as an Archive.
+    /// If it does not, fall back to checking for separate Recording files.
+    pub fn builder(filename: std::path::PathBuf) -> SigMFSourceBuilder<T> {
+        SigMFSourceBuilder {
+            filename,
+            ignore_type_error: false,
+            repeat: Repeat::finite(1),
+            sample_rate: None,
+            dummy: std::marker::PhantomData,
+        }
+    }
+
     /// Create a new SigMF source block.
     ///
     /// If the exact file name exists, then treat it as an Archive.
@@ -349,6 +356,7 @@ impl<T: Default + Copy + Type> SigMFSource<T> {
         Self::new2(path, samp_rate, false)
     }
 
+    /// Internal creator used by Builder.
     fn new2<P: AsRef<std::path::Path>>(
         path: P,
         samp_rate: Option<f64>,

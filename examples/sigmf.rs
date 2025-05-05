@@ -145,7 +145,7 @@ fn cmd_check(opt: CheckOpts) -> Result<()> {
     use rustradio::blocks::*;
     use rustradio::graph::GraphRunner;
     let mut g = rustradio::mtgraph::MTGraph::new();
-    let src = SigMFSourceBuilder::<u8>::new(opt.archive)
+    let src = SigMFSource::<u8>::builder(opt.archive)
         .ignore_type_error()
         .build()?;
     let Some(ref in_meta) = src.0.meta().global.core_sha512 else {

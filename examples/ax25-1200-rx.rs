@@ -113,7 +113,7 @@ fn get_complex_input(
     opt: &Opt,
 ) -> Result<(ReadStream<Complex>, f32)> {
     if let Some(ref read) = opt.read {
-        let mut b = SigMFSourceBuilder::new(read.clone());
+        let mut b = SigMFSource::builder(read.clone());
         if let Some(s) = opt.samp_rate {
             b = b.sample_rate(s as f64);
         }
