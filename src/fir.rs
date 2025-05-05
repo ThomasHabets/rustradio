@@ -164,13 +164,6 @@ impl<T> FirFilterBuilder<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    /// Create new FirFilterBuilder, with the supplied taps.
-    pub fn new(taps: &[T]) -> Self {
-        Self {
-            taps: taps.to_vec(),
-            deci: 1,
-        }
-    }
     /// Set the decimation to the given value.
     ///
     /// The default is 1, meaning no decimation.
@@ -204,6 +197,13 @@ impl<T: Copy> FirFilter<T>
 where
     T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
+    /// Create new FirFilterBuilder, with the supplied taps.
+    pub fn builder(taps: &[T]) -> FirFilterBuilder<T> {
+        FirFilterBuilder {
+            taps: taps.to_vec(),
+            deci: 1,
+        }
+    }
     /// Create Fir block given taps.
     pub fn new(src: ReadStream<T>, taps: &[T]) -> (Self, ReadStream<T>) {
         let (dst, dr) = crate::stream::new_stream();
@@ -420,7 +420,7 @@ mod tests {
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(&taps).deci(deci).build(src_out);
             if deci <= 2 * input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
@@ -469,7 +469,7 @@ mod tests {
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(&taps).deci(deci).build(src_out);
             if deci <= input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
@@ -506,7 +506,7 @@ mod tests {
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilterBuilder::new(&taps).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(&taps).deci(deci).build(src_out);
             if deci < input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
