@@ -16,6 +16,8 @@ jobs:
     - uses: actions/checkout@v3
     - name: Rustup
       run: rustup install nightly
+    - name: Rustup install nightly clippy
+      run: rustup component add --toolchain nightly clippy
     - name: Build
       run: cargo build --verbose
     - name: Build examples
