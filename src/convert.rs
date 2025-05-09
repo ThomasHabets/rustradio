@@ -75,3 +75,32 @@ impl FloatToComplex {
         Complex::new(re, im)
     }
 }
+
+/// Convert a complex stream to two float streams.
+///
+/// If only one of the two streams are needed, then it's better to use a [`Map`]
+/// block.
+///
+/// ```
+/// use rustradio::Complex;
+/// use rustradio::blocks::ConstantSource;
+/// use rustradio::blocks::ComplexToFloat;
+/// let (src_block, src) = ConstantSource::new(Complex::new(1.0, 2.0));
+/// let (b, out_re, out_im) = ComplexToFloat::new(src);
+/// ```
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, sync)]
+pub struct ComplexToFloat {
+    #[rustradio(in)]
+    src: ReadStream<Complex>,
+    #[rustradio(out)]
+    re: WriteStream<Float>,
+    #[rustradio(out)]
+    im: WriteStream<Float>,
+}
+
+impl ComplexToFloat {
+    fn process_sync(&self, c: Complex) -> (Float, Float) {
+        (c.re, c.im)
+    }
+}
