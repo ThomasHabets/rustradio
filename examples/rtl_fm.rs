@@ -309,7 +309,7 @@ fn main() -> Result<()> {
         let prev = blehbleh![g, FftStream::new(spec_tee, SPECTRUM_SIZE)];
         let prev = blehbleh![
             g,
-            Map::builder(prev, move |x| {
+            Map::new(prev, "to_ui_spectrum", move |x| {
                 if opt.tui {
                     if let Err(e) = ui_tx_spec.send(x.norm()) {
                         trace!("Failed to write data to UI (probably exiting): {e}");
@@ -317,8 +317,6 @@ fn main() -> Result<()> {
                 }
                 x
             })
-            .name("to_ui_spectrum".to_owned())
-            .build()
         ];
         g.add(Box::new(NullSink::new(prev)));
     }
@@ -364,7 +362,7 @@ fn main() -> Result<()> {
     // Send data to audio UI.
     let prev = blehbleh![
         g,
-        Map::builder(prev, move |x| {
+        Map::new(prev, "to_ui", move |x| {
             if opt.tui {
                 if let Err(e) = ui_tx.send(x) {
                     trace!("Failed to write data to UI (probably exiting): {e}");
@@ -372,8 +370,6 @@ fn main() -> Result<()> {
             }
             x
         })
-        .name("to_ui".to_owned())
-        .build()
     ];
 
     // Change volume.

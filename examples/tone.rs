@@ -63,12 +63,7 @@ fn main() -> Result<()> {
             g,
             SignalSourceComplex::new(opt.audio_rate as Float, opt.freq, opt.volume)
         ];
-        add_block![
-            g,
-            Map::builder(prev, |x| x.re)
-                .name("ComplexToReal".to_owned())
-                .build()
-        ]
+        add_block![g, Map::new(prev, "ComplexToReal", |x| x.re)]
     };
 
     g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));

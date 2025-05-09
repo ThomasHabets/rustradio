@@ -12,9 +12,7 @@ pub fn add_const<T>(
 where
     T: Copy + std::ops::Add<Output = T>,
 {
-    crate::convert::Map::builder(src, move |x| x + val)
-        .name("add_const")
-        .build()
+    crate::convert::Map::new(src, "add_const", move |x| x + val)
 }
 
 /// AddConst adds a constant value to every sample.

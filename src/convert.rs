@@ -1,55 +1,32 @@
-//! Blocks for converting from one type to another.
+//! Blocks for making simple synchronous conversions/mappings.
 
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 
-/// Builder for Map.
+/// Arbitrary mapping using a lambda.
+///
+/// A Map block transforms one sample at a time, from input to output. The input
+/// and output can be different types.
+///
+/// If there's more than one input or output stream, then you have to make a
+/// dedicated block, like [`FloatToComplex`].
 ///
 /// ```
+/// use rustradio::Complex;
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::convert::Map;
-/// let (src_block, src) = ConstantSource::new(13);
-/// let (b, out) = Map::builder(src, move |x| x + 10)
-///   .name("mymap")
-///   .build();
+/// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0));
+/// let (b, out) = Map::new(src, "mymap", move |x| x.re + 10.0);
 /// ```
-pub struct MapBuilder<In, Out, F>
-where
-    F: Fn(In) -> Out,
-{
-    map: F,
-    name: String,
-    src: ReadStream<In>,
-}
-
-impl<In, Out, F> MapBuilder<In, Out, F>
-where
-    In: Copy,
-    Out: Copy,
-    F: Fn(In) -> Out,
-{
-    /// Set name.
-    pub fn name<T: Into<String>>(mut self, name: T) -> MapBuilder<In, Out, F> {
-        self.name = name.into();
-        self
-    }
-    /// Build Map.
-    pub fn build(self) -> (Map<In, Out, F>, ReadStream<Out>) {
-        Map::new(self.name, self.src, self.map)
-    }
-}
-
-/// Arbitrary mapping.
-///
-/// Use [`MapBuilder`] to create a `Map` block.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, custom_name, sync)]
+#[rustradio(crate, custom_name, sync, new)]
 pub struct Map<In, Out, F>
 where
     In: Copy,
     Out: Copy,
     F: Fn(In) -> Out,
 {
+    #[rustradio(into)]
     name: String,
     map: F,
     #[rustradio(in)]
@@ -64,32 +41,6 @@ where
     Out: Copy,
     F: Fn(In) -> Out,
 {
-    /// Create new MapBuilder.
-    pub fn builder(src: ReadStream<In>, map: F) -> MapBuilder<In, Out, F> {
-        MapBuilder {
-            src,
-            map,
-            name: "Map".into(),
-        }
-    }
-    /// Create new Map block.
-    ///
-    /// A Map block transforms one sample at a time, from input to output.
-    ///
-    /// If there's more than one input or output stream, then you have to make a
-    /// dedicated block.
-    fn new(name: String, src: ReadStream<In>, map: F) -> (Self, ReadStream<Out>) {
-        let dst = crate::stream::new_stream();
-        (
-            Self {
-                name,
-                map,
-                src,
-                dst: dst.0,
-            },
-            dst.1,
-        )
-    }
     fn process_sync(&mut self, s: In) -> Out {
         (self.map)(s)
     }
