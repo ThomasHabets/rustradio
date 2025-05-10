@@ -10,14 +10,14 @@ use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos};
 // TODO: maybe merge with DebugSink using an enum?
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct DebugSinkNoCopy<T> {
+pub struct DebugSinkNoCopy<T: Send + Sync + 'static> {
     #[rustradio(in)]
     src: NCReadStream<T>,
 }
 
 impl<T> Block for DebugSinkNoCopy<T>
 where
-    T: std::fmt::Debug + Default,
+    T: std::fmt::Debug + Default + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (v, _tags) = match self.src.pop() {

@@ -58,7 +58,10 @@ where
     T: Sample
         + std::ops::Mul<Float, Output = T>
         + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>,
+        + std::ops::Add<T, Output = T>
+        + Send
+        + Sync
+        + 'static,
 {
     iir: SinglePoleIir<T>,
     #[rustradio(in)]
@@ -72,7 +75,10 @@ where
     T: Sample
         + std::ops::Mul<Float, Output = T>
         + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>,
+        + std::ops::Add<T, Output = T>
+        + Send
+        + Sync
+        + 'static,
 {
     /// Create new block.
     pub fn new(src: ReadStream<T>, alpha: Float) -> Option<(Self, ReadStream<T>)> {

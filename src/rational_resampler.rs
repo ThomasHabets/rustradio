@@ -22,7 +22,7 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
 /// set decimation to the current rate, and interpolation to the new rate.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct RationalResampler<T: Copy> {
+pub struct RationalResampler<T: Copy + Send + Sync + 'static> {
     deci: i64,
     interp: i64,
     counter: i64,
@@ -34,7 +34,7 @@ pub struct RationalResampler<T: Copy> {
     dst: WriteStream<T>,
 }
 
-impl<T: Copy> RationalResampler<T> {
+impl<T: Copy + Send + Sync + 'static> RationalResampler<T> {
     /// Create new RationalResampler block.
     ///
     /// A common pattern to convert between arbitrary sample rates X
@@ -61,7 +61,7 @@ impl<T: Copy> RationalResampler<T> {
     }
 }
 
-impl<T: Copy> Block for RationalResampler<T> {
+impl<T: Copy + Send + Sync + 'static> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet> {
         // TODO: retain tags.
         let (i, _tags) = self.src.read_buf()?;
