@@ -16,7 +16,13 @@ struct SinglePoleIir<Tout> {
 
 impl<Tout> SinglePoleIir<Tout>
 where
-    Tout: Copy + Default + std::ops::Mul<Float, Output = Tout> + std::ops::Add<Output = Tout>,
+    Tout: Copy
+        + Default
+        + std::ops::Mul<Float, Output = Tout>
+        + std::ops::Add<Output = Tout>
+        + Send
+        + Sync
+        + 'static,
 {
     fn new(alpha: Float) -> Option<Self> {
         let mut r = Self {
@@ -59,7 +65,10 @@ where
         + Default
         + std::ops::Mul<Float, Output = T>
         + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>,
+        + std::ops::Add<T, Output = T>
+        + Send
+        + Sync
+        + 'static,
 {
     iir: SinglePoleIir<T>,
     #[rustradio(in)]
@@ -74,7 +83,10 @@ where
         + Default
         + std::ops::Mul<Float, Output = T>
         + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>,
+        + std::ops::Add<T, Output = T>
+        + Send
+        + Sync
+        + 'static,
 {
     /// Create new block.
     pub fn new(src: ReadStream<T>, alpha: Float) -> Option<(Self, ReadStream<T>)> {

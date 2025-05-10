@@ -47,7 +47,7 @@ use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 /// * `tag`: Tag name to add.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync_tag)]
-pub struct BurstTagger<T: Copy> {
+pub struct BurstTagger<T: Copy + Send + Sync + 'static> {
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(in)]
@@ -64,7 +64,7 @@ pub struct BurstTagger<T: Copy> {
     last: bool,
 }
 
-impl<T: Copy> BurstTagger<T> {
+impl<T: Copy + Send + Sync + 'static> BurstTagger<T> {
     fn process_sync_tags<'a>(
         &mut self,
         s: T,

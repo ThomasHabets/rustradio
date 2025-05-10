@@ -6,7 +6,7 @@ use crate::stream::{ReadStream, WriteStream};
 #[rustradio(crate, new, sync)]
 pub struct Xor<T>
 where
-    T: Copy + std::ops::BitXor<Output = T>,
+    T: Copy + std::ops::BitXor<Output = T> + Send + Sync + 'static,
 {
     #[rustradio(in)]
     a: ReadStream<T>,
@@ -18,7 +18,7 @@ where
 
 impl<T> Xor<T>
 where
-    T: Copy + std::ops::BitXor<Output = T>,
+    T: Copy + std::ops::BitXor<Output = T> + Send + Sync + 'static,
 {
     fn process_sync(&self, a: T, b: T) -> T {
         a ^ b

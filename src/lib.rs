@@ -463,7 +463,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 }
 
 /// A trait all sample types must implement.
-pub trait Sample {
+pub trait Sample: Send + Sync {
     /// The type of the sample.
     type Type;
 

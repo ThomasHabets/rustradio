@@ -22,8 +22,8 @@ use crate::{Complex, Float};
 #[rustradio(crate, custom_name, sync, new)]
 pub struct Map<In, Out, F>
 where
-    In: Copy,
-    Out: Copy,
+    In: Copy + Send + Sync + 'static,
+    Out: Copy + Send + Sync + 'static,
     F: Fn(In) -> Out,
 {
     #[rustradio(into)]
@@ -37,8 +37,8 @@ where
 
 impl<In, Out, F> Map<In, Out, F>
 where
-    In: Copy,
-    Out: Copy,
+    In: Copy + Send + Sync + 'static,
+    Out: Copy + Send + Sync + 'static,
     F: Fn(In) -> Out,
 {
     fn process_sync(&mut self, s: In) -> Out {

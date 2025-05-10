@@ -10,14 +10,14 @@ use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos};
 // TODO: maybe merge with DebugSink using an enum?
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct DebugSinkNoCopy<T> {
+pub struct DebugSinkNoCopy<T: Send + Sync + 'static> {
     #[rustradio(in)]
     src: NCReadStream<T>,
 }
 
 impl<T> Block for DebugSinkNoCopy<T>
 where
-    T: std::fmt::Debug + Default,
+    T: std::fmt::Debug + Default + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (v, _tags) = match self.src.pop() {
@@ -46,7 +46,7 @@ where
 #[rustradio(crate, new)]
 pub struct DebugFilter<T>
 where
-    T: Copy,
+    T: Copy + Send + Sync + 'static,
 {
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -56,7 +56,7 @@ where
 
 impl<T> Block for DebugFilter<T>
 where
-    T: Copy + std::fmt::Debug,
+    T: Copy + std::fmt::Debug + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;
@@ -92,7 +92,7 @@ where
 #[rustradio(crate, new)]
 pub struct DebugSink<T>
 where
-    T: Copy,
+    T: Copy + Send + Sync + 'static,
 {
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -102,7 +102,7 @@ where
 
 impl<T> Block for DebugSink<T>
 where
-    T: Copy + std::fmt::Debug + Default,
+    T: Copy + std::fmt::Debug + Default + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;

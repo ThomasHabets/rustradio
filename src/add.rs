@@ -37,9 +37,9 @@ use crate::stream::{ReadStream, WriteStream};
 #[rustradio(crate, new, sync)]
 pub struct Add<Ta, Tb, Tout>
 where
-    Ta: Copy + std::ops::Add<Tb, Output = Tout>,
-    Tb: Copy,
-    Tout: Copy,
+    Ta: Copy + std::ops::Add<Tb, Output = Tout> + Sync + Send + 'static,
+    Tb: Copy + Sync + Send + 'static,
+    Tout: Copy + Sync + Send + 'static,
 {
     /// Hello world.
     #[rustradio(in)]
@@ -54,9 +54,9 @@ where
 
 impl<Ta, Tb, Tout> Add<Ta, Tb, Tout>
 where
-    Ta: Copy + std::ops::Add<Tb, Output = Tout>,
-    Tb: Copy,
-    Tout: Copy,
+    Ta: Copy + std::ops::Add<Tb, Output = Tout> + Sync + Send + 'static,
+    Tb: Copy + Sync + Send + 'static,
+    Tout: Copy + Sync + Send + 'static,
 {
     fn process_sync(&self, a: Ta, b: Tb) -> Tout {
         a + b

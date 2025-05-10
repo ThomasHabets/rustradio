@@ -7,7 +7,7 @@ use crate::stream::WriteStream;
 /// Generate the same value, forever.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct ConstantSource<T: Copy> {
+pub struct ConstantSource<T: Copy + Send + Sync + 'static> {
     #[rustradio(out)]
     dst: WriteStream<T>,
     val: T,
@@ -15,7 +15,7 @@ pub struct ConstantSource<T: Copy> {
 
 impl<T> Block for ConstantSource<T>
 where
-    T: Copy,
+    T: Copy + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;

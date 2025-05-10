@@ -10,7 +10,7 @@ pub fn add_const<T>(
     val: T,
 ) -> (crate::convert::Map<T, T, impl Fn(T) -> T>, ReadStream<T>)
 where
-    T: Copy + std::ops::Add<Output = T>,
+    T: Copy + std::ops::Add<Output = T> + Send + Sync,
 {
     crate::convert::Map::new(src, "add_const", move |x| x + val)
 }
@@ -42,7 +42,7 @@ where
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
-pub struct AddConst<T: Copy + std::ops::Add<Output = T>> {
+pub struct AddConst<T: Copy + std::ops::Add<Output = T> + Send + Sync + 'static> {
     val: T,
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -52,7 +52,7 @@ pub struct AddConst<T: Copy + std::ops::Add<Output = T>> {
 
 impl<T> AddConst<T>
 where
-    T: Copy + std::ops::Add<Output = T>,
+    T: Copy + std::ops::Add<Output = T> + Send + Sync + 'static,
 {
     fn process_sync(&self, a: T) -> T {
         a + self.val

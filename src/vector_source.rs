@@ -6,12 +6,12 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
 /// VectorSource builder.
-pub struct VectorSourceBuilder<T: Copy> {
+pub struct VectorSourceBuilder<T: Copy + Send + Sync + 'static> {
     block: VectorSource<T>,
     out: ReadStream<T>,
 }
 
-impl<T: Copy> VectorSourceBuilder<T> {
+impl<T: Copy + Send + Sync + 'static> VectorSourceBuilder<T> {
     /// Set a finite repeat count.
     pub fn repeat(mut self, r: Repeat) -> VectorSourceBuilder<T> {
         self.block.set_repeat(r);
@@ -42,7 +42,7 @@ impl<T: Copy> VectorSourceBuilder<T> {
 #[rustradio(crate)]
 pub struct VectorSource<T>
 where
-    T: Copy,
+    T: Copy + Send + Sync + 'static,
 {
     #[rustradio(out)]
     dst: WriteStream<T>,
@@ -52,7 +52,7 @@ where
     tags: Vec<Tag>,
 }
 
-impl<T: Copy> VectorSource<T> {
+impl<T: Copy + Send + Sync + 'static> VectorSource<T> {
     /// New VectorSource builder.
     pub fn builder(data: Vec<T>) -> VectorSourceBuilder<T> {
         let (block, out) = VectorSource::new(data);
@@ -84,7 +84,7 @@ impl<T: Copy> VectorSource<T> {
 
 impl<T> Block for VectorSource<T>
 where
-    T: Copy,
+    T: Copy + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         if self.data.is_empty() {

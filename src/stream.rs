@@ -3,9 +3,10 @@
 Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
 */
+use async_trait::async_trait;
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex};
 use std::pin::Pin;
+use std::sync::{Arc, Condvar, Mutex};
 
 use crate::circular_buffer;
 use crate::{Error, Float, Len, Result};
@@ -84,12 +85,13 @@ impl Tag {
 /// *    400KiB: 1.228s
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
-type AsyncWaitRet = Box<dyn Fn(usize) -> Pin<Box<dyn Future<Output = bool> + Send>>+ Sync>;
+type AsyncWaitRet = bool;
 
 /// Wait on a stream.
 ///
 /// For ReadStream, wait until there's enough to read.
 /// For WriteStream, wait until there's enough to write something.
+#[async_trait]
 pub trait StreamWait {
     /// Wait for "a while" or until `need` samples are available/space available.
     ///
@@ -102,8 +104,12 @@ pub trait StreamWait {
     fn closed(&self) -> bool;
 
     #[must_use]
-    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet;
+    //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet;
+    async fn wait_async<'a>(
+        self: Pin<&'a Self>,
+    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>>;
 }
+#[async_trait]
 impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     fn wait(&self, need: usize) -> bool {
         self.wait_for_read(need)
@@ -111,22 +117,31 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
-    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
-        Box::new(move |need| Box::pin({
-        let circ = self.circ.clone();
-            async move {
+    async fn wait_async<'a>(
+        self: Pin<&'a Self>,
+    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
+        //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet {
+        //Box::pin(async move |need| Box::pin({
+        Box::pin(async move {
+            let need = 1; // TODO: take arg.
+            let circ = self.circ.clone();
             circ.wait_for_read_async(need).await < need
-            }}))
+        })
     }
 }
-impl<T: Copy> StreamWait for WriteStream<T> {
+
+#[async_trait]
+impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     fn wait(&self, need: usize) -> bool {
         self.wait_for_write(need)
     }
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
-    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
+    async fn wait_async<'a>(
+        self: Pin<&'a Self>,
+    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
+        //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
 }
@@ -139,7 +154,7 @@ impl<T: Copy> StreamWait for WriteStream<T> {
 pub struct ReadStream<T> {
     circ: Arc<circular_buffer::Buffer<T>>,
 }
-unsafe impl <T> Sync for ReadStream<T> {}
+unsafe impl<T> Sync for ReadStream<T> {}
 
 impl<T: Copy> ReadStream<T> {
     /// Create a new stream with initial data in it.
@@ -180,7 +195,7 @@ impl<T: Copy> ReadStream<T> {
         self.circ.wait_for_read(need) < need && Arc::strong_count(&self.circ) == 1
     }
     #[must_use]
-    pub async fn wait_for_read_async(&self, need: usize) -> bool {
+    pub async fn wait_for_read_async(&self, _need: usize) -> bool {
         todo!()
     }
 
@@ -296,7 +311,8 @@ pub struct NCReadStream<T> {
     q: Arc<(Mutex<VecDeque<T>>, Condvar)>,
 }
 
-impl<T> StreamWait for NCReadStream<T> {
+#[async_trait]
+impl<T: Send + Sync> StreamWait for NCReadStream<T> {
     fn wait(&self, need: usize) -> bool {
         let (lock, cv) = &*self.q;
         let l = cv
@@ -311,12 +327,16 @@ impl<T> StreamWait for NCReadStream<T> {
     fn closed(&self) -> bool {
         Arc::strong_count(&self.q) == 1
     }
-    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
+    async fn wait_async<'a>(
+        self: Pin<&'a Self>,
+    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
+        //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
 }
 
-impl<T> StreamWait for NCWriteStream<T> {
+#[async_trait]
+impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
     fn wait(&self, _need: usize) -> bool {
         // TODO: we should have a maximum, shouldn't we?
         // For now, as much room as you need.
@@ -325,7 +345,10 @@ impl<T> StreamWait for NCWriteStream<T> {
     fn closed(&self) -> bool {
         Arc::strong_count(&self.q) == 1
     }
-    fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
+    async fn wait_async<'a>(
+        self: Pin<&'a Self>,
+    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
+        //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
 }

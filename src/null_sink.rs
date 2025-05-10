@@ -9,7 +9,7 @@ use crate::stream::ReadStream;
 #[rustradio(crate, new)]
 pub struct NullSink<T>
 where
-    T: Copy,
+    T: Copy + Send + Sync + 'static,
 {
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -17,7 +17,7 @@ where
 
 impl<T> Block for NullSink<T>
 where
-    T: Copy,
+    T: Copy + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, _) = self.src.read_buf()?;

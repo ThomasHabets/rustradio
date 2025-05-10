@@ -41,7 +41,7 @@ use crate::{Result, Sample};
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct StreamToPdu<T: Copy> {
+pub struct StreamToPdu<T: Copy + Send + Sync + 'static> {
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -53,7 +53,7 @@ pub struct StreamToPdu<T: Copy> {
     tail: usize,
 }
 
-impl<T: Copy + Sample> StreamToPdu<T> {
+impl<T: Copy + Sample + Send + Sync + 'static> StreamToPdu<T> {
     /// Make new Stream to PDU block.
     pub fn new<S: Into<String>>(
         src: ReadStream<T>,
@@ -106,7 +106,7 @@ fn get_tag_val_bool(tags: &HashMap<(TagPos, &str), &Tag>, pos: TagPos, key: &str
 
 impl<T> Block for StreamToPdu<T>
 where
-    T: Copy + Sample,
+    T: Copy + Sample + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (input, tags) = self.src.read_buf()?;

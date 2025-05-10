@@ -8,7 +8,7 @@ use crate::stream::{ReadStream, WriteStream};
 /// both streams.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
-pub struct Tee<T: Copy> {
+pub struct Tee<T: Copy + Send + Sync + 'static> {
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -17,7 +17,7 @@ pub struct Tee<T: Copy> {
     dst2: WriteStream<T>,
 }
 
-impl<T: Copy> Tee<T> {
+impl<T: Copy + Send + Sync + 'static> Tee<T> {
     fn process_sync(&self, s: T) -> (T, T) {
         (s, s)
     }
