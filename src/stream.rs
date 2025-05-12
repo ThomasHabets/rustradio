@@ -138,9 +138,9 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
-    async fn wait_async<'a>(&self, _need: usize) -> bool {
-        //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
-        todo!()
+    async fn wait_async<'a>(&self, need: usize) -> bool {
+        let circ = self.circ.clone();
+        circ.wait_for_write_async(need).await < need
     }
 }
 

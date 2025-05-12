@@ -20,7 +20,7 @@ use crate::{Complex, Float};
 /// standard implementation written in C.
 ///
 /// FFTW is a little bit faster.
-pub trait Engine {
+pub trait Engine: Send {
     /// Run runs an FFT round. Input and output is always the size of the FFT.
     fn run(&mut self, i: &mut [Complex]);
 

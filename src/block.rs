@@ -87,6 +87,7 @@ pub enum BlockRet<'a> {
     /// * Head block reached its max.
     EOF,
 }
+unsafe impl Send for BlockRet<'_> {}
 
 impl std::fmt::Debug for BlockRet<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
@@ -131,7 +132,7 @@ pub trait BlockEOF {
 /// Block trait. Must be implemented for all blocks.
 ///
 /// Simpler blocks can use macros to avoid needing to implement `work()`.
-pub trait Block: BlockName + BlockEOF {
+pub trait Block: BlockName + BlockEOF + Send {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.

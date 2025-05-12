@@ -383,7 +383,9 @@ impl<T> Buffer<T> {
             .free()
     }
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
-        todo!()
+        // TODO: loop or something.
+        self.state.acv.notified().await;
+        1
     }
     pub fn wait_for_read(&self, need: usize) -> usize {
         self.state
@@ -398,7 +400,9 @@ impl<T> Buffer<T> {
             .used
     }
     pub async fn wait_for_read_async(&self, _need: usize) -> usize {
-        todo!()
+        // TODO: loop or something.
+        self.state.acv.notified().await;
+        1
     }
 }
 
