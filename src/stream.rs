@@ -85,8 +85,6 @@ impl Tag {
 /// *    400KiB: 1.228s
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
-type AsyncWaitRet = bool;
-
 /// Wait on a stream.
 ///
 /// For ReadStream, wait until there's enough to read.
@@ -111,8 +109,8 @@ pub trait StreamWait {
     #[must_use]
     //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet;
     async fn wait_async<'a>(
-        self: Pin<&'a Self>,
-    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>>;
+        self: Pin<&'a Self>, need: usize,
+    ) -> bool;
 }
 #[async_trait]
 impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
@@ -127,14 +125,10 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     }
     async fn wait_async<'a>(
         self: Pin<&'a Self>,
-    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
-        //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet {
-        //Box::pin(async move |need| Box::pin({
-        Box::pin(async move {
-            let need = 1; // TODO: take arg.
-            let circ = self.circ.clone();
-            circ.wait_for_read_async(need).await < need
-        })
+        need: usize,
+    ) -> bool {
+        let circ = self.circ.clone();
+        circ.wait_for_read_async(need).await < need
     }
 }
 
@@ -151,7 +145,8 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     }
     async fn wait_async<'a>(
         self: Pin<&'a Self>,
-    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
+        _need: usize,
+    ) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
@@ -344,7 +339,8 @@ impl<T: Send + Sync> StreamWait for NCReadStream<T> {
     }
     async fn wait_async<'a>(
         self: Pin<&'a Self>,
-    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
+        _need: usize,
+    ) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
@@ -365,7 +361,8 @@ impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
     }
     async fn wait_async<'a>(
         self: Pin<&'a Self>,
-    ) -> Pin<Box<dyn Future<Output = AsyncWaitRet> + Send + 'a>> {
+        _need: usize,
+    ) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
