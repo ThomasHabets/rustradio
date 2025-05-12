@@ -20,8 +20,9 @@ impl AsyncGraph {
     pub async fn run_async(&mut self) -> Result<()> {
         let mut tasks = Vec::new();
         while let Some(mut b) = self.blocks.pop() {
+            let cancel_token = self.cancel_token.clone();
             tasks.push(tokio::spawn(async move {
-                loop {
+                while !cancel_token.is_canceled() {
                     let ret = match b.work() {
                         Ok(v) => v,
                         Err(e) => {

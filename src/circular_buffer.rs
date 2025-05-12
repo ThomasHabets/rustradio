@@ -315,7 +315,12 @@ impl<T: Copy> BufferWriter<T> {
 struct BufferInner {
     lock: Mutex<BufferState>,
     cv: Condvar,
-    acv: tokio::sync::Notify,
+
+    // Waiting for read.
+    acvr: tokio::sync::Notify,
+
+    // Waiting for write.
+    acvw: tokio::sync::Notify,
 }
 
 /// Type aware buffer.
@@ -346,7 +351,8 @@ impl<T> Buffer<T> {
                     tags: BTreeMap::new(),
                 }),
                 cv: Condvar::new(),
-                acv: tokio::sync::Notify::new(),
+                acvr: tokio::sync::Notify::new(),
+                acvw: tokio::sync::Notify::new(),
             }),
             member_size: std::mem::size_of::<T>(),
             circ: Circ::new(size)?,
@@ -384,7 +390,7 @@ impl<T> Buffer<T> {
     }
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
-        self.state.acv.notified().await;
+        self.state.acvw.notified().await;
         1
     }
     pub fn wait_for_read(&self, need: usize) -> usize {
@@ -401,7 +407,7 @@ impl<T> Buffer<T> {
     }
     pub async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
-        self.state.acv.notified().await;
+        self.state.acvr.notified().await;
         1
     }
 }
@@ -445,7 +451,7 @@ impl<T: Copy> Buffer<T> {
         s.rpos = newpos;
         s.used -= n;
         self.state.cv.notify_all();
-        self.state.acv.notify_one();
+        self.state.acvw.notify_one();
     }
 
     /// Produce samples (commit writes).
@@ -483,7 +489,7 @@ impl<T: Copy> Buffer<T> {
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
         self.state.cv.notify_all();
-        self.state.acv.notify_waiters();
+        self.state.acvr.notify_waiters();
     }
 
     pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
