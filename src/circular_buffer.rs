@@ -441,6 +441,7 @@ impl<T: Copy> Buffer<T> {
         s.rpos = newpos;
         s.used -= n;
         self.state.cv.notify_all();
+        self.state.acv.notify_one();
     }
 
     /// Produce samples (commit writes).
@@ -478,6 +479,7 @@ impl<T: Copy> Buffer<T> {
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
         self.state.cv.notify_all();
+        self.state.acv.notify_waiters();
     }
 
     pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
