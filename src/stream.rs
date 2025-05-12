@@ -5,7 +5,6 @@ streams, and write to zero or more output streams.
 */
 use async_trait::async_trait;
 use std::collections::VecDeque;
-use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::circular_buffer;
@@ -108,9 +107,7 @@ pub trait StreamWait {
 
     #[must_use]
     //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet;
-    async fn wait_async<'a>(
-        self: Pin<&'a Self>, need: usize,
-    ) -> bool;
+    async fn wait_async<'a>(&self, need: usize) -> bool;
 }
 #[async_trait]
 impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
@@ -124,7 +121,7 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
         self.refcount() == 1
     }
     async fn wait_async<'a>(
-        self: Pin<&'a Self>,
+        &self,
         need: usize,
     ) -> bool {
         let circ = self.circ.clone();
@@ -144,7 +141,7 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
         self.refcount() == 1
     }
     async fn wait_async<'a>(
-        self: Pin<&'a Self>,
+        &self,
         _need: usize,
     ) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
@@ -338,7 +335,7 @@ impl<T: Send + Sync> StreamWait for NCReadStream<T> {
         Arc::strong_count(&self.q) == 1
     }
     async fn wait_async<'a>(
-        self: Pin<&'a Self>,
+        &self,
         _need: usize,
     ) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
@@ -360,7 +357,7 @@ impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
         Arc::strong_count(&self.q) == 1
     }
     async fn wait_async<'a>(
-        self: Pin<&'a Self>,
+        &self,
         _need: usize,
     ) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
