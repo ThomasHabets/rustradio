@@ -390,8 +390,11 @@ impl<T> Buffer<T> {
     }
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
-        self.state.acvw.notified().await;
-        1
+        let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+        tokio::select! {
+            _ = sleep => 0,
+            _ = self.state.acvw.notified() => 1,
+        }
     }
     pub fn wait_for_read(&self, need: usize) -> usize {
         self.state
@@ -407,8 +410,11 @@ impl<T> Buffer<T> {
     }
     pub async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
-        self.state.acvr.notified().await;
-        1
+        let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+        tokio::select! {
+            _ = sleep => 0,
+            _ = self.state.acvr.notified() => 1,
+        }
     }
 }
 

@@ -122,8 +122,7 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
         self.refcount() == 1
     }
     async fn wait_async<'a>(&self, need: usize) -> bool {
-        let circ = self.circ.clone();
-        circ.wait_for_read_async(need).await < need
+        self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
 }
 
@@ -139,8 +138,7 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
         self.refcount() == 1
     }
     async fn wait_async<'a>(&self, need: usize) -> bool {
-        let circ = self.circ.clone();
-        circ.wait_for_write_async(need).await < need
+        self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
 }
 

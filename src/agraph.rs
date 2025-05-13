@@ -1,4 +1,4 @@
-use log::{error, info};
+use log::{debug, error, info};
 
 use crate::Result;
 use crate::block::{Block, BlockRet};
@@ -54,7 +54,11 @@ impl AsyncGraph {
                         BlockRet::Again => {}
                         BlockRet::EOF => break,
                         BlockRet::WaitForStream(stream, need) => {
-                            stream.wait_async(need).await;
+                            debug!("wait for stream");
+                            let eof = stream.wait_async(need).await;
+                            if eof {
+                                break;
+                            }
                         }
                         BlockRet::WaitForFunc(_) => {}
                         BlockRet::Pending => {}
@@ -106,4 +110,32 @@ pub async fn run(mut b: Box<dyn Block>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_something_async() -> Result<()> {
+        stderrlog::new()
+            .module(module_path!())
+            .module("rustradio")
+            .quiet(false)
+            .verbosity(10)
+            .timestamp(stderrlog::Timestamp::Second)
+            .init()
+            .unwrap();
+        eprintln!("Hello");
+        use crate::agraph::AsyncGraph;
+        use crate::blocks::{NullSink, VectorSource};
+        use crate::graph::GraphRunner;
+        let (src, prev) = VectorSource::new(vec![0u8; 10]);
+        let sink = NullSink::new(prev);
+        let mut g = AsyncGraph::new();
+        g.add(Box::new(src));
+        g.add(Box::new(sink));
+        g.run_async().await?;
+        Ok(())
+    }
 }
