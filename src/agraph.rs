@@ -43,6 +43,7 @@ impl AsyncGraph {
             let cancel_token = self.cancel_token.clone();
             tasks.push(tokio::spawn(async move {
                 while !cancel_token.is_canceled() {
+                    let name = b.block_name().to_string();
                     let ret = match b.work() {
                         Ok(v) => v,
                         Err(e) => {
@@ -54,8 +55,10 @@ impl AsyncGraph {
                         BlockRet::Again => {}
                         BlockRet::EOF => break,
                         BlockRet::WaitForStream(stream, need) => {
-                            debug!("wait for stream");
+                            debug!("{name} wait for stream");
                             let eof = stream.wait_async(need).await;
+                            drop(ret);
+                            //if b.eof() || eof {
                             if eof {
                                 break;
                             }
