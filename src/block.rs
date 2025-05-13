@@ -145,11 +145,16 @@ mod tests {
     use super::*;
 
     struct FakeWait {}
+
+    #[async_trait::async_trait]
     impl StreamWait for FakeWait {
         fn id(&self) -> usize {
             123
         }
         fn wait(&self, _need: usize) -> bool {
+            true
+        }
+        async fn wait_async<'a>(&self, _need: usize) -> bool {
             true
         }
         fn closed(&self) -> bool {

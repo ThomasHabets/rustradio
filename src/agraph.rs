@@ -4,6 +4,26 @@ use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::graph::{CancellationToken, GraphRunner};
 
+/// Async Graph executor.
+///
+/// # Example
+///
+/// ```
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), anyhow::Error> {
+/// eprintln!("Hello");
+/// use rustradio::graph::GraphRunner;
+/// use rustradio::agraph::AsyncGraph;
+/// use rustradio::blocks::{VectorSource,NullSink};
+/// let (src, prev) = VectorSource::new(vec![0u8; 10]);
+/// let sink = NullSink::new(prev);
+/// let mut g = AsyncGraph::new();
+/// g.add(Box::new(src));
+/// g.add(Box::new(sink));
+/// g.run_async().await?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct AsyncGraph {
     blocks: Vec<Box<dyn Block>>,
     cancel_token: CancellationToken,
