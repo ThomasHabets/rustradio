@@ -317,9 +317,11 @@ struct BufferInner {
     cv: Condvar,
 
     // Waiting for read.
+    #[cfg(feature = "async")]
     acvr: tokio::sync::Notify,
 
     // Waiting for write.
+    #[cfg(feature = "async")]
     acvw: tokio::sync::Notify,
 }
 
@@ -351,7 +353,9 @@ impl<T> Buffer<T> {
                     tags: BTreeMap::new(),
                 }),
                 cv: Condvar::new(),
+                #[cfg(feature = "async")]
                 acvr: tokio::sync::Notify::new(),
+                #[cfg(feature = "async")]
                 acvw: tokio::sync::Notify::new(),
             }),
             member_size: std::mem::size_of::<T>(),
@@ -388,6 +392,7 @@ impl<T> Buffer<T> {
             .0
             .free()
     }
+    #[cfg(feature = "async")]
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
         let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
@@ -408,6 +413,7 @@ impl<T> Buffer<T> {
             .0
             .used
     }
+    #[cfg(feature = "async")]
     pub async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
         let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
@@ -457,6 +463,7 @@ impl<T: Copy> Buffer<T> {
         s.rpos = newpos;
         s.used -= n;
         self.state.cv.notify_all();
+        #[cfg(feature = "async")]
         self.state.acvw.notify_one();
     }
 
@@ -495,6 +502,7 @@ impl<T: Copy> Buffer<T> {
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
         self.state.cv.notify_all();
+        #[cfg(feature = "async")]
         self.state.acvr.notify_waiters();
     }
 

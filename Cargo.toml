@@ -75,6 +75,10 @@ name = "bell202"
 required-features = ["soapysdr"]
 
 [[example]]
+name = "rtl_fm_async"
+required-features = ["async"]
+
+[[example]]
 name = "tone"
 required-features = ["audio"]
 

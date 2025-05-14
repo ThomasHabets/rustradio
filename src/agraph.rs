@@ -24,6 +24,7 @@ use crate::graph::{CancellationToken, GraphRunner};
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Default)]
 pub struct AsyncGraph {
     blocks: Vec<Box<dyn Block>>,
     cancel_token: CancellationToken,
@@ -32,10 +33,7 @@ pub struct AsyncGraph {
 impl AsyncGraph {
     /// Create a new async flowgraph.
     pub fn new() -> Self {
-        Self {
-            blocks: Vec::new(),
-            cancel_token: CancellationToken::new(),
-        }
+        Self::default()
     }
     pub async fn run_async(&mut self) -> Result<()> {
         let mut tasks = Vec::new();

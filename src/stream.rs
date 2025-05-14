@@ -105,6 +105,7 @@ pub trait StreamWait {
     #[must_use]
     fn closed(&self) -> bool;
 
+    #[cfg(feature = "async")]
     #[must_use]
     //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet;
     async fn wait_async<'a>(&self, need: usize) -> bool;
@@ -121,6 +122,7 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
+    #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, need: usize) -> bool {
         self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
@@ -137,6 +139,7 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
+    #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, need: usize) -> bool {
         self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
@@ -150,6 +153,9 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
 pub struct ReadStream<T> {
     circ: Arc<circular_buffer::Buffer<T>>,
 }
+
+// SAFETY:
+// TODO: I don't actually know if this is safe.
 unsafe impl<T> Sync for ReadStream<T> {}
 
 impl<T: Copy> ReadStream<T> {
@@ -280,6 +286,7 @@ impl<T: Copy> WriteStream<T> {
         self.circ.wait_for_write(need) < need && Arc::strong_count(&self.circ) == 1
     }
 
+    #[cfg(feature = "async")]
     pub async fn wait_for_write_async(&self, need: usize) -> bool {
         self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
@@ -327,6 +334,7 @@ impl<T: Send + Sync> StreamWait for NCReadStream<T> {
     fn closed(&self) -> bool {
         Arc::strong_count(&self.q) == 1
     }
+    #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, _need: usize) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
@@ -346,6 +354,7 @@ impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
     fn closed(&self) -> bool {
         Arc::strong_count(&self.q) == 1
     }
+    #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, _need: usize) -> bool {
         //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()

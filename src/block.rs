@@ -87,6 +87,9 @@ pub enum BlockRet<'a> {
     /// * Head block reached its max.
     EOF,
 }
+
+// SAFETY:
+// TODO: I don't actually know if this is safe.
 unsafe impl Send for BlockRet<'_> {}
 
 impl std::fmt::Debug for BlockRet<'_> {
@@ -154,6 +157,7 @@ mod tests {
         fn wait(&self, _need: usize) -> bool {
             true
         }
+        #[cfg(feature = "async")]
         async fn wait_async<'a>(&self, _need: usize) -> bool {
             true
         }
