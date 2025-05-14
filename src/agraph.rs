@@ -120,15 +120,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_something_async() -> Result<()> {
-        stderrlog::new()
-            .module(module_path!())
-            .module("rustradio")
-            .quiet(false)
-            .verbosity(10)
-            .timestamp(stderrlog::Timestamp::Second)
-            .init()
-            .unwrap();
+    async fn nullsink() -> Result<()> {
         eprintln!("Hello");
         use crate::agraph::AsyncGraph;
         use crate::blocks::{NullSink, VectorSource};
@@ -139,6 +131,24 @@ mod tests {
         g.add(Box::new(src));
         g.add(Box::new(sink));
         g.run_async().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn double() -> Result<()> {
+        use crate::agraph::AsyncGraph;
+        use crate::blocks::{Map, VectorSink, VectorSource};
+        use crate::graph::GraphRunner;
+        let (src, prev) = VectorSource::new(vec![1u8, 2, 3]);
+        let (mul, prev) = Map::new(prev, "double", move |x| x * 2);
+        let sink = VectorSink::new(prev, 100);
+        let hook = sink.hook();
+        let mut g = AsyncGraph::new();
+        g.add(Box::new(src));
+        g.add(Box::new(mul));
+        g.add(Box::new(sink));
+        g.run_async().await?;
+        assert_eq!(hook.data().samples(), [2, 4, 6]);
         Ok(())
     }
 }
