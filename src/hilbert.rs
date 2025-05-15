@@ -73,13 +73,16 @@ impl Block for Hilbert {
         let len = self.history.len() + inout;
         let n = len - self.ntaps;
 
-        // TODO: combine this check with the i.is_empty() check above.
         if n == 0 {
-            return Ok(BlockRet::WaitForFunc(Box::new(|| {
-                // TODO: instead check which stream needs to be waited for.
-                let _ = self.src.wait_for_read(1);
-                let _ = self.dst.wait_for_write(1);
-            })));
+            // TODO: use the right number instead of 1.
+            return Ok(BlockRet::WaitForStream(
+                if i.len() < o.len() {
+                    &self.src
+                } else {
+                    &self.dst
+                },
+                1,
+            ));
         }
 
         // TODO: Probably needless copy.
