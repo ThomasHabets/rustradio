@@ -58,7 +58,7 @@ where
         let have = self.buf.len() / sample_size;
         let want = o.len();
         if want == 0 {
-            trace!("FileSource: no space left in output stream");
+            trace!("FileSource: no space left in output stream. have={have} want={want}");
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
 
@@ -98,6 +98,7 @@ where
 
         let have = self.buf.len() / sample_size;
         if have == 0 {
+            trace!("FileSource pending");
             return Ok(BlockRet::Pending);
         }
 

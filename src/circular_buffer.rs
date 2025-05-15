@@ -119,7 +119,6 @@ impl Circ {
             _map2: map2,
         })
     }
-
     /// Return length of buffer, *before* the double mapping, in bytes.
     #[must_use]
     pub fn total_size(&self) -> usize {
@@ -339,6 +338,9 @@ pub(crate) static NEXT_STREAM_ID: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(1);
 
 impl<T> Buffer<T> {
+    pub(crate) fn id(&self) -> usize {
+        self.id
+    }
     /// Create a new Buffer.
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {

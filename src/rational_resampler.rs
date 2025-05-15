@@ -63,6 +63,7 @@ impl<T: Copy + Send + Sync + 'static> RationalResampler<T> {
 
 impl<T: Copy + Send + Sync + 'static> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet> {
+        log::trace!("Rational: work()");
         // TODO: retain tags.
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {

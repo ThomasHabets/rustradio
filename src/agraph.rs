@@ -42,6 +42,7 @@ impl AsyncGraph {
             tasks.push(tokio::spawn(async move {
                 while !cancel_token.is_canceled() {
                     let name = b.block_name().to_string();
+                    //log::trace!("Still running: {name}");
                     let ret = match b.work() {
                         Ok(v) => v,
                         Err(e) => {
@@ -50,28 +51,39 @@ impl AsyncGraph {
                         }
                     };
                     match ret {
-                        BlockRet::Again => {}
+                        BlockRet::Again => {
+                            //debug!("{name} Again");
+                        }
                         BlockRet::EOF => break,
                         BlockRet::WaitForStream(stream, need) => {
-                            debug!("{name} wait for stream");
+                            //debug!("{name} wait for stream");
                             let eof = stream.wait_async(need).await;
                             drop(ret);
-                            //if b.eof() || eof {
-                            if eof {
+                            if b.eof() || eof {
                                 break;
                             }
                         }
-                        BlockRet::WaitForFunc(_) => {}
-                        BlockRet::Pending => {}
+                        BlockRet::WaitForFunc(_) => {
+                            //debug!("{name} WaitForFunc");
+                            drop(ret);
+                            if b.eof() {
+                                break;
+                            }
+                        }
+                        BlockRet::Pending => {
+                            //debug!("{name} Pending");
+                        }
                     }
                 }
                 info!("Block {} done", b.block_name());
-                Ok(())
+                let name = b.block_name().to_string();
+                drop(b);
+                Ok(name)
             }));
         }
         for task in tasks.into_iter() {
             match task.await {
-                Ok(res) => info!("Task exited with status {res:?}"),
+                Ok(name) => info!("Task exited with status {name:?}"),
                 Err(e) => error!("Task failed: {e}!"),
             }
         }
@@ -147,6 +159,25 @@ mod tests {
         g.add(Box::new(sink));
         g.run_async().await?;
         assert_eq!(hook.data().samples(), [2, 4, 6]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn big() -> Result<()> {
+        use crate::agraph::AsyncGraph;
+        use crate::blocks::{Map, VectorSink, VectorSource};
+        use crate::graph::GraphRunner;
+        let n = 100_000_000;
+        let (src, prev) = VectorSource::new(vec![1u8; n]);
+        let (mul, prev) = Map::new(prev, "double", move |x| x * 2);
+        let sink = VectorSink::new(prev, n * 2);
+        let hook = sink.hook();
+        let mut g = AsyncGraph::new();
+        g.add(Box::new(src));
+        g.add(Box::new(mul));
+        g.add(Box::new(sink));
+        g.run_async().await?;
+        assert_eq!(hook.data().samples(), vec![2u8; n]);
         Ok(())
     }
 }

@@ -105,6 +105,9 @@ pub trait StreamWait {
     #[must_use]
     fn closed(&self) -> bool;
 
+    #[must_use]
+    fn id(&self) -> usize;
+
     #[cfg(feature = "async")]
     #[must_use]
     //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet;
@@ -124,7 +127,11 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     }
     #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, need: usize) -> bool {
-        self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
+        //self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
+        let have = self.circ.wait_for_read_async(need).await;
+        let r = Arc::strong_count(&self.circ);
+        //log::trace!("wait_async: have={have} need={need} {r}");
+        have < need && r == 1
     }
 }
 

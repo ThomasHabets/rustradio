@@ -233,7 +233,7 @@ fn render(
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     println!("rtl_fm receiver example");
     let opt = Opt::parse();
@@ -296,7 +296,6 @@ async fn main() -> Result<()> {
         #[cfg(not(feature = "rtlsdr"))]
         panic!("can't happen, but must be here to compile")
     };
-
     let (block, spec_tee, prev) = Tee::new(prev);
     g.add(Box::new(block));
 
