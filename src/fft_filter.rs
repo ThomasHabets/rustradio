@@ -421,14 +421,18 @@ impl<T: Engine> Block for FftFilterFloat<T> {
         // Replace the inner stream wait with an outer stream wait.
 
         Ok(match ret {
-            BlockRet::WaitForStream(_, need) => {
-                let src = &self.src;
-                let dst = &self.dst;
-                BlockRet::WaitForFunc(Box::new(move || {
-                    // TODO: instead check with stream needs to be waited for.
-                    let _ = src.wait_for_read(need);
-                    let _ = dst.wait_for_write(need);
-                }))
+            BlockRet::WaitForStream(stream, need) => {
+                use crate::stream::StreamWait;
+                match stream.id() {
+                    v if v == self.inner_in.id() => BlockRet::WaitForStream(&self.src, need),
+                    v if v == self.inner_out.id() => BlockRet::WaitForStream(&self.dst, need),
+                    other => panic!(
+                        "FftFilter WaitForStream({}) is neither in ({}) nor out ({})",
+                        other,
+                        self.inner_in.id(),
+                        self.inner_out.id()
+                    ),
+                }
             }
             other => other,
         })

@@ -88,6 +88,9 @@ pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 /// For ReadStream, wait until there's enough to read.
 /// For WriteStream, wait until there's enough to write something.
 pub trait StreamWait {
+    /// ID shared between read and write side.
+    fn id(&self) -> usize;
+
     /// Wait for "a while" or until `need` samples are available/space available.
     ///
     /// Return true if `need` will *never* be satisfied, and blocks waiting for
@@ -99,6 +102,9 @@ pub trait StreamWait {
     fn closed(&self) -> bool;
 }
 impl<T: Copy> StreamWait for ReadStream<T> {
+    fn id(&self) -> usize {
+        self.circ.id()
+    }
     fn wait(&self, need: usize) -> bool {
         self.wait_for_read(need)
     }
@@ -107,6 +113,9 @@ impl<T: Copy> StreamWait for ReadStream<T> {
     }
 }
 impl<T: Copy> StreamWait for WriteStream<T> {
+    fn id(&self) -> usize {
+        self.circ.id()
+    }
     fn wait(&self, need: usize) -> bool {
         self.wait_for_write(need)
     }
@@ -268,10 +277,14 @@ pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
 
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NCReadStream<T> {
+    id: usize,
     q: Arc<(Mutex<VecDeque<T>>, Condvar)>,
 }
 
 impl<T> StreamWait for NCReadStream<T> {
+    fn id(&self) -> usize {
+        self.id
+    }
     fn wait(&self, need: usize) -> bool {
         let (lock, cv) = &*self.q;
         let l = cv
@@ -289,6 +302,9 @@ impl<T> StreamWait for NCReadStream<T> {
 }
 
 impl<T> StreamWait for NCWriteStream<T> {
+    fn id(&self) -> usize {
+        self.id
+    }
     fn wait(&self, _need: usize) -> bool {
         // TODO: we should have a maximum, shouldn't we?
         // For now, as much room as you need.
@@ -301,6 +317,7 @@ impl<T> StreamWait for NCWriteStream<T> {
 
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
 pub struct NCWriteStream<T> {
+    id: usize,
     q: Arc<(Mutex<VecDeque<T>>, Condvar)>,
 }
 
@@ -311,7 +328,9 @@ pub struct NCWriteStream<T> {
 #[must_use]
 pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
     let q = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
-    (NCWriteStream { q: q.clone() }, NCReadStream { q })
+    let id =
+        crate::circular_buffer::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    (NCWriteStream { id, q: q.clone() }, NCReadStream { id, q })
 }
 
 impl<T> NCReadStream<T> {

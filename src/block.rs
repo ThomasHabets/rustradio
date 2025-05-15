@@ -145,6 +145,9 @@ mod tests {
 
     struct FakeWait {}
     impl StreamWait for FakeWait {
+        fn id(&self) -> usize {
+            123
+        }
         fn wait(&self, _need: usize) -> bool {
             true
         }

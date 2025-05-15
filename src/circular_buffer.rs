@@ -314,16 +314,21 @@ impl<T: Copy> BufferWriter<T> {
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
+    id: usize,
     state: Arc<(Mutex<BufferState>, Condvar)>,
     circ: Circ,
     member_size: usize,
     dummy: std::marker::PhantomData<T>,
 }
 
+pub(crate) static NEXT_STREAM_ID: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(1);
+
 impl<T> Buffer<T> {
     /// Create a new Buffer.
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
+            id: NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             state: Arc::new((
                 Mutex::new(BufferState {
                     rpos: 0,
@@ -339,6 +344,10 @@ impl<T> Buffer<T> {
             circ: Circ::new(size)?,
             dummy: std::marker::PhantomData,
         })
+    }
+
+    pub(crate) fn id(&self) -> usize {
+        self.id
     }
 
     /// Return length of buffer, ignoring how much is in use, and the
