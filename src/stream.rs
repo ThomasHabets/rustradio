@@ -89,6 +89,7 @@ pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 /// For WriteStream, wait until there's enough to write something.
 pub trait StreamWait {
     /// ID shared between read and write side.
+    #[must_use]
     fn id(&self) -> usize;
 
     /// Wait for "a while" or until `need` samples are available/space available.
@@ -98,6 +99,7 @@ pub trait StreamWait {
     #[must_use]
     fn wait(&self, need: usize) -> bool;
 
+    /// Return true if the other end of this stream is disconnected.
     #[must_use]
     fn closed(&self) -> bool;
 }
