@@ -40,8 +40,8 @@ impl AsyncGraph {
         while let Some(mut b) = self.blocks.pop() {
             let cancel_token = self.cancel_token.clone();
             tasks.push(tokio::spawn(async move {
+                let name = b.block_name().to_string();
                 while !cancel_token.is_canceled() {
-                    let name = b.block_name().to_string();
                     //log::trace!("Still running: {name}");
                     let ret = match b.work() {
                         Ok(v) => v,
@@ -75,8 +75,7 @@ impl AsyncGraph {
                         }
                     }
                 }
-                info!("Block {} done", b.block_name());
-                let name = b.block_name().to_string();
+                info!("Block {name} done");
                 drop(b);
                 Ok(name)
             }));
