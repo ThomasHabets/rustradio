@@ -105,9 +105,6 @@ pub trait StreamWait {
     #[must_use]
     fn closed(&self) -> bool;
 
-    #[must_use]
-    fn id(&self) -> usize;
-
     #[cfg(feature = "async")]
     #[must_use]
     //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet;
