@@ -61,7 +61,7 @@ impl Block for FftStream {
         let mut o = self.dst.write_buf()?;
         let oo = o.slice();
         if oo.len() < self.size {
-            return Ok(BlockRet::Again);
+            return Ok(BlockRet::WaitForStream(&self.dst, self.size));
         }
         let len = std::cmp::min(ii.len(), oo.len());
         let len = len - (len % self.size);
