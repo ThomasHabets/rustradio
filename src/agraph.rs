@@ -52,13 +52,13 @@ impl AsyncGraph {
                     };
                     match ret {
                         BlockRet::Again => {
-                            //debug!("{name} Again");
+                            debug!("{name} Again");
                         }
                         BlockRet::EOF => break,
                         BlockRet::WaitForStream(stream, need) => {
                             //debug!("{name} wait for stream");
-                            let eof = stream.wait_async(need).await;
                             drop(ret);
+                            let eof = stream.wait_async(need).await;
                             if b.eof() || eof {
                                 break;
                             }

@@ -88,10 +88,6 @@ pub enum BlockRet<'a> {
     EOF,
 }
 
-// SAFETY:
-// TODO: I don't actually know if this is safe.
-unsafe impl Send for BlockRet<'_> {}
-
 impl std::fmt::Debug for BlockRet<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(
