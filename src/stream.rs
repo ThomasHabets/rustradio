@@ -107,7 +107,6 @@ pub trait StreamWait {
 
     #[cfg(feature = "async")]
     #[must_use]
-    //async fn wait_async<'a>(self: Pin<&'a Self>) -> AsyncWaitRet;
     async fn wait_async<'a>(&self, need: usize) -> bool;
 }
 
@@ -124,10 +123,8 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     }
     #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, need: usize) -> bool {
-        //self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
         let have = self.circ.wait_for_read_async(need).await;
         let r = Arc::strong_count(&self.circ);
-        //log::trace!("wait_async: have={have} need={need} {r}");
         have < need && r == 1
     }
 }
@@ -340,7 +337,6 @@ impl<T: Send + Sync> StreamWait for NCReadStream<T> {
     }
     #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, _need: usize) -> bool {
-        //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
 }
@@ -360,7 +356,6 @@ impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
     }
     #[cfg(feature = "async")]
     async fn wait_async<'a>(&self, _need: usize) -> bool {
-        //async fn wait_async(self: Pin<&Self>) -> AsyncWaitRet {
         todo!()
     }
 }

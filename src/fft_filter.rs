@@ -272,11 +272,13 @@ impl<T: Engine> Block for FftFilter<T> {
         loop {
             let mut o = self.dst.write_buf()?;
             if self.nsamples > o.len() {
+                /*
                 trace!(
                     "FftFilter: Need {} output space, only have {}",
                     self.nsamples,
                     o.len()
                 );
+                */
                 return Ok(BlockRet::WaitForStream(&self.dst, self.nsamples));
             }
             let (input, tags) = self.src.read_buf()?;
