@@ -35,6 +35,7 @@ impl AsyncGraph {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Run the graph until completion.
     pub async fn run_async(&mut self) -> Result<()> {
         let mut tasks = Vec::new();
         while let Some(mut b) = self.blocks.pop() {
