@@ -155,10 +155,6 @@ pub struct ReadStream<T> {
     circ: Arc<circular_buffer::Buffer<T>>,
 }
 
-// SAFETY:
-// TODO: I don't actually know if this is safe.
-unsafe impl<T> Sync for ReadStream<T> {}
-
 impl<T: Copy> ReadStream<T> {
     /// Create a new stream with initial data in it.
     #[cfg(test)]
