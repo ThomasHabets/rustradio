@@ -1,24 +1,18 @@
 //! Discard anything written to this block.
 
-use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::ReadStream;
+use crate::{Result, Sample};
 
 /// Discard anything written to this block.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct NullSink<T>
-where
-    T: Copy,
-{
+pub struct NullSink<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
 }
 
-impl<T> Block for NullSink<T>
-where
-    T: Copy,
-{
+impl<T: Sample> Block for NullSink<T> {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, _) = self.src.read_buf()?;
         let n = i.len();

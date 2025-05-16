@@ -11,7 +11,7 @@ use crate::{Error, Repeat, Result, Sample};
 /// Read stream from raw file.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FileSource<T: Copy> {
+pub struct FileSource<T: Sample> {
     filename: std::path::PathBuf,
     f: BufReader<std::fs::File>,
     repeat: Repeat,
@@ -20,7 +20,7 @@ pub struct FileSource<T: Copy> {
     dst: WriteStream<T>,
 }
 
-impl<T: Default + Copy> FileSource<T> {
+impl<T: Sample> FileSource<T> {
     /// Create new FileSource block.
     pub fn new<P: AsRef<std::path::Path>>(filename: P) -> Result<(Self, ReadStream<T>)> {
         let f = BufReader::new(
@@ -50,7 +50,7 @@ impl<T: Default + Copy> FileSource<T> {
 
 impl<T> Block for FileSource<T>
 where
-    T: Sample<Type = T> + Copy + std::fmt::Debug,
+    T: Sample<Type = T> + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let mut o = self.dst.write_buf()?;

@@ -1,10 +1,11 @@
 //! Multiply stream by a constant value.
+use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
 /// Multiply stream by a constant value.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
-pub struct MultiplyConst<T: Copy + std::ops::Mul<Output = T>> {
+pub struct MultiplyConst<T: Sample + std::ops::Mul<Output = T>> {
     val: T,
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -14,7 +15,7 @@ pub struct MultiplyConst<T: Copy + std::ops::Mul<Output = T>> {
 
 impl<T> MultiplyConst<T>
 where
-    T: Copy + std::ops::Mul<Output = T>,
+    T: Sample + std::ops::Mul<Output = T>,
 {
     fn process_sync(&self, x: T) -> T {
         x * self.val

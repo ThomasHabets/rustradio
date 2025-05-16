@@ -1,5 +1,5 @@
 //! Tee a stream.
-
+use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
 /// Tee a stream into two.
@@ -8,7 +8,7 @@ use crate::stream::{ReadStream, WriteStream};
 /// both streams.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
-pub struct Tee<T: Copy> {
+pub struct Tee<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -17,7 +17,7 @@ pub struct Tee<T: Copy> {
     dst2: WriteStream<T>,
 }
 
-impl<T: Copy> Tee<T> {
+impl<T: Sample> Tee<T> {
     fn process_sync(&self, s: T) -> (T, T) {
         (s, s)
     }
@@ -40,7 +40,7 @@ mod tests {
     /// expected.
     #[derive(rustradio_macros::Block)]
     #[rustradio(crate, new, sync_tag)]
-    struct Tee<T: Copy> {
+    struct Tee<T: Sample> {
         #[rustradio(in)]
         src: ReadStream<T>,
         #[rustradio(out)]
@@ -49,7 +49,7 @@ mod tests {
         dst2: WriteStream<T>,
     }
 
-    impl<T: Copy> Tee<T> {
+    impl<T: Sample> Tee<T> {
         fn process_sync_tags<'a>(
             &self,
             s: T,

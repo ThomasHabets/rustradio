@@ -4,9 +4,9 @@ Turn stream of e.g. `Vec<u8>` to stream of `u8`.
  */
 use log::trace;
 
-use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, Tag, TagValue, WriteStream};
+use crate::{Result, Sample};
 
 /// This tag gets added to the first output sample of a vec.
 ///
@@ -34,7 +34,7 @@ pub struct VecToStream<T> {
     dst: WriteStream<T>,
 }
 
-impl<T: Copy> Block for VecToStream<T> {
+impl<T: Sample> Block for VecToStream<T> {
     fn work(&mut self) -> Result<BlockRet> {
         let n = match self.src.peek_size() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),

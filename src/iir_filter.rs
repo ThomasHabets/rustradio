@@ -7,7 +7,7 @@
 //! For blocks, see [`SinglePoleIirFilter`](crate::blocks::SinglePoleIirFilter).
 use std::collections::VecDeque;
 
-use crate::Float;
+use crate::{Float, Sample};
 
 /// Ability to call `.clamp()`.
 ///
@@ -25,7 +25,7 @@ impl Clamp for Float {
 /// General IIR filter.
 ///
 /// TODO: also add filter_n?
-pub trait Filter<T: Copy + Default>: Send {
+pub trait Filter<T: Sample>: Send {
     /// Filter from one input sample.
     fn filter(&mut self, input: T) -> T;
 
@@ -37,7 +37,7 @@ pub trait Filter<T: Copy + Default>: Send {
 /// between the minimum and the maximum.
 ///
 /// TODO: also add filter_n?
-pub trait ClampedFilter<T: Copy + Default + Clamp>: Filter<T> {
+pub trait ClampedFilter<T: Sample + Clamp>: Filter<T> {
     /// Filter from one input sample, but with clamped output.
     fn filter_clamped(&mut self, input: T, mi: T, mx: T) -> T;
 }
@@ -51,14 +51,14 @@ pub trait ClampedFilter<T: Copy + Default + Clamp>: Filter<T> {
 /// more efficient.
 ///
 /// For more info see <https://en.wikipedia.org/wiki/Infinite_impulse_response>.
-pub struct IirFilter<T: Copy> {
+pub struct IirFilter<T: Sample> {
     taps: Vec<T>,
     buf: VecDeque<T>,
 }
 
 impl<T> IirFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create new IIR from the provided taps.
     pub fn new(taps: &[T]) -> Self {
@@ -71,8 +71,7 @@ where
 
 impl<T> Filter<T> for IirFilter<T>
 where
-    T: Copy
-        + Default
+    T: Sample
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>
         + Send
@@ -99,8 +98,7 @@ where
 
 impl<T> ClampedFilter<T> for IirFilter<T>
 where
-    T: Copy
-        + Default
+    T: Sample
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>
         + Clamp

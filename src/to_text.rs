@@ -20,7 +20,7 @@ g.add(Box::new(sink));
 # Ok::<(), anyhow::Error>(())
 ```
 */
-use crate::Result;
+use crate::{Result, Sample};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
@@ -31,13 +31,13 @@ use crate::stream::{ReadStream, WriteStream};
 /// line is one sample per stream, separated by spaces.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
-pub struct ToText<T: Copy> {
+pub struct ToText<T: Sample> {
     srcs: Vec<ReadStream<T>>,
     #[rustradio(out)]
     dst: WriteStream<u8>,
 }
 
-impl<T: Copy> ToText<T> {
+impl<T: Sample> ToText<T> {
     /// Create new ToText block.
     pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
@@ -45,7 +45,7 @@ impl<T: Copy> ToText<T> {
     }
 }
 
-impl<T: Copy + std::fmt::Debug> Block for ToText<T> {
+impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
     fn work(&mut self) -> Result<BlockRet> {
         // TODO: This implementation locks and unlocks a lot, as it
         // aquires samples.  Ideally it should process

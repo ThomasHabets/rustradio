@@ -3,9 +3,9 @@
 //! This block is really only useful for unit tests.
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag};
+use crate::{Result, Sample};
 
 /// VectorSink.
 ///
@@ -13,7 +13,7 @@ use crate::stream::{ReadStream, Tag};
 /// the stream and just adds it to a vector. Tags are stored to another vector.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct VectorSink<T: Copy> {
+pub struct VectorSink<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
 
@@ -25,10 +25,10 @@ pub struct VectorSink<T: Copy> {
 }
 
 /// Hook is a hook into getting the data and tags written to the VectorSink.
-pub struct Hook<T: Copy> {
+pub struct Hook<T: Sample> {
     inner: Arc<Mutex<(Vec<T>, Vec<Tag>)>>,
 }
-impl<T: Copy> Hook<T> {
+impl<T: Sample> Hook<T> {
     /// Get a locked read only reference to the samples and the data.
     #[must_use]
     pub fn data(&self) -> Data<'_, T> {
@@ -42,10 +42,10 @@ impl<T: Copy> Hook<T> {
 /// VectorSink.
 ///
 /// The VectorSink is unable to write anything new while the Data is alive.
-pub struct Data<'a, T: Copy> {
+pub struct Data<'a, T: Sample> {
     inner: MutexGuard<'a, (Vec<T>, Vec<Tag>)>,
 }
-impl<T: Copy> Data<'_, T> {
+impl<T: Sample> Data<'_, T> {
     /// Get a slice of the data written to the VectorSink.
     #[must_use]
     pub fn samples(&self) -> &[T] {
@@ -58,7 +58,7 @@ impl<T: Copy> Data<'_, T> {
     }
 }
 
-impl<T: Copy> VectorSink<T> {
+impl<T: Sample> VectorSink<T> {
     /// Get a Hook into the data that will be written.
     #[must_use]
     pub fn hook(&self) -> Hook<T> {
@@ -68,7 +68,7 @@ impl<T: Copy> VectorSink<T> {
     }
 }
 
-impl<T: Copy> Block for VectorSink<T> {
+impl<T: Sample> Block for VectorSink<T> {
     fn work(&mut self) -> Result<BlockRet> {
         let mut storage = self.storage.lock().unwrap();
         let (i, tags) = self.src.read_buf()?;

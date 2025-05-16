@@ -1,14 +1,14 @@
 //! Delay stream. Good for syncing up streams.
-use crate::Result;
 use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
+use crate::{Result, Sample};
 
 /// Delay stream. Good for syncing up streams.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct Delay<T: Copy> {
+pub struct Delay<T: Sample> {
     delay: usize,
     current_delay: usize,
     skip: usize,
@@ -18,7 +18,7 @@ pub struct Delay<T: Copy> {
     dst: WriteStream<T>,
 }
 
-impl<T: Copy> Delay<T> {
+impl<T: Sample> Delay<T> {
     /// Create new Delay block.
     pub fn new(src: ReadStream<T>, delay: usize) -> (Self, ReadStream<T>) {
         let (dst, dr) = crate::stream::new_stream();
@@ -47,10 +47,7 @@ impl<T: Copy> Delay<T> {
     }
 }
 
-impl<T> Block for Delay<T>
-where
-    T: Copy + Default,
-{
+impl<T: Sample> Block for Delay<T> {
     fn work(&mut self) -> Result<BlockRet> {
         {
             let o = self.dst.write_buf()?;

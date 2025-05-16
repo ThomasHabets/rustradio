@@ -1,7 +1,7 @@
 //! Blocks for making simple synchronous conversions/mappings.
 
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Float};
+use crate::{Complex, Float, Sample};
 
 /// Arbitrary mapping using a lambda.
 ///
@@ -22,8 +22,8 @@ use crate::{Complex, Float};
 #[rustradio(crate, custom_name, sync, new)]
 pub struct Map<In, Out, F>
 where
-    In: Copy,
-    Out: Copy,
+    In: Sample,
+    Out: Sample,
     F: Fn(In) -> Out,
 {
     #[rustradio(into)]
@@ -37,8 +37,8 @@ where
 
 impl<In, Out, F> Map<In, Out, F>
 where
-    In: Copy,
-    Out: Copy,
+    In: Sample,
+    Out: Sample,
     F: Fn(In) -> Out,
 {
     fn process_sync(&mut self, s: In) -> Out {

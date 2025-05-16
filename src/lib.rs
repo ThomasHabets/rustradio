@@ -460,7 +460,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 }
 
 /// A trait all sample types must implement.
-pub trait Sample: Copy {
+pub trait Sample: Copy + Default {
     /// The type of the sample.
     type Type;
 

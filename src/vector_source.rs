@@ -1,17 +1,17 @@
 //! Generate values from a fixed vector.
-use crate::{Error, Result};
+use crate::{Error, Result, Sample};
 
 use crate::Repeat;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
 /// VectorSource builder.
-pub struct VectorSourceBuilder<T: Copy> {
+pub struct VectorSourceBuilder<T: Sample> {
     block: VectorSource<T>,
     out: ReadStream<T>,
 }
 
-impl<T: Copy> VectorSourceBuilder<T> {
+impl<T: Sample> VectorSourceBuilder<T> {
     /// Set a finite repeat count.
     pub fn repeat(mut self, r: Repeat) -> VectorSourceBuilder<T> {
         self.block.set_repeat(r);
@@ -42,7 +42,7 @@ impl<T: Copy> VectorSourceBuilder<T> {
 #[rustradio(crate)]
 pub struct VectorSource<T>
 where
-    T: Copy,
+    T: Sample,
 {
     #[rustradio(out)]
     dst: WriteStream<T>,
@@ -52,7 +52,7 @@ where
     tags: Vec<Tag>,
 }
 
-impl<T: Copy> VectorSource<T> {
+impl<T: Sample> VectorSource<T> {
     /// New VectorSource builder.
     pub fn builder(data: Vec<T>) -> VectorSourceBuilder<T> {
         let (block, out) = VectorSource::new(data);
@@ -84,7 +84,7 @@ impl<T: Copy> VectorSource<T> {
 
 impl<T> Block for VectorSource<T>
 where
-    T: Copy,
+    T: Sample,
 {
     fn work(&mut self) -> Result<BlockRet> {
         if self.data.is_empty() {

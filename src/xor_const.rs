@@ -1,4 +1,5 @@
 //! Xor a constant value with every sample.
+use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
 /// XorConst xors a constant value to every sample.
@@ -6,7 +7,7 @@ use crate::stream::{ReadStream, WriteStream};
 #[rustradio(crate, new, sync)]
 pub struct XorConst<T>
 where
-    T: Copy + std::ops::BitXor<Output = T>,
+    T: Sample + std::ops::BitXor<Output = T>,
 {
     val: T,
     #[rustradio(in)]
@@ -17,7 +18,7 @@ where
 
 impl<T> XorConst<T>
 where
-    T: Copy + std::ops::BitXor<Output = T>,
+    T: Sample + std::ops::BitXor<Output = T>,
 {
     fn process_sync(&mut self, a: T) -> T {
         a ^ self.val

@@ -1,6 +1,7 @@
 //! Add two streams.
 //!
 //! To add a constant value to a stream, instead use AddConst.
+use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
 /// Adds two streams, sample wise.
@@ -37,9 +38,9 @@ use crate::stream::{ReadStream, WriteStream};
 #[rustradio(crate, new, sync)]
 pub struct Add<Ta, Tb, Tout>
 where
-    Ta: Copy + std::ops::Add<Tb, Output = Tout>,
-    Tb: Copy,
-    Tout: Copy,
+    Ta: Sample + std::ops::Add<Tb, Output = Tout>,
+    Tb: Sample,
+    Tout: Sample,
 {
     /// Hello world.
     #[rustradio(in)]
@@ -54,9 +55,9 @@ where
 
 impl<Ta, Tb, Tout> Add<Ta, Tb, Tout>
 where
-    Ta: Copy + std::ops::Add<Tb, Output = Tout>,
-    Tb: Copy,
-    Tout: Copy,
+    Ta: Sample + std::ops::Add<Tb, Output = Tout>,
+    Tb: Sample,
+    Tout: Sample,
 {
     fn process_sync(&self, a: Ta, b: Tb) -> Tout {
         a + b

@@ -9,10 +9,10 @@
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
-use crate::{Complex, Float, Result};
+use crate::{Complex, Float, Result, Sample};
 
 /// Finite impulse response filter.
-pub struct Fir<T: Copy> {
+pub struct Fir<T: Sample> {
     taps: Vec<T>,
 }
 
@@ -109,7 +109,7 @@ impl Fir<Float> {
 
 impl<T> Fir<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create new Fir.
     #[must_use]
@@ -162,7 +162,7 @@ pub struct FirFilterBuilder<T> {
 
 impl<T> FirFilterBuilder<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Set the decimation to the given value.
     ///
@@ -183,7 +183,7 @@ where
 /// Finite impulse response filter block.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FirFilter<T: Copy> {
+pub struct FirFilter<T: Sample> {
     fir: Fir<T>,
     ntaps: usize,
     deci: usize,
@@ -193,9 +193,9 @@ pub struct FirFilter<T: Copy> {
     dst: WriteStream<T>,
 }
 
-impl<T: Copy> FirFilter<T>
+impl<T> FirFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create new FirFilterBuilder, with the supplied taps.
     pub fn builder(taps: &[T]) -> FirFilterBuilder<T> {
@@ -222,7 +222,7 @@ where
 
 impl<T> Block for FirFilter<T>
 where
-    T: Copy + Default + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (input, mut tags) = self.src.read_buf()?;

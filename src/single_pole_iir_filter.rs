@@ -5,8 +5,8 @@
 //! * <https://www.wavewalkerdsp.com/2022/08/10/single-pole-iir-filter-substitute-for-moving-average-filter/>
 //! * [`iir_filter`](crate::iir_filter) module
 
-use crate::Float;
 use crate::stream::{ReadStream, WriteStream};
+use crate::{Float, Sample};
 
 struct SinglePoleIir<Tout> {
     alpha: Float, // TODO: GNURadio uses double
@@ -16,7 +16,7 @@ struct SinglePoleIir<Tout> {
 
 impl<Tout> SinglePoleIir<Tout>
 where
-    Tout: Copy + Default + std::ops::Mul<Float, Output = Tout> + std::ops::Add<Output = Tout>,
+    Tout: Sample + std::ops::Mul<Float, Output = Tout> + std::ops::Add<Output = Tout>,
 {
     fn new(alpha: Float) -> Option<Self> {
         let mut r = Self {
@@ -29,7 +29,7 @@ where
     }
     fn filter<Tin>(&mut self, sample: Tin) -> Tout
     where
-        Tin: Copy + std::ops::Mul<Float, Output = Tin> + std::ops::Add<Tout, Output = Tout>,
+        Tin: Sample + std::ops::Mul<Float, Output = Tin> + std::ops::Add<Tout, Output = Tout>,
     {
         let o: Tout = sample * self.alpha + self.prev_output * self.one_minus_alpha;
         self.prev_output = o;
@@ -55,8 +55,7 @@ where
 #[rustradio(crate, sync)]
 pub struct SinglePoleIirFilter<T>
 where
-    T: Copy
-        + Default
+    T: Sample
         + std::ops::Mul<Float, Output = T>
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>,
@@ -70,8 +69,7 @@ where
 
 impl<T> SinglePoleIirFilter<T>
 where
-    T: Copy
-        + Default
+    T: Sample
         + std::ops::Mul<Float, Output = T>
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>,

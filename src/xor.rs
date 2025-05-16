@@ -1,4 +1,5 @@
 //! Xor two streams.
+use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
 /// Xors a constant value to every sample.
@@ -6,7 +7,7 @@ use crate::stream::{ReadStream, WriteStream};
 #[rustradio(crate, new, sync)]
 pub struct Xor<T>
 where
-    T: Copy + std::ops::BitXor<Output = T>,
+    T: Sample + std::ops::BitXor<Output = T>,
 {
     #[rustradio(in)]
     a: ReadStream<T>,
@@ -18,7 +19,7 @@ where
 
 impl<T> Xor<T>
 where
-    T: Copy + std::ops::BitXor<Output = T>,
+    T: Sample + std::ops::BitXor<Output = T>,
 {
     fn process_sync(&self, a: T, b: T) -> T {
         a ^ b

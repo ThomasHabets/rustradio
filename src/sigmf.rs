@@ -224,7 +224,7 @@ pub fn write<P: AsRef<std::path::Path>>(path: P, samp_rate: f64, freq: f64) -> R
 }
 
 /// SigMF source builder.
-pub struct SigMFSourceBuilder<T: Copy + Type> {
+pub struct SigMFSourceBuilder<T: Sample + Type> {
     filename: std::path::PathBuf,
     repeat: Repeat,
     ignore_type_error: bool,
@@ -232,7 +232,7 @@ pub struct SigMFSourceBuilder<T: Copy + Type> {
     dummy: std::marker::PhantomData<T>,
 }
 
-impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
+impl<T: Sample + Type> SigMFSourceBuilder<T> {
     /// Force a certain sample rate.
     pub fn sample_rate(mut self, rate: f64) -> Self {
         self.sample_rate = Some(rate);
@@ -262,7 +262,7 @@ impl<T: Default + Copy + Type> SigMFSourceBuilder<T> {
 /// SigMF file source.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct SigMFSource<T: Copy> {
+pub struct SigMFSource<T: Sample> {
     file: std::fs::File,
     meta: SigMF,
     range: (u64, u64),
@@ -327,7 +327,7 @@ fn base_append<P: AsRef<std::path::Path>>(path: P, s: &str) -> std::path::PathBu
     }
 }
 
-impl<T: Default + Copy + Type> SigMFSource<T> {
+impl<T: Sample + Type> SigMFSource<T> {
     /// Create new SigMF source builder.
     ///
     /// If the exact file name exists, then treat it as an Archive.
@@ -557,7 +557,7 @@ fn u64_to_clamped_usize(v: u64) -> usize {
 
 impl<T> Block for SigMFSource<T>
 where
-    T: Sample<Type = T> + Copy + std::fmt::Debug + Type,
+    T: Sample<Type = T> + std::fmt::Debug + Type,
 {
     fn work(&mut self) -> Result<BlockRet> {
         if self.left == 0 {

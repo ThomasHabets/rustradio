@@ -1,7 +1,7 @@
 //! Print values to stdout, for debugging.
 use std::collections::HashMap;
 
-use crate::Result;
+use crate::{Result, Sample};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos};
@@ -46,7 +46,7 @@ where
 #[rustradio(crate, new)]
 pub struct DebugFilter<T>
 where
-    T: Copy,
+    T: Sample,
 {
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -56,7 +56,7 @@ where
 
 impl<T> Block for DebugFilter<T>
 where
-    T: Copy + std::fmt::Debug,
+    T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;
@@ -92,7 +92,7 @@ where
 #[rustradio(crate, new)]
 pub struct DebugSink<T>
 where
-    T: Copy,
+    T: Sample,
 {
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -102,7 +102,7 @@ where
 
 impl<T> Block for DebugSink<T>
 where
-    T: Copy + std::fmt::Debug + Default,
+    T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;

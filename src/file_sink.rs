@@ -23,13 +23,13 @@ pub enum Mode {
 /// Send stream to raw file.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FileSink<T: Copy> {
+pub struct FileSink<T: Sample> {
     f: BufWriter<std::fs::File>,
     #[rustradio(in)]
     src: ReadStream<T>,
 }
 
-impl<T: Copy> FileSink<T> {
+impl<T: Sample> FileSink<T> {
     /// Create new FileSink block.
     pub fn new<P: AsRef<std::path::Path>>(
         src: ReadStream<T>,
@@ -60,7 +60,7 @@ impl<T: Copy> FileSink<T> {
 
 impl<T> Block for FileSink<T>
 where
-    T: Copy + Sample<Type = T> + std::fmt::Debug + Default,
+    T: Sample + Sample<Type = T> + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, _tags) = self.src.read_buf()?;

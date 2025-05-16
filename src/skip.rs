@@ -1,5 +1,5 @@
 //! Skip samples, then stream at full speed.
-use crate::Result;
+use crate::{Result, Sample};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
@@ -7,7 +7,7 @@ use crate::stream::{ReadStream, WriteStream};
 /// Turn samples into text.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct Skip<T: Copy> {
+pub struct Skip<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -15,7 +15,7 @@ pub struct Skip<T: Copy> {
     skip: usize,
 }
 
-impl<T: Copy + std::fmt::Debug> Block for Skip<T> {
+impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
     fn work(&mut self) -> Result<BlockRet> {
         let (i, tags) = self.src.read_buf()?;
         if i.is_empty() {
