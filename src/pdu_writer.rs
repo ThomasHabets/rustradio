@@ -38,10 +38,7 @@ impl<T: Send + Sync + 'static> Drop for PduWriter<T> {
     }
 }
 
-impl<T> Block for PduWriter<T>
-where
-    T: Sample + Send + Sync + 'static,
-{
+impl<T: Sample> Block for PduWriter<T> {
     fn work(&mut self) -> Result<BlockRet> {
         let packet = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
