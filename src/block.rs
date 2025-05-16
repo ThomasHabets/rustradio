@@ -131,7 +131,7 @@ pub trait BlockEOF {
 /// Block trait. Must be implemented for all blocks.
 ///
 /// Simpler blocks can use macros to avoid needing to implement `work()`.
-pub trait Block: BlockName + Send + BlockEOF {
+pub trait Block: BlockName + BlockEOF + Send {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.

@@ -2,7 +2,7 @@
 /*
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
  */
-use crate::Result;
+use crate::{Result, Sample};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};

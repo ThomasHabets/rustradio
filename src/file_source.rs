@@ -98,7 +98,6 @@ where
 
         let have = self.buf.len() / sample_size;
         if have == 0 {
-            trace!("FileSource pending");
             return Ok(BlockRet::Pending);
         }
 

@@ -119,6 +119,7 @@ impl Circ {
             _map2: map2,
         })
     }
+
     /// Return length of buffer, *before* the double mapping, in bytes.
     #[must_use]
     pub fn total_size(&self) -> usize {
