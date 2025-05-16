@@ -460,7 +460,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 }
 
 /// A trait all sample types must implement.
-pub trait Sample {
+pub trait Sample: Copy {
     /// The type of the sample.
     type Type;
 
@@ -558,26 +558,6 @@ impl Sample for i32 {
     }
     fn serialize(&self) -> Vec<u8> {
         i32::to_le_bytes(*self).to_vec()
-    }
-}
-
-impl Sample for String {
-    type Type = String;
-    fn size() -> usize {
-        // TODO: variable.
-        4
-    }
-    fn parse(_data: &[u8]) -> Result<Self::Type> {
-        Ok("TODO".into())
-    }
-    fn serialize(&self) -> Vec<u8> {
-        // TODO: there has to be a better way to do his. But I'm on a
-        // plane with no wifi, so can't google it.
-        let mut v = Vec::new();
-        for ch in self.bytes() {
-            v.push(ch);
-        }
-        v
     }
 }
 
