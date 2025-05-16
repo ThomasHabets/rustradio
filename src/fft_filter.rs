@@ -287,11 +287,13 @@ impl<T: Engine> Block for FftFilter<T> {
             self.buf.extend(input.iter().take(add).copied());
             input.consume(add);
             if self.buf.len() < self.nsamples {
+                /*
                 trace!(
                     "FftFilter: Need {} input samples, only have {}, {add}",
                     self.nsamples,
                     self.buf.len()
                 );
+                */
                 return Ok(BlockRet::WaitForStream(
                     &self.src,
                     self.nsamples - self.buf.len(),
