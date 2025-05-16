@@ -24,7 +24,7 @@ pub struct Map<In, Out, F>
 where
     In: Sample,
     Out: Sample,
-    F: Fn(In) -> Out,
+    F: Fn(In) -> Out + Send,
 {
     #[rustradio(into)]
     name: String,
@@ -39,7 +39,7 @@ impl<In, Out, F> Map<In, Out, F>
 where
     In: Sample,
     Out: Sample,
-    F: Fn(In) -> Out,
+    F: Fn(In) -> Out + Send,
 {
     fn process_sync(&mut self, s: In) -> Out {
         (self.map)(s)
