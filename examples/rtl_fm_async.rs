@@ -11,7 +11,7 @@ use rustradio::agraph::AsyncGraph;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::GraphRunner;
-use rustradio::{Complex, Float};
+use rustradio::{Complex, Float, blockchain};
 
 const SPECTRUM_SIZE: usize = 1024;
 
@@ -67,14 +67,6 @@ struct Opt {
     /// Run with multithreaded scheduler.
     #[arg(long)]
     multithread: bool,
-}
-
-macro_rules! blehbleh {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
 }
 
 // TODO: this code is really ugly. It works, but needs major cleanup.
@@ -266,20 +258,29 @@ async fn main() -> Result<()> {
     let mut g = AsyncGraph::new();
     let samp_rate = 1_024_000.0;
 
+    let repeat = if opt.file_repeat {
+        rustradio::Repeat::infinite()
+    } else {
+        rustradio::Repeat::finite(1)
+    };
     let prev = if let Some(filename) = opt.filename {
         if opt.rtlsdr_file {
-            let mut block = FileSource::<u8>::new(&filename)?;
-            if opt.file_repeat {
-                block.0.repeat(rustradio::Repeat::infinite());
-            }
-            let prev = blehbleh!(g, block);
-            blehbleh![g, RtlSdrDecode::new(prev)]
+            blockchain![
+                g,
+                prev,
+                FileSource::<u8>::builder(&filename)
+                    .repeat(repeat)
+                    .build()?,
+                RtlSdrDecode::new(prev),
+            ]
         } else {
-            let mut block = FileSource::<Complex>::new(&filename)?;
-            if opt.file_repeat {
-                block.0.repeat(rustradio::Repeat::infinite());
-            }
-            blehbleh!(g, block)
+            blockchain![
+                g,
+                prev,
+                FileSource::<Complex>::builder(&filename)
+                    .repeat(repeat)
+                    .build()?,
+            ]
         }
     } else if !cfg!(feature = "rtlsdr") {
         panic!("RTL SDR feature not enabled")
@@ -287,11 +288,12 @@ async fn main() -> Result<()> {
         // RTL SDR source.
         #[cfg(feature = "rtlsdr")]
         {
-            let (src, prev) = RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?;
-            let (dec, prev) = RtlSdrDecode::new(prev);
-            g.add(Box::new(src));
-            g.add(Box::new(dec));
-            prev
+            blockchain![
+                g,
+                prev,
+                RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?,
+                RtlSdrDecode::new(prev),
+            ]
         }
         #[cfg(not(feature = "rtlsdr"))]
         panic!("can't happen, but must be here to compile")
@@ -301,9 +303,10 @@ async fn main() -> Result<()> {
 
     // Send data to spectrum UI.
     {
-        let prev = blehbleh![g, FftStream::new(spec_tee, SPECTRUM_SIZE)];
-        let prev = blehbleh![
+        let prev = blockchain![
             g,
+            prev,
+            FftStream::new(spec_tee, SPECTRUM_SIZE),
             Map::new(prev, "to_ui_spectrum", move |x| {
                 if opt.tui {
                     if let Err(e) = ui_tx_spec.send(x.norm()) {
@@ -311,52 +314,47 @@ async fn main() -> Result<()> {
                     }
                 }
                 x
-            })
+            }),
         ];
         g.add(Box::new(NullSink::new(prev)));
     }
 
-    // Filter.
-    let taps = rustradio::fir::low_pass_complex(
-        samp_rate,
-        100_000.0,
-        1000.0,
-        &rustradio::window::WindowType::Hamming,
-    );
-    let prev = blehbleh![g, FftFilter::new(prev, taps)];
-
-    // Resample.
     let new_samp_rate = 200_000.0;
-    let prev = blehbleh![
+    // Filter.
+    let prev = blockchain![
         g,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+        prev,
+        FftFilter::new(
+            prev,
+            rustradio::fir::low_pass_complex(
+                samp_rate,
+                100_000.0,
+                1000.0,
+                &rustradio::window::WindowType::Hamming,
+            )
+        ),
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
+        QuadratureDemod::new(prev, 1.0),
     ];
     let samp_rate = new_samp_rate;
 
     // TODO: Add broadcast FM deemph.
 
-    // Quad demod.
-    let prev = blehbleh![g, QuadratureDemod::new(prev, 1.0)];
-
-    let taps = rustradio::fir::low_pass(
-        samp_rate,
-        44_100.0,
-        500.0,
-        &rustradio::window::WindowType::Hamming,
-    );
     //let audio_filter = FirFilter::new(prev, &taps);
-    let prev = blehbleh![g, FftFilterFloat::new(prev, &taps)];
-
-    // Resample audio.
     let new_samp_rate = opt.audio_rate as f32;
-    let prev = blehbleh![
+    let prev = blockchain![
         g,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
-    ];
-
-    // Send data to audio UI.
-    let prev = blehbleh![
-        g,
+        prev,
+        FftFilterFloat::new(
+            prev,
+            &rustradio::fir::low_pass(
+                samp_rate,
+                44_100.0,
+                500.0,
+                &rustradio::window::WindowType::Hamming,
+            )
+        ),
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
         Map::new(prev, "to_ui", move |x| {
             if opt.tui {
                 if let Err(e) = ui_tx.send(x) {
@@ -364,16 +362,17 @@ async fn main() -> Result<()> {
                 }
             }
             x
-        })
+        }),
+        MultiplyConst::new(prev, opt.volume),
     ];
 
     // Change volume.
-    let prev = blehbleh![g, MultiplyConst::new(prev, opt.volume)];
 
     if let Some(out) = opt.output {
         // Convert to .au.
-        let prev = blehbleh![
+        let prev = blockchain![
             g,
+            prev,
             AuEncode::new(
                 prev,
                 rustradio::au::Encoding::Pcm16,

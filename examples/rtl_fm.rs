@@ -263,19 +263,29 @@ fn main() -> Result<()> {
     };
     let samp_rate = 1_024_000.0;
 
+    let repeat = if opt.file_repeat {
+        rustradio::Repeat::infinite()
+    } else {
+        rustradio::Repeat::finite(1)
+    };
     let prev = if let Some(filename) = opt.filename {
         if opt.rtlsdr_file {
-            let mut block = FileSource::<u8>::new(&filename)?;
-            if opt.file_repeat {
-                block.0.repeat(rustradio::Repeat::infinite());
-            }
-            blockchain![g, prev, block, RtlSdrDecode::new(prev)]
+            blockchain![
+                g,
+                prev,
+                FileSource::<u8>::builder(&filename)
+                    .repeat(repeat)
+                    .build()?,
+                RtlSdrDecode::new(prev),
+            ]
         } else {
-            let mut block = FileSource::<Complex>::new(&filename)?;
-            if opt.file_repeat {
-                block.0.repeat(rustradio::Repeat::infinite());
-            }
-            blockchain!(g, prev, block)
+            blockchain![
+                g,
+                prev,
+                FileSource::<Complex>::builder(&filename)
+                    .repeat(repeat)
+                    .build()?,
+            ]
         }
     } else if !cfg!(feature = "rtlsdr") {
         panic!("RTL SDR feature not enabled")

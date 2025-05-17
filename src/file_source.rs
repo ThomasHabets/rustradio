@@ -8,6 +8,34 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Repeat, Result, Sample};
 
+/// FileSource builder.
+pub struct FileSourceBuilder {
+    filename: std::path::PathBuf,
+    repeat: Repeat,
+}
+
+impl FileSourceBuilder {
+    /// Create builder.
+    pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
+        FileSourceBuilder {
+            filename: filename.into(),
+            repeat: Repeat::finite(1),
+        }
+    }
+    /// Build the FileSource.
+    pub fn build<T: Sample>(self) -> Result<(FileSource<T>, ReadStream<T>)> {
+        let (mut block, dst) = FileSource::new(self.filename)?;
+        block.repeat(self.repeat);
+        Ok((block, dst))
+    }
+
+    /// Repeat mode.
+    pub fn repeat(mut self, r: Repeat) -> Self {
+        self.repeat = r;
+        self
+    }
+}
+
 /// Read stream from raw file.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
@@ -21,19 +49,21 @@ pub struct FileSource<T: Sample> {
 }
 
 impl<T: Sample> FileSource<T> {
+    /// Create builder.
+    pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSourceBuilder {
+        FileSourceBuilder::new(filename)
+    }
     /// Create new FileSource block.
-    pub fn new<P: AsRef<std::path::Path>>(filename: P) -> Result<(Self, ReadStream<T>)> {
+    pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Result<(Self, ReadStream<T>)> {
+        let filename = filename.into();
         let f = BufReader::new(
-            std::fs::File::open(&filename).map_err(|e| Error::file_io(e, filename.as_ref()))?,
+            std::fs::File::open(&filename).map_err(|e| Error::file_io(e, filename.clone()))?,
         );
-        debug!(
-            "Opening source {}",
-            format!("{}", filename.as_ref().display())
-        );
+        debug!("Opening source {}", format!("{}", filename.display()));
         let (dst, dr) = crate::stream::new_stream();
         Ok((
             Self {
-                filename: filename.as_ref().to_path_buf(),
+                filename,
                 f,
                 repeat: Repeat::finite(1),
                 buf: Vec::new(),
