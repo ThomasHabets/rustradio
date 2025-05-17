@@ -42,7 +42,6 @@ where
     Tb: Sample,
     Tout: Sample,
 {
-    /// Hello world.
     #[rustradio(in)]
     a: ReadStream<Ta>,
 
