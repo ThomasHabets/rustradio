@@ -16,6 +16,7 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
     a
 }
 
+#[derive(Default)]
 pub struct RationalResamplerBuilder {}
 pub struct RationalResamplerBuilderInterp {
     interp: usize,
@@ -29,6 +30,9 @@ pub struct RationalResamplerBuilderBoth {
 }
 
 impl RationalResamplerBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
     pub fn deci(self, deci: usize) -> RationalResamplerBuilderDeci {
         RationalResamplerBuilderDeci { deci }
     }

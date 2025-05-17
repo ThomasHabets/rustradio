@@ -108,7 +108,7 @@ async fn main() -> Result<()> {
                 &rustradio::window::WindowType::Hamming,
             )
         ),
-        RationalResampler::<Complex>::builder()
+        RationalResamplerBuilder::new()
             .deci(samp_rate as usize)
             .interp(samp_rate_2 as usize)
             .build(prev)?,
