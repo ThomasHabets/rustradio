@@ -292,6 +292,17 @@ macro_rules! error_from {
     };
 }
 
+#[macro_export]
+macro_rules! blockchain {
+    ($g:expr, $prev:ident, $($cons:expr),* $(,)?) => {{
+        $(
+            let (block, $prev) = $cons;
+            $g.add(Box::new(block));
+            )*
+            $prev
+    }};
+}
+
 error_from!(
     "", // Can't attribute to a specific set of blocks.
     std::sync::mpsc::RecvError,

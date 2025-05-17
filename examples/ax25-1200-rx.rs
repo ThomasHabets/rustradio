@@ -172,7 +172,7 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    let prev = add_block![g, FftFilter::new(prev, &taps)];
+    let prev = add_block![g, FftFilter::new(prev, taps)];
     let new_samp_rate = 50_000.0;
     let prev = add_block![
         g,

@@ -92,7 +92,7 @@ fn main() -> Result<()> {
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    let prev = add_block![g, FftFilter::new(prev, &taps)];
+    let prev = add_block![g, FftFilter::new(prev, taps)];
 
     // Resample RF.
     let new_samp_rate = 50_000.0;

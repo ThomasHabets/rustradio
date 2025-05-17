@@ -57,8 +57,10 @@ pub mod rr_fftw {
     impl FftwEngine {
         /// Create new FFTW engine, given taps.
         #[must_use]
-        pub fn new(taps: &[Complex]) -> Self {
-            let fft_size = calc_fft_size(taps.len());
+        pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
+            let mut taps_fft = taps.into();
+            let tap_len = taps_fft.len();
+            let fft_size = calc_fft_size(taps_fft.len());
             // Create FFT planners.
             let mut fft: C2CPlan32 = C2CPlan::aligned(
                 &[fft_size],
@@ -74,7 +76,6 @@ pub mod rr_fftw {
             .unwrap();
 
             // Pre-FFT the taps.
-            let mut taps_fft = taps.to_vec();
             taps_fft.resize(fft_size, Complex::default());
             let mut tmp = taps_fft.clone();
             fft.c2c(&mut tmp, &mut taps_fft).unwrap();
@@ -90,7 +91,7 @@ pub mod rr_fftw {
                 fft,
                 ifft,
                 taps_fft,
-                tap_len: taps.len(),
+                tap_len,
             }
         }
     }
@@ -137,7 +138,8 @@ pub mod rr_rustfft {
     impl RustFftEngine {
         /// Create new rustfft engine, given taps.
         #[must_use]
-        pub fn new(taps: &[Complex]) -> Self {
+        pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
+            let taps = taps.into();
             let fft_size = calc_fft_size(taps.len());
             let mut planner = rustfft::FftPlanner::new();
             let fft = planner.plan_fft_forward(fft_size);
@@ -190,7 +192,7 @@ pub mod rr_rustfft {
 /// let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0));
 ///
 /// // Create and connect fft.
-/// let (fft, fft_out) = FftFilter::new(src_out, &taps);
+/// let (fft, fft_out) = FftFilter::new(src_out, taps);
 ///
 /// // Set up dummy sink.
 /// let sink = NullSink::new(fft_out);
@@ -219,7 +221,10 @@ impl FftFilter<rr_fftw::FftwEngine> {
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
-    pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
+    pub fn new<T: Into<Vec<Complex>>>(
+        src: ReadStream<Complex>,
+        taps: T,
+    ) -> (Self, ReadStream<Complex>) {
         trace!("FftFilter: defaulting to FFTW");
         let engine = rr_fftw::FftwEngine::new(taps);
         Self::new_engine(src, engine)
@@ -232,7 +237,10 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
-    pub fn new(src: ReadStream<Complex>, taps: &[Complex]) -> (Self, ReadStream<Complex>) {
+    pub fn new<T: Into<Vec<Complex>>>(
+        src: ReadStream<Complex>,
+        taps: T,
+    ) -> (Self, ReadStream<Complex>) {
         trace!("FftFilter: defaulting to RustFFT");
         let engine = rr_rustfft::RustFftEngine::new(taps);
         Self::new_engine(src, engine)
@@ -355,7 +363,7 @@ impl FftFilterFloat<rr_fftw::FftwEngine> {
     /// Otherwise it's RustFFT.
     pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
-        let engine = rr_fftw::FftwEngine::new(&taps);
+        let engine = rr_fftw::FftwEngine::new(taps);
         Self::new_engine(src, engine)
     }
 }
@@ -368,7 +376,7 @@ impl FftFilterFloat<rr_rustfft::RustFftEngine> {
     /// Otherwise it's RustFFT.
     pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
-        let engine = rr_rustfft::RustFftEngine::new(&taps);
+        let engine = rr_rustfft::RustFftEngine::new(taps);
         Self::new_engine(src, engine)
     }
 }
@@ -471,7 +479,8 @@ mod tests {
         // Create blocks.
         let (mut src, o) = SignalSourceComplex::new(samp_rate, signal, amplitude);
         let taps = low_pass_complex(samp_rate, cutoff, twidth, &WindowType::Hamming);
-        let (mut fft, out) = FftFilter::new(o, &taps);
+        let taps_len = taps.len();
+        let (mut fft, out) = FftFilter::new(o, taps);
 
         // Generate a bunch of samples from signal generator.
         let mut total = 0;
@@ -483,7 +492,7 @@ mod tests {
                 .read_buf()?
                 .0
                 .iter()
-                .skip(taps.len()) // I get garbage in the beginning.
+                .skip(taps_len) // I get garbage in the beginning.
                 .copied()
                 .collect::<Vec<Complex>>();
             // write_vec("bleh.txt", &out)?;

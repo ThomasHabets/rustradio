@@ -75,7 +75,7 @@ mod internal {
             1000.0,
             &rustradio::window::WindowType::Hamming,
         );
-        let prev = blehbleh![g, FftFilter::new(prev, &taps)];
+        let prev = blehbleh![g, FftFilter::new(prev, taps)];
 
         // Resample.
         let new_samp_rate = 200_000.0;
