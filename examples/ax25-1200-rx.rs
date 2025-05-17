@@ -38,13 +38,12 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use rustradio::Error;
 use rustradio::blocks::*;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{Graph, GraphRunner};
+use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::window::WindowType;
-use rustradio::{Complex, Float};
-use rustradio::{graph::Graph, mtgraph::MTGraph};
+use rustradio::{Complex, Error, Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -99,15 +98,6 @@ struct Opt {
     multithread: bool,
 }
 
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        let block = Box::new(block);
-        $g.add(block);
-        prev
-    }};
-}
-
 fn get_complex_input(
     g: &mut Box<dyn GraphRunner>,
     opt: &Opt,
@@ -131,11 +121,15 @@ fn get_complex_input(
             let samp = opt
                 .samp_rate
                 .ok_or(Error::msg("Sample rate must be provided for RTLSDR input"))?;
-            let prev = add_block![g, RtlSdrSource::new(opt.freq, samp, opt.gain)?];
-
-            // Decode.
-            let prev = add_block![g, RtlSdrDecode::new(prev)];
-            return Ok((prev, samp as f32));
+            return Ok((
+                blockchain![
+                    g,
+                    prev,
+                    RtlSdrSource::new(opt.freq, samp, opt.gain)?,
+                    RtlSdrDecode::new(prev),
+                ],
+                samp as f32,
+            ));
         }
         #[cfg(not(feature = "rtlsdr"))]
         panic!("rtlsdr feature not enabled");
@@ -146,13 +140,14 @@ fn get_complex_input(
 fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
     if opt.audio {
         if let Some(read) = &opt.read {
-            let prev = add_block![g, FileSource::new(read)?];
-            let prev = add_block![
+            let prev = blockchain![
                 g,
+                prev,
+                FileSource::new(read)?,
                 AuDecode::new(
                     prev,
                     opt.samp_rate.expect("audio source requires --sample_rate")
-                )
+                ),
             ];
             // TODO: AuDecode should be providing the bitrate.
             return Ok((
@@ -165,27 +160,29 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
         panic!("Audio can only be read from file");
     }
 
-    let (prev, samp_rate) = get_complex_input(g, opt)?;
-    let taps = rustradio::fir::low_pass_complex(
-        samp_rate,
-        20_000.0,
-        100.0,
-        &rustradio::window::WindowType::Hamming,
-    );
-    let prev = add_block![g, FftFilter::new(prev, taps)];
     let new_samp_rate = 50_000.0;
-    let prev = add_block![
+    let (prev, samp_rate) = get_complex_input(g, opt)?;
+    let prev = blockchain![
         g,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+        prev,
+        FftFilter::new(
+            prev,
+            rustradio::fir::low_pass_complex(
+                samp_rate,
+                20_000.0,
+                100.0,
+                &rustradio::window::WindowType::Hamming,
+            )
+        ),
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
     ];
-    let samp_rate = new_samp_rate;
     let prev = if opt.fast_fm {
         // This is faster, but slightly worse.
-        add_block![g, FastFM::new(prev)]
+        blockchain![g, prev, FastFM::new(prev)]
     } else {
-        add_block![g, QuadratureDemod::new(prev, 1.0)]
+        blockchain![g, prev, QuadratureDemod::new(prev, 1.0)]
     };
-    Ok((prev, samp_rate))
+    Ok((prev, new_samp_rate))
 }
 
 fn main() -> Result<()> {
@@ -226,26 +223,24 @@ fn main() -> Result<()> {
     }
     */
 
-    let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
-
-    // Can't use FastFM here, because it doesn't work well with
-    // preemph'd input.
-    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-
     let taps = rustradio::fir::low_pass(
         samp_rate,
         1100.0,
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
-
     let freq1 = 1200.0;
     let freq2 = 2200.0;
     let center_freq = freq1 + (freq2 - freq1) / 2.0;
-    let prev = add_block![
+    let prev = blockchain![
         g,
-        add_const(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)
+        prev,
+        Hilbert::new(prev, 65, &WindowType::Hamming),
+        // Can't use FastFM here, because it doesn't work well with
+        // preemph'd input.
+        QuadratureDemod::new(prev, 1.0),
+        FftFilterFloat::new(prev, &taps),
+        add_const(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate),
     ];
 
     /*
@@ -276,8 +271,12 @@ fn main() -> Result<()> {
         let clock = block.out_clock();
         let (block, a, prev) = Tee::new(prev);
         g.add(Box::new(block));
-        let clock = add_block![g, AddConst::new(clock.expect("TODO"), -samp_rate / baud)];
-        let clock = add_block![g, ToText::new(vec![a, clock])];
+        let clock = blockchain![
+            g,
+            clock,
+            AddConst::new(clock.expect("TODO"), -samp_rate / baud),
+            ToText::new(vec![a, clock]),
+        ];
         g.add(Box::new(FileSink::new(
             clock,
             clockfile,
@@ -289,24 +288,26 @@ fn main() -> Result<()> {
     };
     g.add(Box::new(block));
 
-    let prev = add_block![g, BinarySlicer::new(prev)];
-
-    // Delay xor, aka NRZI decode.
-    let prev = add_block![g, NrziDecode::new(prev)];
-
-    // Save bits to file.
-    /*
-    let (a, prev) = add_block![g, Tee::new(prev)];
-    g.add(Box::new(FileSink::new(
-        a,
-        "test.u8",
-        rustradio::file_sink::Mode::Overwrite,
-    )?));
-     */
-
-    let (mut hdlc, prev) = HdlcDeframer::new(prev, 10, 1500);
-    hdlc.set_fix_bits(opt.fix_bits);
-    g.add(Box::new(hdlc));
+    let prev = blockchain![
+        g,
+        prev,
+        BinarySlicer::new(prev),
+        NrziDecode::new(prev),
+        // Save bits to file.
+        /*
+        let (a, prev) = add_block![g, Tee::new(prev)];
+        g.add(Box::new(FileSink::new(
+            a,
+            "test.u8",
+            rustradio::file_sink::Mode::Overwrite,
+        )?));
+         */
+        {
+            let (mut hdlc, prev) = HdlcDeframer::new(prev, 10, 1500);
+            hdlc.set_fix_bits(opt.fix_bits);
+            (hdlc, prev)
+        },
+    ];
     if let Some(o) = opt.output {
         g.add(Box::new(PduWriter::new(prev, o)));
     } else {
