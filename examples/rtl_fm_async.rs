@@ -108,7 +108,10 @@ async fn main() -> Result<()> {
                 &rustradio::window::WindowType::Hamming,
             )
         ),
-        RationalResampler::new(prev, samp_rate_2 as usize, samp_rate as usize)?,
+        RationalResampler::<Complex>::builder()
+            .deci(samp_rate as usize)
+            .interp(samp_rate_2 as usize)
+            .build(prev)?,
         QuadratureDemod::new(prev, 1.0),
         FftFilterFloat::new(
             prev,

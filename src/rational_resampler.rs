@@ -16,6 +16,51 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
     a
 }
 
+pub struct RationalResamplerBuilder {}
+pub struct RationalResamplerBuilderInterp {
+    interp: usize,
+}
+pub struct RationalResamplerBuilderDeci {
+    deci: usize,
+}
+pub struct RationalResamplerBuilderBoth {
+    interp: usize,
+    deci: usize,
+}
+
+impl RationalResamplerBuilder {
+    pub fn deci(self, deci: usize) -> RationalResamplerBuilderDeci {
+        RationalResamplerBuilderDeci { deci }
+    }
+    pub fn interp(self, interp: usize) -> RationalResamplerBuilderInterp {
+        RationalResamplerBuilderInterp { interp }
+    }
+}
+impl RationalResamplerBuilderInterp {
+    pub fn deci(self, deci: usize) -> RationalResamplerBuilderBoth {
+        RationalResamplerBuilderBoth {
+            interp: self.interp,
+            deci,
+        }
+    }
+}
+impl RationalResamplerBuilderDeci {
+    pub fn interp(self, interp: usize) -> RationalResamplerBuilderBoth {
+        RationalResamplerBuilderBoth {
+            deci: self.deci,
+            interp,
+        }
+    }
+}
+impl RationalResamplerBuilderBoth {
+    pub fn build<T: Sample>(
+        self,
+        src: ReadStream<T>,
+    ) -> Result<(RationalResampler<T>, ReadStream<T>)> {
+        RationalResampler::new(src, self.interp, self.deci)
+    }
+}
+
 /// Resample by a fractional amount.
 ///
 /// This can be used to easily convert from any sample rate to any other. Just
@@ -35,6 +80,11 @@ pub struct RationalResampler<T: Sample> {
 }
 
 impl<T: Sample> RationalResampler<T> {
+    /// Create builder.
+    pub fn builder() -> RationalResamplerBuilder {
+        RationalResamplerBuilder {}
+    }
+
     /// Create new RationalResampler block.
     ///
     /// A common pattern to convert between arbitrary sample rates X
