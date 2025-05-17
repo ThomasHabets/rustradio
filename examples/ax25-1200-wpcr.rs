@@ -16,7 +16,7 @@ use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::window::WindowType;
-use rustradio::{Error, Float};
+use rustradio::{Error, Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -43,14 +43,6 @@ struct Opt {
     multithreaded: bool,
 }
 
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
-}
-
 fn main() -> Result<()> {
     let opt = Opt::parse();
     stderrlog::new()
@@ -69,34 +61,36 @@ fn main() -> Result<()> {
         Box::new(rustradio::graph::Graph::new())
     };
 
-    // Read file.
-    let prev = add_block![g, FileSource::new(&opt.read)?];
-
-    // Filter.
-    let taps = rustradio::fir::low_pass_complex(
-        samp_rate,
-        20_000.0,
-        100.0,
-        &rustradio::window::WindowType::Hamming,
-    );
-    let prev = add_block![g, FftFilter::new(prev, taps)];
-
-    // Resample RF.
     let new_samp_rate = 50_000.0;
-    let prev = add_block![
+    let prev = blockchain![
         g,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+        prev,
+        // Read file.
+        FileSource::new(&opt.read)?,
+        // Filter.
+        FftFilter::new(
+            prev,
+            rustradio::fir::low_pass_complex(
+                samp_rate,
+                20_000.0,
+                100.0,
+                &rustradio::window::WindowType::Hamming,
+            )
+        ),
+        // Resample RF.
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
     ];
     let samp_rate = new_samp_rate;
 
     // Tee out signal strength.
     let (b, prev, burst_tee) = Tee::new(prev);
     g.add(Box::new(b));
-    let burst_tee = add_block![g, ComplexToMag2::new(burst_tee)];
-    let burst_tee = add_block![
+    let burst_tee = blockchain![
         g,
+        burst_tee,
+        ComplexToMag2::new(burst_tee),
         SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)
-            .ok_or(Error::msg("bad IIR parameters"))?
+            .ok_or(Error::msg("bad IIR parameters"))?,
     ];
 
     // Save burst stream
@@ -105,42 +99,36 @@ fn main() -> Result<()> {
     g.add(Box::new(FileSink::new(a, "test.f32", rustradio::file_sink::Mode::Overwrite)?));
      */
 
-    // Demod.
-    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-    let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
-    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-
-    // Filter.
-    let taps = rustradio::fir::low_pass(
-        samp_rate,
-        2400.0,
-        100.0,
-        &rustradio::window::WindowType::Hamming,
-    );
-    let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
-
-    // Tag.
-    let prev = add_block![
+    let prev = blockchain![
         g,
-        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())
+        prev,
+        // Demod.
+        QuadratureDemod::new(prev, 1.0),
+        Hilbert::new(prev, 65, &WindowType::Hamming),
+        QuadratureDemod::new(prev, 1.0),
+        // Filter.
+        FftFilterFloat::new(
+            prev,
+            &rustradio::fir::low_pass(
+                samp_rate,
+                2400.0,
+                100.0,
+                &rustradio::window::WindowType::Hamming,
+            )
+        ),
+        // Tag.
+        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string()),
+        StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50),
+        // Symbol sync.
+        Midpointer::new(prev),
+        Wpcr::builder(prev).samp_rate(opt.sample_rate).build(),
+        VecToStream::new(prev),
+        BinarySlicer::new(prev),
+        // Delay xor, aka NRZI decode.
+        NrziDecode::new(prev),
+        // Decode.
+        HdlcDeframer::new(prev, 10, 1500),
     ];
-
-    let prev = add_block![
-        g,
-        StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50)
-    ];
-
-    // Symbol sync.
-    let prev = add_block![g, Midpointer::new(prev)];
-    let prev = add_block![g, Wpcr::builder(prev).samp_rate(opt.sample_rate).build()];
-    let prev = add_block![g, VecToStream::new(prev)];
-    let prev = add_block![g, BinarySlicer::new(prev)];
-
-    // Delay xor, aka NRZI decode.
-    let prev = add_block![g, NrziDecode::new(prev)];
-
-    // Decode.
-    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
 
     // Save.
     g.add(Box::new(PduWriter::new(prev, opt.output)));
