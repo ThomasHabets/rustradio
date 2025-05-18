@@ -41,7 +41,7 @@ struct Opt {
     verbose: usize,
 
     /// Audio volume.
-    #[arg(long = "volume", default_value = "1.0")]
+    #[arg(long = "volume", default_value = "0.01")]
     volume: Float,
 
     /// Audio output rate.
@@ -123,7 +123,6 @@ async fn main() -> Result<()> {
             )
         ),
         RationalResampler::new(prev, audio_rate as usize, samp_rate_2 as usize)?,
-        // Change volume.
         MultiplyConst::new(prev, opt.volume),
     ];
 
