@@ -72,6 +72,8 @@ impl AsyncGraph {
                             }
                         }
                         BlockRet::Pending => {
+                            drop(ret);
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                             //debug!("{name} Pending");
                         }
                     }
