@@ -109,27 +109,29 @@ impl RtlSdrSource {
 
 impl Block for RtlSdrSource {
     fn work(&mut self) -> Result<BlockRet> {
-        let mut o = self.dst.write_buf()?;
-        if o.is_empty() {
-            return Ok(BlockRet::WaitForStream(&self.dst, 1));
-        }
-        if !self.buf.is_empty() {
-            let n = std::cmp::min(o.len(), self.buf.len());
-            o.fill_from_slice(&self.buf[..n]);
-            self.buf.drain(0..n);
-            o.produce(n, &[]);
-            return Ok(BlockRet::Again);
-        }
-        match self.rx.try_recv() {
-            Err(TryRecvError::Empty) => Ok(BlockRet::Pending),
-            Err(other) => Err(other.into()),
-            Ok(buf) => {
-                let n = std::cmp::min(o.len(), buf.len());
-                o.fill_from_slice(&buf[..n]);
-                self.buf.extend(&buf[n..]);
-                o.produce(n, &[]);
-                Ok(BlockRet::Again)
+        loop {
+            let mut o = self.dst.write_buf()?;
+            if o.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
+            if !self.buf.is_empty() {
+                let n = std::cmp::min(o.len(), self.buf.len());
+                o.fill_from_slice(&self.buf[..n]);
+                self.buf.drain(0..n);
+                o.produce(n, &[]);
+                continue;
+            }
+            return match self.rx.try_recv() {
+                Err(TryRecvError::Empty) => Ok(BlockRet::Pending),
+                Err(other) => Err(other.into()),
+                Ok(buf) => {
+                    let n = std::cmp::min(o.len(), buf.len());
+                    o.fill_from_slice(&buf[..n]);
+                    self.buf.extend(&buf[n..]);
+                    o.produce(n, &[]);
+                    continue;
+                }
+            };
         }
     }
 }
