@@ -15,6 +15,10 @@ use log::error;
 use crate::stream::{Tag, TagPos};
 use crate::{Error, Result};
 
+const SYNC_SLEEP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
+#[cfg(feature = "async")]
+const ASYNC_SLEEP_TIME: tokio::time::Duration = tokio::time::Duration::from_millis(100);
+
 #[derive(Debug)]
 struct Map {
     base: *mut c_uchar,
@@ -383,11 +387,9 @@ impl<T> Buffer<T> {
     pub fn wait_for_write(&self, need: usize) -> usize {
         self.state
             .cv
-            .wait_timeout_while(
-                self.state.lock.lock().unwrap(),
-                std::time::Duration::from_millis(100),
-                |s| s.free() < need,
-            )
+            .wait_timeout_while(self.state.lock.lock().unwrap(), SYNC_SLEEP_TIME, |s| {
+                s.free() < need
+            })
             .unwrap()
             .0
             .free()
@@ -395,7 +397,7 @@ impl<T> Buffer<T> {
     #[cfg(feature = "async")]
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
-        let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+        let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
             _ = sleep => 0,
             _ = self.state.acvw.notified() => 1,
@@ -404,11 +406,9 @@ impl<T> Buffer<T> {
     pub fn wait_for_read(&self, need: usize) -> usize {
         self.state
             .cv
-            .wait_timeout_while(
-                self.state.lock.lock().unwrap(),
-                std::time::Duration::from_millis(100),
-                |s| s.used < need,
-            )
+            .wait_timeout_while(self.state.lock.lock().unwrap(), SYNC_SLEEP_TIME, |s| {
+                s.used < need
+            })
             .unwrap()
             .0
             .used
@@ -416,7 +416,7 @@ impl<T> Buffer<T> {
     #[cfg(feature = "async")]
     pub async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
-        let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+        let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
             _ = sleep => 0,
             _ = self.state.acvr.notified() => 1,
