@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -uoe pipefail
-if [[ $FAST = "true" ]]; then
+if [[ ${FAST:-} = "true" ]]; then
         exit 0
 fi
 cd "$TICKBOX_TEMPDIR/work"
