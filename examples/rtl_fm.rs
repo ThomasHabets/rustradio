@@ -69,6 +69,10 @@ struct Opt {
     /// Run with multithreaded scheduler.
     #[arg(long)]
     multithread: bool,
+
+    /// Run async graph executor.
+    #[arg(long = "async")]
+    run_async: bool,
 }
 
 // TODO: this code is really ugly. It works, but needs major cleanup.
@@ -237,15 +241,69 @@ fn main() -> Result<()> {
         .verbosity(opt.verbose)
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
+    if opt.run_async {
+        #[cfg(feature = "async")]
+        {
+            run_async(opt)
+        }
+        #[cfg(not(feature = "async"))]
+        panic!("Async not built in")
+    } else {
+        run_sync(opt)
+    }
+}
 
+fn run_sync(opt: Opt) -> Result<()> {
+    let mut g: Box<dyn GraphRunner> = if opt.multithread {
+        Box::new(MTGraph::new())
+    } else {
+        Box::new(Graph::new())
+    };
+    let ui_thread = build(&mut *g, &opt)?;
+    let cancel = g.cancel_token();
+    ctrlc::set_handler(move || {
+        warn!("Got Ctrl-C");
+        eprintln!("\n");
+        cancel.cancel();
+    })
+    .expect("failed to set Ctrl-C handler");
+    eprintln!("Running loop");
+    g.run()?;
+    ui_thread.join().expect("Failed to join UI thread");
+    eprintln!("{}", g.generate_stats().unwrap());
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+#[tokio::main]
+async fn run_async(opt: Opt) -> Result<()> {
+    let mut g = rustradio::agraph::AsyncGraph::new();
+    let ui_thread = build(&mut g, &opt)?;
+    let cancel = g.cancel_token();
+    ctrlc::set_handler(move || {
+        warn!("Got Ctrl-C");
+        eprintln!("\n");
+        cancel.cancel();
+    })
+    .expect("failed to set Ctrl-C handler");
+    eprintln!("Running loop");
+    g.run_async().await?;
+    ui_thread.join().expect("Failed to join UI thread");
+    eprintln!("{}", g.generate_stats().unwrap_or("no stats".to_string()));
+    Ok(())
+}
+
+fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<()>> {
     let (ui_tx, rx) = std::sync::mpsc::channel();
     let (ui_tx_spec, rx_spec) = std::sync::mpsc::channel();
 
     let pid = std::process::id();
+    let opt_tui = opt.tui;
+    let opt_fps = opt.fps;
     let ui_thread = std::thread::spawn(move || {
-        if opt.tui {
+        if opt_tui {
             let terminal = ratatui::init();
-            let result = run_ui(terminal, rx, rx_spec, opt.fps);
+            let result = run_ui(terminal, rx, rx_spec, opt_fps);
             ratatui::restore();
             result.unwrap();
             // SAFETY:
@@ -256,11 +314,6 @@ fn main() -> Result<()> {
         }
     });
 
-    let mut g: Box<dyn GraphRunner> = if opt.multithread {
-        Box::new(MTGraph::new())
-    } else {
-        Box::new(Graph::new())
-    };
     let samp_rate = 1_024_000.0;
 
     let repeat = if opt.file_repeat {
@@ -268,7 +321,7 @@ fn main() -> Result<()> {
     } else {
         rustradio::Repeat::finite(1)
     };
-    let prev = if let Some(filename) = opt.filename {
+    let prev = if let Some(ref filename) = opt.filename {
         if opt.rtlsdr_file {
             blockchain![
                 g,
@@ -314,7 +367,7 @@ fn main() -> Result<()> {
             prev,
             FftStream::new(spec_tee, SPECTRUM_SIZE),
             Map::new(prev, "to_ui_spectrum", move |x| {
-                if opt.tui {
+                if opt_tui {
                     if let Err(e) = ui_tx_spec.send(x.norm()) {
                         trace!("Failed to write data to UI (probably exiting): {e}");
                     }
@@ -326,7 +379,7 @@ fn main() -> Result<()> {
     }
 
     // Resample.
-    let new_samp_rate = 200_000.0;
+    let samp_rate_2 = 200_000.0;
     let prev = blockchain![
         g,
         prev,
@@ -339,50 +392,35 @@ fn main() -> Result<()> {
                 &rustradio::window::WindowType::Hamming,
             )
         ),
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
+        RationalResamplerBuilder::new()
+            .deci(samp_rate as usize)
+            .interp(samp_rate_2 as usize)
+            .build(prev)?,
         QuadratureDemod::new(prev, 1.0),
-    ];
-    let samp_rate = new_samp_rate;
-
-    // TODO: Add broadcast FM deemph.
-
-    // Quad demod.
-
-    let taps = rustradio::fir::low_pass(
-        samp_rate,
-        44_100.0,
-        500.0,
-        &rustradio::window::WindowType::Hamming,
-    );
-    //let audio_filter = FirFilter::new(prev, &taps);
-    let prev = blockchain![g, prev, FftFilterFloat::new(prev, &taps)];
-
-    // Resample audio.
-    let new_samp_rate = opt.audio_rate as f32;
-    let prev = blockchain![
-        g,
-        prev,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
-    ];
-
-    // Send data to audio UI.
-    let prev = blockchain![
-        g,
-        prev,
-        Map::new(prev, "to_ui", move |x| {
-            if opt.tui {
+        FftFilterFloat::new(
+            prev,
+            &rustradio::fir::low_pass(
+                samp_rate_2,
+                44_100.0,
+                500.0,
+                &rustradio::window::WindowType::Hamming,
+            )
+        ),
+        RationalResamplerBuilder::new()
+            .deci(samp_rate_2 as usize)
+            .interp(opt.audio_rate as usize)
+            .build(prev)?,
+        Inspect::new(prev, "to_ui", move |x| {
+            if opt_tui {
                 if let Err(e) = ui_tx.send(x) {
                     trace!("Failed to write data to UI (probably exiting): {e}");
                 }
             }
-            x
-        })
+        }),
+        MultiplyConst::new(prev, opt.volume),
     ];
 
-    // Change volume.
-    let prev = blockchain![g, prev, MultiplyConst::new(prev, opt.volume)];
-
-    if let Some(out) = opt.output {
+    if let Some(ref out) = opt.output {
         // Convert to .au.
         let prev = blockchain![
             g,
@@ -390,7 +428,7 @@ fn main() -> Result<()> {
             AuEncode::new(
                 prev,
                 rustradio::au::Encoding::Pcm16,
-                new_samp_rate as u32,
+                opt.audio_rate as u32,
                 1
             )
         ];
@@ -404,20 +442,8 @@ fn main() -> Result<()> {
         #[cfg(feature = "audio")]
         {
             // Play live.
-            g.add(Box::new(AudioSink::new(prev, new_samp_rate as u64)?));
+            g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));
         }
     }
-
-    let cancel = g.cancel_token();
-    ctrlc::set_handler(move || {
-        warn!("Got Ctrl-C");
-        eprintln!("\n");
-        cancel.cancel();
-    })
-    .expect("failed to set Ctrl-C handler");
-    eprintln!("Running loop");
-    g.run()?;
-    ui_thread.join().expect("Failed to join UI thread");
-    eprintln!("{}", g.generate_stats().unwrap());
-    Ok(())
+    Ok(ui_thread)
 }
