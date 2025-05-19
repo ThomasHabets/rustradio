@@ -4,6 +4,26 @@ use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::graph::{CancellationToken, GraphRunner};
 
+const SLEEP_TIME: tokio::time::Duration = tokio::time::Duration::from_millis(10);
+
+#[cfg(feature = "tokio_unstable")]
+pub fn spawn<F>(name: &str, future: F) -> Result<tokio::task::JoinHandle<F::Output>>
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    Ok(tokio::task::Builder::new().name(name).spawn(future)?)
+}
+
+#[cfg(not(feature = "tokio_unstable"))]
+pub fn spawn<F>(_name: &str, future: F) -> Result<tokio::task::JoinHandle<F::Output>>
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    Ok(tokio::spawn(future))
+}
+
 /// Async Graph executor.
 ///
 /// # Example
@@ -40,7 +60,8 @@ impl AsyncGraph {
         let mut tasks = Vec::new();
         while let Some(mut b) = self.blocks.pop() {
             let cancel_token = self.cancel_token.clone();
-            tasks.push(tokio::spawn(async move {
+            let name = b.block_name().to_string();
+            tasks.push(spawn(&name, async move {
                 let name = b.block_name().to_string();
                 while !cancel_token.is_canceled() {
                     //log::trace!("Still running: {name}");
@@ -73,7 +94,7 @@ impl AsyncGraph {
                         }
                         BlockRet::Pending => {
                             drop(ret);
-                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                            tokio::time::sleep(SLEEP_TIME).await;
                             //debug!("{name} Pending");
                         }
                     }
@@ -81,7 +102,7 @@ impl AsyncGraph {
                 info!("Block {name} done");
                 drop(b);
                 Ok(name)
-            }));
+            })?);
         }
         for task in tasks.into_iter() {
             match task.await {

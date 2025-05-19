@@ -69,6 +69,7 @@ fast-math = ["dep:fast-math"]
 audio = ["dep:cpal"]
 fftw = ["dep:fftw"]
 async = ["dep:tokio"]
+tokio_unstable = ["tokio/tracing"]
 
 [[example]]
 name = "bell202"
