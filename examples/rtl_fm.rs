@@ -280,13 +280,14 @@ async fn run_async(opt: Opt) -> Result<()> {
     let mut g = rustradio::agraph::AsyncGraph::new();
     let ui_thread = build(&mut g, &opt)?;
     let cancel = g.cancel_token();
-    ctrlc::set_handler(move || {
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to listen for ctrl-C");
         warn!("Got Ctrl-C");
-        eprintln!("\n");
         cancel.cancel();
-    })
-    .expect("failed to set Ctrl-C handler");
-    eprintln!("Running loop");
+    });
+    eprintln!("Running loop (async)");
     g.run_async().await?;
     ui_thread.join().expect("Failed to join UI thread");
     eprintln!("{}", g.generate_stats().unwrap_or("no stats".to_string()));
