@@ -3,6 +3,46 @@
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float, Sample};
 
+/// Like Map, but cannot modify what it sees.
+///
+/// ```
+/// use rustradio::Complex;
+/// use rustradio::blocks::ConstantSource;
+/// use rustradio::convert::Inspect;
+/// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0));
+/// let (b, out) = Inspect::new(src, "mymap", move |x| println!("{x}"));
+/// ```
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, custom_name, sync, new)]
+pub struct Inspect<In, F>
+where
+    In: Sample,
+    F: Fn(In) + Send,
+{
+    #[rustradio(into)]
+    name: String,
+    f: F,
+    #[rustradio(in)]
+    src: ReadStream<In>,
+    #[rustradio(out)]
+    dst: WriteStream<In>,
+}
+
+impl<In, F> Inspect<In, F>
+where
+    In: Sample,
+    F: Fn(In) + Send,
+{
+    fn process_sync(&mut self, s: In) -> In {
+        (self.f)(s);
+        s
+    }
+    /// Name of the block.
+    pub fn custom_name(&self) -> &str {
+        &self.name
+    }
+}
+
 /// Arbitrary mapping using a lambda.
 ///
 /// A Map block transforms one sample at a time, from input to output. The input
