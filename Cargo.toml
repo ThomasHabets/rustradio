@@ -34,7 +34,7 @@ itertools = "0.13.0"
 tar = "0.4.44"
 sha2 = "0.10.8"
 thiserror = "2.0.12"
-tokio = { version = "1.44.2", optional=true, features = ["full"] }
+tokio = { version = "1.44.2", optional = true, features = ["full"] }
 async-trait = "0.1.88"
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
@@ -69,7 +69,7 @@ fast-math = ["dep:fast-math"]
 audio = ["dep:cpal"]
 fftw = ["dep:fftw"]
 async = ["dep:tokio"]
-tokio_unstable = ["tokio/tracing"]
+tokio-unstable = ["tokio/tracing"]
 
 [[example]]
 name = "bell202"

@@ -6,7 +6,7 @@ use crate::graph::{CancellationToken, GraphRunner};
 
 const SLEEP_TIME: tokio::time::Duration = tokio::time::Duration::from_millis(10);
 
-#[cfg(feature = "tokio_unstable")]
+#[cfg(feature = "tokio-unstable")]
 pub fn spawn<F>(name: &str, future: F) -> Result<tokio::task::JoinHandle<F::Output>>
 where
     F: Future + Send + 'static,
@@ -15,7 +15,7 @@ where
     Ok(tokio::task::Builder::new().name(name).spawn(future)?)
 }
 
-#[cfg(not(feature = "tokio_unstable"))]
+#[cfg(not(feature = "tokio-unstable"))]
 pub fn spawn<F>(_name: &str, future: F) -> Result<tokio::task::JoinHandle<F::Output>>
 where
     F: Future + Send + 'static,
