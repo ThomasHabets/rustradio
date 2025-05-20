@@ -100,6 +100,22 @@ g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
+## Features
+
+* `simd` (only with `nightly` Rust): Enable some code using `std::simd`.
+* `rtlsdr`: Enable `RtlSdrSource` block, and adds the `rtlsdr` crate as a
+  dependency at build time, and thus `librtlsdr.so` as a dependency at runtime.
+* `soapysdr`: Add dependency on `soapysdr`, for its various SDR support.
+* `fast-math`: Add a dependency in order to speed up some math.
+* `audio`: Add support for `AudioSink`.
+* `fftw`: Add support to use `libfftw` instead of `rustfft`.
+* `async`: Add support for `AsyncGraph`.
+* `tokio-unstable`: For async graphs, allow use of tokio unstable API,
+
+`tokio-unstable` allows tasks to be named, which helps when running
+`tokio-console`. But it does require the user to run `cargo build` with the env
+`RUSTFLAGS="--cfg tokio_unstable"` set too.
+
 ## Links
 
 * Main repo: <https://github.com/ThomasHabets/rustradio>
