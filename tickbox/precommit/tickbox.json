@@ -2,5 +2,8 @@
     "envs": {
 	"RUSTFLAGS": "--deny warnings",
 	"CARGO_TERM_COLOR": "always"
-    }
+    },
+    "parallel_regex": [
+            "^[2-6].*"
+    ]
 }
