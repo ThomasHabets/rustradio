@@ -75,6 +75,7 @@ mod tests {
     use super::*;
 
     use std::io::Write;
+    use std::sync::{Arc, Barrier};
 
     use crate::Float;
 
@@ -82,7 +83,10 @@ mod tests {
     fn partials() -> Result<()> {
         let listener = std::net::TcpListener::bind("[::1]:0")?;
         let addr = listener.local_addr()?;
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier2 = Arc::clone(&barrier);
         std::thread::spawn(move || {
+            let barrier = barrier2;
             eprintln!("waiting for connection");
             let (mut stream, _) = listener.accept().unwrap();
             eprintln!("connected");
@@ -94,13 +98,13 @@ mod tests {
             let pos = 0;
             let n = 6;
             stream.write_all(&data[pos..n]).unwrap();
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            barrier.wait();
+            barrier.wait();
 
             let pos = pos + n;
             let n = 3;
             stream.write_all(&data[pos..(pos + n)]).unwrap();
-            std::thread::sleep(std::time::Duration::from_millis(10));
-
+            barrier.wait();
             stream.write_all(&data[pos + n..]).unwrap();
         });
         let (mut src, src_out): (TcpSource<Float>, _) = match addr {
@@ -110,13 +114,14 @@ mod tests {
                 TcpSource::new("[::1]", a.port())?
             }
         };
+        barrier.wait();
         src.work()?;
         {
             let (res, _) = src_out.read_buf()?;
             let want: Vec<Float> = [12345678.91817].into();
             assert_eq!(res.slice(), want, "first failed");
         }
-
+        barrier.wait();
         src.work()?;
         {
             let (res, _) = src_out.read_buf()?;
@@ -127,6 +132,7 @@ mod tests {
             );
         }
 
+        barrier.wait();
         src.work()?;
         {
             let (res, _) = src_out.read_buf()?;
