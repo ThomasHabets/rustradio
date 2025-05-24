@@ -33,10 +33,20 @@ struct Opt {
     /// Sample rate on RF side.
     #[arg(long, default_value_t = 480000)]
     sample_rate: usize,
+
+    /// List SDR devices.
+    #[arg(long)]
+    list_devices: bool,
 }
 
 fn main() -> Result<()> {
     let opt = Opt::parse();
+    if opt.list_devices {
+        for dev in soapysdr::enumerate("").unwrap() {
+            println!("{}", dev);
+        }
+        return Ok(());
+    }
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")
