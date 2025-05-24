@@ -12,16 +12,16 @@ impl From<soapysdr::Error> for Error {
 }
 
 /// SoapySDR source builder.
-#[derive(Default)]
-pub struct SoapySdrSourceBuilder {
-    dev: String,
+pub struct SoapySdrSourceBuilder<'a> {
+    dev: &'a soapysdr::Device,
+    antenna: Option<String>,
     channel: usize,
     igain: f64,
     samp_rate: f64,
     freq: f64,
 }
 
-impl SoapySdrSourceBuilder {
+impl SoapySdrSourceBuilder<'_> {
     /// Set channel number.
     pub fn channel(mut self, channel: usize) -> Self {
         self.channel = channel;
@@ -32,52 +32,60 @@ impl SoapySdrSourceBuilder {
         self.igain = igain;
         self
     }
+    pub fn antenna<T: Into<String>>(mut self, a: T) -> Self {
+        self.antenna = Some(a.into());
+        self
+    }
     /// Build the source object.
     pub fn build(self) -> Result<(SoapySdrSource, ReadStream<Complex>)> {
-        let dev = soapysdr::Device::new(&*self.dev)?;
-        debug!("SoapySDR RX driver: {}", dev.driver_key()?);
-        debug!("SoapySDR RX hardware: {}", dev.hardware_key()?);
-        debug!("SoapySDR RX hardware info: {}", dev.hardware_info()?);
+        debug!("SoapySDR RX driver: {}", self.dev.driver_key()?);
+        debug!("SoapySDR RX hardware: {}", self.dev.hardware_key()?);
+        debug!("SoapySDR RX hardware info: {}", self.dev.hardware_info()?);
         debug!(
             "SoapySDR RX frontend mapping: {}",
-            dev.frontend_mapping(soapysdr::Direction::Rx)?
+            self.dev.frontend_mapping(soapysdr::Direction::Rx)?
         );
-        let chans = dev.num_channels(soapysdr::Direction::Rx)?;
+        let chans = self.dev.num_channels(soapysdr::Direction::Rx)?;
         debug!("SoapySDR RX channels : {}", chans);
         for channel in 0..chans {
             debug!(
                 "SoapySDR RX channel {channel} antennas: {:?}",
-                dev.antennas(soapysdr::Direction::Rx, channel)?
+                self.dev.antennas(soapysdr::Direction::Rx, channel)?
             );
             debug!(
                 "SoapySDR RX channel {channel} gains: {:?}",
-                dev.list_gains(soapysdr::Direction::Rx, channel)?
+                self.dev.list_gains(soapysdr::Direction::Rx, channel)?
             );
             debug!(
                 "SoapySDR RX channel {channel} frequency range: {:?}",
-                dev.frequency_range(soapysdr::Direction::Rx, channel)?
+                self.dev.frequency_range(soapysdr::Direction::Rx, channel)?
             );
-            for ai in dev.stream_args_info(soapysdr::Direction::Rx, channel)? {
+            for ai in self
+                .dev
+                .stream_args_info(soapysdr::Direction::Rx, channel)?
+            {
                 debug!("SoapySDR RX channel {channel} arg info: {}", ai_string(&ai));
             }
             debug!(
                 "SoapySDR RX channel {channel} stream formats: {:?}",
-                dev.stream_formats(soapysdr::Direction::Rx, channel)?
+                self.dev.stream_formats(soapysdr::Direction::Rx, channel)?
             );
             debug!(
                 "SoapySDR RX channel {channel} info: {}",
-                dev.channel_info(soapysdr::Direction::Rx, channel)?
+                self.dev.channel_info(soapysdr::Direction::Rx, channel)?
             );
         }
-        dev.set_frequency(
+        self.dev.set_frequency(
             soapysdr::Direction::Rx,
             self.channel,
             self.freq,
             soapysdr::Args::new(),
         )?;
-        dev.set_sample_rate(soapysdr::Direction::Rx, self.channel, self.samp_rate)?;
-        dev.set_gain(soapysdr::Direction::Rx, self.channel, self.igain)?;
-        let mut stream = dev.rx_stream(&[self.channel])?;
+        self.dev
+            .set_sample_rate(soapysdr::Direction::Rx, self.channel, self.samp_rate)?;
+        self.dev
+            .set_gain(soapysdr::Direction::Rx, self.channel, self.igain)?;
+        let mut stream = self.dev.rx_stream(&[self.channel])?;
         stream.activate(None)?;
         let (dst, dr) = crate::stream::new_stream();
         Ok((SoapySdrSource { stream, dst }, dr))
@@ -95,12 +103,14 @@ pub struct SoapySdrSource {
 
 impl SoapySdrSource {
     /// Create new SoapySdrSource builder.
-    pub fn builder(dev: String, freq: f64, samp_rate: f64) -> SoapySdrSourceBuilder {
+    pub fn builder(dev: &soapysdr::Device, freq: f64, samp_rate: f64) -> SoapySdrSourceBuilder {
         SoapySdrSourceBuilder {
             dev,
             freq,
             samp_rate,
-            ..Default::default()
+            channel: 0,
+            igain: 0.5,
+            antenna: None,
         }
     }
 }

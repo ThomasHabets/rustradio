@@ -33,19 +33,23 @@ pub fn main() -> Result<()> {
         .init()?;
 
     let mut g = Graph::new();
+
     // Transmitter.
+    let dev = soapysdr::Device::new(&*opt.driver)?;
     {
+        eprintln!("Set up transmitter");
         let prev = add_block![g, ConstantSource::new(Complex::new(0.0, 0.0))];
         g.add(Box::new(
-            SoapySdrSink::builder(opt.driver.clone(), 100000000.0, 300000.0).build(prev)?,
+            SoapySdrSink::builder(&dev, 2_450_000_000.0, 300000.0).build(prev)?,
         ));
     }
 
     // Receiver.
-    if false {
+    if true {
+        eprintln!("Set up receiver");
         let prev = add_block![
             g,
-            SoapySdrSource::builder(opt.driver, 10000000.0, 300000.0).build()?
+            SoapySdrSource::builder(&dev, 2_450_000_000.0, 300000.0).build()?
         ];
         g.add(Box::new(NullSink::new(prev)));
     }

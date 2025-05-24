@@ -61,9 +61,10 @@ mod internal {
         let mut g = Graph::new();
         let samp_rate = 1_024_000.0f32;
 
+        let dev = soapysdr::Device::new(&*opt.driver)?;
         let prev = blehbleh![
             g,
-            SoapySdrSource::builder(opt.driver.clone(), opt.freq as f64, samp_rate as f64)
+            SoapySdrSource::builder(&dev, opt.freq as f64, samp_rate as f64)
                 .igain(opt.gain as f64)
                 .build()?
         ];
