@@ -13,10 +13,26 @@ use rustradio::mtgraph::MTGraph;
 struct Opt {
     #[arg(long, default_value_t = 0)]
     verbose: usize,
+
+    /// soapysdr driver string.
     #[arg(long)]
     driver: String,
+
+    /// Input .au file.
     #[arg(long)]
     input: std::path::PathBuf,
+
+    /// Output gain, between 0 and 1.
+    #[arg(long, default_value_t = 0.1)]
+    ogain: f32,
+
+    /// Frequency in MHz.
+    #[arg(long, default_value_t = 436.2)]
+    freq: f32,
+
+    /// Sample rate on RF side.
+    #[arg(long, default_value_t = 480000)]
+    sample_rate: usize,
 }
 
 fn main() -> Result<()> {
@@ -38,10 +54,21 @@ fn main() -> Result<()> {
             .repeat(Repeat::infinite())
             .build()?,
         AuDecode::new(prev, 48000),
-        Vco::new(prev, 1000.0),
+        RationalResampler::<u8>::builder()
+            .deci(1)
+            .interp(10)
+            .build(prev)?,
+        // TODO: use proper deviation.
+        Vco::new(prev, 1000.0 / 48000.0),
     ];
     g.add(Box::new(
-        SoapySdrSink::builder(&dev, 436_000_000.0, 48_000.0).build(prev)?,
+        SoapySdrSink::builder(
+            &dev,
+            (1_000_000.0 * opt.freq).into(),
+            opt.sample_rate as f64,
+        )
+        .ogain(opt.ogain.into())
+        .build(prev)?,
     ));
 
     let cancel = g.cancel_token();
