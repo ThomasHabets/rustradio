@@ -16,41 +16,41 @@ keywords = ["SDR", "radio"]
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = "0.4.20"
-num-complex = "0.4.4"
-rustfft = "6.2.0"
+log = "0.4"
+num-complex = "0.4"
+rustfft = "6.2"
 tempfile = "3.19"
 rtlsdr = {version = "0.1.4", optional=true}
-fast-math = {version = "0.1.1", optional=true}
+fast-math = {version = "0.1", optional=true}
 libc = "0.2.149"
-soapysdr = {version = "0.4.0", optional=true}
-serde_json = "1.0.113"
-serde = {version = "1.0.196", features = ["derive"]}
-cpal = { version = "0.15.3", features = ["jack"], optional=true }
-errno = "0.3.9"
+soapysdr = {version = "0.4", optional=true}
+serde_json = "1.0"
+serde = {version = "1.0", features = ["derive"]}
+cpal = { version = "0.15", features = ["jack"], optional=true }
+errno = "0.3"
 rustradio_macros = { version = "0.14.2", path = "rustradio_macros" }
-rayon = "1.10.0"
-itertools = "0.13.0"
-tar = "0.4.44"
-sha2 = "0.10.8"
-thiserror = "2.0.12"
-tokio = { version = "1.44.2", optional = true, features = ["full"] }
-async-trait = "0.1.88"
+rayon = "1.10"
+itertools = "0.13"
+tar = "0.4"
+sha2 = "0.10"
+thiserror = "2.0"
+tokio = { version = "1.44", optional = true, features = ["full"] }
+async-trait = "0.1"
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]
-version = "0.8.0"
+version = "0.8"
 default-features = false
 features = ["system"]
 optional = true
 
 [dev-dependencies]
-anyhow = "1.0.75"
-chrono = "0.4.40"
+anyhow = "1.0"
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
-stderrlog = "0.6.0"
-ctrlc = "3.4.1"
-ratatui = { version = "0.29.0", features = ["all-widgets"]}
+stderrlog = "0.6"
+ctrlc = "3.4"
+ratatui = { version = "0.29", features = ["all-widgets"]}
 crossterm = "0.29"
 # apt install libgoogle-perftools-dev google-perftools
 # Uncomment the PROFILER stuff in examples/ax25-1200-rx.rs
