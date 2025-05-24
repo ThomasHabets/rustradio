@@ -45,7 +45,7 @@ pub fn main() -> Result<()> {
     }
 
     // Receiver.
-    if true {
+    {
         eprintln!("Set up receiver");
         let prev = add_block![
             g,
