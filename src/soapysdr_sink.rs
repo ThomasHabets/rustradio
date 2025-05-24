@@ -18,6 +18,7 @@ fn ai_string(ai: &soapysdr::ArgInfo) -> String {
 /// SoapySDR sink builder.
 pub struct SoapySdrSinkBuilder<'a> {
     dev: &'a soapysdr::Device,
+    antenna: Option<String>,
     channel: usize,
     ogain: f64,
     samp_rate: f64,
@@ -33,6 +34,11 @@ impl SoapySdrSinkBuilder<'_> {
     /// Set input gain.
     pub fn ogain(mut self, igain: f64) -> Self {
         self.ogain = igain;
+        self
+    }
+    /// Set antenna.
+    pub fn antenna<T: Into<String>>(mut self, a: T) -> Self {
+        self.antenna = Some(a.into());
         self
     }
     /// Build block.
@@ -85,6 +91,10 @@ impl SoapySdrSinkBuilder<'_> {
         self.dev
             .set_sample_rate(Direction::Tx, self.channel, self.samp_rate)?;
         self.dev.set_gain(Direction::Tx, self.channel, self.ogain)?;
+        if let Some(a) = self.antenna {
+            self.dev
+                .set_antenna(soapysdr::Direction::Tx, self.channel, a)?;
+        }
         let mut stream = self.dev.tx_stream(&[self.channel])?;
         stream.activate(None)?;
         Ok(SoapySdrSink { src, stream })
@@ -108,6 +118,7 @@ impl SoapySdrSink {
             samp_rate,
             channel: 0,
             ogain: 0.5,
+            antenna: None,
         }
     }
 }

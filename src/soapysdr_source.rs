@@ -32,6 +32,7 @@ impl SoapySdrSourceBuilder<'_> {
         self.igain = igain;
         self
     }
+    /// Set antenna.
     pub fn antenna<T: Into<String>>(mut self, a: T) -> Self {
         self.antenna = Some(a.into());
         self
@@ -85,6 +86,10 @@ impl SoapySdrSourceBuilder<'_> {
             .set_sample_rate(soapysdr::Direction::Rx, self.channel, self.samp_rate)?;
         self.dev
             .set_gain(soapysdr::Direction::Rx, self.channel, self.igain)?;
+        if let Some(a) = self.antenna {
+            self.dev
+                .set_antenna(soapysdr::Direction::Rx, self.channel, a)?;
+        }
         let mut stream = self.dev.rx_stream(&[self.channel])?;
         stream.activate(None)?;
         let (dst, dr) = crate::stream::new_stream();
