@@ -28,6 +28,8 @@ impl SoapySdrSourceBuilder<'_> {
         self
     }
     /// Set input gain.
+    ///
+    /// Normalized to 0.0 to 1.0.
     pub fn igain(mut self, igain: f64) -> Self {
         self.igain = igain;
         self
@@ -58,6 +60,10 @@ impl SoapySdrSourceBuilder<'_> {
                 self.dev.list_gains(soapysdr::Direction::Rx, channel)?
             );
             debug!(
+                "SoapySDR RX channel {channel} gain range: {:?}",
+                self.dev.gain_range(soapysdr::Direction::Rx, channel)?
+            );
+            debug!(
                 "SoapySDR RX channel {channel} frequency range: {:?}",
                 self.dev.frequency_range(soapysdr::Direction::Rx, channel)?
             );
@@ -84,8 +90,10 @@ impl SoapySdrSourceBuilder<'_> {
         )?;
         self.dev
             .set_sample_rate(soapysdr::Direction::Rx, self.channel, self.samp_rate)?;
+        let gr = self.dev.gain_range(soapysdr::Direction::Rx, self.channel)?;
+        let gain = gr.minimum + self.igain * (gr.maximum - gr.minimum);
         self.dev
-            .set_gain(soapysdr::Direction::Rx, self.channel, self.igain)?;
+            .set_gain(soapysdr::Direction::Rx, self.channel, gain)?;
         if let Some(a) = self.antenna {
             self.dev
                 .set_antenna(soapysdr::Direction::Rx, self.channel, a)?;
