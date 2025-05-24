@@ -41,6 +41,7 @@ struct Opt {
 
 fn main() -> Result<()> {
     let opt = Opt::parse();
+    soapysdr::configure_logging();
     if opt.list_devices {
         for dev in soapysdr::enumerate("").unwrap() {
             println!("{}", dev);
