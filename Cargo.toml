@@ -76,6 +76,10 @@ name = "bell202"
 required-features = ["soapysdr"]
 
 [[example]]
+name = "fm_tx"
+required-features = ["soapysdr"]
+
+[[example]]
 name = "tone"
 required-features = ["audio"]
 
