@@ -3,8 +3,8 @@ use clap::Parser;
 
 use rustradio::Complex;
 use rustradio::blocks::*;
-use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
+use rustradio::mtgraph::MTGraph;
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -32,7 +32,7 @@ pub fn main() -> Result<()> {
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
 
-    let mut g = Graph::new();
+    let mut g = MTGraph::new();
 
     // Transmitter.
     let dev = soapysdr::Device::new(&*opt.driver)?;
@@ -53,6 +53,13 @@ pub fn main() -> Result<()> {
         ];
         g.add(Box::new(NullSink::new(prev)));
     }
+    let cancel = g.cancel_token();
+    ctrlc::set_handler(move || {
+        eprintln!("Received Ctrl+C!");
+        cancel.cancel();
+    })
+    .expect("Error setting Ctrl-C handler");
     g.run()?;
+    eprintln!("{}", g.generate_stats().expect("failed to generate stats"));
     Ok(())
 }
