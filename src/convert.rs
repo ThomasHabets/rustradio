@@ -1,4 +1,5 @@
 //! Blocks for making simple synchronous conversions/mappings.
+use std::borrow::Cow;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, WriteStream};
@@ -11,14 +12,14 @@ use crate::{Complex, Float, Result, Sample};
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::convert::Inspect;
 /// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0));
-/// let (b, out) = Inspect::new(src, "mymap", move |x| println!("{x}"));
+/// let (b, out) = Inspect::new(src, "mymap", move |x, _tags| println!("{x}"));
 /// ```
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, custom_name, sync, new)]
+#[rustradio(crate, custom_name, sync_tag, new)]
 pub struct Inspect<In, F>
 where
     In: Sample,
-    F: Fn(In) + Send,
+    F: Fn(In, &[Tag]) + Send,
 {
     #[rustradio(into)]
     name: String,
@@ -32,11 +33,11 @@ where
 impl<In, F> Inspect<In, F>
 where
     In: Sample,
-    F: Fn(In) + Send,
+    F: Fn(In, &[Tag]) + Send,
 {
-    fn process_sync(&mut self, s: In) -> In {
-        (self.f)(s);
-        s
+    fn process_sync_tags<'a>(&mut self, s: In, tags: &'a [Tag]) -> (In, Cow<'a, [Tag]>) {
+        (self.f)(s, tags);
+        (s, Cow::Borrowed(tags))
     }
     /// Name of the block.
     pub fn custom_name(&self) -> &str {

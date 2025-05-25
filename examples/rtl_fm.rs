@@ -411,7 +411,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
             .deci(samp_rate_2 as usize)
             .interp(opt.audio_rate as usize)
             .build(prev)?,
-        Inspect::new(prev, "to_ui", move |x| {
+        Inspect::new(prev, "to_ui", move |x, _tags| {
             if opt_tui {
                 if let Err(e) = ui_tx.send(x) {
                     trace!("Failed to write data to UI (probably exiting): {e}");
