@@ -1,3 +1,11 @@
+//! Simple analog audio FM transmitter.
+//!
+//! Deviation:
+//! * Amateur radio: 5KHz
+//! * Broadcast FM: 75KHz
+//!
+//! TODO:
+//! * Add preemphasis.
 use anyhow::Result;
 use clap::Parser;
 use log::warn;
@@ -30,6 +38,10 @@ struct Opt {
     #[arg(long, default_value_t = 436.2)]
     freq: f32,
 
+    /// Audio rate.
+    #[arg(long, default_value_t = 48000)]
+    audio_rate: usize,
+
     /// Sample rate on RF side.
     #[arg(long, default_value_t = 480000)]
     sample_rate: usize,
@@ -37,17 +49,14 @@ struct Opt {
     /// List SDR devices.
     #[arg(long)]
     list_devices: bool,
+
+    /// FM deviation.
+    #[arg(long, default_value_t = 5000)]
+    deviation: usize,
 }
 
 fn main() -> Result<()> {
     let opt = Opt::parse();
-    soapysdr::configure_logging();
-    if opt.list_devices {
-        for dev in soapysdr::enumerate("").unwrap() {
-            println!("{}", dev);
-        }
-        return Ok(());
-    }
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")
@@ -55,6 +64,13 @@ fn main() -> Result<()> {
         .verbosity(opt.verbose)
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
+    soapysdr::configure_logging();
+    if opt.list_devices {
+        for dev in soapysdr::enumerate("").unwrap() {
+            println!("{}", dev);
+        }
+        return Ok(());
+    }
     let mut g = MTGraph::new();
     let dev = soapysdr::Device::new(&*opt.driver)?;
 
@@ -64,13 +80,15 @@ fn main() -> Result<()> {
         FileSource::<u8>::builder(&opt.input)
             .repeat(Repeat::infinite())
             .build()?,
-        AuDecode::new(prev, 48000),
+        AuDecode::new(prev, opt.audio_rate as u32),
         RationalResampler::<u8>::builder()
-            .deci(1)
-            .interp(10)
+            .deci(opt.audio_rate)
+            .interp(opt.sample_rate)
             .build(prev)?,
-        // TODO: use proper deviation.
-        Vco::new(prev, 1000.0 / 48000.0),
+        Vco::new(
+            prev,
+            2.0 * std::f64::consts::PI * opt.deviation as f64 / opt.sample_rate as f64
+        ),
     ];
     g.add(Box::new(
         SoapySdrSink::builder(
