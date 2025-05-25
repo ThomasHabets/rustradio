@@ -4,8 +4,45 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{ReadStream, Tag};
+use crate::stream::{NCReadStream, ReadStream, Tag};
 use crate::{Result, Sample};
+
+type NCStorage<T> = Vec<(T, Vec<Tag>)>;
+/// VectorSinkNoCopy.
+///
+/// This block is really only useful for unit tests. It takes what comes from
+/// the stream and just adds it to a vector. Tags are stored to another vector.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
+pub struct VectorSinkNoCopy<T: Send + Sync> {
+    #[rustradio(in)]
+    src: NCReadStream<T>,
+
+    #[rustradio(default)]
+    storage: Arc<Mutex<NCStorage<T>>>,
+
+    /// Max number of samples and/or tags to store.
+    max_size: usize,
+}
+
+impl<T: Send + Sync> VectorSinkNoCopy<T> {
+    pub fn storage(&self) -> Arc<Mutex<NCStorage<T>>> {
+        Arc::clone(&self.storage)
+    }
+}
+
+impl<T: Send + Sync> Block for VectorSinkNoCopy<T> {
+    fn work(&mut self) -> Result<BlockRet> {
+        let mut s = self.storage.lock().unwrap();
+        while let Some((val, tags)) = self.src.pop() {
+            if s.len() > self.max_size {
+                todo!();
+            }
+            s.push((val, tags));
+        }
+        Ok(BlockRet::WaitForStream(&self.src, 1))
+    }
+}
 
 /// VectorSink.
 ///
