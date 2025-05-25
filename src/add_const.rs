@@ -19,9 +19,7 @@ pub fn add_const<T>(
 where
     T: Sample + std::ops::Add<Output = T>,
 {
-    crate::convert::Map::new(src, "add_const", move |x, tags| {
-        (x + val, Cow::Borrowed(tags))
-    })
+    crate::convert::Map::keep_tags(src, "add_const", move |x| x + val)
 }
 
 /// AddConst adds a constant value to every sample.

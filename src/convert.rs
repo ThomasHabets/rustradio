@@ -82,6 +82,31 @@ where
     dst: WriteStream<Out>,
 }
 
+#[allow(clippy::type_complexity)]
+impl Map<u8, u8, for<'a> fn(u8, &'a [Tag]) -> (u8, Cow<'a, [Tag]>)> {
+    /// Create a Map that just passes tags along.
+    ///
+    /// The specialization args (`u8` and stuff) are discarded, just to make
+    /// `Map::keep_tags(src, "some name", |x| x * 2)` compile.
+    #[allow(clippy::type_complexity)]
+    pub fn keep_tags<In, Out, Name, F2>(
+        src: ReadStream<In>,
+        name: Name,
+        f: F2,
+    ) -> (
+        Map<In, Out, impl for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>)>,
+        ReadStream<Out>,
+    )
+    where
+        In: Sample,
+        Out: Sample,
+        Name: Into<String>,
+        F2: Fn(In) -> Out + Send,
+    {
+        Map::new(src, name, move |s, tags| (f(s), Cow::Borrowed(tags)))
+    }
+}
+
 impl<In, Out, F> Map<In, Out, F>
 where
     In: Sample,

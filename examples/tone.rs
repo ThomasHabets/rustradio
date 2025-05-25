@@ -1,8 +1,6 @@
 /*!
 Example tone generator.
  */
-use std::borrow::Cow;
-
 use anyhow::Result;
 use clap::Parser;
 use log::warn;
@@ -65,10 +63,7 @@ fn main() -> Result<()> {
             g,
             SignalSourceComplex::new(opt.audio_rate as Float, opt.freq, opt.volume)
         ];
-        add_block![
-            g,
-            Map::new(prev, "ComplexToReal", |x, tags| (x.re, Cow::Borrowed(tags)))
-        ]
+        add_block![g, Map::keep_tags(prev, "ComplexToReal", |x| x.re)]
     };
 
     g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));
