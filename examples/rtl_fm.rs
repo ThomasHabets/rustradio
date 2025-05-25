@@ -7,13 +7,13 @@ use anyhow::Result;
 use clap::Parser;
 use log::{trace, warn};
 
+use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
-use rustradio::{Complex, Float};
 
 const SPECTRUM_SIZE: usize = 1024;
 
@@ -327,18 +327,14 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
             blockchain![
                 g,
                 prev,
-                FileSource::<u8>::builder(&filename)
-                    .repeat(repeat)
-                    .build()?,
+                FileSource::builder(&filename).repeat(repeat).build()?,
                 RtlSdrDecode::new(prev),
             ]
         } else {
             blockchain![
                 g,
                 prev,
-                FileSource::<Complex>::builder(&filename)
-                    .repeat(repeat)
-                    .build()?,
+                FileSource::builder(&filename).repeat(repeat).build()?,
             ]
         }
     } else if !cfg!(feature = "rtlsdr") {

@@ -48,11 +48,17 @@ pub struct FileSource<T: Sample> {
     dst: WriteStream<T>,
 }
 
-impl<T: Sample> FileSource<T> {
+impl FileSource<u8> {
     /// Create builder.
+    ///
+    /// `u8` is a dummy type to make `FileSource::builder()` work. It'll work
+    /// for any type, not just u8.
     pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSourceBuilder {
         FileSourceBuilder::new(filename)
     }
+}
+
+impl<T: Sample> FileSource<T> {
     /// Create new FileSource block.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Result<(Self, ReadStream<T>)> {
         let filename = filename.into();

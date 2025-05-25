@@ -77,7 +77,7 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        FileSource::<u8>::builder(&opt.input)
+        FileSource::builder(&opt.input)
             .repeat(Repeat::infinite())
             .build()?,
         AuDecode::new(prev, opt.audio_rate as u32),
