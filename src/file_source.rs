@@ -9,21 +9,23 @@ use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Repeat, Result, Sample};
 
 /// FileSource builder.
-pub struct FileSourceBuilder {
+pub struct FileSourceBuilder<T: Sample> {
     filename: std::path::PathBuf,
     repeat: Repeat,
+    _dummy: std::marker::PhantomData<T>,
 }
 
-impl FileSourceBuilder {
+impl<T: Sample> FileSourceBuilder<T> {
     /// Create builder.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
         FileSourceBuilder {
             filename: filename.into(),
             repeat: Repeat::finite(1),
+            _dummy: std::marker::PhantomData,
         }
     }
     /// Build the FileSource.
-    pub fn build<T: Sample>(self) -> Result<(FileSource<T>, ReadStream<T>)> {
+    pub fn build(self) -> Result<(FileSource<T>, ReadStream<T>)> {
         let (mut block, dst) = FileSource::new(self.filename)?;
         block.repeat(self.repeat);
         Ok((block, dst))
@@ -48,17 +50,14 @@ pub struct FileSource<T: Sample> {
     dst: WriteStream<T>,
 }
 
-impl FileSource<u8> {
+impl<T: Sample> FileSource<T> {
     /// Create builder.
     ///
     /// `u8` is a dummy type to make `FileSource::builder()` work. It'll work
     /// for any type, not just u8.
-    pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSourceBuilder {
-        FileSourceBuilder::new(filename)
+    pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSourceBuilder<T> {
+        FileSourceBuilder::<T>::new(filename)
     }
-}
-
-impl<T: Sample> FileSource<T> {
     /// Create new FileSource block.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Result<(Self, ReadStream<T>)> {
         let filename = filename.into();
