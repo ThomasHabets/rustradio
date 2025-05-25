@@ -1,7 +1,7 @@
 //! Blocks for making simple synchronous conversions/mappings.
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream, WriteStream};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, WriteStream};
 use crate::{Complex, Float, Result, Sample};
 
 /// Like Map, but cannot modify what it sees.
@@ -115,7 +115,7 @@ pub struct NCMap<In, Out, F>
 where
     In: Send + Sync,
     Out: Send + Sync,
-    F: Fn(In) -> Vec<Out> + Send,
+    F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
 {
     #[rustradio(into)]
     name: String,
@@ -130,7 +130,7 @@ impl<In, Out, F> Block for NCMap<In, Out, F>
 where
     In: Send + Sync,
     Out: Send + Sync,
-    F: Fn(In) -> Vec<Out> + Send,
+    F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
 {
     fn work(&mut self) -> Result<BlockRet> {
         // TODO: handle tags.
@@ -139,8 +139,8 @@ where
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
             eprintln!("{:?}", tags);
-            for packet in (self.map)(x) {
-                self.dst.push(packet, tags.clone());
+            for (packet, new_tags) in (self.map)(x, tags) {
+                self.dst.push(packet, new_tags);
             }
         }
     }
@@ -150,7 +150,7 @@ impl<In, Out, F> NCMap<In, Out, F>
 where
     In: Send + Sync,
     Out: Send + Sync,
-    F: Fn(In) -> Vec<Out> + Send,
+    F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
 {
     /// Name of the block.
     pub fn custom_name(&self) -> &str {
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn ncmap_identity() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
-        let (mut m, out) = NCMap::new(rx, "nctest", |packet| vec![packet]);
+        let (mut m, out) = NCMap::new(rx, "nctest", |packet, tags| vec![(packet, tags)]);
         let mut sink = VectorSinkNoCopy::new(out, 10);
         let res = sink.storage();
         tx.push(vec![0u8, 1, 2, 3], &[]);
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn ncmap_drop() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
-        let (mut m, out) = NCMap::new(rx, "nctest", |_packet| vec![]);
+        let (mut m, out) = NCMap::new(rx, "nctest", |_packet, _tags| vec![]);
         let mut sink: VectorSinkNoCopy<Vec<u8>> = VectorSinkNoCopy::new(out, 10);
         let res = sink.storage();
         tx.push(vec![0u8, 1, 2, 3], &[]);
@@ -261,10 +261,10 @@ mod tests {
     #[test]
     fn ncmap_multipacket() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
-        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>| {
+        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>, tags| {
             vec![
-                packet.iter().map(|s| *s * 2).collect(),
-                packet.iter().map(|s| *s * 20).collect(),
+                (packet.iter().map(|s| *s * 2).collect(), tags.clone()),
+                (packet.iter().map(|s| *s * 20).collect(), tags.clone()),
             ]
         });
         let mut sink = VectorSinkNoCopy::new(out, 10);
@@ -285,8 +285,8 @@ mod tests {
     #[test]
     fn ncmap_double() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
-        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>| {
-            vec![packet.iter().map(|s| *s * 2).collect()]
+        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>, tags| {
+            vec![(packet.iter().map(|s| *s * 2).collect(), tags)]
         });
         let mut sink = VectorSinkNoCopy::new(out, 10);
         let res = sink.storage();
@@ -300,9 +300,9 @@ mod tests {
     #[test]
     fn ncmap_double_inplace() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
-        let (mut m, out) = NCMap::new(rx, "nctest", |mut packet: Vec<u8>| {
+        let (mut m, out) = NCMap::new(rx, "nctest", |mut packet: Vec<u8>, tags| {
             packet.iter_mut().for_each(|v| *v = *v + *v);
-            vec![packet]
+            vec![(packet, tags)]
         });
         let mut sink = VectorSinkNoCopy::new(out, 10);
         let res = sink.storage();
@@ -316,8 +316,8 @@ mod tests {
     #[test]
     fn ncmap_convert() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
-        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>| {
-            vec![packet.iter().map(|s| *s as Float + 0.1).collect()]
+        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>, tags| {
+            vec![(packet.iter().map(|s| *s as Float + 0.1).collect(), tags)]
         });
         let mut sink = VectorSinkNoCopy::new(out, 10);
         let res = sink.storage();
@@ -331,10 +331,10 @@ mod tests {
     #[test]
     fn ncmap_append() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
-        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>| {
+        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>, tags| {
             let mut p2 = packet.clone();
             p2.extend(packet);
-            vec![p2]
+            vec![(p2, tags)]
         });
         let mut sink = VectorSinkNoCopy::new(out, 10);
         let res = sink.storage();
