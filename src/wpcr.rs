@@ -198,7 +198,7 @@ impl Block for Wpcr {
             Some((x, _tags)) => x,
         };
         if let Some((packet, tags)) = self.process_one(&x) {
-            self.dst.push(packet, &tags);
+            self.dst.push(packet, tags);
         }
         Ok(BlockRet::Again)
     }

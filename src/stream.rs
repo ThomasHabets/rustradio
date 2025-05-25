@@ -310,8 +310,13 @@ pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
     (WriteStream { circ: circ.clone() }, ReadStream { circ })
 }
 
+struct NCEntry<T> {
+    val: T,
+    tags: Vec<Tag>,
+}
+
 struct NCInner<T> {
-    lock: Mutex<VecDeque<T>>,
+    lock: Mutex<VecDeque<NCEntry<T>>>,
     cv: Condvar,
 
     // Waiting for read.
@@ -430,7 +435,7 @@ impl<T> NCReadStream<T> {
             .lock()
             .unwrap()
             .pop_front()
-            .map(|v| (v, Vec::new()));
+            .map(|v| (v.val, v.tags));
         self.inner.cv.notify_all();
         ret
     }
@@ -463,11 +468,11 @@ impl<T> NCWriteStream<T> {
     }
     /// Push one sample, handing off ownership.
     /// Ideally this should only be NoCopy.
-    ///
-    /// TODO: Actually store the tags.
-    pub fn push(&self, val: T, _tags: &[Tag]) {
-        // TODO: attach tags.
-        self.inner.lock.lock().unwrap().push_back(val);
+    pub fn push<Tags: Into<Vec<Tag>>>(&self, val: T, tags: Tags) {
+        self.inner.lock.lock().unwrap().push_back(NCEntry {
+            val,
+            tags: tags.into(),
+        });
         self.inner.cv.notify_all();
     }
 }
@@ -475,6 +480,6 @@ impl<T> NCWriteStream<T> {
 impl<T: Len> NCReadStream<T> {
     /// Get the size of the front packet.
     pub fn peek_size(&self) -> Option<usize> {
-        self.inner.lock.lock().unwrap().front().map(|e| e.len())
+        self.inner.lock.lock().unwrap().front().map(|e| e.val.len())
     }
 }

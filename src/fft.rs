@@ -30,7 +30,7 @@ impl Block for Fft {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
             let out = self.process_one(&msg);
-            self.dst.push(out, &tags);
+            self.dst.push(out, tags);
         }
     }
 }

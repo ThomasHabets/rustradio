@@ -140,7 +140,7 @@ where
             };
             eprintln!("{:?}", tags);
             if let Some(packet) = (self.map)(x) {
-                self.dst.push(packet, &tags);
+                self.dst.push(packet, tags);
             }
         }
     }
@@ -239,7 +239,7 @@ mod tests {
                 (vec![0u8, 1, 2, 3], vec![]),
                 (
                     vec![9u8, 33, 22, 11],
-                    vec![/*Tag::new(0, "foo", TagValue::U64(42))*/]
+                    vec![Tag::new(0, "foo", TagValue::U64(42))],
                 ),
             ]
         );
