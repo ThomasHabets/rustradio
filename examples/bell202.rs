@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use rustradio::Complex;
+use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
@@ -14,13 +15,7 @@ struct Opt {
     #[arg(short, default_value = "0")]
     verbose: usize,
 }
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
-}
+
 pub fn main() -> Result<()> {
     println!("soapy_fm receiver example");
     let opt = Opt::parse();
@@ -38,7 +33,7 @@ pub fn main() -> Result<()> {
     let dev = soapysdr::Device::new(&*opt.driver)?;
     {
         eprintln!("Set up transmitter");
-        let prev = add_block![g, ConstantSource::new(Complex::new(0.0, 0.0))];
+        let prev = blockchain![g, prev, ConstantSource::new(Complex::new(0.0, 0.0))];
         g.add(Box::new(
             SoapySdrSink::builder(&dev, 2_450_000_000.0, 300000.0).build(prev)?,
         ));
@@ -47,8 +42,9 @@ pub fn main() -> Result<()> {
     // Receiver.
     {
         eprintln!("Set up receiver");
-        let prev = add_block![
+        let prev = blockchain![
             g,
+            prev,
             SoapySdrSource::builder(&dev, 2_450_000_000.0, 300000.0).build()?
         ];
         g.add(Box::new(NullSink::new(prev)));
