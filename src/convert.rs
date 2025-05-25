@@ -54,19 +54,24 @@ where
 /// dedicated block, like [`FloatToComplex`].
 ///
 /// ```
+/// use std::borrow::Cow;
 /// use rustradio::Complex;
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::convert::Map;
 /// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0));
-/// let (b, out) = Map::new(src, "mymap", move |x| x.re + 10.0);
+/// let (b, out) = Map::new(
+///     src,
+///     "mymap",
+///     move |x, tags| (x.re + 10.0, Cow::Borrowed(tags)),
+/// );
 /// ```
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, custom_name, sync, new)]
+#[rustradio(crate, custom_name, sync_tag, new)]
 pub struct Map<In, Out, F>
 where
     In: Sample,
     Out: Sample,
-    F: Fn(In) -> Out + Send,
+    F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send,
 {
     #[rustradio(into)]
     name: String,
@@ -74,17 +79,17 @@ where
     #[rustradio(in)]
     src: ReadStream<In>,
     #[rustradio(out)]
-    dst: WriteStream<F::Output>,
+    dst: WriteStream<Out>,
 }
 
 impl<In, Out, F> Map<In, Out, F>
 where
     In: Sample,
     Out: Sample,
-    F: Fn(In) -> Out + Send,
+    F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send,
 {
-    fn process_sync(&mut self, s: In) -> Out {
-        (self.map)(s)
+    fn process_sync_tags<'a>(&mut self, s: In, tags: &'a [Tag]) -> (Out, Cow<'a, [Tag]>) {
+        (self.map)(s, tags)
     }
     /// Name of the block.
     pub fn custom_name(&self) -> &str {

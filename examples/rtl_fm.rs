@@ -367,13 +367,12 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
             g,
             prev,
             FftStream::new(spec_tee, SPECTRUM_SIZE),
-            Map::new(prev, "to_ui_spectrum", move |x| {
+            Inspect::new(prev, "to_ui_spectrum", move |x, _tags| {
                 if opt_tui {
                     if let Err(e) = ui_tx_spec.send(x.norm()) {
                         trace!("Failed to write data to UI (probably exiting): {e}");
                     }
                 }
-                x
             })
         ];
         g.add(Box::new(NullSink::new(prev)));
