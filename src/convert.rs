@@ -3,7 +3,7 @@ use std::borrow::Cow;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, WriteStream};
-use crate::{Complex, Float, Result, Sample};
+use crate::{AnySample, Complex, Float, Result, Sample};
 
 /// Like Map, but cannot modify what it sees.
 ///
@@ -83,11 +83,11 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-impl Map<u8, u8, for<'a> fn(u8, &'a [Tag]) -> (u8, Cow<'a, [Tag]>)> {
+impl Map<AnySample, AnySample, for<'a> fn(AnySample, &'a [Tag]) -> (AnySample, Cow<'a, [Tag]>)> {
     /// Create a Map that just passes tags along.
     ///
-    /// The specialization args (`u8` and stuff) are discarded, just to make
-    /// `Map::keep_tags(src, "some name", |x| x * 2)` compile.
+    /// The specialization args (`AnySample` and the callback) are discarded,
+    /// just to make `Map::keep_tags(src, "some name", |x| x * 2)` compile.
     #[allow(clippy::type_complexity)]
     pub fn keep_tags<In, Out, Name, F2>(
         src: ReadStream<In>,

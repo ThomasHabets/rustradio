@@ -507,6 +507,28 @@ pub trait Sample: Copy + Default + Send + Sync + 'static {
     fn serialize(&self) -> Vec<u8>;
 }
 
+/// AnySample is a fake type that only exists to make documentation clearer for
+/// alternate constructors.
+///
+/// It's for use where there's a need to have a concrete type, but where that
+/// type is not actually used.
+#[derive(Default, Clone, Copy)]
+pub struct AnySample {
+    _dummy: u8,
+}
+impl Sample for AnySample {
+    type Type = u8;
+    fn size() -> usize {
+        panic!()
+    }
+    fn parse(_data: &[u8]) -> Result<Self::Type> {
+        panic!()
+    }
+    fn serialize(&self) -> Vec<u8> {
+        panic!()
+    }
+}
+
 impl Sample for Complex {
     type Type = Complex;
     fn size() -> usize {
