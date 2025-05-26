@@ -28,3 +28,4 @@ A library for digital signals processing in the spirit of GNU Radio.
 * Example AX.25 KISS modem written, using soapysdr.
 * `AsRef<Path>` vs `Into<PathBuf>`?
 * What exactly is the purpose of `BlockEOF`?
+* Should `produce()` take `Into<Vec<Tag>>`? Less copying.
