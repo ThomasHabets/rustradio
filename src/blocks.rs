@@ -23,6 +23,7 @@ pub use crate::hasher::{Hasher, sha512};
 pub use crate::hdlc_deframer::HdlcDeframer;
 pub use crate::hilbert::Hilbert;
 pub use crate::il2p_deframer::Il2pDeframer;
+pub use crate::kiss::{KissDecode, KissEncode};
 pub use crate::multiply_const::MultiplyConst;
 pub use crate::nrzi::NrziDecode;
 pub use crate::null_sink::NullSink;
