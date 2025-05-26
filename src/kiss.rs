@@ -161,21 +161,23 @@ impl Block for KissEncode {
                     0
                 }
             };
-            let mut tags: Vec<_> = tags
+            let out = escape(&x, port.try_into().unwrap());
+            let tags: Vec<_> = tags
                 .into_iter()
                 .filter(|t| t.key() != ENCODE_PORT_TAG)
+                .chain(vec![
+                    Tag::new(
+                        0,
+                        "KissEncode:input-bytes",
+                        TagValue::U64(x.len().try_into().unwrap()),
+                    ),
+                    Tag::new(
+                        0,
+                        "KissEncode:output-bytes",
+                        TagValue::U64(out.len().try_into().unwrap()),
+                    ),
+                ])
                 .collect();
-            let out = escape(&x, port.try_into().unwrap());
-            tags.push(Tag::new(
-                0,
-                "KissEncode:input-bytes",
-                TagValue::U64(x.len().try_into().unwrap()),
-            ));
-            tags.push(Tag::new(
-                0,
-                "KissEncode:output-bytes",
-                TagValue::U64(out.len().try_into().unwrap()),
-            ));
             self.dst.push(out, tags);
         }
     }
