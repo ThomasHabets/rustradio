@@ -1,6 +1,8 @@
+use log::warn;
+
 use crate::Result;
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
+use crate::stream::{NCReadStream, NCWriteStream, Tag, TagValue};
 
 const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
@@ -8,8 +10,6 @@ const KISS_TFEND: u8 = 0xDC;
 const KISS_TFESC: u8 = 0xDD;
 
 /// Escape KISS data stream.
-///
-/// https://en.wikipedia.org/wiki/KISS_(amateur_radio_protocol)
 #[must_use]
 fn escape(bytes: &[u8]) -> Vec<u8> {
     // Add 10% capacity to leave room for escaped
@@ -27,23 +27,78 @@ fn escape(bytes: &[u8]) -> Vec<u8> {
     ret
 }
 
+/// Unescape KISS data stream.
+#[must_use]
+fn unescape(data: &[u8]) -> Option<Vec<u8>> {
+    let mut unescaped = Vec::with_capacity(data.len());
+    let mut is_escaped = false;
+    for &byte in data {
+        if is_escaped {
+            unescaped.push(match byte {
+                KISS_TFESC => KISS_FESC,
+                KISS_TFEND => KISS_FEND,
+                other => {
+                    warn!("TODO: kiss unescape error: escaped {other}");
+                    return None;
+                }
+            });
+            is_escaped = false;
+        } else if byte == KISS_FESC {
+            // Next byte is escaped, so set the flag
+            is_escaped = true;
+        } else {
+            // Normal byte, just push it to the output
+            unescaped.push(byte);
+        }
+    }
+    if is_escaped { None } else { Some(unescaped) }
+}
+
+/// Decode KISS frame.
+///
+/// <https://en.wikipedia.org/wiki/KISS_(amateur_radio_protocol)>
+///
+/// TODO: Tag with other KISS stuff like channel.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
 pub struct KissDecode {
     #[rustradio(in)]
-    src: ReadStream<u8>,
+    src: NCReadStream<Vec<u8>>,
     #[rustradio(out)]
     dst: NCWriteStream<Vec<u8>>,
 }
 
 impl Block for KissDecode {
     fn work(&mut self) -> Result<BlockRet> {
-        let _ = &self.src;
-        let _ = &self.dst;
-        todo!()
+        loop {
+            let Some((x, mut tags)) = self.src.pop() else {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            };
+            let Some(out) = unescape(&x) else {
+                continue;
+            };
+            tags.push(Tag::new(
+                0,
+                "KissDecode:input-bytes",
+                TagValue::U64(x.len().try_into().unwrap()),
+            ));
+            tags.push(Tag::new(
+                0,
+                "KissDecode:output-bytes",
+                TagValue::U64(out.len().try_into().unwrap()),
+            ));
+            self.dst.push(out, tags);
+        }
     }
 }
 
+/// Kiss encode.
+///
+/// Takes bytes and creates a KISS frame.
+///
+/// <https://en.wikipedia.org/wiki/KISS_(amateur_radio_protocol)>
+///
+/// TODO: Take channel from a tag.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
 pub struct KissEncode {
@@ -62,12 +117,12 @@ impl Block for KissEncode {
             let out = escape(&x);
             tags.push(Tag::new(
                 0,
-                "KISS:input-bytes",
+                "KissEncode:input-bytes",
                 TagValue::U64(x.len().try_into().unwrap()),
             ));
             tags.push(Tag::new(
                 0,
-                "KISS:output-bytes",
+                "KissEncode:output-bytes",
                 TagValue::U64(out.len().try_into().unwrap()),
             ));
             self.dst.push(out, tags);
@@ -100,8 +155,8 @@ mod tests {
         assert_eq!(
             tags,
             &[
-                Tag::new(0, "KISS:input-bytes", TagValue::U64(0)),
-                Tag::new(0, "KISS:output-bytes", TagValue::U64(3)),
+                Tag::new(0, "KissEncode:input-bytes", TagValue::U64(0)),
+                Tag::new(0, "KissEncode:output-bytes", TagValue::U64(3)),
             ]
         );
         Ok(())
@@ -125,10 +180,10 @@ mod tests {
             tags,
             &[
                 Tag::new(0, "foobar", TagValue::String("baz".to_string())),
-                Tag::new(0, "KISS:input-bytes", TagValue::U64(5)),
+                Tag::new(0, "KissEncode:input-bytes", TagValue::U64(5)),
                 Tag::new(
                     0,
-                    "KISS:output-bytes",
+                    "KissEncode:output-bytes",
                     TagValue::U64(want.len().try_into().unwrap())
                 ),
             ]
