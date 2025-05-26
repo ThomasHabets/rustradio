@@ -245,7 +245,8 @@ fn main() -> Result<()> {
 
     /*
     // Save floats to file.
-    let (a, prev) = add_block![g, Tee::new(prev)];
+    let (b, a, prev) = Tee::new(prev);
+    g.add(Box::new(b));
     g.add(Box::new(FileSink::new(
         a,
         "test.f32",
@@ -295,7 +296,8 @@ fn main() -> Result<()> {
         NrziDecode::new(prev),
         // Save bits to file.
         /*
-        let (a, prev) = add_block![g, Tee::new(prev)];
+        let (b, a, prev) = Tee::new(prev);
+        g.add(Box::new(b));
         g.add(Box::new(FileSink::new(
             a,
             "test.u8",

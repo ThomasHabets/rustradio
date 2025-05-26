@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
+use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
@@ -52,14 +53,6 @@ struct Opt {
     gain: i32,
 }
 
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
-}
-
 fn main() -> Result<()> {
     let opt = Opt::parse();
     stderrlog::new()
@@ -73,16 +66,19 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     let (prev, samp_rate) = if let Some(read) = opt.read {
-        let prev = add_block![g, FileSource::<Complex>::new(&read)?];
+        let prev = blockchain![g, prev, FileSource::<Complex>::new(&read)?];
         (prev, opt.samp_rate as Float)
     } else if opt.rtlsdr {
         #[cfg(feature = "rtlsdr")]
         {
             // Source.
-            let prev = add_block![g, RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?];
-
+            let prev = blockchain![
+                g,
+                prev,
+                RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?,
+                RtlSdrDecode::new(prev),
+            ];
             // Decode.
-            let prev = add_block![g, RtlSdrDecode::new(prev)];
             (prev, opt.samp_rate as Float)
         }
         #[cfg(not(feature = "rtlsdr"))]
@@ -98,32 +94,31 @@ fn main() -> Result<()> {
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    let prev = add_block![g, FftFilter::new(prev, taps)];
+    let prev = blockchain![g, prev, FftFilter::new(prev, taps)];
 
     // Resample RF.
     let new_samp_rate = 50_000.0;
-    let prev = add_block![
+    let prev = blockchain![
         g,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+        prev,
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
     ];
     let samp_rate = new_samp_rate;
 
     let (b, datapath, magpath) = Tee::new(prev);
     g.add(Box::new(b));
-    let magpath = add_block![g, ComplexToMag2::new(magpath)];
-    let magpath = add_block![
+    let magpath = blockchain![
         g,
-        SinglePoleIirFilter::new(magpath, opt.iir_alpha).ok_or(Error::msg("bad IIR parameters"))?
+        magpath,
+        ComplexToMag2::new(magpath),
+        SinglePoleIirFilter::new(magpath, opt.iir_alpha).ok_or(Error::msg("bad IIR parameters"))?,
     ];
-    let datapath = add_block![g, Delay::new(datapath, opt.delay)];
-    let prev = add_block![
+    let prev = blockchain![
         g,
-        BurstTagger::new(datapath, magpath, opt.threshold, "burst".to_string())
-    ];
-
-    let prev = add_block![
-        g,
-        StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, opt.tail)
+        datapath,
+        Delay::new(datapath, opt.delay),
+        BurstTagger::new(datapath, magpath, opt.threshold, "burst".to_string()),
+        StreamToPdu::new(datapath, "burst".to_string(), samp_rate as usize, opt.tail),
     ];
     g.add(Box::new(PduWriter::new(prev, opt.output)));
 

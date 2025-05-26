@@ -7,11 +7,11 @@ mod internal {
     use clap::Parser;
     use log::warn;
 
-    use rustradio::Float;
     use rustradio::blocks::*;
     use rustradio::file_sink::Mode;
     use rustradio::graph::Graph;
     use rustradio::graph::GraphRunner;
+    use rustradio::{Float, blockchain};
 
     #[derive(clap::Parser, Debug)]
     #[command(version, about)]
@@ -39,14 +39,6 @@ mod internal {
         volume: Float,
     }
 
-    macro_rules! blehbleh {
-        ($g:ident, $cons:expr) => {{
-            let (block, prev) = $cons;
-            $g.add(Box::new(block));
-            prev
-        }};
-    }
-
     pub fn main() -> Result<()> {
         println!("soapy_fm receiver example");
         let opt = Opt::parse();
@@ -62,8 +54,9 @@ mod internal {
         let samp_rate = 1_024_000.0f32;
 
         let dev = soapysdr::Device::new(&*opt.driver)?;
-        let prev = blehbleh![
+        let prev = blockchain![
             g,
+            prev,
             SoapySdrSource::builder(&dev, opt.freq as f64, samp_rate as f64)
                 .igain(opt.gain as f64)
                 .build()?
@@ -76,12 +69,13 @@ mod internal {
             1000.0,
             &rustradio::window::WindowType::Hamming,
         );
-        let prev = blehbleh![g, FftFilter::new(prev, taps)];
+        let prev = blockchain![g, prev, FftFilter::new(prev, taps)];
 
         // Resample.
         let new_samp_rate = 200_000.0;
-        let prev = blehbleh![
+        let prev = blockchain![
             g,
+            prev,
             RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
         ];
         let samp_rate = new_samp_rate;
@@ -89,7 +83,7 @@ mod internal {
         // TODO: Add broadcast FM deemph.
 
         // Quad demod.
-        let prev = blehbleh![g, QuadratureDemod::new(prev, 1.0)];
+        let prev = blockchain![g, prev, QuadratureDemod::new(prev, 1.0)];
 
         let taps = rustradio::fir::low_pass(
             samp_rate,
@@ -98,23 +92,24 @@ mod internal {
             &rustradio::window::WindowType::Hamming,
         );
         //let audio_filter = FirFilter::new(prev, &taps);
-        let prev = blehbleh![g, FftFilterFloat::new(prev, &taps)];
+        let prev = blockchain![g, prev, FftFilterFloat::new(prev, &taps)];
 
         // Resample audio.
         let new_samp_rate = 48_000.0;
-        let prev = blehbleh![
+        let prev = blockchain![
             g,
+            prev,
             RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
         ];
         let _samp_rate = new_samp_rate;
 
         // Change volume.
-        let prev = blehbleh![g, MultiplyConst::new(prev, opt.volume)];
-
-        // Convert to .au.
-        let prev = blehbleh![
+        let prev = blockchain![
             g,
-            AuEncode::new(prev, rustradio::au::Encoding::Pcm16, 48000, 1)
+            prev,
+            MultiplyConst::new(prev, opt.volume),
+            // Convert to .au.
+            AuEncode::new(prev, rustradio::au::Encoding::Pcm16, 48000, 1),
         ];
 
         // Save to file.

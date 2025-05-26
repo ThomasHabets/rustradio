@@ -21,7 +21,7 @@ use clap::Parser;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::{Complex, Float};
+use rustradio::{Complex, Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -66,14 +66,6 @@ struct Opt {
     symbol_max_deviation: Float,
 }
 
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
-}
-
 fn main() -> Result<()> {
     let opt = Opt::parse();
     stderrlog::new()
@@ -89,11 +81,16 @@ fn main() -> Result<()> {
     // TODO: this is a complete mess.
     let (prev, samp_rate) = if opt.audio {
         if let Some(read) = opt.read {
-            let prev = add_block![g, FileSource::new(&read)?];
-            let prev = add_block![g, AuDecode::new(prev, opt.samp_rate)];
+            let prev = blockchain![
+                g,
+                prev,
+                FileSource::new(&read)?,
+                AuDecode::new(prev, opt.samp_rate),
+            ];
 
             /*
-            let (prev, b) = add_block![g, Tee::new(prev)];
+            let (t, prev, b) = Tee::new(prev);
+            g.add(Box::new(t));
             g.add(Box::new(FileSink::new(
                 b,
                 "debug/00-audio.f32",
@@ -107,15 +104,17 @@ fn main() -> Result<()> {
         }
     } else {
         let prev = if let Some(read) = opt.read {
-            add_block![g, FileSource::<Complex>::new(&read)?]
+            blockchain![g, prev, FileSource::<Complex>::new(&read)?]
         } else if opt.rtlsdr {
             #[cfg(feature = "rtlsdr")]
             {
                 // Source.
-                let prev = add_block![g, RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?];
-
-                // Decode.
-                add_block![g, RtlSdrDecode::new(prev)]
+                blockchain![
+                    g,
+                    prev,
+                    RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?,
+                    RtlSdrDecode::new(prev),
+                ]
             }
             #[cfg(not(feature = "rtlsdr"))]
             panic!("rtlsdr feature not enabled")
@@ -125,7 +124,8 @@ fn main() -> Result<()> {
         let samp_rate = opt.samp_rate as Float;
 
         /*
-                let (prev, b) = add_block![g, Tee::new(prev)];
+                let (t, prev, b) = Tee::new(prev);
+                g.add(Box::new(t));
                 g.add(Box::new(FileSink::new(
                     b,
                     "debug/00-unfiltered.c32",
@@ -140,17 +140,15 @@ fn main() -> Result<()> {
             100.0,
             &rustradio::window::WindowType::Hamming,
         );
-        let prev = add_block![g, FftFilter::new(prev, taps)];
-        // Resample RF.
         let new_samp_rate = 50_000.0;
-        let prev = add_block![
+        let prev = blockchain![
             g,
-            RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+            prev,
+            FftFilter::new(prev, taps),
+            RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
+            QuadratureDemod::new(prev, 1.0),
         ];
-        let samp_rate = new_samp_rate;
-
-        let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-        (prev, samp_rate)
+        (prev, new_samp_rate)
     };
 
     //let taps = rustradio::fir::low_pass(samp_rate, 20_000.0, 100.0);
@@ -174,8 +172,12 @@ fn main() -> Result<()> {
         let clock = block.out_clock().unwrap();
         let (b, a, prev) = Tee::new(prev);
         g.add(Box::new(b));
-        let clock = add_block![g, AddConst::new(clock, -samp_rate / baud)];
-        let clock = add_block![g, ToText::new(vec![a, clock])];
+        let clock = blockchain![
+            g,
+            clock,
+            AddConst::new(clock, -samp_rate / baud),
+            ToText::new(vec![a, clock]),
+        ];
         g.add(Box::new(FileSink::new(
             clock,
             clockfile,
@@ -187,16 +189,17 @@ fn main() -> Result<()> {
     };
     g.add(Box::new(block));
 
-    let prev = add_block![g, BinarySlicer::new(prev)];
-
-    // Delay xor, aka NRZI decode.
-    let prev = add_block![g, NrziDecode::new(prev)];
-
-    // G3RUH descramble.
-    let prev = add_block![g, Descrambler::new(prev, 0x21, 0, 16)];
-
-    // Decode.
-    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
+    let prev = blockchain![
+        g,
+        prev,
+        BinarySlicer::new(prev),
+        // Delay xor, aka NRZI decode.
+        NrziDecode::new(prev),
+        // G3RUH descramble.
+        Descrambler::new(prev, 0x21, 0, 16),
+        // Decode.
+        HdlcDeframer::new(prev, 10, 1500),
+    ];
 
     g.add(Box::new(PduWriter::new(prev, opt.output)));
 
@@ -215,6 +218,6 @@ fn main() -> Result<()> {
 }
 /* ---- Emacs variables ----
  * Local variables:
- * compile-command: "cargo run --example ax25-9600-rx -- -r ../aprs-9600-50k.c32 --sample_rate 50000 -o ../packets"
+ * compile-command: "cargo run --example ax25-9600-rx -- -r data/aprs-9600-50k.c32 --sample_rate 50000 -o tmp/"
  * End:
  */

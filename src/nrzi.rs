@@ -8,10 +8,14 @@ use crate::stream::{ReadStream, WriteStream};
 /// The same effect as NrziDecode can be had by doing:
 ///
 /// ```text
-/// let (a, b) = add_block![g, Tee::new(prev)];
-/// let delay = add_block![g, Delay::new(a, 1)];
-/// let prev = add_block![g, Xor::new(delay, b)];
-/// let prev = add_block![g, XorConst::new(prev, 1u8)];
+/// let (prev, b) = blockchain![g, prev, Tee::new(prev)];
+/// let prev = blockchain![
+///     g,
+///     prev,
+///     Delay::new(prev, 1),
+///     Xor::new(delay, b),
+///     XorConst::new(prev, 1u8),
+/// ];
 /// ```
 ///
 /// "NRZI" is actually ambiguous as to which is zero and which is

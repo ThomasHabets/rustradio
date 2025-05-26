@@ -9,7 +9,7 @@ use clap::Parser;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::{Error, Float};
+use rustradio::{Error, Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -44,14 +44,6 @@ struct Opt {
     iir_alpha: Float,
 }
 
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
-}
-
 fn main() -> Result<()> {
     let opt = Opt::parse();
     stderrlog::new()
@@ -69,15 +61,17 @@ fn main() -> Result<()> {
     // Source.
     //let prev = add_block![g, FileSource::new(&opt.read, false)?];
     let prev = if let Some(read) = opt.read {
-        add_block![g, FileSource::new(&read)?]
+        blockchain![g, prev, FileSource::new(&read)?]
     } else if opt.rtlsdr {
         #[cfg(feature = "rtlsdr")]
         {
             // Source.
-            let prev = add_block![g, RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?];
-
-            // Decode.
-            add_block![g, RtlSdrDecode::new(prev)]
+            blockchain![
+                g,
+                prev,
+                RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?,
+                RtlSdrDecode::new(prev),
+            ]
         }
         #[cfg(not(feature = "rtlsdr"))]
         panic!("rtlsdr feature not enabled")
@@ -92,66 +86,54 @@ fn main() -> Result<()> {
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    let prev = add_block![g, FftFilter::new(prev, taps)];
-
-    // Resample RF.
     let new_samp_rate = 50_000.0;
-    let prev = add_block![
+    let prev = blockchain![
         g,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+        prev,
+        FftFilter::new(prev, taps),
+        // Resample RF.
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
     ];
     let samp_rate = new_samp_rate;
 
     // Tee out signal strength.
     let (b, prev, burst_tee) = Tee::new(prev);
     g.add(Box::new(b));
-    let burst_tee = add_block![g, ComplexToMag2::new(burst_tee)];
-    let burst_tee = add_block![
+    let burst_tee = blockchain![
         g,
+        burst_tee,
+        ComplexToMag2::new(burst_tee),
         SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)
-            .ok_or(Error::msg("bad IIR parameters"))?
+            .ok_or(Error::msg("bad IIR parameters"))?,
     ];
 
     // Demod.
-    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-
-    // Filter.
-    //let taps = rustradio::fir::low_pass(samp_rate, 16000.0, 100.0);
-    //let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
-
-    // Tag burst.
-    let prev = add_block![
+    let prev = blockchain![
         g,
-        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())
+        prev,
+        QuadratureDemod::new(prev, 1.0),
+        // Filter.
+        //FftFilterFloat::new(prev, &rustradio::fir::low_pass(samp_rate, 16000.0, 100.0));
+        // Tag burst.
+        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string()),
+        // Create quad demod raw sample blobs (Vec<Float>) from tagged
+        // stream of Floats.
+        StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50),
+        // A kind of frequency lock.
+        Midpointer::new(prev),
+        // Symbol sync.
+        Wpcr::builder(prev).samp_rate(samp_rate).build(),
+        // Turn Vec<Float> into Float.
+        VecToStream::new(prev),
+        // Turn floats into bits.
+        BinarySlicer::new(prev),
+        // NRZI decode.
+        NrziDecode::new(prev),
+        // G3RUH descramble.
+        Descrambler::new(prev, 0x21, 0, 16),
+        // Decode.
+        HdlcDeframer::new(prev, 10, 1500),
     ];
-
-    // Create quad demod raw sample blobs (Vec<Float>) from tagged
-    // stream of Floats.
-    let prev = add_block![
-        g,
-        StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50)
-    ];
-
-    // A kind of frequency lock.
-    let prev = add_block![g, Midpointer::new(prev)];
-
-    // Symbol sync.
-    let prev = add_block![g, Wpcr::builder(prev).samp_rate(samp_rate).build()];
-
-    // Turn Vec<Float> into Float.
-    let prev = add_block![g, VecToStream::new(prev)];
-
-    // Turn floats into bits.
-    let prev = add_block![g, BinarySlicer::new(prev)];
-
-    // NRZI decode.
-    let prev = add_block![g, NrziDecode::new(prev)];
-
-    // G3RUH descramble.
-    let prev = add_block![g, Descrambler::new(prev, 0x21, 0, 16)];
-
-    // Decode.
-    let prev = add_block![g, HdlcDeframer::new(prev, 10, 1500)];
 
     // Save.
     g.add(Box::new(PduWriter::new(prev, opt.output)));

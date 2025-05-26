@@ -5,10 +5,10 @@ use anyhow::Result;
 use clap::Parser;
 use log::warn;
 
-use rustradio::Float;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
+use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -31,14 +31,6 @@ struct Opt {
     audio_rate: u32,
 }
 
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
-}
-
 fn main() -> Result<()> {
     println!("tone generator receiver example");
     let opt = Opt::parse();
@@ -54,16 +46,18 @@ fn main() -> Result<()> {
 
     // Two ways of getting a real sine wave, just as examples.
     let prev = if false {
-        add_block![
+        blockchain![
             g,
+            prev,
             SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)
         ]
     } else {
-        let prev = add_block![
+        blockchain![
             g,
-            SignalSourceComplex::new(opt.audio_rate as Float, opt.freq, opt.volume)
-        ];
-        add_block![g, Map::keep_tags(prev, "ComplexToReal", |x| x.re)]
+            prev,
+            SignalSourceComplex::new(opt.audio_rate as Float, opt.freq, opt.volume),
+            Map::keep_tags(prev, "ComplexToReal", |x| x.re),
+        ]
     };
 
     g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));

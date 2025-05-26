@@ -16,7 +16,7 @@ use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::window::WindowType;
-use rustradio::{Complex, Float};
+use rustradio::{Complex, Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -44,14 +44,6 @@ struct Opt {
     symbol_max_deviation: Float,
 }
 
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        $g.add(Box::new(block));
-        prev
-    }};
-}
-
 fn main() -> Result<()> {
     let opt = Opt::parse();
     stderrlog::new()
@@ -65,37 +57,33 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     // TODO: this is a complete mess.
-    let prev = add_block![g, FileSource::<Complex>::new(&opt.read)?];
     let samp_rate = opt.samp_rate as Float;
-
-    // Filter RF.
-    let taps = rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0, &WindowType::Hamming);
-    let prev = add_block![g, FftFilter::new(prev, taps)];
-
-    // Resample RF.
     let new_samp_rate = 50_000.0;
-    let prev = add_block![
-        g,
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
-    ];
-    let samp_rate = new_samp_rate;
-
-    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-    let prev = add_block![g, Hilbert::new(prev, 65, &WindowType::Hamming)];
-
-    // Can't use FastFM here, because it doesn't work well with
-    // preemph'd input.
-    let prev = add_block![g, QuadratureDemod::new(prev, 1.0)];
-
-    let taps = rustradio::fir::low_pass(samp_rate, 1100.0, 100.0, &WindowType::Hamming);
-    let prev = add_block![g, FftFilterFloat::new(prev, &taps)];
-
     let freq1 = 1200.0;
     let freq2 = 2200.0;
     let center_freq = freq1 + (freq2 - freq1) / 2.0;
-    let prev = add_block![
+
+    let prev = blockchain![
         g,
-        AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)
+        prev,
+        FileSource::<Complex>::new(&opt.read)?,
+        // Filter RF.
+        FftFilter::new(
+            prev,
+            rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0, &WindowType::Hamming)
+        ),
+        // Resample RF.
+        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
+        QuadratureDemod::new(prev, 1.0),
+        Hilbert::new(prev, 65, &WindowType::Hamming),
+        // Can't use FastFM here, because it doesn't work well with
+        // preemph'd input.
+        QuadratureDemod::new(prev, 1.0),
+        FftFilterFloat::new(
+            prev,
+            &rustradio::fir::low_pass(samp_rate, 1100.0, 100.0, &WindowType::Hamming)
+        ),
+        AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate),
     ];
 
     /*
@@ -121,28 +109,29 @@ fn main() -> Result<()> {
         prev
     };
 
-    let prev = add_block![g, BinarySlicer::new(prev)];
-    let prev = add_block![g, XorConst::new(prev, 1)];
-    let prev = add_block![
+    let prev = blockchain![
         g,
+        prev,
+        BinarySlicer::new(prev),
+        XorConst::new(prev, 1),
         CorrelateAccessCodeTag::new(
             prev,
             rustradio::il2p_deframer::SYNC_WORD.to_vec(),
             "sync",
             0,
-        )
+        ),
     ];
 
     let (b, a, prev) = Tee::new(prev);
     g.add(Box::new(b));
-    let clock = add_block![g, ToText::new(vec![a])];
+    let clock = blockchain![g, clock, ToText::new(vec![a])];
     g.add(Box::new(FileSink::new(
         clock,
         "test.u8",
         rustradio::file_sink::Mode::Overwrite,
     )?));
 
-    let _ = add_block![g, Il2pDeframer::new(prev)];
+    let _ = blockchain![g, prev, Il2pDeframer::new(prev)];
     //g.add(Box::new(NullSink::new(prev)));
 
     // Run the graph.

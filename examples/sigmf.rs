@@ -3,19 +3,10 @@ use std::io::Write;
 use anyhow::Result;
 use clap::Parser;
 
-use rustradio::Error;
 use rustradio::block::{Block, BlockRet};
 use rustradio::sigmf::{Capture, SigMF};
 use rustradio::stream::NCReadStream;
-
-macro_rules! add_block {
-    ($g:ident, $cons:expr) => {{
-        let (block, prev) = $cons;
-        let block = Box::new(block);
-        $g.add(block);
-        prev
-    }};
-}
+use rustradio::{Error, blockchain};
 
 #[derive(clap::Parser)]
 struct Opt {
@@ -153,8 +144,7 @@ fn cmd_check(opt: CheckOpts) -> Result<()> {
         return Ok(());
     };
     let in_meta = in_meta.to_owned();
-    let prev = add_block![g, src];
-    let prev = add_block![g, sha512(prev)];
+    let prev = blockchain![g, prev, src, sha512(prev)];
     g.add(Box::new(CheckHash::new(prev, in_meta)));
     g.run().map_err(Into::into)
 }
