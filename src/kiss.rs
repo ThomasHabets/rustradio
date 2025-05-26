@@ -1,19 +1,32 @@
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, Tag, TagValue};
 use crate::{Error, Result};
+use log::debug;
 
 const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
 const KISS_TFEND: u8 = 0xDC;
 const KISS_TFESC: u8 = 0xDD;
 
+fn strip_fend(data: &[u8]) -> &[u8] {
+    let start = data
+        .iter()
+        .position(|&b| b != KISS_FEND)
+        .unwrap_or(data.len());
+    let end = data
+        .iter()
+        .rposition(|&b| b != KISS_FEND)
+        .map_or(0, |i| i + 1);
+    &data[start..end]
+}
+
 /// Escape KISS data stream.
 #[must_use]
-fn escape(bytes: &[u8]) -> Vec<u8> {
+fn escape(bytes: &[u8], port: u8) -> Vec<u8> {
     // Add 10% capacity to leave room for escaped
     let mut ret = Vec::with_capacity((3 + bytes.len()) * 110 / 100);
     ret.push(KISS_FEND);
-    ret.push(0); // TODO: port
+    ret.push(port << 4);
     for &b in bytes {
         match b {
             KISS_FEND => ret.extend(vec![KISS_FESC, KISS_TFEND]),
@@ -78,23 +91,36 @@ impl Block for KissDecode {
             let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            let out = match unescape(&x) {
+            let x = strip_fend(&x);
+            if x.is_empty() {
+                continue;
+            }
+            let (port, x) = (x[0], &x[1..]);
+            if port & 0xF != 0 {
+                debug!("KissDecode: non-data packet: {port:02x} {x:02x?}");
+                continue;
+            }
+            let port = (port >> 4) & 0xf;
+            let out = match unescape(x) {
                 Ok(o) => o,
                 Err(e) => {
                     log::debug!("Bad KISS packet: {e}");
                     continue;
                 }
             };
-            tags.push(Tag::new(
-                0,
-                "KissDecode:input-bytes",
-                TagValue::U64(x.len().try_into().unwrap()),
-            ));
-            tags.push(Tag::new(
-                0,
-                "KissDecode:output-bytes",
-                TagValue::U64(out.len().try_into().unwrap()),
-            ));
+            tags.extend(vec![
+                Tag::new(0, "KissDecode:port", TagValue::U64(port.into())),
+                Tag::new(
+                    0,
+                    "KissDecode:input-bytes",
+                    TagValue::U64(x.len().try_into().unwrap()),
+                ),
+                Tag::new(
+                    0,
+                    "KissDecode:output-bytes",
+                    TagValue::U64(out.len().try_into().unwrap()),
+                ),
+            ]);
             self.dst.push(out, tags);
         }
     }
@@ -122,7 +148,8 @@ impl Block for KissEncode {
             let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            let out = escape(&x);
+            // TODO: set port.
+            let out = escape(&x, 0);
             tags.push(Tag::new(
                 0,
                 "KissEncode:input-bytes",
@@ -142,6 +169,53 @@ impl Block for KissEncode {
 mod tests {
     use super::*;
     use crate::stream::new_nocopy_stream;
+
+    #[test]
+    fn decode_nothing() -> Result<()> {
+        let (_tx, rx) = new_nocopy_stream();
+        let (mut b, out) = KissDecode::new(rx);
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        assert_eq!(out.pop(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn decode_empty() -> Result<()> {
+        let (tx, rx) = new_nocopy_stream();
+        tx.push(vec![], &[]);
+        let (mut b, out) = KissDecode::new(rx);
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        assert_eq!(out.pop(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn decode_some_data() -> Result<()> {
+        let (tx, rx) = new_nocopy_stream();
+        tx.push(
+            b"\xC0\x30foo\xDB\xDCA\xDB\xDD".to_vec(),
+            &[Tag::new(0, "foobar", TagValue::String("baz".to_string()))],
+        );
+        let (mut b, out) = KissDecode::new(rx);
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        let (o, tags) = out.pop().unwrap();
+        let want = b"foo\xC0A\xDB".to_vec();
+        assert_eq!(o, want);
+        assert_eq!(
+            tags,
+            &[
+                Tag::new(0, "foobar", TagValue::String("baz".to_string())),
+                Tag::new(0, "KissDecode:port", TagValue::U64(3)),
+                Tag::new(0, "KissDecode:input-bytes", TagValue::U64(8)),
+                Tag::new(
+                    0,
+                    "KissDecode:output-bytes",
+                    TagValue::U64(want.len().try_into().unwrap())
+                ),
+            ]
+        );
+        Ok(())
+    }
 
     #[test]
     fn encode_nothing() -> Result<()> {
