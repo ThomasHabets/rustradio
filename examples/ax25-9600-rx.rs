@@ -145,7 +145,10 @@ fn main() -> Result<()> {
             g,
             prev,
             FftFilter::new(prev, taps),
-            RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
+            RationalResampler::builder()
+                .deci(samp_rate as usize)
+                .interp(new_samp_rate as usize)
+                .build(prev)?,
             QuadratureDemod::new(prev, 1.0),
         ];
         (prev, new_samp_rate)

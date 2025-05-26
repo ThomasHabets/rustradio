@@ -73,7 +73,10 @@ fn main() -> Result<()> {
             rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0, &WindowType::Hamming)
         ),
         // Resample RF.
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
+        RationalResampler::builder()
+            .deci(samp_rate as usize)
+            .interp(new_samp_rate as usize)
+            .build(prev)?,
         QuadratureDemod::new(prev, 1.0),
         Hilbert::new(prev, 65, &WindowType::Hamming),
         // Can't use FastFM here, because it doesn't work well with

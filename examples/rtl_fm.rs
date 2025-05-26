@@ -388,7 +388,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 &rustradio::window::WindowType::Hamming,
             )
         ),
-        RationalResamplerBuilder::new()
+        RationalResampler::builder()
             .deci(samp_rate as usize)
             .interp(samp_rate_2 as usize)
             .build(prev)?,
@@ -402,7 +402,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 &rustradio::window::WindowType::Hamming,
             )
         ),
-        RationalResamplerBuilder::new()
+        RationalResampler::builder()
             .deci(samp_rate_2 as usize)
             .interp(opt.audio_rate as usize)
             .build(prev)?,

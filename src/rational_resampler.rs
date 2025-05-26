@@ -16,51 +16,67 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
     a
 }
 
-#[derive(Default)]
-pub struct RationalResamplerBuilder {}
-pub struct RationalResamplerBuilderInterp {
+pub struct RationalResamplerBuilder<T> {
+    dummy: std::marker::PhantomData<T>,
+}
+pub struct RationalResamplerBuilderInterp<T> {
+    dummy: std::marker::PhantomData<T>,
     interp: usize,
 }
-pub struct RationalResamplerBuilderDeci {
+pub struct RationalResamplerBuilderDeci<T> {
+    dummy: std::marker::PhantomData<T>,
     deci: usize,
 }
-pub struct RationalResamplerBuilderBoth {
+pub struct RationalResamplerBuilderBoth<T> {
+    dummy: std::marker::PhantomData<T>,
     interp: usize,
     deci: usize,
 }
 
-impl RationalResamplerBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn deci(self, deci: usize) -> RationalResamplerBuilderDeci {
-        RationalResamplerBuilderDeci { deci }
-    }
-    pub fn interp(self, interp: usize) -> RationalResamplerBuilderInterp {
-        RationalResamplerBuilderInterp { interp }
+impl<T> Default for RationalResamplerBuilder<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
-impl RationalResamplerBuilderInterp {
-    pub fn deci(self, deci: usize) -> RationalResamplerBuilderBoth {
+impl<T> RationalResamplerBuilder<T> {
+    pub fn new() -> Self {
+        Self {
+            dummy: std::marker::PhantomData,
+        }
+    }
+    pub fn deci(self, deci: usize) -> RationalResamplerBuilderDeci<T> {
+        RationalResamplerBuilderDeci {
+            deci,
+            dummy: self.dummy,
+        }
+    }
+    pub fn interp(self, interp: usize) -> RationalResamplerBuilderInterp<T> {
+        RationalResamplerBuilderInterp {
+            interp,
+            dummy: self.dummy,
+        }
+    }
+}
+impl<T> RationalResamplerBuilderInterp<T> {
+    pub fn deci(self, deci: usize) -> RationalResamplerBuilderBoth<T> {
         RationalResamplerBuilderBoth {
             interp: self.interp,
             deci,
+            dummy: self.dummy,
         }
     }
 }
-impl RationalResamplerBuilderDeci {
-    pub fn interp(self, interp: usize) -> RationalResamplerBuilderBoth {
+impl<T> RationalResamplerBuilderDeci<T> {
+    pub fn interp(self, interp: usize) -> RationalResamplerBuilderBoth<T> {
         RationalResamplerBuilderBoth {
             deci: self.deci,
             interp,
+            dummy: self.dummy,
         }
     }
 }
-impl RationalResamplerBuilderBoth {
-    pub fn build<T: Sample>(
-        self,
-        src: ReadStream<T>,
-    ) -> Result<(RationalResampler<T>, ReadStream<T>)> {
+impl<T: Sample> RationalResamplerBuilderBoth<T> {
+    pub fn build(self, src: ReadStream<T>) -> Result<(RationalResampler<T>, ReadStream<T>)> {
         RationalResampler::new(src, self.interp, self.deci)
     }
 }
@@ -85,8 +101,8 @@ pub struct RationalResampler<T: Sample> {
 
 impl<T: Sample> RationalResampler<T> {
     /// Create builder.
-    pub fn builder() -> RationalResamplerBuilder {
-        RationalResamplerBuilder {}
+    pub fn builder() -> RationalResamplerBuilder<T> {
+        RationalResamplerBuilder::<T>::new()
     }
 
     /// Create new RationalResampler block.

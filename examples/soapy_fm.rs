@@ -76,7 +76,10 @@ mod internal {
         let prev = blockchain![
             g,
             prev,
-            RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+            RationalResampler::builder()
+                .deci(samp_rate as usize)
+                .interp(new_samp_rate as usize)
+                .build(prev)?,
         ];
         let samp_rate = new_samp_rate;
 
@@ -99,7 +102,10 @@ mod internal {
         let prev = blockchain![
             g,
             prev,
-            RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?
+            RationalResampler::builder()
+                .deci(samp_rate as usize)
+                .interp(new_samp_rate as usize)
+                .build(prev)?,
         ];
         let _samp_rate = new_samp_rate;
 

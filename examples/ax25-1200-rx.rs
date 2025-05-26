@@ -174,7 +174,10 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
                 &rustradio::window::WindowType::Hamming,
             )
         ),
-        RationalResampler::new(prev, new_samp_rate as usize, samp_rate as usize)?,
+        RationalResampler::builder()
+            .deci(samp_rate as usize)
+            .interp(new_samp_rate as usize)
+            .build(prev)?,
     ];
     let prev = if opt.fast_fm {
         // This is faster, but slightly worse.

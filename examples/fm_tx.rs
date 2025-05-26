@@ -81,7 +81,7 @@ fn main() -> Result<()> {
             .repeat(Repeat::infinite())
             .build()?,
         AuDecode::new(prev, opt.audio_rate as u32),
-        RationalResampler::<u8>::builder()
+        RationalResampler::builder()
             .deci(opt.audio_rate)
             .interp(opt.sample_rate)
             .build(prev)?,
