@@ -1,8 +1,6 @@
-use log::warn;
-
-use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, Tag, TagValue};
+use crate::{Error, Result};
 
 const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
@@ -28,8 +26,7 @@ fn escape(bytes: &[u8]) -> Vec<u8> {
 }
 
 /// Unescape KISS data stream.
-#[must_use]
-fn unescape(data: &[u8]) -> Option<Vec<u8>> {
+fn unescape(data: &[u8]) -> Result<Vec<u8>> {
     let mut unescaped = Vec::with_capacity(data.len());
     let mut is_escaped = false;
     for &byte in data {
@@ -38,20 +35,27 @@ fn unescape(data: &[u8]) -> Option<Vec<u8>> {
                 KISS_TFESC => KISS_FESC,
                 KISS_TFEND => KISS_FEND,
                 other => {
-                    warn!("TODO: kiss unescape error: escaped {other}");
-                    return None;
+                    return Err(Error::msg(format!(
+                        "KissDecode: invalid escape byte {other:02x}"
+                    )));
                 }
             });
             is_escaped = false;
         } else if byte == KISS_FESC {
             // Next byte is escaped, so set the flag
             is_escaped = true;
+        } else if byte == KISS_FEND {
+            return Err(Error::msg("KissDecode: FEND in the middle of a packet"));
         } else {
             // Normal byte, just push it to the output
             unescaped.push(byte);
         }
     }
-    if is_escaped { None } else { Some(unescaped) }
+    if is_escaped {
+        Err(Error::msg("KissDecode: ended on an escape"))
+    } else {
+        Ok(unescaped)
+    }
 }
 
 /// Decode KISS frame.
@@ -74,8 +78,12 @@ impl Block for KissDecode {
             let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            let Some(out) = unescape(&x) else {
-                continue;
+            let out = match unescape(&x) {
+                Ok(o) => o,
+                Err(e) => {
+                    log::debug!("Bad KISS packet: {e}");
+                    continue;
+                }
             };
             tags.push(Tag::new(
                 0,
