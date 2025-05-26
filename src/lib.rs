@@ -150,6 +150,7 @@ pub mod file_source;
 pub mod fir;
 pub mod hasher;
 pub mod hdlc_deframer;
+pub mod hdlc_framer;
 pub mod hilbert;
 pub mod iir_filter;
 pub mod il2p_deframer;
