@@ -1,6 +1,6 @@
 use crate::Result;
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue, WriteStream};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
 
 const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
@@ -50,38 +50,16 @@ pub struct KissEncode {
     #[rustradio(in)]
     src: NCReadStream<Vec<u8>>,
     #[rustradio(out)]
-    dst: WriteStream<u8>,
-    #[rustradio(default)]
-    buf: Vec<u8>,
-    #[rustradio(default)]
-    tags: Option<Vec<Tag>>,
+    dst: NCWriteStream<Vec<u8>>,
 }
 
 impl Block for KissEncode {
     fn work(&mut self) -> Result<BlockRet> {
         loop {
-            let mut o = self.dst.write_buf()?;
-            if o.is_empty() {
-                return Ok(BlockRet::WaitForStream(&self.dst, 1));
-            }
-            if !self.buf.is_empty() {
-                let n = std::cmp::min(o.len(), self.buf.len());
-                assert_ne!(n, 0);
-                o.slice()[..n].copy_from_slice(&self.buf);
-                let mut tags = self.tags.take().unwrap_or_default();
-                if n == self.buf.len() {
-                    tags.push(Tag::new(n - 1, "KISS:end", TagValue::Bool(true)));
-                }
-                o.produce(n, &tags);
-                self.buf.drain(..n);
-                if self.buf.is_empty() {
-                    return Ok(BlockRet::WaitForStream(&self.dst, 1));
-                }
-            }
             let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            self.buf = escape(&x);
+            let out = escape(&x);
             tags.push(Tag::new(
                 0,
                 "KISS:input-bytes",
@@ -90,9 +68,9 @@ impl Block for KissEncode {
             tags.push(Tag::new(
                 0,
                 "KISS:output-bytes",
-                TagValue::U64(self.buf.len().try_into().unwrap()),
+                TagValue::U64(out.len().try_into().unwrap()),
             ));
-            self.tags = Some(tags);
+            self.dst.push(out, tags);
         }
     }
 }
@@ -107,7 +85,7 @@ mod tests {
         let (_tx, rx) = new_nocopy_stream();
         let (mut b, out) = KissEncode::new(rx);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
-        assert_eq!(out.read_buf()?.0.len(), 0);
+        assert_eq!(out.pop(), None);
         Ok(())
     }
 
@@ -117,14 +95,13 @@ mod tests {
         tx.push(vec![], &[]);
         let (mut b, out) = KissEncode::new(rx);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
-        let (o, tags) = out.read_buf()?;
-        assert_eq!(o.slice(), &[KISS_FEND, 0, KISS_FEND]);
+        let (o, tags) = out.pop().unwrap();
+        assert_eq!(o, &[KISS_FEND, 0, KISS_FEND]);
         assert_eq!(
             tags,
             &[
                 Tag::new(0, "KISS:input-bytes", TagValue::U64(0)),
                 Tag::new(0, "KISS:output-bytes", TagValue::U64(3)),
-                Tag::new(2, "KISS:end", TagValue::Bool(true)),
             ]
         );
         Ok(())
@@ -139,11 +116,11 @@ mod tests {
         );
         let (mut b, out) = KissEncode::new(rx);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
-        let (o, tags) = out.read_buf()?;
+        let (o, tags) = out.pop().unwrap();
         let want = &[
             KISS_FEND, 0, b'f', b'o', KISS_FESC, KISS_TFEND, b'o', KISS_FESC, KISS_TFESC, KISS_FEND,
         ];
-        assert_eq!(o.slice(), want,);
+        assert_eq!(o, want);
         assert_eq!(
             tags,
             &[
@@ -154,7 +131,6 @@ mod tests {
                     "KISS:output-bytes",
                     TagValue::U64(want.len().try_into().unwrap())
                 ),
-                Tag::new(want.len() - 1, "KISS:end", TagValue::Bool(true)),
             ]
         );
         Ok(())
