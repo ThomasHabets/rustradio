@@ -7,6 +7,7 @@ const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
 const KISS_TFEND: u8 = 0xDC;
 const KISS_TFESC: u8 = 0xDD;
+const ENCODE_PORT_TAG: &str = "KissEncode:port";
 
 fn strip_fend(data: &[u8]) -> &[u8] {
     let start = data
@@ -145,11 +146,26 @@ pub struct KissEncode {
 impl Block for KissEncode {
     fn work(&mut self) -> Result<BlockRet> {
         loop {
-            let Some((x, mut tags)) = self.src.pop() else {
+            let Some((x, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            // TODO: set port.
-            let out = escape(&x, 0);
+            let port = match tags
+                .iter()
+                .find(|t| t.key() == ENCODE_PORT_TAG)
+                .map(|t| t.val())
+                .unwrap_or(&TagValue::U64(0))
+            {
+                TagValue::U64(port) if *port < 0x10 => *port & 0xf,
+                other => {
+                    debug!("KissEncode: invalid port tag value: {other:?}");
+                    0
+                }
+            };
+            let mut tags: Vec<_> = tags
+                .into_iter()
+                .filter(|t| t.key() != ENCODE_PORT_TAG)
+                .collect();
+            let out = escape(&x, port.try_into().unwrap());
             tags.push(Tag::new(
                 0,
                 "KissEncode:input-bytes",
@@ -249,13 +265,17 @@ mod tests {
         let (tx, rx) = new_nocopy_stream();
         tx.push(
             b"fo\xC0o\xDB".to_vec(),
-            &[Tag::new(0, "foobar", TagValue::String("baz".to_string()))],
+            &[
+                Tag::new(0, "foobar", TagValue::String("baz".to_string())),
+                Tag::new(0, "KissEncode:port", TagValue::U64(1)),
+            ],
         );
         let (mut b, out) = KissEncode::new(rx);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         let (o, tags) = out.pop().unwrap();
         let want = &[
-            KISS_FEND, 0, b'f', b'o', KISS_FESC, KISS_TFEND, b'o', KISS_FESC, KISS_TFESC, KISS_FEND,
+            KISS_FEND, 0x10, b'f', b'o', KISS_FESC, KISS_TFEND, b'o', KISS_FESC, KISS_TFESC,
+            KISS_FEND,
         ];
         assert_eq!(o, want);
         assert_eq!(
