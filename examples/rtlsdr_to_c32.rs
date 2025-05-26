@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        FileSource::<u8>::new(opt.input.to_str().unwrap())?,
+        FileSource::new(opt.input.to_str().unwrap())?,
         RtlSdrDecode::new(prev),
     ];
     g.add(Box::new(FileSink::new(

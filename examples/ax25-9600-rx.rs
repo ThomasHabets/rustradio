@@ -21,7 +21,7 @@ use clap::Parser;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::{Complex, Float, blockchain};
+use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -104,7 +104,7 @@ fn main() -> Result<()> {
         }
     } else {
         let prev = if let Some(read) = opt.read {
-            blockchain![g, prev, FileSource::<Complex>::new(&read)?]
+            blockchain![g, prev, FileSource::new(&read)?]
         } else if opt.rtlsdr {
             #[cfg(feature = "rtlsdr")]
             {

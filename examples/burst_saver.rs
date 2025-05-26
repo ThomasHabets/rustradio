@@ -12,7 +12,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::{Complex, Error, Float};
+use rustradio::{Error, Float};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     let (prev, samp_rate) = if let Some(read) = opt.read {
-        let prev = blockchain![g, prev, FileSource::<Complex>::new(&read)?];
+        let prev = blockchain![g, prev, FileSource::new(&read)?];
         (prev, opt.samp_rate as Float)
     } else if opt.rtlsdr {
         #[cfg(feature = "rtlsdr")]

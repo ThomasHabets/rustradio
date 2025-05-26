@@ -16,7 +16,7 @@ use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::window::WindowType;
-use rustradio::{Complex, Float, blockchain};
+use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        FileSource::<Complex>::new(&opt.read)?,
+        FileSource::new(&opt.read)?,
         // Filter RF.
         FftFilter::new(
             prev,
