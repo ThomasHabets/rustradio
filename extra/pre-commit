@@ -2,7 +2,7 @@
 
 set -ueo pipefail
 
-exec tickbox --dir tickbox/precommit
+exec schedtool -D -e tickbox --dir tickbox/precommit
 
 if [[ ${AI_REVIEW:-} = true ]]; then
     exec < /dev/tty
