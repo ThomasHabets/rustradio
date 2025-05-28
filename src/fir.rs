@@ -12,7 +12,7 @@ use crate::window::{Window, WindowType};
 use crate::{Complex, Float, Result, Sample};
 
 /// Finite impulse response filter.
-pub struct Fir<T: Sample> {
+pub struct Fir<T> {
     taps: Vec<T>,
 }
 

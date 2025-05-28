@@ -224,7 +224,7 @@ pub fn write<P: AsRef<std::path::Path>>(path: P, samp_rate: f64, freq: f64) -> R
 }
 
 /// SigMF source builder.
-pub struct SigMFSourceBuilder<T: Sample + Type> {
+pub struct SigMFSourceBuilder<T> {
     filename: std::path::PathBuf,
     repeat: Repeat,
     ignore_type_error: bool,

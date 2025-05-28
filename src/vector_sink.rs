@@ -62,7 +62,7 @@ pub struct VectorSink<T: Sample> {
 }
 
 /// Hook is a hook into getting the data and tags written to the VectorSink.
-pub struct Hook<T: Sample> {
+pub struct Hook<T> {
     inner: Arc<Mutex<(Vec<T>, Vec<Tag>)>>,
 }
 impl<T: Sample> Hook<T> {
@@ -79,7 +79,7 @@ impl<T: Sample> Hook<T> {
 /// VectorSink.
 ///
 /// The VectorSink is unable to write anything new while the Data is alive.
-pub struct Data<'a, T: Sample> {
+pub struct Data<'a, T> {
     inner: MutexGuard<'a, (Vec<T>, Vec<Tag>)>,
 }
 impl<T: Sample> Data<'_, T> {

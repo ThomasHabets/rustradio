@@ -212,7 +212,7 @@ impl BufferState {
 }
 
 /// BufferReader is an RAII'd fixed window read slice with some helper functions.
-pub struct BufferReader<T: Copy> {
+pub struct BufferReader<T> {
     parent: Arc<Buffer<T>>,
     start: usize,
     end: usize,
@@ -262,7 +262,7 @@ impl<T: Copy> std::ops::Index<usize> for BufferReader<T> {
 }
 
 /// BufferWriter is an RAII fixed window slice with some helper functions.
-pub struct BufferWriter<T: Copy> {
+pub struct BufferWriter<T> {
     parent: Arc<Buffer<T>>,
     start: usize,
     end: usize,
