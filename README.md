@@ -29,3 +29,5 @@ A library for digital signals processing in the spirit of GNU Radio.
 * `AsRef<Path>` vs `Into<PathBuf>`?
 * What exactly is the purpose of `BlockEOF`?
 * Should `produce()` take `Into<Vec<Tag>>`? Less copying.
+* Block structs have needless trait bounds, just to be passed to generated impl
+  sections.
