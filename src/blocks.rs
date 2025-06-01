@@ -21,7 +21,7 @@ pub use crate::file_source::FileSource;
 pub use crate::fir::FirFilter;
 pub use crate::hasher::{Hasher, sha512};
 pub use crate::hdlc_deframer::HdlcDeframer;
-pub use crate::hdlc_framer::HdlcFramer;
+pub use crate::hdlc_framer::{FcsAdder, HdlcFramer};
 pub use crate::hilbert::Hilbert;
 pub use crate::il2p_deframer::Il2pDeframer;
 pub use crate::kiss::{KissDecode, KissEncode};

@@ -60,6 +60,7 @@ pub fn main() -> Result<()> {
             g,
             prev,
             Strobe::new(std::time::Duration::from_millis(2000), test_packet),
+            FcsAdder::new(prev),
             HdlcFramer::new(prev),
             PduToStream::new(prev),
             Map::keep_tags(prev, "bool_to_u8", |s| if s { 1 } else { 0 }),

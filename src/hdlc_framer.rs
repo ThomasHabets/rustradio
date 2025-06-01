@@ -13,6 +13,31 @@ use crate::stream::{NCReadStream, NCWriteStream};
 const SYNC_BYTES: usize = 10;
 const SYNC: &[bool] = &[false, true, true, true, true, true, true, false];
 
+/// FCS adder.
+///
+/// Takes a packet, and adds 16 bit CRC to it.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
+pub struct FcsAdder {
+    #[rustradio(in)]
+    src: NCReadStream<Vec<u8>>,
+    #[rustradio(out)]
+    dst: NCWriteStream<Vec<u8>>,
+}
+
+impl Block for FcsAdder {
+    fn work(&mut self) -> Result<BlockRet> {
+        loop {
+            let Some((mut data, tags)) = self.src.pop() else {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            };
+            let crc = crate::hdlc_deframer::calc_crc(&data);
+            data.extend(&[(crc & 0xff) as u8, ((crc >> 8) & 0xff) as u8]);
+            self.dst.push(data, tags);
+        }
+    }
+}
+
 /// HDLC framer.
 ///
 /// Takes a packet of bytes, and outputs a packet of bits.
@@ -72,6 +97,7 @@ impl Block for HdlcFramer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stream::new_nocopy_stream;
 
     fn bools_to_string(bs: &[bool]) -> String {
         let mut s = String::new();
@@ -109,5 +135,23 @@ mod tests {
                 bools_to_string(&got)
             );
         }
+    }
+
+    #[test]
+    fn fcs() -> Result<()> {
+        let data = vec![
+            0x82u8, 0xa0, 0xb4, 0x60, 0x60, 0x62, 0x60, 0x9a, 0x60, 0xa8, 0x90, 0x86, 0x40, 0xe5,
+            0x03, 0xf0, 0x3a, 0x4d, 0x30, 0x54, 0x48, 0x43, 0x2d, 0x31, 0x20, 0x20, 0x3a, 0x68,
+            0x65, 0x6c, 0x6c, 0x6f, 0x41,
+        ];
+        let want: Vec<_> = data.iter().copied().chain(vec![0x7d, 0xdc]).collect();
+
+        let (tx, rx) = new_nocopy_stream();
+        tx.push(data, &[]);
+        let (mut b, out) = FcsAdder::new(rx);
+        b.work()?;
+        let (got, _) = out.pop().unwrap();
+        assert_eq!(got, want);
+        Ok(())
     }
 }
