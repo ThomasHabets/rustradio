@@ -158,6 +158,7 @@ pub mod kiss;
 pub mod multiply_const;
 pub mod nrzi;
 pub mod null_sink;
+pub mod pdu_to_stream;
 pub mod pdu_writer;
 pub mod quadrature_demod;
 pub mod rational_resampler;
@@ -581,6 +582,23 @@ impl Sample for u8 {
     }
     fn serialize(&self) -> Vec<u8> {
         vec![*self]
+    }
+}
+
+// Implement bool as u8 serialized to byte 0 and 1.
+impl Sample for bool {
+    type Type = bool;
+    fn size() -> usize {
+        std::mem::size_of::<u8>()
+    }
+    fn parse(data: &[u8]) -> Result<Self::Type> {
+        if data.len() != Self::size() {
+            panic!("TODO: bool is wrong size");
+        }
+        Ok(data[0] != 0)
+    }
+    fn serialize(&self) -> Vec<u8> {
+        vec![if *self { 1u8 } else { 0 }]
     }
 }
 

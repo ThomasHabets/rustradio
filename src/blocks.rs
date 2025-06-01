@@ -28,6 +28,7 @@ pub use crate::kiss::{KissDecode, KissEncode};
 pub use crate::multiply_const::MultiplyConst;
 pub use crate::nrzi::NrziDecode;
 pub use crate::null_sink::NullSink;
+pub use crate::pdu_to_stream::PduToStream;
 pub use crate::pdu_writer::PduWriter;
 pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
 pub use crate::rational_resampler::RationalResampler;
