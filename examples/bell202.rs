@@ -61,18 +61,19 @@ pub fn main() -> Result<()> {
         let prev = blockchain![
             g,
             prev,
-            Strobe::new(std::time::Duration::from_millis(1000), test_packet),
+            Strobe::new(std::time::Duration::from_millis(2000), test_packet),
             HdlcFramer::new(prev),
-            // TODO: scramble.
             PduToStream::new(prev),
+            Map::keep_tags(prev, "bool_to_u8", |s| if s { 1 } else { 0 }),
+            NrziEncode::new(prev),
             RationalResampler::builder()
                 .deci(baud as usize)
                 .interp(audio_rate as usize)
                 .build(prev)?,
-            Map::keep_tags(prev, "bits_to_pn", |s| if s {
-                1200.0 as Float
+            Map::keep_tags(prev, "bits_to_pn", |s| if s > 0 {
+                2200.0 as Float
             } else {
-                2200.0
+                1200.0
             }),
             Vco::new(prev, 2.0 * std::f64::consts::PI / audio_rate),
             Map::keep_tags(prev, "ComplexToFloat", |s| s.re),

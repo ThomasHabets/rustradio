@@ -26,7 +26,7 @@ pub use crate::hilbert::Hilbert;
 pub use crate::il2p_deframer::Il2pDeframer;
 pub use crate::kiss::{KissDecode, KissEncode};
 pub use crate::multiply_const::MultiplyConst;
-pub use crate::nrzi::NrziDecode;
+pub use crate::nrzi::{NrziDecode, NrziEncode};
 pub use crate::null_sink::NullSink;
 pub use crate::pdu_to_stream::PduToStream;
 pub use crate::pdu_writer::PduWriter;

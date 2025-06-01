@@ -10,6 +10,7 @@ use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream};
 
+const SYNC_BYTES: usize = 10;
 const SYNC: &[bool] = &[false, true, true, true, true, true, true, false];
 
 /// HDLC framer.
@@ -30,7 +31,9 @@ pub struct HdlcFramer {
 // TODO: confirm that I didn't get the bit order backwards.
 fn hdlc_encode(data: &[u8]) -> Vec<bool> {
     let mut out = Vec::with_capacity(data.len() * 8 + 32);
-    out.extend(SYNC);
+    for _ in 0..SYNC_BYTES {
+        out.extend(SYNC);
+    }
     let mut ones = 0;
     for mut byte in data.iter().copied() {
         for _ in 0..8 {
@@ -48,7 +51,9 @@ fn hdlc_encode(data: &[u8]) -> Vec<bool> {
             byte >>= 1;
         }
     }
-    out.extend(SYNC);
+    for _ in 0..SYNC_BYTES {
+        out.extend(SYNC);
+    }
     out
 }
 
@@ -89,10 +94,11 @@ mod tests {
         ];
         for (i, o) in pairs {
             let want: Vec<_> = SYNC
+                .repeat(SYNC_BYTES)
                 .iter()
                 .copied()
                 .chain(o.chars().map(|b| b == '1'))
-                .chain(SYNC.iter().copied())
+                .chain(SYNC.repeat(SYNC_BYTES).iter().copied())
                 .collect();
             let got = hdlc_encode(&*i);
             assert_eq!(
