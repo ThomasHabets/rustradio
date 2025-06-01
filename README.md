@@ -31,3 +31,4 @@ A library for digital signals processing in the spirit of GNU Radio.
 * Should `produce()` take `Into<Vec<Tag>>`? Less copying.
 * Block structs have needless trait bounds, just to be passed to generated impl
   sections.
+* Should `Pending` return a time estimate?
