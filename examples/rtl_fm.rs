@@ -438,7 +438,9 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
         #[cfg(feature = "audio")]
         {
             // Play live.
-            g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));
+            g.add(Box::new(
+                AudioSink::builder().build(prev, opt.audio_rate as u64)?,
+            ));
         }
     }
     Ok(ui_thread)

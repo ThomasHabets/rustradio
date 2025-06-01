@@ -26,7 +26,7 @@ crate::error_from!(
 );
 
 impl CpalOutput {
-    fn new(sample_rate: u32) -> Result<Self> {
+    fn new(sample_rate: u32, device_name: Option<&str>) -> Result<Self> {
         for host in cpal::platform::ALL_HOSTS {
             debug!("Audio sink host: {host:?}, name: {}", host.name());
         }
@@ -40,9 +40,14 @@ impl CpalOutput {
                 debug!("Audio sink device: {:?}", dev.name()?);
             }
         }
-        let device = host
-            .default_output_device()
-            .ok_or(Error::msg("audio sink: failed to find output device"))?;
+        let device = if let Some(dn) = device_name {
+            host.output_devices()?
+                .find(|d| d.name().unwrap_or_default().contains(dn))
+                .ok_or(Error::msg("audio sink: failed to find output device {dn}"))?
+        } else {
+            host.default_output_device()
+                .ok_or(Error::msg("audio sink: failed to find output device"))?
+        };
         info!("Audio sink output device: {}", device.name()?);
 
         trace!("Audio sink supported output configs:");
@@ -96,6 +101,23 @@ impl CpalOutput {
     }
 }
 
+/// Audio sink builder.
+#[derive(Default)]
+pub struct AudioSinkBuilder {
+    dev: Option<String>,
+}
+
+impl AudioSinkBuilder {
+    /// Create a new builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Build the AudioSink.
+    pub fn build(self, prev: ReadStream<Float>, sample_rate: u64) -> Result<AudioSink> {
+        AudioSink::new_opts(prev, sample_rate, self.dev.as_deref())
+    }
+}
+
 /// Audio sink. In other words: playback to speakers.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
@@ -117,7 +139,14 @@ impl AudioSink {
     ///
     /// Input is a single channel (mono), with values between -1.0 and +1.0.
     pub fn new(src: ReadStream<Float>, sample_rate: u64) -> Result<Self> {
-        let output = CpalOutput::new(sample_rate as u32)?;
+        Self::new_opts(src, sample_rate, None)
+    }
+    /// Create a builder.
+    pub fn builder() -> AudioSinkBuilder {
+        AudioSinkBuilder::default()
+    }
+    fn new_opts(src: ReadStream<Float>, sample_rate: u64, dev: Option<&str>) -> Result<Self> {
+        let output = CpalOutput::new(sample_rate as u32, dev)?;
         let (tx, rx) = std::sync::mpsc::channel();
         let cancel = CancellationToken::new();
         let c2 = cancel.clone();
