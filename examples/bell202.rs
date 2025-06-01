@@ -56,7 +56,7 @@ pub fn main() -> Result<()> {
         let (tx, rx) = rustradio::stream::new_nocopy_stream();
         tx.push(test_packet, &[]);
         */
-        let _baud = 1200.0;
+        let baud = 1200.0;
         let audio_rate = 48000.0;
         let prev = blockchain![
             g,
@@ -65,6 +65,10 @@ pub fn main() -> Result<()> {
             HdlcFramer::new(prev),
             // TODO: scramble.
             PduToStream::new(prev),
+            RationalResampler::builder()
+                .deci(baud as usize)
+                .interp(audio_rate as usize)
+                .build(prev)?,
             Map::keep_tags(prev, "bits_to_pn", |s| if s {
                 1200.0 as Float
             } else {
@@ -72,12 +76,12 @@ pub fn main() -> Result<()> {
             }),
             Vco::new(prev, 2.0 * std::f64::consts::PI / audio_rate),
             Map::keep_tags(prev, "ComplexToFloat", |s| s.re),
-            MultiplyConst::new(prev, 0.1),
+            MultiplyConst::new(prev, 0.5),
             RationalResampler::builder()
                 .deci(audio_rate as usize)
                 .interp(opt.sample_rate as usize)
                 .build(prev)?,
-            Vco::new(prev, 2.0 * std::f64::consts::PI / opt.sample_rate),
+            Vco::new(prev, 2.0 * std::f64::consts::PI * 5000.0 / opt.sample_rate),
         ];
         g.add(Box::new(
             SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
