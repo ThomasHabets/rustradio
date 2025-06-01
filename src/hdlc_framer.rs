@@ -11,7 +11,7 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream};
 
 const SYNC_BYTES: usize = 10;
-const SYNC: &[bool] = &[false, true, true, true, true, true, true, false];
+const SYNC: &[u8] = &[0, 1, 1, 1, 1, 1, 1, 0];
 
 /// FCS adder.
 ///
@@ -50,11 +50,11 @@ pub struct HdlcFramer {
     #[rustradio(in)]
     src: NCReadStream<Vec<u8>>,
     #[rustradio(out)]
-    dst: NCWriteStream<Vec<bool>>,
+    dst: NCWriteStream<Vec<u8>>,
 }
 
 // TODO: confirm that I didn't get the bit order backwards.
-fn hdlc_encode(data: &[u8]) -> Vec<bool> {
+fn hdlc_encode(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len() * 8 + 32);
     for _ in 0..SYNC_BYTES {
         out.extend(SYNC);
@@ -64,14 +64,14 @@ fn hdlc_encode(data: &[u8]) -> Vec<bool> {
         for _ in 0..8 {
             if byte & 1 == 1 {
                 ones += 1;
-                out.push(true);
+                out.push(1);
                 if ones == 5 {
                     ones = 0;
-                    out.push(false);
+                    out.push(0);
                 }
             } else {
                 ones = 0;
-                out.push(false);
+                out.push(0);
             }
             byte >>= 1;
         }
@@ -99,10 +99,10 @@ mod tests {
     use super::*;
     use crate::stream::new_nocopy_stream;
 
-    fn bools_to_string(bs: &[bool]) -> String {
+    fn bools_to_string(bs: &[u8]) -> String {
         let mut s = String::new();
         for b in bs {
-            s += if *b { "1" } else { "0" };
+            s += if *b > 0 { "1" } else { "0" };
         }
         s
     }
@@ -123,14 +123,14 @@ mod tests {
                 .repeat(SYNC_BYTES)
                 .iter()
                 .copied()
-                .chain(o.chars().map(|b| b == '1'))
+                .chain(o.chars().map(|b| if b == '0' { 0 } else { 1 }))
                 .chain(SYNC.repeat(SYNC_BYTES).iter().copied())
                 .collect();
             let got = hdlc_encode(&*i);
             assert_eq!(
                 got,
                 want,
-                "\nwant: {}\ngot:  {}",
+                "\nin: {i:?}\nout: {o}\nwant: {}\ngot:  {}",
                 bools_to_string(&want),
                 bools_to_string(&got)
             );

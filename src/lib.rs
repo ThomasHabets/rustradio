@@ -586,23 +586,6 @@ impl Sample for u8 {
     }
 }
 
-// Implement bool as u8 serialized to byte 0 and 1.
-impl Sample for bool {
-    type Type = bool;
-    fn size() -> usize {
-        std::mem::size_of::<u8>()
-    }
-    fn parse(data: &[u8]) -> Result<Self::Type> {
-        if data.len() != Self::size() {
-            panic!("TODO: bool is wrong size");
-        }
-        Ok(data[0] != 0)
-    }
-    fn serialize(&self) -> Vec<u8> {
-        vec![if *self { 1u8 } else { 0 }]
-    }
-}
-
 impl Sample for u32 {
     type Type = u32;
     fn size() -> usize {

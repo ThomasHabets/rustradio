@@ -63,7 +63,6 @@ pub fn main() -> Result<()> {
             FcsAdder::new(prev),
             HdlcFramer::new(prev),
             PduToStream::new(prev),
-            Map::keep_tags(prev, "bool_to_u8", |s| if s { 1 } else { 0 }),
             NrziEncode::new(prev),
             RationalResampler::builder()
                 .deci(baud as usize)
