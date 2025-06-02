@@ -25,6 +25,16 @@ struct Opt {
     /// Output gain. 0.0-1.0.
     #[arg(long, default_value_t = 0.0)]
     ogain: f64,
+
+    #[arg(long, default_value = "0.5")]
+    symbol_max_deviation: Float,
+
+    #[arg(
+        long = "symbol_taps",
+        default_value = "0.5,0.5",
+        use_value_delimiter = true
+    )]
+    symbol_taps: Vec<Float>,
 }
 
 pub fn main() -> Result<()> {
@@ -90,10 +100,57 @@ pub fn main() -> Result<()> {
     // Receiver.
     {
         eprintln!("Set up receiver");
+        let samp_rate = 300_000.0f32;
+        let samp_rate_2 = 50_000.0;
+        let freq1 = 1200.0;
+        let freq2 = 2200.0f32;
+        let center_freq = freq1 + (freq2 - freq1) / 2.0;
+        let baud = 1200.0;
         let prev = blockchain![
             g,
             prev,
-            SoapySdrSource::builder(&dev, 2_450_000_000.0, 300000.0).build()?
+            SoapySdrSource::builder(&dev, 2_450_000_000.0, samp_rate as f64).build()?,
+            FftFilter::new(
+                prev,
+                rustradio::fir::low_pass_complex(
+                    samp_rate,
+                    20_000.0,
+                    100.0,
+                    &rustradio::window::WindowType::Hamming,
+                )
+            ),
+            RationalResampler::builder()
+                .deci(samp_rate as usize)
+                .interp(samp_rate_2 as usize)
+                .build(prev)?,
+            QuadratureDemod::new(prev, 1.0),
+            Hilbert::new(prev, 65, &rustradio::window::WindowType::Hamming),
+            QuadratureDemod::new(prev, 1.0),
+            FftFilterFloat::new(
+                prev,
+                &rustradio::fir::low_pass(
+                    samp_rate_2,
+                    1100.0,
+                    100.0,
+                    &rustradio::window::WindowType::Hamming,
+                )
+            ),
+            add_const(
+                prev,
+                -center_freq * 2.0 * std::f32::consts::PI / samp_rate_2
+            ),
+            SymbolSync::new(
+                prev,
+                samp_rate_2 / baud,
+                opt.symbol_max_deviation,
+                Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
+                Box::new(rustradio::iir_filter::IirFilter::new(&opt.symbol_taps)),
+            ),
+            BinarySlicer::new(prev),
+            NrziDecode::new(prev),
+            HdlcDeframer::new(prev, 10, 1500),
+            KissEncode::new(prev),
+            PduToStream::new(prev),
         ];
         // TODO: decode.
         g.add(Box::new(WriterSink::new(prev, tcp)));
