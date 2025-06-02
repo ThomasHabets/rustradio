@@ -95,7 +95,8 @@ pub fn main() -> Result<()> {
             prev,
             SoapySdrSource::builder(&dev, 2_450_000_000.0, 300000.0).build()?
         ];
-        g.add(Box::new(NullSink::new(prev)));
+        // TODO: decode.
+        g.add(Box::new(WriterSink::new(prev, tcp)));
     }
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

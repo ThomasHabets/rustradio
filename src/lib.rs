@@ -179,6 +179,7 @@ pub mod vec_to_stream;
 pub mod vector_sink;
 pub mod vector_source;
 pub mod wpcr;
+pub mod writer_sink;
 pub mod xor;
 pub mod xor_const;
 pub mod zero_crossing;

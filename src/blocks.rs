@@ -49,6 +49,7 @@ pub use crate::vec_to_stream::VecToStream;
 pub use crate::vector_sink::{VectorSink, VectorSinkNoCopy};
 pub use crate::vector_source::VectorSource;
 pub use crate::wpcr::{Midpointer, Wpcr};
+pub use crate::writer_sink::WriterSink;
 pub use crate::xor::Xor;
 pub use crate::xor_const::XorConst;
 pub use crate::zero_crossing::ZeroCrossing;
