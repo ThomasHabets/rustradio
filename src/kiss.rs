@@ -1,8 +1,9 @@
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, Tag, TagValue};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
 use crate::{Error, Result};
 use log::debug;
 
+const MAX_LEN: usize = 10_000;
 const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
 const KISS_TFEND: u8 = 0xDC;
@@ -127,6 +128,94 @@ impl Block for KissDecode {
     }
 }
 
+#[derive(Default)]
+enum FrameState {
+    #[default]
+    Unsynced,
+    Synced(Vec<u8>),
+}
+
+impl FrameState {}
+
+/// Kiss frame.
+///
+/// Take stream of bytes and output the still KISS encoded frames.
+/// Should probably be followed by `KissDecode`.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new)]
+pub struct KissFrame {
+    #[rustradio(in)]
+    src: ReadStream<u8>,
+    #[rustradio(out)]
+    dst: NCWriteStream<Vec<u8>>,
+
+    #[rustradio(default)]
+    state: FrameState,
+}
+
+impl Block for KissFrame {
+    fn work(&mut self) -> Result<BlockRet> {
+        loop {
+            let old_state = std::mem::replace(&mut self.state, FrameState::Unsynced);
+            self.state = match old_state {
+                FrameState::Unsynced => {
+                    let (i, _tags) = self.src.read_buf()?;
+                    if i.is_empty() {
+                        return Ok(BlockRet::WaitForStream(&self.src, 1));
+                    }
+                    let mut n = 0;
+                    let mut synced = false;
+                    for sample in i.slice().iter().copied() {
+                        n += 1;
+                        if sample == KISS_FEND {
+                            synced = true;
+                            break;
+                        }
+                    }
+                    i.consume(n);
+                    if synced {
+                        FrameState::Synced(vec![])
+                    } else {
+                        FrameState::Unsynced
+                    }
+                }
+                FrameState::Synced(mut v) => {
+                    let (i, _tags) = self.src.read_buf()?;
+                    if i.is_empty() {
+                        return Ok(BlockRet::WaitForStream(&self.src, 1));
+                    }
+                    let mut n = 0;
+                    let mut done = false;
+                    for sample in i.slice().iter().copied() {
+                        n += 1;
+                        if sample == KISS_FEND {
+                            if v.is_empty() {
+                                continue;
+                            } else {
+                                done = true;
+                                break;
+                            }
+                        }
+                        if v.len() < MAX_LEN {
+                            v.push(sample);
+                        }
+                    }
+                    i.consume(n);
+                    if v.len() == MAX_LEN {
+                        FrameState::Unsynced
+                    } else if done {
+                        // TODO: add tags.
+                        self.dst.push(v, &[]);
+                        FrameState::Synced(vec![])
+                    } else {
+                        FrameState::Synced(v)
+                    }
+                }
+            };
+        }
+    }
+}
+
 /// Kiss encode.
 ///
 /// Takes bytes and creates a KISS frame.
@@ -186,6 +275,7 @@ impl Block for KissEncode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blocks::VectorSource;
     use crate::stream::new_nocopy_stream;
 
     #[test]
@@ -292,6 +382,17 @@ mod tests {
                 ),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn find_packet() -> Result<()> {
+        let (mut b, prev) = VectorSource::new(vec![0u8, KISS_FEND, 0, 1, 2, 3, KISS_FEND]);
+        b.work()?;
+        let (mut b, prev) = KissFrame::new(prev);
+        b.work()?;
+        let (o, _) = prev.pop().unwrap();
+        assert_eq!(o, &[0, 1, 2, 3]);
         Ok(())
     }
 }

@@ -40,6 +40,11 @@ pub fn main() -> Result<()> {
 
     let mut g = MTGraph::new();
 
+    let listener = std::net::TcpListener::bind("[::]:7878")?;
+    println!("Awaiting connection");
+    let _tcp = listener.accept()?;
+    drop(listener);
+
     // Transmitter.
     let dev = soapysdr::Device::new(&*opt.driver)?;
     {
@@ -59,6 +64,9 @@ pub fn main() -> Result<()> {
         let prev = blockchain![
             g,
             prev,
+            //ReaderSource::new(tcp.try_clone()?),
+            //KissFrame::new(prev),
+            //KissDecode::new(prev),
             Strobe::new(std::time::Duration::from_millis(2000), test_packet),
             FcsAdder::new(prev),
             HdlcFramer::new(prev),
