@@ -162,6 +162,7 @@ pub mod pdu_to_stream;
 pub mod pdu_writer;
 pub mod quadrature_demod;
 pub mod rational_resampler;
+pub mod reader_source;
 pub mod rtlsdr_decode;
 pub mod sigmf;
 pub mod signal_source;

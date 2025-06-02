@@ -42,32 +42,22 @@ pub fn main() -> Result<()> {
 
     let listener = std::net::TcpListener::bind("[::]:7878")?;
     println!("Awaiting connection");
-    let _tcp = listener.accept()?;
+    let (tcp, addr) = listener.accept()?;
     drop(listener);
+    println!("Connect from {addr}");
 
     // Transmitter.
     let dev = soapysdr::Device::new(&*opt.driver)?;
     {
         eprintln!("Set up transmitter");
-        // Message including CRC: WORKS!!!!111
-        let test_packet = vec![
-            0x82, 0xa0, 0xb4, 0x60, 0x60, 0x62, 0x60, 0x9a, 0x60, 0xa8, 0x90, 0x86, 0x40, 0xe5,
-            0x03, 0xf0, 0x3a, 0x4d, 0x30, 0x54, 0x48, 0x43, 0x2d, 0x31, 0x20, 0x20, 0x3a, 0x68,
-            0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64,
-        ];
-        /*
-        let (tx, rx) = rustradio::stream::new_nocopy_stream();
-        tx.push(test_packet, &[]);
-        */
         let baud = 1200.0;
         let audio_rate = 48000.0;
         let prev = blockchain![
             g,
             prev,
-            //ReaderSource::new(tcp.try_clone()?),
-            //KissFrame::new(prev),
-            //KissDecode::new(prev),
-            Strobe::new(std::time::Duration::from_millis(2000), test_packet),
+            ReaderSource::new(tcp.try_clone()?),
+            KissFrame::new(prev),
+            KissDecode::new(prev),
             FcsAdder::new(prev),
             HdlcFramer::new(prev),
             PduToStream::new(prev),

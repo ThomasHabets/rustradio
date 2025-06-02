@@ -32,6 +32,7 @@ pub use crate::pdu_to_stream::PduToStream;
 pub use crate::pdu_writer::PduWriter;
 pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
 pub use crate::rational_resampler::RationalResampler;
+pub use crate::reader_source::ReaderSource;
 pub use crate::rtlsdr_decode::RtlSdrDecode;
 pub use crate::sigmf::SigMFSource;
 pub use crate::signal_source::{SignalSourceComplex, SignalSourceFloat};
