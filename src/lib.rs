@@ -496,6 +496,43 @@ pub fn check_environment() -> Result<Vec<Feature>> {
     }
 }
 
+/// Parse frequencies like "100k", "2M", etc.
+///
+/// For use with clap. E.g.:
+///
+/// ```text
+/// #[derive(clap::Parser)]
+/// struct Opt {
+///     /// Frequency.
+///     #[arg(long, value_parser=parse_frequency)]
+///     freq: f64,
+///     /// Sample rate.
+///     #[arg(long, value_parser=parse_frequency, default_value_t = 300000.0)]
+///     sample_rate: f64,
+/// }
+/// ```
+pub fn parse_frequency(s: &str) -> std::result::Result<f64, String> {
+    use regex::Regex;
+    static RE: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"(?i)^(\d*\.?\d+)\s*([kmg]?)$").unwrap());
+
+    if let Some(caps) = RE.captures(s) {
+        let value: f64 = caps[1]
+            .parse()
+            .map_err(|e| format!("Invalid number: {}", e))?;
+        let multiplier = match &caps[2].to_lowercase()[..] {
+            "" => 1.0,
+            "k" => 1_000.0,
+            "m" => 1_000_000.0,
+            "g" => 1_000_000_000.0,
+            _ => return Err(format!("Unknown suffix: {}", &caps[2])),
+        };
+        Ok(value * multiplier)
+    } else {
+        Err("Invalid frequency format must be a float with optional k/m/g suffix".into())
+    }
+}
+
 /// A trait all sample types must implement.
 pub trait Sample: Copy + Default + Send + Sync + 'static {
     /// The type of the sample.

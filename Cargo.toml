@@ -36,6 +36,7 @@ sha2 = "0.10"
 thiserror = "2.0"
 tokio = { version = "1.44", optional = true, features = ["full"] }
 async-trait = "0.1"
+regex = "1.11.1"
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]

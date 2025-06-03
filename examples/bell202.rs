@@ -1,3 +1,22 @@
+//! Bell 202 modem. Most common used modem for AX.25.
+//!
+//! ## Examples
+//!
+//! ### Send/receive APRS
+//!
+//! 1. Run the modem: `bell202 --freq 433800000 -d driver=uhd --ogain=0.5`
+//! 2. Connect to port 7878 using some app that can talk APRS using KISS. :-)
+//!
+//! ### Remote SoapySDR, connect to kernel AX.25
+//!
+//! 1. On the machine with the SDR, run `SoapySDRServer --bind`
+//! 2. Start bell202: `bell202 --freq 433800000 -d soapy=0,remote=hostname-here,driver=remote,remote:driver=uhd --ogain 0.5`
+//! 3. Create a TCP-tty bridge: `socat -d -d PTY,raw,echo=0 TCP:localhost:7878`
+//! 4. Connect to kernel: `kissattach /dev/tty/<tty from prev command>
+//!    radioname` (set up radioname in /etc/ax25/axports)
+//! 5. Disable CRC on kernel KISS: `kissparms -c 1 -p radioname`
+//!
+//! Kernel stack should now be up and working with bell202 as the modem.
 use anyhow::Result;
 use clap::Parser;
 
@@ -6,6 +25,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
+use rustradio::parse_frequency;
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -16,10 +36,10 @@ struct Opt {
     verbose: usize,
 
     /// TX/RX frequency.
-    #[arg(long)]
+    #[arg(long, value_parser=parse_frequency)]
     freq: f64,
 
-    #[arg(long, default_value_t = 300000.0)]
+    #[arg(long, value_parser=parse_frequency, default_value_t = 300000.0)]
     sample_rate: f64,
 
     /// Output gain. 0.0-1.0.
