@@ -109,7 +109,7 @@ pub fn main() -> Result<()> {
         let prev = blockchain![
             g,
             prev,
-            SoapySdrSource::builder(&dev, 2_450_000_000.0, samp_rate as f64).build()?,
+            SoapySdrSource::builder(&dev, opt.freq, samp_rate as f64).build()?,
             FftFilter::new(
                 prev,
                 rustradio::fir::low_pass_complex(
