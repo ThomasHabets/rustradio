@@ -74,13 +74,15 @@ pub fn main() -> Result<()> {
     let listener = std::net::TcpListener::bind("[::]:7878")?;
     println!("Awaiting connection");
     let (tcp, addr) = listener.accept()?;
+    tcp.set_read_timeout(Some(std::time::Duration::from_millis(500)))?;
     drop(listener);
     println!("Connect from {addr}");
+    println!("Setting up device");
+    let dev = soapysdr::Device::new(&*opt.driver)?;
 
     // Transmitter.
-    let dev = soapysdr::Device::new(&*opt.driver)?;
     {
-        eprintln!("Set up transmitter");
+        println!("Setting up transmitter");
         let baud = 1200.0;
         let audio_rate = 48000.0;
         let prev = blockchain![
@@ -120,7 +122,7 @@ pub fn main() -> Result<()> {
 
     // Receiver.
     {
-        eprintln!("Set up receiver");
+        println!("Setting up receiver");
         let samp_rate = 300_000.0f32;
         let samp_rate_2 = 50_000.0;
         let freq1 = 1200.0;
@@ -183,6 +185,6 @@ pub fn main() -> Result<()> {
     })
     .expect("Error setting Ctrl-C handler");
     g.run()?;
-    eprintln!("{}", g.generate_stats().expect("failed to generate stats"));
+    println!("{}", g.generate_stats().expect("failed to generate stats"));
     Ok(())
 }

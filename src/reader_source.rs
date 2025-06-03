@@ -1,12 +1,18 @@
 use std::io::Read;
 
-use log::warn;
+use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Result, Sample};
 
 /// Arbitrary reader source.
+///
+/// The underlying reader must periodically time out, or the graph will block on
+/// e.g. Ctrl-C.
+///
+/// TODO: The reader should probably be passed to a separate thread, to make the
+/// work function nonblocking.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct ReaderSource<T: Sample> {
@@ -39,9 +45,16 @@ where
         let size = T::size();
         let mut buffer = vec![0; o.len()];
         // TODO: this read blocks.
-        let n = self.reader.read(&mut buffer[..])?;
+        let n = match self.reader.read(&mut buffer[..]) {
+            Ok(n) => n,
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::TimedOut => return Ok(BlockRet::Pending),
+                std::io::ErrorKind::WouldBlock => return Ok(BlockRet::Pending),
+                _ => return Err(e.into()),
+            },
+        };
         if n == 0 {
-            warn!("TCP connection closed?");
+            debug!("ReaderSource: Input closed");
             return Ok(BlockRet::EOF);
         }
         let mut v = Vec::with_capacity(n / size + 1);

@@ -25,10 +25,14 @@ A library for digital signals processing in the spirit of GNU Radio.
 * A clear strategy for optional output streams.
   * Is the current `Option`-based solution good enough for 1.0?
 * SymbolSync block at least have the right API.
-* Example AX.25 KISS modem written, using soapysdr.
 * `AsRef<Path>` vs `Into<PathBuf>`?
 * What exactly is the purpose of `BlockEOF`?
 * Should `produce()` take `Into<Vec<Tag>>`? Less copying.
 * Block structs have needless trait bounds, just to be passed to generated impl
   sections.
 * Should `Pending` return a time estimate?
+* Or better yet: The graph should do some fancy heuristic to hone in on the
+  perfect time when to call again.
+  * Great for hardware like audio, SDRs.
+  * Max ceiling for e.g. TCP streams.
+  * Maybe both. Strobe could do with being able to just say.
