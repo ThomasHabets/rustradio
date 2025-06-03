@@ -83,6 +83,7 @@ pub fn main() -> Result<()> {
     // Transmitter.
     {
         println!("Setting up transmitter");
+        let cancel = g.cancel_token();
         let baud = 1200.0;
         let audio_rate = 48000.0;
         let prev = blockchain![
@@ -112,6 +113,7 @@ pub fn main() -> Result<()> {
                 .interp(opt.sample_rate as usize)
                 .build(prev)?,
             Vco::new(prev, 2.0 * std::f64::consts::PI * 5000.0 / opt.sample_rate),
+            Canary::new(prev, move || cancel.cancel()),
         ];
         g.add(Box::new(
             SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)

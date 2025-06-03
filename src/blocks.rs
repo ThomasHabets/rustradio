@@ -4,6 +4,7 @@ pub use crate::add_const::{AddConst, add_const};
 pub use crate::au::{AuDecode, AuEncode};
 pub use crate::binary_slicer::BinarySlicer;
 pub use crate::burst_tagger::BurstTagger;
+pub use crate::canary::Canary;
 pub use crate::cma::CmaEqualizer;
 pub use crate::complex_to_mag2::ComplexToMag2;
 pub use crate::constant_source::ConstantSource;
