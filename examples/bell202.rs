@@ -67,6 +67,7 @@ pub fn main() -> Result<()> {
         .verbosity(opt.verbose)
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
+    soapysdr::configure_logging();
 
     let mut g = MTGraph::new();
 
