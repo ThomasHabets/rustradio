@@ -63,6 +63,7 @@ pub fn main() -> Result<()> {
     stderrlog::new()
         .module(module_path!())
         .module("rustradio")
+        .module("soapysdr")
         .quiet(false)
         .verbosity(opt.verbose)
         .timestamp(stderrlog::Timestamp::Second)
