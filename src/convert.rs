@@ -3,7 +3,7 @@ use std::borrow::Cow;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, WriteStream};
-use crate::{AnySample, Complex, Float, Result, Sample};
+use crate::{Complex, Float, Result, Sample};
 
 /// Like Map, but cannot modify what it sees.
 ///
@@ -66,13 +66,14 @@ where
 /// );
 /// ```
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, custom_name, sync_tag, new)]
-pub struct Map<In, Out, F>
-where
-    In: Sample,
-    Out: Sample,
-    F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send,
-{
+#[rustradio(
+    crate,
+    custom_name,
+    sync_tag,
+    new,
+    bound = "In: Sample, Out: Sample, F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send"
+)]
+pub struct Map<In, Out, F> {
     #[rustradio(into)]
     name: String,
     map: F,
@@ -83,7 +84,7 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-impl Map<AnySample, AnySample, for<'a> fn(AnySample, &'a [Tag]) -> (AnySample, Cow<'a, [Tag]>)> {
+impl Map<(), (), ()> {
     /// Create a Map that just passes tags along.
     ///
     /// The specialization args (`AnySample` and the callback) are discarded,

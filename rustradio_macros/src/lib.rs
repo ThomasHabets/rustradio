@@ -1,29 +1,12 @@
 //! Derive macros for rustradio.
 //!
 //! Most blocks should derive from this macro.
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
+use std::borrow::Cow;
 
 use quote::quote;
 use syn::{Attribute, Data, DeriveInput, Fields, Meta, parse_macro_input};
 
-use paste::paste;
-
-// TODO: change this macro to take `n` instead of a list of temporary variable
-// names.
-macro_rules! unzip_n {
-    ($iter:expr, $($name:ident),+) => {{
-        $(let paste!(mut [<agg_ $name>]) = Vec::new();)*
-        for tuple in $iter {
-            let ($($name),+) = tuple;
-            paste! {
-                $([<agg_ $name>].push($name);)+
-            }
-        }
-        ($(paste! { [<agg_ $name>] }),+)
-    }};
-}
-
-static STRUCT_ATTRS: &[&str] = &["new", "crate", "sync", "sync_tag", "custom_name", "noeof"];
 static FIELD_ATTRS: &[&str] = &["in", "out", "default", "into"];
 
 /// Check if named attribute is in the list of attributes.
@@ -49,14 +32,14 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
         }
         let mut found = false;
         attr.parse_nested_meta(|meta| {
-            let s = meta.path.get_ident().unwrap();
+            let s = meta.path.get_ident().expect("what?");
             if !valid.iter().any(|v| s == v) {
                 panic!("Invalid attr {s}");
             }
             found |= meta.path.is_ident(name);
             Ok(())
         })
-        .unwrap();
+        .expect("what2?");
         found
     })
 }
@@ -82,22 +65,490 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
     )
 }
 
-/// Return the outer type of a generic type.
-///
-/// E.g. given Vec<Float>, return Vec.
-///
-/// Since a type can be a bit complicated, maybe it's fair to clarify that the
-/// last part of the type path has its path arguments removed.
-fn outer_type(ty: &syn::Type) -> syn::Type {
-    //eprintln!("Finding outer type of {}", quote! { #ty }.to_string());
-    //eprintln!("  {:?}", ty);
-    let mut ty = ty.clone();
-    if let syn::Type::Path(p) = &mut ty {
-        let n = p.path.segments.len();
-        let segment: &mut syn::PathSegment = &mut p.path.segments[n - 1];
-        segment.arguments = syn::PathArguments::None;
+#[derive(Default)]
+enum Sync {
+    Value,
+    Tag,
+    #[default]
+    No,
+}
+
+#[derive(Default)]
+struct StructAttrs {
+    internal: bool,
+    custom_name: bool,
+    generate_new: bool,
+    noeof: bool,
+    sync: Sync,
+    bounds: Option<syn::WhereClause>,
+}
+
+impl StructAttrs {
+    fn path(&self) -> proc_macro2::TokenStream {
+        if self.internal {
+            quote! { crate }
+        } else {
+            quote! { rustradio }
+        }
     }
-    ty
+    fn parse(attrs: &[Attribute]) -> StructAttrs {
+        let mut ret = StructAttrs::default();
+        attrs
+            .iter()
+            .filter_map(|attr| match &attr.meta {
+                Meta::List(l) => Some(l),
+                _ => None,
+            })
+            .filter(|list| list.path.is_ident("rustradio"))
+            .for_each(|list| {
+                list.parse_nested_meta(|meta| {
+                    let s = meta.path.get_ident().expect("failed to get ident");
+                    match s.to_string().as_str() {
+                        "bound" => {
+                            let value = meta.value()?;
+                            let lit: syn::LitStr = value.parse()?;
+                            let w: syn::WhereClause =
+                                syn::parse_str(&format!("where {}", lit.value()))?;
+                            ret.bounds = Some(w);
+                        }
+                        "crate" => ret.internal = true,
+                        "custom_name" => ret.custom_name = true,
+                        "noeof" => ret.noeof = true,
+                        "new" => ret.generate_new = true,
+                        "sync" => ret.sync = Sync::Value,
+                        "sync_tag" => ret.sync = Sync::Tag,
+                        other => panic!("invalid attr {other}"),
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            });
+        ret
+    }
+}
+
+fn merge_where_clauses(
+    struct_clause: Option<&syn::WhereClause>,
+    macro_clause: Option<&syn::WhereClause>,
+) -> Option<syn::WhereClause> {
+    match (struct_clause, macro_clause) {
+        (None, None) => None,
+        (Some(clause), None) | (None, Some(clause)) => Some(clause.clone()),
+        (Some(struct_clause), Some(macro_clause)) => {
+            let mut combined = struct_clause.clone();
+            combined.predicates.extend(macro_clause.predicates.clone());
+            Some(combined)
+        }
+    }
+}
+
+struct Parsed<'a> {
+    name: &'a syn::Ident,
+    attrs: StructAttrs,
+    generics: (
+        syn::ImplGenerics<'a>,
+        syn::TypeGenerics<'a>,
+        Option<syn::WhereClause>,
+    ),
+    inputs: Vec<&'a syn::Field>,
+    outputs: Vec<&'a syn::Field>,
+    defaults: Vec<&'a syn::Field>,
+    parms: Vec<(bool, &'a syn::Field)>,
+}
+
+impl<'a> Parsed<'a> {
+    fn parse(input: &'a DeriveInput) -> Result<Self, std::fmt::Error> {
+        let Data::Struct(data_struct) = &input.data else {
+            panic!("can only use on struct");
+        };
+        let Fields::Named(fields_named) = &data_struct.fields else {
+            panic!("Fields is what? {:?}", data_struct.fields);
+        };
+        let attrs = StructAttrs::parse(&input.attrs);
+        let generics = {
+            let (a, b, w) = input.generics.split_for_impl();
+            let w = merge_where_clauses(w, attrs.bounds.as_ref());
+            (a, b, w)
+        };
+        Ok(Self {
+            name: &input.ident,
+            attrs,
+            generics,
+            inputs: fields_named
+                .named
+                .iter()
+                .filter(|field| has_attr(&field.attrs, "in", FIELD_ATTRS))
+                .collect(),
+            outputs: fields_named
+                .named
+                .iter()
+                .filter(|field| has_attr(&field.attrs, "out", FIELD_ATTRS))
+                .collect(),
+            defaults: fields_named
+                .named
+                .iter()
+                .filter(|field| has_attr(&field.attrs, "default", FIELD_ATTRS))
+                .collect(),
+            parms: fields_named
+                .named
+                .iter()
+                .filter(|field| {
+                    !has_attr(&field.attrs, "in", FIELD_ATTRS)
+                        && !has_attr(&field.attrs, "out", FIELD_ATTRS)
+                        && !has_attr(&field.attrs, "default", FIELD_ATTRS)
+                })
+                .map(|field| (has_attr(&field.attrs, "into", FIELD_ATTRS), field))
+                .collect(),
+        })
+    }
+    fn in_name_types(&self) -> Vec<proc_macro2::TokenStream> {
+        self.inputs
+            .iter()
+            .map(|field| {
+                let n = &field.ident;
+                let ty = &field.ty;
+                quote! { #n: #ty }
+            })
+            .collect()
+    }
+    fn parm_name_types(&self) -> Vec<proc_macro2::TokenStream> {
+        self.parms
+            .iter()
+            .map(|(is_into, field)| {
+                let name = field.ident.as_ref().unwrap();
+                let ty = if *is_into {
+                    Cow::Owned(syn::parse_str(&format!("Into{name}")).unwrap())
+                } else {
+                    Cow::Borrowed(&field.ty)
+                };
+                quote! { #name: #ty }
+            })
+            .collect()
+    }
+    fn in_names(&self) -> Vec<&syn::Ident> {
+        self.inputs
+            .iter()
+            .map(|field| field.ident.as_ref().unwrap())
+            .collect()
+    }
+    fn out_names(&self) -> Vec<&syn::Ident> {
+        self.outputs
+            .iter()
+            .map(|field| field.ident.as_ref().unwrap())
+            .collect()
+    }
+    fn in_tag_names(&self) -> Vec<syn::Ident> {
+        self.inputs
+            .iter()
+            .map(|field| {
+                let name = field.ident.as_ref().unwrap();
+                syn::parse_str(&format!("{name}_tag")).unwrap()
+            })
+            .collect()
+    }
+    fn out_tag_names(&self) -> Vec<syn::Ident> {
+        self.outputs
+            .iter()
+            .map(|field| {
+                let name = field.ident.as_ref().unwrap();
+                syn::parse_str(&format!("{name}_tag")).unwrap()
+            })
+            .collect()
+    }
+    fn out_tag_names_tmp(&self) -> Vec<syn::Ident> {
+        self.outputs
+            .iter()
+            .map(|field| {
+                let name = field.ident.as_ref().unwrap();
+                syn::parse_str(&format!("{name}_tag_tmp")).unwrap()
+            })
+            .collect()
+    }
+    fn out_names_samp(&self) -> Vec<syn::Ident> {
+        self.outputs
+            .iter()
+            .map(|field| {
+                let name = field.ident.as_ref().unwrap();
+                syn::parse_str(&format!("{name}_sample")).unwrap()
+            })
+            .collect()
+    }
+    fn parm_into_names(&self) -> Vec<&syn::Ident> {
+        self.parms
+            .iter()
+            .filter_map(|(is_into, field)| {
+                if *is_into {
+                    Some(field.ident.as_ref().unwrap())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    fn parm_no_into_names(&self) -> Vec<&syn::Ident> {
+        self.parms
+            .iter()
+            .filter_map(|(is_into, field)| {
+                if *is_into {
+                    None
+                } else {
+                    Some(field.ident.as_ref().unwrap())
+                }
+            })
+            .collect()
+    }
+    fn parm_into_types(&self) -> Vec<TokenStream> {
+        self.parms
+            .iter()
+            .filter_map(|(is_into, field)| {
+                if *is_into {
+                    let ty = &field.ty;
+                    let field_name = field.ident.as_ref().unwrap();
+                    let gen_name: syn::Type = syn::parse_str(&format!("Into{field_name}")).unwrap();
+                    Some(quote! { #gen_name: Into<#ty> })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+    fn fields_defaulted(&self) -> Vec<TokenStream> {
+        self.defaults
+            .iter()
+            .map(|field| {
+                let field_name = field.ident.as_ref().unwrap();
+                let ty = &field.ty;
+                quote! { #field_name: <#ty>::default() }
+            })
+            .collect()
+    }
+    fn outval_types(&self) -> Vec<&syn::Type> {
+        self.outputs
+            .iter()
+            .map(|field| inner_type(&field.ty))
+            .collect()
+    }
+    fn inval_name_types(&self) -> Vec<TokenStream> {
+        self.inputs
+            .iter()
+            .map(|field| {
+                let inner = inner_type(&field.ty);
+                let name = field.ident.as_ref().unwrap();
+                quote! { #name: #inner }
+            })
+            .collect()
+    }
+    fn intag_name_types(&self) -> Vec<TokenStream> {
+        let path = self.attrs.path();
+        self.inputs
+            .iter()
+            .map(|field| {
+                let name = field.ident.as_ref().unwrap();
+                let tagname: syn::Ident = syn::parse_str(&format!("{name}_tag")).unwrap();
+                quote! { #tagname: &'a [#path::stream::Tag] }
+            })
+            .collect()
+    }
+
+    fn expand_sync_work(&self) -> Option<TokenStream> {
+        if matches![self.attrs.sync, Sync::No] {
+            return None;
+        }
+        let name = self.name;
+        let path = self.attrs.path();
+        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let in_names = self.in_names();
+        let out_names = self.out_names();
+        let out_tag_names = self.out_tag_names();
+        let out_tag_names_tmp = self.out_tag_names_tmp();
+        let out_names_samp = self.out_names_samp();
+        let in_tag_names = self.in_tag_names();
+        let first = &in_names[0];
+        let rest = &in_names[1..];
+        let it = if in_names.len() == 1 {
+            quote! { #first.iter().take(n) }
+        } else {
+            quote! { #first.iter().take(n)#(.zip(#rest.iter()))* }
+        };
+        Some(quote! {
+            impl #impl_generics #path::block::Block for #name #ty_generics #where_clause {
+                fn work(&mut self) -> #path::Result<#path::block::BlockRet> {
+                    let empty = vec![];
+                    loop {
+                        #(let #in_names = self.#in_names.read_buf()?;)*
+                        #(let #in_tag_names = #in_names.1;)*
+                        #(let #in_names = #in_names.0;
+                          if #in_names.len() == 0 {
+                              return Ok(#path::block::BlockRet::WaitForStream(&self.#in_names, 1));
+                          })*
+
+                        // Clamp n to be no more than the input available.
+                        let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
+                        assert_ne!(n, 0, "Input stream len 0, but we already checked that.");
+
+                        #(let mut #out_names = self.#out_names.write_buf()?;
+                          if #out_names.len() == 0 {
+                              return Ok(#path::block::BlockRet::WaitForStream(&self.#out_names, 1));
+                          })*
+
+                        // Clamp n to be no more than output space.
+                        let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
+                        assert_ne!(n, 0, "Output stream len 0, but we already checked that.");
+
+                        #(let mut #out_tag_names = Vec::new();)*
+                        let empty_tags = true #(&&#in_tag_names.is_empty())*;
+                        let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
+                            let (#(#in_tag_names),*) = if empty_tags {
+                                // Fast path for input without tags.
+                                // There may be opportunity to deduplicate some of
+                                // the next couple of lines with the !empty_tags
+                                // case.
+                                (#({
+                                    let _ = &#in_tag_names;
+                                    std::borrow::Cow::Borrowed(&empty)
+                                }),*)
+                            } else {
+                                // TODO: This tag filtering is quite expensive.
+                                (#(std::borrow::Cow::Owned(#in_tag_names.iter()
+                                  .filter(|t| t.pos() == pos)
+                                  .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
+                                  .collect::<Vec<_>>())),*)
+                            };
+                            let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
+                            #(for tag in #out_tag_names_tmp.iter() {
+                                #out_tag_names.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
+                            })*
+                            (#(#out_names),*)
+                        });
+                        for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
+                            (#(*#out_names),*) = (#(#out_names_samp),*);
+                        }
+                        #(#in_names.consume(n);)*
+                        #(#out_names.produce(n, &#out_tag_names);)*
+                    }
+                }
+            }
+        })
+    }
+    fn expand_sync_tags(&self) -> Option<TokenStream> {
+        if !matches![self.attrs.sync, Sync::Value] {
+            return None;
+        }
+        let name = self.name;
+        let path = self.attrs.path();
+        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let inval_name_types = self.inval_name_types();
+        let intag_name_types = self.intag_name_types();
+        let outval_types = self.outval_types();
+        let in_names = self.in_names();
+        let out_names = self.out_names();
+        let in_tag_names = self.in_tag_names();
+        let first_tags = &in_tag_names[0];
+        Some(quote! {
+                impl #impl_generics #name #ty_generics #where_clause {
+                    fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types, std::borrow::Cow<'a, [#path::stream::Tag]>),*) {
+                        let (#(#out_names),*) = self.process_sync(#(#in_names,)*);
+                        (#(#out_names,std::borrow::Cow::Borrowed(#first_tags)),*)
+                    }
+                }
+        })
+    }
+    fn expand_new(&self) -> Option<TokenStream> {
+        if !self.attrs.generate_new {
+            return None;
+        }
+        let name = self.name;
+        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let in_names = self.in_names();
+        let in_name_types = self.in_name_types();
+        let out_names = self.out_names();
+        let parm_into_types = self.parm_into_types();
+        let parm_into_names = self.parm_into_names();
+        let parm_no_into_names = self.parm_no_into_names();
+        let parm_name_types = self.parm_name_types();
+        let fields_defaulted = self.fields_defaulted();
+        let path = self.attrs.path();
+        let out_types: Vec<_> = self.outputs.iter().map(|field| &field.ty).collect();
+        Some(quote! {
+            impl #impl_generics #name #ty_generics #where_clause {
+                pub fn new #(<#parm_into_types>),*(#(#in_name_types,)*#(#parm_name_types),*) -> (Self #(,<#out_types as #path::stream::StreamReadSide>::ReadSide)*) {
+                    #(let #out_names = <#out_types>::new();)*
+                    (Self {
+                        #(#in_names,)*
+                        #(#out_names: #out_names.0,)*
+                        #(#parm_into_names: #parm_into_names.into(),)*
+                        #(#parm_no_into_names,)*
+                        #(#fields_defaulted,)*
+                    }#(,#out_names.1)*)
+                }
+            }
+        })
+    }
+    fn expand_blockname(&self) -> Option<TokenStream> {
+        let name = self.name;
+        let name_str = name.to_string();
+        let nameval = if self.attrs.custom_name {
+            quote! { self.custom_name() }
+        } else {
+            quote! { #name_str }
+        };
+        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let path = self.attrs.path();
+        Some(quote! {
+            impl #impl_generics #path::block::BlockName for #name #ty_generics #where_clause {
+            fn block_name(&self) -> &str {
+                #nameval
+            }
+        }
+        })
+    }
+    fn expand_eof(&self) -> Option<TokenStream> {
+        let name = self.name;
+        let path = self.attrs.path();
+        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let in_names = self.in_names();
+        if in_names.is_empty() {
+            // TODO: should we really generate this eof() just because there are no
+            // inputs?
+            return Some(quote! {
+                 impl #impl_generics #path::block::BlockEOF for #name #ty_generics #where_clause {
+                    fn eof(&mut self) -> bool {
+                        false
+                    }
+                 }
+            });
+        }
+
+        if self.attrs.noeof || in_names.is_empty() {
+            return None;
+        }
+        Some(quote! {
+             impl #impl_generics #path::block::BlockEOF for #name #ty_generics #where_clause {
+                fn eof(&mut self) -> bool {
+                    if true #(&&self.#in_names.eof())* {
+                        true
+                    } else {
+                        false
+                    }
+                }
+             }
+        })
+    }
+    fn expand(&self) -> TokenStream {
+        let e: Vec<_> = [
+            self.expand_new(),
+            self.expand_sync_work(),
+            self.expand_sync_tags(),
+            self.expand_blockname(),
+            self.expand_eof(),
+        ]
+        .into_iter()
+        .filter_map(|t| t)
+        .collect();
+        quote! {
+            #(#e)*
+        }
+    }
 }
 
 /// Block derive macro.
@@ -136,6 +587,7 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 /// * `custom_name`: Call `custom_name()` instead of using the struct name, as
 ///   name.
 /// * `noeof`: Don't generate `eof()` logic.
+/// * `bound`: Add more trait bound strings that should apply to impl.
 ///
 /// Field attributes:
 /// * `in`: Input stream.
@@ -217,344 +669,10 @@ fn outer_type(ty: &syn::Type) -> syn::Type {
 /// But a better solution for that case would likely be to use regular `Tee`,
 /// and then have a second block filter the tags of the second stream.
 #[proc_macro_derive(Block, attributes(rustradio))]
-pub fn derive_block(input: TokenStream) -> TokenStream {
+pub fn derive_block2(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    // eprintln!("{:?}", input.generics.split_for_impl());
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    let struct_name = input.ident;
-    //eprintln!("struct name: {struct_name}");
-    let name_str = struct_name.to_string();
-
-    let data_struct = match input.data {
-        Data::Struct(d) => d,
-        _ => panic!("derive_block can only be used on structs"),
-    };
-    let fields_named = match data_struct.fields {
-        Fields::Named(f) => f,
-        // _ => return quote! { false }.into(),
-        x => panic!("Fields is what? {x:?}"),
-    };
-
-    let path = match has_attr(&input.attrs, "crate", STRUCT_ATTRS) {
-        true => quote! { crate },
-        false => quote! { rustradio },
-    };
-
-    // fields_defaulted_ty: The initializer expression for the field.
-    let fields_defaulted_ty: Vec<_> = fields_named
-        .named
-        .iter()
-        .filter(|field| has_attr(&field.attrs, "default", FIELD_ATTRS))
-        .map(|field| {
-            let field_name = field.ident.clone().unwrap();
-            let ty = outer_type(&field.ty);
-            quote! { #field_name: #ty::default() }
-        })
-        .collect();
-
-    // Create vec of useful input expressions.
-    //
-    // Elements are of the form:
-    // * in_names:          src
-    // * in_name_types:     src: ReadStream<Complex>
-    // * inval_name_types:  src: Complex
-    // * in_tag_names:      src_tag
-    // * intag_name_types:  src_tag: &'a [Vec]   or   src_tag: &[Vec]
-    //
-    // Only the first tag has lifetime marking, if it's a `sync` block. If it's
-    // a `sync_tag` block they're all lifetimed marked, though.
-    let (in_names, in_name_types, inval_name_types, in_tag_names, intag_name_types) = unzip_n![
-        fields_named
-            .named
-            .iter()
-            .filter(|field| has_attr(&field.attrs, "in", FIELD_ATTRS))
-            .enumerate()
-            .map(|(i, field)| {
-                let inner = inner_type(&field.ty);
-                let ty = field.ty.clone();
-                let field_name = field.ident.clone().unwrap();
-                let tagname: syn::Ident = syn::parse_str(&format!("{field_name}_tag")).unwrap();
-                (
-                    field_name.clone(),
-                    quote! { #field_name: #ty },
-                    quote! { #field_name: #inner },
-                    quote! { #tagname },
-                    if i == 0 || !has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
-                        quote! { #tagname: &'a [#path::stream::Tag] }
-                    } else {
-                        quote! { #tagname: &[#path::stream::Tag] }
-                    },
-                )
-            }),
-        a,
-        b,
-        c,
-        d,
-        e
-    ];
-
-    // Create vec of useful out expressions.
-    //
-    // For a field:
-    //   #[rustradio(out)]
-    //   dst: WriteStream<Complex>,
-    //
-    // Produces:
-    // * out_names:          dst
-    // * out_tag_names:      dst_tag
-    // * out_tag_names_tmp:  dst_tag_tmp
-    // * out_names_samp:     dst_sample
-    // * out_types:          WriteStream<Complex>
-    // * outval_types:       Complex
-    let (out_names, out_tag_names, out_tag_names_tmp, out_names_samp, out_types, outval_types) = unzip_n![
-        fields_named
-            .named
-            .iter()
-            .filter(|field| has_attr(&field.attrs, "out", FIELD_ATTRS))
-            .map(|field| {
-                let inner = inner_type(&field.ty);
-                //eprintln!("{:?}", outer.ident);
-                let ty = field.ty.clone();
-                let field_name = field.ident.clone().unwrap();
-                let samp_name: syn::Ident =
-                    syn::parse_str(&format!("{field_name}_sample")).unwrap();
-                let tag_name: syn::Ident = syn::parse_str(&format!("{field_name}_tag")).unwrap();
-                let tag_name_tmp: syn::Ident =
-                    syn::parse_str(&format!("{field_name}_tag_tmp")).unwrap();
-                (
-                    field_name.clone(),
-                    tag_name,
-                    tag_name_tmp,
-                    samp_name,
-                    quote! { #ty },
-                    quote! { #inner },
-                )
-            }),
-        a,
-        b,
-        c,
-        d,
-        e,
-        f
-    ];
-
-    // Ensure no field is marked both input and output.
-    for field in &fields_named.named {
-        assert!(
-            !(has_attr(&field.attrs, "in", FIELD_ATTRS)
-                && has_attr(&field.attrs, "out", FIELD_ATTRS)),
-            "Field {} marked as both input and output stream",
-            field.ident.clone().unwrap()
-        );
-    }
-
-    // Create vec of fields that are not input, output, nor defaulted.
-
-    let other_names_no_into: Vec<_> = fields_named
-        .named
-        .iter()
-        .filter(|field| {
-            !has_attr(&field.attrs, "in", FIELD_ATTRS)
-                && !has_attr(&field.attrs, "out", FIELD_ATTRS)
-                && !has_attr(&field.attrs, "into", FIELD_ATTRS)
-                && !has_attr(&field.attrs, "default", FIELD_ATTRS)
-        })
-        .map(|field| {
-            let field_name = field.ident.clone().unwrap();
-            field_name.clone()
-        })
-        .collect();
-    let other_name_types: Vec<_> = fields_named
-        .named
-        .iter()
-        .filter(|field| {
-            !has_attr(&field.attrs, "in", FIELD_ATTRS)
-                && !has_attr(&field.attrs, "out", FIELD_ATTRS)
-                && !has_attr(&field.attrs, "default", FIELD_ATTRS)
-        })
-        .map(|field| {
-            let field_name = field.ident.clone().unwrap();
-            let ty = field.ty.clone();
-            if has_attr(&field.attrs, "into", FIELD_ATTRS) {
-                let gen_name: syn::Type =
-                    syn::parse_str(&format!("Into{field_name}")).expect("creating Into type");
-                quote! { #field_name: #gen_name}
-            } else {
-                quote! { #field_name: #ty}
-            }
-        })
-        .collect();
-    let (other_into_names, other_into_types) = unzip_n![
-        fields_named
-            .named
-            .iter()
-            .filter(|field| has_attr(&field.attrs, "into", FIELD_ATTRS))
-            .map(|field| {
-                let ty = field.ty.clone();
-                let field_name = field.ident.clone().unwrap();
-                //let gen_name = prefixed_into_type(&ty);
-                let gen_name: syn::Type = syn::parse_str(&format!("Into{field_name}")).unwrap();
-                (quote! { #field_name }, quote! { #gen_name: Into<#ty> })
-            }),
-        a,
-        b
-    ];
-
-    let mut extra = vec![]; // If requested, generate some extra code.
-
-    // Create new(), if requested.
-    if has_attr(&input.attrs, "new", STRUCT_ATTRS) {
-        extra.push(quote! {
-            impl #impl_generics #struct_name #ty_generics #where_clause {
-                /// Create a new block.
-                ///
-                /// The arguments to this function are the mandatory input
-                /// streams, and the mandatory parameters.
-                ///
-                /// The return values are the block itself, plus any mandatory
-                /// output streams.
-                ///
-                /// This function was generated by a macro.
-                pub fn new #(<#other_into_types>),*(#(#in_name_types,)*#(#other_name_types),*) -> (Self #(,<#out_types as #path::stream::StreamReadSide>::ReadSide)*) {
-                    #(let #out_names = <#out_types>::new();)*
-                    (Self {
-                        #(#in_names,)*
-                        #(#out_names: #out_names.0,)*
-                        #(#other_into_names: #other_into_names.into(),)*
-                        #(#other_names_no_into,)*
-                        #(#fields_defaulted_ty,)*
-                    }#(,#out_names.1)*)
-                }
-            }
-        });
-    }
-
-    // Support sync blocks.
-    if has_attr(&input.attrs, "sync", STRUCT_ATTRS)
-        || has_attr(&input.attrs, "sync_tag", STRUCT_ATTRS)
-    {
-        let first = in_names[0].clone();
-        let rest = &in_names[1..];
-        let it = if in_names.len() == 1 {
-            quote! { #first.iter().take(n) }
-        } else {
-            quote! { #first.iter().take(n)#(.zip(#rest.iter()))* }
-        };
-        if has_attr(&input.attrs, "sync", STRUCT_ATTRS) {
-            let first_tags = &in_tag_names[0];
-            extra.push(quote! {
-                impl #impl_generics #struct_name #ty_generics #where_clause {
-                    fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types, std::borrow::Cow<'a, [#path::stream::Tag]>),*) {
-                        let (#(#out_names),*) = self.process_sync(#(#in_names,)*);
-                        (#(#out_names,std::borrow::Cow::Borrowed(#first_tags)),*)
-                    }
-                }
-            });
-        }
-        extra.push(quote! {
-            impl #impl_generics #path::block::Block for #struct_name #ty_generics #where_clause {
-                fn work(&mut self) -> #path::Result<#path::block::BlockRet> {
-                    let empty = vec![];
-                    loop {
-                        #(let #in_names = self.#in_names.read_buf()?;)*
-                        #(let #in_tag_names = #in_names.1;)*
-                        #(let #in_names = #in_names.0;
-                          if #in_names.len() == 0 {
-                              return Ok(#path::block::BlockRet::WaitForStream(&self.#in_names, 1));
-                          })*
-
-                        // Clamp n to be no more than the input available.
-                        let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
-                        assert_ne!(n, 0, "Input stream len 0, but we already checked that.");
-
-                        #(let mut #out_names = self.#out_names.write_buf()?;
-                          if #out_names.len() == 0 {
-                              return Ok(#path::block::BlockRet::WaitForStream(&self.#out_names, 1));
-                          })*
-
-                        // Clamp n to be no more than output space.
-                        let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
-                        assert_ne!(n, 0, "Output stream len 0, but we already checked that.");
-
-                        #(let mut #out_tag_names = Vec::new();)*
-                        let empty_tags = true #(&&#in_tag_names.is_empty())*;
-                        let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                            let (#(#in_tag_names),*) = if empty_tags {
-                                // Fast path for input without tags.
-                                // There may be opportunity to deduplicate some of
-                                // the next couple of lines with the !empty_tags
-                                // case.
-                                (#({
-                                    let _ = &#in_tag_names;
-                                    std::borrow::Cow::Borrowed(&empty)
-                                }),*)
-                            } else {
-                                // TODO: This tag filtering is quite expensive.
-                                (#(std::borrow::Cow::Owned(#in_tag_names.iter()
-                                  .filter(|t| t.pos() == pos)
-                                  .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
-                                  .collect::<Vec<_>>())),*)
-                            };
-                            let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
-                            #(for tag in #out_tag_names_tmp.iter() {
-                                #out_tag_names.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
-                            })*
-                            (#(#out_names),*)
-                        });
-                        for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
-                            (#(*#out_names),*) = (#(#out_names_samp),*);
-                        }
-                        #(#in_names.consume(n);)*
-                        #(#out_names.produce(n, &#out_tag_names);)*
-                    }
-                }
-            }
-        });
-    }
-
-    {
-        let nameval = if has_attr(&input.attrs, "custom_name", STRUCT_ATTRS) {
-            quote! { self.custom_name() }
-        } else {
-            quote! { #name_str }
-        };
-        extra.push(quote! {
-            impl #impl_generics #path::block::BlockName for #struct_name #ty_generics #where_clause {
-            fn block_name(&self) -> &str {
-                #nameval
-            }
-        }
-        });
-    }
-
-    extra.push(match (in_names.is_empty(), has_attr(&input.attrs, "noeof", STRUCT_ATTRS)) {
-        // No inputs.
-        (true, _) => quote! {
-            impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
-                fn eof(&mut self) -> bool {
-                    false
-                }
-            }
-        },
-        // Has inputs, eof generation (implicitly) requested.
-        (false, false) => quote! {
-                 impl #impl_generics #path::block::BlockEOF for #struct_name #ty_generics #where_clause {
-                    fn eof(&mut self) -> bool {
-                        if true #(&&self.#in_names.eof())* {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                 }
-            },
-        // Has inputs, noeof requested. The block will have to manually
-        // implement eof.
-        (false, true) => quote! {},
-    });
-
-    TokenStream::from(quote! { #(#extra)* })
+    let p = Parsed::parse(&input).unwrap();
+    p.expand().into()
 }
 /* vim: textwidth=80
  */

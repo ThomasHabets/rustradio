@@ -4,8 +4,8 @@ use crate::stream::{ReadStream, WriteStream};
 
 /// Multiply stream by a constant value.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, sync)]
-pub struct MultiplyConst<T: Sample + std::ops::Mul<Output = T>> {
+#[rustradio(crate, new, sync, bound = "T: Sample + std::ops::Mul<Output=T>")]
+pub struct MultiplyConst<T> {
     val: T,
     #[rustradio(in)]
     src: ReadStream<T>,
