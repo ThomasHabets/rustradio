@@ -1577,7 +1577,6 @@ dependencies = [
 name = "rustradio_macros"
 version = "0.14.2"
 dependencies = [
- "paste",
  "proc-macro2",
  "quote",
  "rustradio",

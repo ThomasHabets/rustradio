@@ -5,8 +5,8 @@ use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, sync)]
-pub struct Canary<T: Sample, F>
+#[rustradio(crate, new, sync, bound = "T: Sample")]
+pub struct Canary<T, F>
 where
     F: Fn() + Send,
 {
@@ -26,7 +26,7 @@ where
     }
 }
 
-impl<T: Sample, F> Drop for Canary<T, F>
+impl<T, F> Drop for Canary<T, F>
 where
     F: Fn() + Send,
 {

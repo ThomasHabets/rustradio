@@ -424,6 +424,13 @@ impl<T> Buffer<T> {
     }
 }
 
+impl<T> Buffer<T> {
+    pub(crate) fn is_empty(&self) -> bool {
+        let state = self.state.lock.lock().unwrap();
+        state.used == 0
+    }
+}
+
 impl<T: Copy> Buffer<T> {
     /// Consume samples from input buffer.
     ///
