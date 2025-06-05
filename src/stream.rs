@@ -201,7 +201,9 @@ impl<T: Copy> ReadStream<T> {
     pub async fn wait_for_read_async(&self, need: usize) -> bool {
         self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
+}
 
+impl<T> ReadStream<T> {
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
@@ -212,10 +214,7 @@ impl<T: Copy> ReadStream<T> {
         }
         // Refcount 1 means that that the WriteStream has closed. No more data is coming. So as
         // long as the buffer is empty, that's it then.
-        let (b, _) = Arc::clone(&self.circ)
-            .read_buf()
-            .expect("can't happen: read_buf() failed");
-        b.is_empty()
+        self.circ.is_empty()
     }
 
     #[must_use]

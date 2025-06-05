@@ -15,12 +15,14 @@ use crate::{Complex, Float, Result, Sample};
 /// let (b, out) = Inspect::new(src, "mymap", move |x, _tags| println!("{x}"));
 /// ```
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, custom_name, sync_tag, new)]
-pub struct Inspect<In, F>
-where
-    In: Sample,
-    F: Fn(In, &[Tag]) + Send,
-{
+#[rustradio(
+    crate,
+    custom_name,
+    sync_tag,
+    new,
+    bound = "In: Sample, F: Fn(In, &[Tag]) + Send"
+)]
+pub struct Inspect<In, F> {
     #[rustradio(into)]
     name: String,
     f: F,
@@ -39,6 +41,8 @@ where
         (self.f)(s, tags);
         (s, Cow::Borrowed(tags))
     }
+}
+impl<In, F> Inspect<In, F> {
     /// Name of the block.
     pub fn custom_name(&self) -> &str {
         &self.name
@@ -71,7 +75,8 @@ where
     custom_name,
     sync_tag,
     new,
-    bound = "In: Sample, Out: Sample, F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send"
+    bound = "In: Sample, Out: Sample",
+    bound = "F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send"
 )]
 pub struct Map<In, Out, F> {
     #[rustradio(into)]
@@ -117,6 +122,9 @@ where
     fn process_sync_tags<'a>(&mut self, s: In, tags: &'a [Tag]) -> (Out, Cow<'a, [Tag]>) {
         (self.map)(s, tags)
     }
+}
+
+impl<In, Out, F> Map<In, Out, F> {
     /// Name of the block.
     pub fn custom_name(&self) -> &str {
         &self.name

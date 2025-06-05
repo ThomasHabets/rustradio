@@ -93,6 +93,7 @@ impl StructAttrs {
     }
     fn parse(attrs: &[Attribute]) -> StructAttrs {
         let mut ret = StructAttrs::default();
+        let mut bounds = Vec::new();
         attrs
             .iter()
             .filter_map(|attr| match &attr.meta {
@@ -107,9 +108,7 @@ impl StructAttrs {
                         "bound" => {
                             let value = meta.value()?;
                             let lit: syn::LitStr = value.parse()?;
-                            let w: syn::WhereClause =
-                                syn::parse_str(&format!("where {}", lit.value()))?;
-                            ret.bounds = Some(w);
+                            bounds.push(lit.value());
                         }
                         "crate" => ret.internal = true,
                         "custom_name" => ret.custom_name = true,
@@ -123,6 +122,8 @@ impl StructAttrs {
                 })
                 .unwrap();
             });
+        let w: syn::WhereClause = syn::parse_str(&format!("where {}", bounds.join(","))).unwrap();
+        ret.bounds = Some(w);
         ret
     }
 }
@@ -150,6 +151,7 @@ struct Parsed<'a> {
         syn::TypeGenerics<'a>,
         Option<syn::WhereClause>,
     ),
+    struct_where: Option<&'a syn::WhereClause>,
     inputs: Vec<&'a syn::Field>,
     outputs: Vec<&'a syn::Field>,
     defaults: Vec<&'a syn::Field>,
@@ -165,15 +167,16 @@ impl<'a> Parsed<'a> {
             panic!("Fields is what? {:?}", data_struct.fields);
         };
         let attrs = StructAttrs::parse(&input.attrs);
-        let generics = {
+        let (generics, struct_where) = {
             let (a, b, w) = input.generics.split_for_impl();
-            let w = merge_where_clauses(w, attrs.bounds.as_ref());
-            (a, b, w)
+            let w2 = merge_where_clauses(w, attrs.bounds.as_ref());
+            ((a, b, w2), w)
         };
         Ok(Self {
             name: &input.ident,
             attrs,
             generics,
+            struct_where,
             inputs: fields_named
                 .named
                 .iter()
@@ -492,10 +495,11 @@ impl<'a> Parsed<'a> {
         } else {
             quote! { #name_str }
         };
-        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let (impl_generics, ty_generics, _) = &self.generics;
+        let struct_where = &self.struct_where;
         let path = self.attrs.path();
         Some(quote! {
-            impl #impl_generics #path::block::BlockName for #name #ty_generics #where_clause {
+            impl #impl_generics #path::block::BlockName for #name #ty_generics #struct_where {
             fn block_name(&self) -> &str {
                 #nameval
             }
@@ -505,7 +509,8 @@ impl<'a> Parsed<'a> {
     fn expand_eof(&self) -> Option<TokenStream> {
         let name = self.name;
         let path = self.attrs.path();
-        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let (impl_generics, ty_generics, _) = &self.generics;
+        let where_clause = &self.struct_where;
         let in_names = self.in_names();
         if in_names.is_empty() {
             // TODO: should we really generate this eof() just because there are no
@@ -543,7 +548,7 @@ impl<'a> Parsed<'a> {
             self.expand_eof(),
         ]
         .into_iter()
-        .filter_map(|t| t)
+        .flatten()
         .collect();
         quote! {
             #(#e)*
