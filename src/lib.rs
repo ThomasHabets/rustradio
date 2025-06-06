@@ -512,26 +512,35 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 ///     sample_rate: f64,
 /// }
 /// ```
-pub fn parse_frequency(s: &str) -> std::result::Result<f64, String> {
-    use regex::Regex;
-    static RE: std::sync::LazyLock<Regex> =
-        std::sync::LazyLock::new(|| Regex::new(r"(?i)^(\d*\.?\d+)\s*([kmg]?)$").unwrap());
-
-    if let Some(caps) = RE.captures(s) {
-        let value: f64 = caps[1]
-            .parse()
-            .map_err(|e| format!("Invalid number: {}", e))?;
-        let multiplier = match &caps[2].to_lowercase()[..] {
-            "" => 1.0,
-            "k" => 1_000.0,
-            "m" => 1_000_000.0,
-            "g" => 1_000_000_000.0,
-            _ => return Err(format!("Unknown suffix: {}", &caps[2])),
-        };
-        Ok(value * multiplier)
+pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
+    let s_binding;
+    let s = if in_s.contains('_') {
+        // Only create a copy if input actually contains underscores.
+        s_binding = in_s.replace('_', "");
+        s_binding.as_str()
     } else {
-        Err("Invalid frequency format must be a float with optional k/m/g suffix".into())
-    }
+        in_s
+    };
+    let (nums, mul) = {
+        let last = match s.chars().last() {
+            None => return Err("empty string is not a frequency".into()),
+            Some(ch) => ch.to_lowercase().next().unwrap(),
+        };
+        if s.len() > 1 {
+            let rest = &s[..(s.len() - 1)];
+            match last {
+                'k' => (rest, 1_000.0),
+                'm' => (rest, 1_000_000.0),
+                'g' => (rest, 1_000_000_000.0),
+                _ => (s, 1.0),
+            }
+        } else {
+            (s, 1.0)
+        }
+    };
+    Ok(nums.parse::<f64>().map_err(|e| {
+        format!("Invalid number {in_s}: {e}. Has to be a float with optional k/mg suffix")
+    })? * mul)
 }
 
 /// A trait all sample types must implement.
@@ -734,5 +743,40 @@ pub mod tests {
         assert_eq!(e_str, e4.to_string());
         let e5 = e4.downcast_ref::<Error>().unwrap();
         assert!(matches![e5, Error::Plain(_)]);
+    }
+
+    #[test]
+    fn frequency() {
+        for (i, want) in &[
+            ("", None),
+            ("k", None),
+            ("r", None),
+            (".k", None),
+            ("0", Some(0.0f64)),
+            ("0.", Some(0.0f64)),
+            ("0.0", Some(0.0f64)),
+            (".3", Some(0.3f64)),
+            (".3k", Some(300.0f64)),
+            ("3.k", Some(3_000.0f64)),
+            ("100", Some(100.0)),
+            ("123k", Some(123_000.0)),
+            ("123.78922K", Some(123_789.22)),
+            ("321m", Some(321_000_000.0)),
+            ("2.45g", Some(2_450_000_000.0)),
+            ("100r", None),
+            ("r100", None),
+            ("10k0", None),
+            ("100_000", Some(100_000.0)),
+            ("_1_2_3._4_", Some(123.4)),
+        ] {
+            let got = parse_frequency(i);
+            match (got, want) {
+                (Err(_), None) => {}
+                (Ok(got), None) => panic!("For {i} got {got}, want error"),
+                (Err(e), Some(want)) => panic!("For {i} got error {e:?}, want {want}"),
+                (Ok(got), Some(want)) if got == *want => {}
+                (Ok(got), Some(want)) => panic!("For {i} got {got} want {want}"),
+            }
+        }
     }
 }

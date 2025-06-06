@@ -1559,7 +1559,6 @@ dependencies = [
  "rand",
  "ratatui",
  "rayon",
- "regex",
  "rtlsdr",
  "rustfft",
  "rustradio_macros",
