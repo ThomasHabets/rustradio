@@ -50,7 +50,7 @@ impl<T: Sample> Block for PduWriter<T> {
             .as_micros()
             .to_string();
         let full = Path::new(&self.dir).join(name);
-        debug!("Saving PDU to {:?}", full);
+        debug!("Saving PDU to {full:?}");
         let mut f = std::fs::File::create(full)?;
         let mut v = Vec::with_capacity(T::size() * packet.len());
         packet.iter().for_each(|s: &T| {

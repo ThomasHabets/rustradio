@@ -163,7 +163,7 @@ impl GraphRunner for Graph {
                     }
                 };
                 if eof[n] {
-                    info!("{} EOF, exiting", name);
+                    info!("{name} EOF, exiting");
                 }
             }
             if done {
@@ -183,7 +183,7 @@ impl GraphRunner for Graph {
             .split('\n')
         {
             if !line.is_empty() {
-                info!("{}", line);
+                info!("{line}");
             }
         }
         Ok(())

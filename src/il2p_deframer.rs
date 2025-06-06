@@ -227,7 +227,7 @@ impl Block for Il2pDeframer {
             // TODO: push something useful.
             self.dst.push(Vec::new(), &[]);
         } else if let Some(Err(e)) = header {
-            info!("Failed to parse header: {}", e);
+            info!("Failed to parse header: {e}");
         }
         Ok(BlockRet::Again)
     }

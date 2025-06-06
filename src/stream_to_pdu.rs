@@ -117,7 +117,7 @@ impl<T: Sample> Block for StreamToPdu<T> {
             .iter()
             .map(|t| ((t.pos(), t.key()), t))
             .collect::<HashMap<(TagPos, &str), &Tag>>();
-        trace!("StreamToPdu: tags: {:?}", tags);
+        trace!("StreamToPdu: tags: {tags:?}");
 
         for (i, sample) in input.iter().enumerate() {
             //eprintln!("sample: {i} {sample:?}, {:?}", self.endcounter);

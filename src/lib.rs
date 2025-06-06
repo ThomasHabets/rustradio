@@ -9,6 +9,12 @@
     feature(stdarch_riscv_feature_detection)
 )]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+// The below lints are in unstable only.
+#![allow(unknown_lints)]
+// I don't like the recommended syntax.
+#![allow(mismatched_lifetime_syntaxes)]
+// Unstable clippy keeps recommending unstable syntax.
+#![allow(clippy::collapsible_if)]
 
 /*! This create provides a framework for running SDR (software defined
 radio) applications.

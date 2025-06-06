@@ -169,7 +169,7 @@ where
             let Some((x, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            eprintln!("{:?}", tags);
+            // eprintln!("{tags:?}");
             for (packet, new_tags) in (self.map)(x, tags) {
                 self.dst.push(packet, new_tags);
             }

@@ -147,7 +147,7 @@ impl HdlcDeframer {
                         State::Synced((*ones + 1, bits))
                     }
                 } else if *ones == 5 {
-                    trace!("discarding stuffed bit {:?}", bits);
+                    trace!("discarding stuffed bit {bits:?}");
                     State::Synced((0, bits))
                 } else {
                     bits.push(0);
@@ -184,7 +184,7 @@ impl HdlcDeframer {
                         .step_by(8)
                         .map(|i| bits2byte(&bits[i..i + 8]))
                         .collect();
-                    debug!("HdlcDeframer: Captured packet: {:0>2x?}", bytes);
+                    debug!("HdlcDeframer: Captured packet: {bytes:0>2x?}");
                     let tags = &[Tag::new(0, "packet_pos", TagValue::U64(stream_pos))];
                     if !self.keep_checksum {
                         let data = &bytes[..bytes.len() - 2];
@@ -200,7 +200,7 @@ impl HdlcDeframer {
 
                         if crc != got_crc {
                             self.crc_error += 1;
-                            debug!("want crc {:0>4x}, got {:0>4x}", crc, got_crc);
+                            debug!("want crc {crc:0>4x}, got {got_crc:0>4x}");
                             return Ok(State::Synced((0, Vec::with_capacity(self.max_size))));
                         }
                         self.decoded += 1;

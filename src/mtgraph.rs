@@ -116,7 +116,7 @@ impl crate::graph::GraphRunner for MTGraph {
                 });
             let th = match th {
                 Err(x) => {
-                    error!("Failed to spawn block thread: {:?}", x);
+                    error!("Failed to spawn block thread: {x:?}");
                     self.cancel_token.cancel();
                     break;
                 }
@@ -127,19 +127,19 @@ impl crate::graph::GraphRunner for MTGraph {
         debug!("Joining threads");
         for (n, th) in threads.into_iter().rev().enumerate() {
             let name = th.thread().name().unwrap().to_string();
-            debug!("Waiting for {}", name);
+            debug!("Waiting for {name}");
             let j = th
                 .join()
                 .expect("joining thread")
                 .expect("block exit status");
-            debug!("Thread {} finished with {:?}", name, j);
+            debug!("Thread {name} finished with {j:?}");
             self.block_stats.insert((n, name), j);
         }
         self.spent_time = Some(st.elapsed());
         self.spent_cpu_time = Some(get_cpu_time() - run_start_cpu);
         for line in self.generate_stats().expect("can't happen").split('\n') {
             if !line.is_empty() {
-                info!("{}", line);
+                info!("{line}");
             }
         }
         Ok(())

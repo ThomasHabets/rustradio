@@ -145,7 +145,7 @@ where
         self.buf.drain(0..(have * sample_size));
         let n = v.len();
         o.fill_from_iter(v);
-        trace!("FileSource: Produced {}", n);
+        trace!("FileSource: Produced {n}");
         o.produce(n, &[]);
         Ok(BlockRet::Again)
     }

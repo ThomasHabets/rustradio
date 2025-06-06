@@ -474,10 +474,7 @@ impl<T: Copy> Buffer<T> {
         if n == 0 {
             debug_assert!(tags.is_empty());
             if !tags.is_empty() {
-                error!(
-                    "produce() called on a stream with 0 entries, but non-empty tags: {:?}",
-                    tags
-                );
+                error!("produce() called on a stream with 0 entries, but non-empty tags: {tags:?}");
             }
             return;
         }
