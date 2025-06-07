@@ -1,3 +1,6 @@
+#![allow(unknown_lints)]
+#![allow(clippy::collapsible_if)]
+#![allow(mismatched_lifetime_syntaxes)]
 use std::io::Write;
 
 use anyhow::Result;

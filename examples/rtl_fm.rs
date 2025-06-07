@@ -1,3 +1,5 @@
+// Unstable clippy keeps recommending unstable syntax.
+#![allow(clippy::collapsible_if)]
 /*!
 Example broadcast FM receiver, sending output to an Au file.
  */
@@ -327,14 +329,14 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
             blockchain![
                 g,
                 prev,
-                FileSource::builder(&filename).repeat(repeat).build()?,
+                FileSource::builder(filename).repeat(repeat).build()?,
                 RtlSdrDecode::new(prev),
             ]
         } else {
             blockchain![
                 g,
                 prev,
-                FileSource::builder(&filename).repeat(repeat).build()?,
+                FileSource::builder(filename).repeat(repeat).build()?,
             ]
         }
     } else if !cfg!(feature = "rtlsdr") {
@@ -421,12 +423,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
         let prev = blockchain![
             g,
             prev,
-            AuEncode::new(
-                prev,
-                rustradio::au::Encoding::Pcm16,
-                opt.audio_rate as u32,
-                1
-            )
+            AuEncode::new(prev, rustradio::au::Encoding::Pcm16, opt.audio_rate, 1)
         ];
         // Save to file.
         g.add(Box::new(FileSink::new(prev, out, Mode::Overwrite)?));
