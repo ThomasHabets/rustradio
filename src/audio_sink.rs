@@ -70,12 +70,12 @@ impl CpalOutput {
         let (sender, receiver) = sync_channel::<f32>(self.config.sample_rate.0 as usize * 3); // 3 seconds buffer
 
         let channels = self.config.channels as usize;
-        let err_fn = |err| error!("an error occurred on stream: {}", err);
+        let err_fn = |err| error!("an error occurred on stream: {err}");
 
         let device = self.device.clone();
         let config = self.config.clone();
 
-        info!("Starting output stream {:?}", config);
+        info!("Starting output stream {config:?}");
         let stream = device.build_output_stream(
             &config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {

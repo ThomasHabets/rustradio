@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -ueo pipefail
+cd "$TICKBOX_TEMPDIR/work"
+export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.clippy"
+export RUSTFLAGS="--cfg tokio_unstable"
+exec cargo +nightly clippy --all-targets --all-features

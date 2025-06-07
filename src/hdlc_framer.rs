@@ -126,7 +126,7 @@ mod tests {
                 .chain(o.chars().map(|b| if b == '0' { 0 } else { 1 }))
                 .chain(SYNC.repeat(SYNC_BYTES).iter().copied())
                 .collect();
-            let got = hdlc_encode(&*i);
+            let got = hdlc_encode(i);
             assert_eq!(
                 got,
                 want,

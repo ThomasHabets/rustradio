@@ -12,6 +12,7 @@
 // The below lints are in unstable only.
 #![allow(unknown_lints)]
 // I don't like the recommended syntax.
+// Commented on https://github.com/rust-lang/rust/pull/138677
 #![allow(mismatched_lifetime_syntaxes)]
 // Unstable clippy keeps recommending unstable syntax.
 #![allow(clippy::collapsible_if)]

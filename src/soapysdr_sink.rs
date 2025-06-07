@@ -57,7 +57,7 @@ impl SoapySdrSinkBuilder<'_> {
             self.dev.list_clock_sources()?
         );
         let chans = self.dev.num_channels(Direction::Tx)?;
-        debug!("SoapySDR TX channels : {}", chans);
+        debug!("SoapySDR TX channels : {chans}");
         for channel in 0..chans {
             debug!(
                 "SoapySDR TX channel {channel} antennas: {:?}",

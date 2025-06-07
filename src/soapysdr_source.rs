@@ -49,7 +49,7 @@ impl SoapySdrSourceBuilder<'_> {
             self.dev.frontend_mapping(soapysdr::Direction::Rx)?
         );
         let chans = self.dev.num_channels(soapysdr::Direction::Rx)?;
-        debug!("SoapySDR RX channels : {}", chans);
+        debug!("SoapySDR RX channels : {chans}");
         for channel in 0..chans {
             debug!(
                 "SoapySDR RX channel {channel} antennas: {:?}",
