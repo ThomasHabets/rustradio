@@ -150,13 +150,15 @@ impl<In, Out, F> Map<In, Out, F> {
 /// });
 /// ```
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, custom_name, new)]
-pub struct NCMap<In, Out, F>
-where
-    In: Send + Sync,
-    Out: Send + Sync,
-    F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
-{
+#[rustradio(
+    crate,
+    custom_name,
+    new,
+    bound = "In: Send + Sync",
+    bound = "Out: Send + Sync",
+    bound = "F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send"
+)]
+pub struct NCMap<In, Out, F> {
     #[rustradio(into)]
     name: String,
     map: F,
@@ -186,12 +188,7 @@ where
     }
 }
 
-impl<In, Out, F> NCMap<In, Out, F>
-where
-    In: Send + Sync,
-    Out: Send + Sync,
-    F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
-{
+impl<In, Out, F> NCMap<In, Out, F> {
     /// Name of the block.
     pub fn custom_name(&self) -> &str {
         &self.name
