@@ -508,7 +508,8 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 ///
 /// For use with clap. E.g.:
 ///
-/// ```text
+/// ```rust
+/// use rustradio::parse_frequency;
 /// #[derive(clap::Parser)]
 /// struct Opt {
 ///     /// Frequency.

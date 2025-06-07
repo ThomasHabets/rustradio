@@ -133,20 +133,21 @@ impl<In, Out, F> Map<In, Out, F> {
 
 /// Arbitrary mapping of non-copy streams using a lambda.
 ///
-/// A NCMap block transforms one sample at a time, from input to output. The
-/// input and output can be different types.
+/// A NCMap block transforms one input sample at a time into one or more
+/// outputs. The input and output can be different types.
 ///
 /// If there's more than one input or output stream, then you have to make a
 /// dedicated block.
 ///
-/// ```text
+/// ```
 /// use rustradio::Complex;
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::convert::NCMap;
-/// […]
-/// let (b, out) = NCMap::new(src, "mymap", |mut x| {
-///   x[0] += 1;
-///   Some(x)
+/// // […]
+/// # let (_, src) = rustradio::stream::new_nocopy_stream::<Vec<rustradio::Float>>();
+/// let (b, out) = NCMap::new(src, "mymap", |mut x, tags| {
+///   x[0] += 1.0;
+///   vec![(x, tags)]
 /// });
 /// ```
 #[derive(rustradio_macros::Block)]
