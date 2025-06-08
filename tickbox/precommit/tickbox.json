@@ -5,5 +5,6 @@
     },
     "parallel_regex": [
             "^[2-6].*"
-    ]
+    ],
+    "max_concurrency": 3
 }
