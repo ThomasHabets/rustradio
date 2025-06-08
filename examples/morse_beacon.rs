@@ -59,7 +59,7 @@ pub fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        Strobe::new(std::time::Duration::from_secs(10), opt.msg.to_string(),),
+        Strobe::new(std::time::Duration::from_secs(10), &opt.msg),
         MorseEncode::new(prev),
         PduToStream::new(prev),
         RationalResampler::builder()

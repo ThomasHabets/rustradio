@@ -12,6 +12,7 @@ pub struct Strobe<T: Send + Clone> {
     #[rustradio(default)]
     last: Option<std::time::Instant>,
     period: std::time::Duration,
+    #[rustradio(into)]
     data: T,
 }
 
