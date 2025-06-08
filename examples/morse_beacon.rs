@@ -32,6 +32,10 @@ struct Opt {
     #[arg(long, default_value_t = 20.0)]
     wpm: f32,
 
+    /// Set clock source.
+    #[arg(long)]
+    clock_source: Option<String>,
+
     /// Message to beacon out.
     msg: String,
 }
@@ -52,6 +56,9 @@ pub fn main() -> Result<()> {
     }
     soapysdr::configure_logging();
     let dev = soapysdr::Device::new(&*opt.driver)?;
+    if let Some(clock) = &opt.clock_source {
+        dev.set_clock_source(clock.as_bytes())?;
+    }
     let mut g = MTGraph::new();
 
     // 20 WPM is 60ms time unit.
