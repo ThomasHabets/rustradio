@@ -65,7 +65,7 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
     )
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Debug)]
 enum Sync {
     Value,
     Tag,
@@ -115,9 +115,18 @@ impl StructAttrs {
                         "custom_name" => ret.custom_name = true,
                         "noeof" => ret.noeof = true,
                         "new" => ret.generate_new = true,
-                        "sync" => ret.sync = Sync::Value,
-                        "sync_tag" => ret.sync = Sync::Tag,
-                        "sync_nocopy_tag" => ret.sync = Sync::NoCopyTag,
+                        "sync" => {
+                            assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
+                            ret.sync = Sync::Value
+                        }
+                        "sync_tag" => {
+                            assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
+                            ret.sync = Sync::Tag
+                        }
+                        "sync_nocopy_tag" => {
+                            assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
+                            ret.sync = Sync::NoCopyTag
+                        }
                         other => panic!("invalid attr {other}"),
                     }
                     Ok(())
