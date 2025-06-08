@@ -48,6 +48,14 @@ impl SoapySdrSourceBuilder<'_> {
             "SoapySDR RX frontend mapping: {}",
             self.dev.frontend_mapping(soapysdr::Direction::Rx)?
         );
+        debug!(
+            "SoapySDR RX clock sources: {:?}",
+            self.dev.list_clock_sources()?
+        );
+        debug!(
+            "SoapySDR RX active clock source: {:?}",
+            self.dev.get_clock_source()?
+        );
         let chans = self.dev.num_channels(soapysdr::Direction::Rx)?;
         debug!("SoapySDR RX channels : {chans}");
         for channel in 0..chans {
