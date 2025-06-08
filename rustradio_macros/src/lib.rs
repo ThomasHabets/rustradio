@@ -69,6 +69,7 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
 enum Sync {
     Value,
     Tag,
+    NoCopyTag,
     #[default]
     General,
 }
@@ -116,6 +117,7 @@ impl StructAttrs {
                         "new" => ret.generate_new = true,
                         "sync" => ret.sync = Sync::Value,
                         "sync_tag" => ret.sync = Sync::Tag,
+                        "sync_nocopy_tag" => ret.sync = Sync::NoCopyTag,
                         other => panic!("invalid attr {other}"),
                     }
                     Ok(())
@@ -353,9 +355,42 @@ impl<'a> Parsed<'a> {
             .collect()
     }
 
+    fn expand_sync_nocopy_work(&self) -> Option<TokenStream> {
+        match self.attrs.sync {
+            Sync::NoCopyTag => {}
+            Sync::General | Sync::Tag | Sync::Value => return None,
+        }
+        let name = self.name;
+        let path = self.attrs.path();
+        let (impl_generics, ty_generics, where_clause) = &self.generics;
+        let in_names = self.in_names();
+        let in_tag_names = self.in_tag_names();
+        let out_names = self.out_names();
+        let out_tag_names = self.out_tag_names();
+        Some(quote! {
+            impl #impl_generics #path::block::Block for #name #ty_generics #where_clause {
+                fn work(&mut self) -> #path::Result<#path::block::BlockRet> {
+                    use #path::block::BlockRet;
+                    loop {
+                        #(if self.#out_names.remaining() == 0 {
+                            return Ok(BlockRet::WaitForStream(&self.#out_names, 1));
+                        })*
+                        #(if self.#in_names.is_empty() {
+                            return Ok(BlockRet::WaitForStream(&self.#in_names, 1));
+                        })*
+                        #(let (#in_names, #in_tag_names) = self.#in_names.pop().expect("can't happen: we checked");)*
+                        let (#(#out_names, #out_tag_names),*) = self.process_sync_tags(#(#in_names, &#in_tag_names),*);
+                        #(self.#out_names.push(#out_names, #out_tag_names);)*
+                    }
+                }
+            }
+        })
+    }
+
     fn expand_sync_work(&self) -> Option<TokenStream> {
-        if matches![self.attrs.sync, Sync::General] {
-            return None;
+        match self.attrs.sync {
+            Sync::General | Sync::NoCopyTag => return None,
+            Sync::Tag | Sync::Value => {}
         }
         let name = self.name;
         let path = self.attrs.path();
@@ -542,6 +577,7 @@ impl<'a> Parsed<'a> {
     fn expand(&self) -> TokenStream {
         let e: Vec<_> = [
             self.expand_new(),
+            self.expand_sync_nocopy_work(),
             self.expand_sync_work(),
             self.expand_sync_tags(),
             self.expand_blockname(),

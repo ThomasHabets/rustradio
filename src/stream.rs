@@ -84,6 +84,8 @@ impl Tag {
 /// *    400KiB: 1.228s
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
+const DEFAULT_NOCOPY_CAPACITY: usize = 1_000;
+
 /// Wait on a stream.
 ///
 /// For ReadStream, wait until there's enough to read.
@@ -317,6 +319,7 @@ struct NCEntry<T> {
 struct NCInner<T> {
     lock: Mutex<VecDeque<NCEntry<T>>>,
     cv: Condvar,
+    capacity: usize,
 
     // Waiting for read.
     #[cfg(feature = "async")]
@@ -377,13 +380,12 @@ impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
         self.id
     }
     fn wait(&self, _need: usize) -> bool {
-        // TODO: we should have a maximum, shouldn't we?
-        // For now, as much room as you need.
-        Arc::strong_count(&self.inner) == 1
+        // TODO: actually wait.
+        self.closed()
     }
     #[cfg(feature = "async")]
     async fn wait_async(&self, _need: usize) -> bool {
-        // Never full. TODO: max capacity?
+        // TODO: actually wait.
         self.closed()
     }
     fn closed(&self) -> bool {
@@ -406,6 +408,7 @@ pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
     let inner = Arc::new(NCInner {
         lock: Mutex::new(VecDeque::new()),
         cv: Condvar::new(),
+        capacity: DEFAULT_NOCOPY_CAPACITY,
 
         // Waiting for read.
         #[cfg(feature = "async")]
@@ -448,6 +451,12 @@ impl<T> NCReadStream<T> {
             Arc::strong_count(&self.inner) == 1
         }
     }
+
+    /// Return true is empty.
+    pub fn is_empty(&self) -> bool {
+        let has = self.inner.lock.lock().unwrap().len();
+        has == 0
+    }
 }
 
 /// Trait that helps finding the read side type of a write stream.
@@ -467,12 +476,21 @@ impl<T> NCWriteStream<T> {
     }
     /// Push one sample, handing off ownership.
     /// Ideally this should only be NoCopy.
+    ///
+    /// This function doesn't enforce capacity. If there's a risk of
+    /// overflowing, then check `remaining()` before pushing.
     pub fn push<Tags: Into<Vec<Tag>>>(&self, val: T, tags: Tags) {
         self.inner.lock.lock().unwrap().push_back(NCEntry {
             val,
             tags: tags.into(),
         });
         self.inner.cv.notify_all();
+    }
+
+    /// Remaining capacity.
+    pub fn remaining(&self) -> usize {
+        let has = self.inner.lock.lock().unwrap().len();
+        self.inner.capacity - has
     }
 }
 

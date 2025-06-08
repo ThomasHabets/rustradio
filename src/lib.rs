@@ -163,6 +163,7 @@ pub mod hilbert;
 pub mod iir_filter;
 pub mod il2p_deframer;
 pub mod kiss;
+pub mod morse_encode;
 pub mod multiply_const;
 pub mod nrzi;
 pub mod null_sink;
