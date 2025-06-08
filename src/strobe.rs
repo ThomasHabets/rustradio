@@ -23,9 +23,13 @@ impl<T: Send + Clone> Block for Strobe<T> {
             Some(last) if now < last + self.period => return Ok(BlockRet::Pending),
             Some(_) => {}
         }
-        // TODO: Add tags?
-        self.dst.push(self.data.clone(), &[]);
-        self.last = Some(now);
+        if self.dst.remaining() == 0 {
+            log::warn!("Strobe: destination buffer overflow, dropping output");
+        } else {
+            // TODO: Add tags?
+            self.dst.push(self.data.clone(), &[]);
+            self.last = Some(now);
+        }
         Ok(BlockRet::Pending)
     }
 }
