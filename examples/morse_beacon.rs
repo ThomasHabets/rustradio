@@ -59,6 +59,20 @@ pub fn main() -> Result<()> {
     if let Some(clock) = &opt.clock_source {
         dev.set_clock_source(clock.as_bytes())?;
     }
+    // TODO: enable once
+    // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
+    /*
+    let dev2 = dev.clone();
+    std::thread::spawn(move || {
+        loop {
+            log::debug!("GPS status: {}: time: {}",
+                       dev2.read_sensor("gps_locked").unwrap_or("<error>".to_string()),
+                       dev2.read_sensor("gps_time").unwrap_or("<error>".to_string()),
+                       );
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        }
+    });
+    */
     let mut g = MTGraph::new();
 
     // 20 WPM is 60ms time unit.
