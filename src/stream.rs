@@ -29,6 +29,17 @@ pub enum TagValue {
     U64(u64),
 }
 
+impl std::fmt::Display for TagValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            TagValue::String(s) => write!(f, "String:{s}"),
+            TagValue::Float(s) => write!(f, "Float:{s}"),
+            TagValue::Bool(s) => write!(f, "Bool:{s}"),
+            TagValue::U64(s) => write!(f, "U64:{s}"),
+        }
+    }
+}
+
 /// Tags associated with a stream.
 #[derive(Debug, PartialEq, Clone, PartialOrd)]
 pub struct Tag {

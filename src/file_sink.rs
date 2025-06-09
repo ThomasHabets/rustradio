@@ -9,6 +9,7 @@ use crate::stream::{NCReadStream, ReadStream};
 use crate::{Result, Sample};
 
 /// File write mode.
+#[derive(Clone, Copy)]
 pub enum Mode {
     /// Create a new file. Fail if file already exists.
     Create,

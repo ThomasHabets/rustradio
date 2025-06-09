@@ -1,146 +1,165 @@
-/*!
-Example broadcast FM receiver, sending output to an Au file.
- */
-#[cfg(feature = "soapysdr")]
-mod internal {
-    use anyhow::Result;
-    use clap::Parser;
-    use log::warn;
+//! SigMF capture
+use anyhow::Result;
+use clap::Parser;
+use log::warn;
+use std::io::Write;
 
-    use rustradio::blocks::*;
-    use rustradio::file_sink::Mode;
-    use rustradio::graph::Graph;
-    use rustradio::graph::GraphRunner;
-    use rustradio::{Float, blockchain};
+use rustradio::block::BlockRet;
+use rustradio::blocks::*;
+use rustradio::file_sink::Mode;
+use rustradio::graph::Graph;
+use rustradio::graph::GraphRunner;
+use rustradio::parse_frequency;
+use rustradio::sigmf::{self, Annotation, SigMF};
+use rustradio::stream::{ReadStream, WriteStream};
+use rustradio::{Complex, Float, blockchain};
 
-    #[derive(clap::Parser, Debug)]
-    #[command(version, about)]
-    struct Opt {
-        #[arg(short)]
-        driver: String,
+#[derive(clap::Parser, Debug)]
+#[command(version, about)]
+struct Opt {
+    #[arg(short)]
+    driver: String,
 
-        #[arg(short)]
-        output: std::path::PathBuf,
+    #[arg(short)]
+    output: std::path::PathBuf,
 
-        // Unused if soapysdr feature not enabled.
-        #[allow(dead_code)]
-        #[arg(long = "freq", default_value = "100000000")]
-        freq: u64,
+    #[arg(long = "freq", value_parser=parse_frequency, default_value = "100m")]
+    freq: f64,
 
-        // Unused if soapysdr feature not enabled.
-        #[allow(dead_code)]
-        #[arg(long = "gain", default_value = "20")]
-        gain: i32,
+    #[arg(long, value_parser=parse_frequency, default_value = "300000")]
+    samp_rate: f64,
 
-        #[arg(short, default_value = "0")]
-        verbose: usize,
+    #[arg(long = "gain", default_value = "0.3")]
+    gain: f64,
 
-        #[arg(long = "volume", default_value = "1.0")]
-        volume: Float,
-    }
+    #[arg(short, default_value = "0")]
+    verbose: usize,
 
-    pub fn main() -> Result<()> {
-        println!("soapy_fm receiver example");
-        let opt = Opt::parse();
-        stderrlog::new()
-            .module(module_path!())
-            .module("rustradio")
-            .quiet(false)
-            .verbosity(opt.verbose)
-            .timestamp(stderrlog::Timestamp::Second)
-            .init()?;
+    #[arg(long = "volume", default_value = "1.0")]
+    volume: Float,
+}
 
-        let mut g = Graph::new();
-        let samp_rate = 1_024_000.0f32;
+#[derive(rustradio_macros::Block)]
+#[rustradio(new)]
+struct Metadata {
+    #[rustradio(in)]
+    src: ReadStream<Complex>,
+    #[rustradio(out)]
+    dst: WriteStream<Complex>,
+    sigmf: SigMF,
+    tx: std::sync::mpsc::Sender<SigMF>,
+    #[rustradio(default)]
+    pos: u64,
+}
 
-        let dev = soapysdr::Device::new(&*opt.driver)?;
-        let prev = blockchain![
-            g,
-            prev,
-            SoapySdrSource::builder(&dev, opt.freq as f64, samp_rate as f64)
-                .igain(opt.gain as f64)
-                .build()?
-        ];
-
-        // Filter.
-        let taps = rustradio::fir::low_pass_complex(
-            samp_rate,
-            100_000.0,
-            1000.0,
-            &rustradio::window::WindowType::Hamming,
-        );
-        let prev = blockchain![g, prev, FftFilter::new(prev, taps)];
-
-        // Resample.
-        let new_samp_rate = 200_000.0;
-        let prev = blockchain![
-            g,
-            prev,
-            RationalResampler::builder()
-                .deci(samp_rate as usize)
-                .interp(new_samp_rate as usize)
-                .build(prev)?,
-        ];
-        let samp_rate = new_samp_rate;
-
-        // TODO: Add broadcast FM deemph.
-
-        // Quad demod.
-        let prev = blockchain![g, prev, QuadratureDemod::new(prev, 1.0)];
-
-        let taps = rustradio::fir::low_pass(
-            samp_rate,
-            44_100.0,
-            500.0,
-            &rustradio::window::WindowType::Hamming,
-        );
-        //let audio_filter = FirFilter::new(prev, &taps);
-        let prev = blockchain![g, prev, FftFilterFloat::new(prev, &taps)];
-
-        // Resample audio.
-        let new_samp_rate = 48_000.0;
-        let prev = blockchain![
-            g,
-            prev,
-            RationalResampler::builder()
-                .deci(samp_rate as usize)
-                .interp(new_samp_rate as usize)
-                .build(prev)?,
-        ];
-        let _samp_rate = new_samp_rate;
-
-        // Change volume.
-        let prev = blockchain![
-            g,
-            prev,
-            MultiplyConst::new(prev, opt.volume),
-            // Convert to .au.
-            AuEncode::new(prev, rustradio::au::Encoding::Pcm16, 48000, 1),
-        ];
-
-        // Save to file.
-        g.add(Box::new(FileSink::new(prev, opt.output, Mode::Overwrite)?));
-
-        let cancel = g.cancel_token();
-        ctrlc::set_handler(move || {
-            warn!("Got Ctrl-C");
-            eprintln!("\n");
-            cancel.cancel();
-        })
-        .expect("failed to set Ctrl-C handler");
-        eprintln!("Running loop");
-        g.run()?;
-        eprintln!("{}", g.generate_stats().unwrap());
-        Ok(())
+impl rustradio::block::Block for Metadata {
+    fn work(&mut self) -> rustradio::Result<BlockRet<'_>> {
+        loop {
+            let (i, tags) = self.src.read_buf()?;
+            if i.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            }
+            let mut o = self.dst.write_buf()?;
+            if o.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
+            let n = std::cmp::min(i.len(), o.len());
+            o.slice()[..n].copy_from_slice(&i.slice()[..n]);
+            i.consume(n);
+            o.produce(n, &tags);
+            for tag in tags {
+                self.sigmf.annotations.push(Annotation {
+                    core_sample_start: self.pos + tag.pos() as u64,
+                    core_generator: Some("RustRadio".to_string()),
+                    core_label: Some(format!("{} {}", tag.key(), tag.val())),
+                    ..Default::default()
+                });
+            }
+            self.pos += n as u64;
+        }
     }
 }
 
-#[cfg(feature = "soapysdr")]
-fn main() -> anyhow::Result<()> {
-    internal::main()
+impl Drop for Metadata {
+    fn drop(&mut self) {
+        self.tx.send(std::mem::take(&mut self.sigmf)).unwrap()
+    }
 }
 
-#[cfg(not(feature = "soapysdr"))]
-fn main() {
-    panic!("This example only works with -F soapysdr");
+fn main() -> Result<()> {
+    println!("soapy_fm receiver example");
+    let opt = Opt::parse();
+    stderrlog::new()
+        .module(module_path!())
+        .module("rustradio")
+        .quiet(false)
+        .verbosity(opt.verbose)
+        .timestamp(stderrlog::Timestamp::Second)
+        .init()?;
+
+    let mut g = Graph::new();
+
+    let dev = soapysdr::Device::new(&*opt.driver)?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let prev = blockchain![
+        g,
+        prev,
+        SoapySdrSource::builder(&dev, opt.freq, opt.samp_rate)
+            .igain(opt.gain)
+            .build()?,
+        Metadata::new(
+            prev,
+            SigMF {
+                global: sigmf::Global {
+                    core_version: sigmf::VERSION.to_string(),
+                    core_datatype: "cf32".to_string(),
+                    core_sample_rate: Some(opt.samp_rate),
+                    ..Default::default()
+                },
+                captures: vec![sigmf::Capture {
+                    core_sample_start: 0,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            tx
+        ),
+    ];
+
+    // Save to file.
+    let mode = Mode::Overwrite;
+    g.add(Box::new(FileSink::new(
+        prev,
+        opt.output.with_extension("sigmf-data"),
+        mode,
+    )?));
+
+    let cancel = g.cancel_token();
+    ctrlc::set_handler(move || {
+        warn!("Got Ctrl-C");
+        eprintln!("\n");
+        cancel.cancel();
+    })
+    .expect("failed to set Ctrl-C handler");
+    eprintln!("Running loop");
+    g.run()?;
+    eprintln!("{}", g.generate_stats().unwrap());
+    drop(g);
+    {
+        let sigmf = rx.recv().unwrap();
+        let ser = serde_json::to_string(&sigmf)?;
+        let metaname = opt.output.with_extension("sigmf-meta");
+        let mut meta = match mode {
+            Mode::Create => std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&metaname),
+            Mode::Overwrite => std::fs::File::create(&metaname),
+            Mode::Append => panic!("can't happen"),
+        }
+        .map_err(|e| rustradio::Error::msg(format!("Failed to create {metaname:?}: {e}")))?;
+        meta.write_all(ser.as_bytes())?;
+        meta.flush()?;
+    }
+    Ok(())
 }

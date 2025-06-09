@@ -78,6 +78,10 @@ name = "bell202"
 required-features = ["soapysdr"]
 
 [[example]]
+name = "capture"
+required-features = ["soapysdr"]
+
+[[example]]
 name = "morse_beacon"
 required-features = ["soapysdr"]
 

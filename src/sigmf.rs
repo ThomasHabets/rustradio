@@ -11,7 +11,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 
 const DATATYPE_CF32: &str = "cf32";
-const VERSION: &str = "1.1.0";
+pub const VERSION: &str = "1.1.0";
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
@@ -30,16 +30,16 @@ pub struct Capture {
     /// Sample index in the dataset file at which this segment takes
     /// effect.
     #[serde(rename = "core:sample_start")]
-    core_sample_start: u64,
+    pub core_sample_start: u64,
 
     /// The index of the sample referenced by `sample_start` relative
     /// to an original sample stream.
     #[serde(rename = "core:global_index", skip_serializing_if = "Option::is_none")]
-    core_global_index: Option<u64>,
+    pub core_global_index: Option<u64>,
 
     /// Header bytes to skip.
     #[serde(rename = "core:header_bytes", skip_serializing_if = "Option::is_none")]
-    core_header_bytes: Option<u64>,
+    pub core_header_bytes: Option<u64>,
 
     /// Frequency of capture.
     #[serde(rename = "core:frequency", skip_serializing_if = "Option::is_none")]
@@ -68,41 +68,41 @@ impl Capture {
 pub struct Annotation {
     /// Sample offset.
     #[serde(rename = "core:sample_start")]
-    core_sample_start: u64,
+    pub core_sample_start: u64,
 
     /// Annotation width.
     #[serde(rename = "core:sample_count", skip_serializing_if = "Option::is_none")]
-    core_sample_count: Option<u64>,
+    pub core_sample_count: Option<u64>,
 
     /// Annotation creator.
     #[serde(rename = "core:generator", skip_serializing_if = "Option::is_none")]
-    core_generator: Option<String>,
+    pub core_generator: Option<String>,
 
     /// Annotation label.
     #[serde(rename = "core:label", skip_serializing_if = "Option::is_none")]
-    core_label: Option<String>,
+    pub core_label: Option<String>,
 
     /// Comment.
     #[serde(rename = "core:comment", skip_serializing_if = "Option::is_none")]
-    core_comment: Option<String>,
+    pub core_comment: Option<String>,
 
     /// Frequency lower edge.
     #[serde(
         rename = "core:freq_lower_edge",
         skip_serializing_if = "Option::is_none"
     )]
-    core_freq_lower_edge: Option<f64>,
+    pub core_freq_lower_edge: Option<f64>,
 
     /// Frequency upper edge.
     #[serde(
         rename = "core:freq_upper_edge",
         skip_serializing_if = "Option::is_none"
     )]
-    core_freq_upper_edge: Option<f64>,
+    pub core_freq_upper_edge: Option<f64>,
 
     /// UUID.
     #[serde(rename = "core:uuid", skip_serializing_if = "Option::is_none")]
-    core_uuid: Option<String>,
+    pub core_uuid: Option<String>,
 }
 
 /// Global object.
@@ -111,7 +111,7 @@ pub struct Annotation {
 pub struct Global {
     /// Data format.
     #[serde(rename = "core:datatype")]
-    core_datatype: String,
+    pub core_datatype: String,
 
     /// Sample rate.
     #[serde(rename = "core:sample_rate", skip_serializing_if = "Option::is_none")]
@@ -119,7 +119,7 @@ pub struct Global {
 
     /// SigMF version.
     #[serde(rename = "core:version")]
-    core_version: String,
+    pub core_version: String,
 
     /// Number of channels.
     #[serde(rename = "core:num_channels", skip_serializing_if = "Option::is_none")]
@@ -161,7 +161,7 @@ pub struct Global {
 
 /// SigMF data.
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct SigMF {
     /// Global information.
     pub global: Global,
