@@ -298,6 +298,9 @@ impl<T: Copy> BufferWriter<T> {
     /// Having written into the write buffer, now tell the buffer
     /// we're done. Also here are the tags, with positions relative to
     /// start of buffer.
+    ///
+    // Tags inherently need to be copied in, because they need to be added to
+    // the underlying stream.
     pub fn produce(self, n: usize, tags: &[Tag]) {
         self.parent.produce(n, tags);
     }
