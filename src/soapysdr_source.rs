@@ -2,8 +2,8 @@
 use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Result};
+use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
+use crate::{Complex, Error, Float, Result};
 
 impl From<soapysdr::Error> for Error {
     fn from(e: soapysdr::Error) -> Self {
@@ -19,6 +19,22 @@ pub struct SoapySdrSourceBuilder<'a> {
     igain: f64,
     samp_rate: f64,
     freq: f64,
+}
+
+macro_rules! log_and_tag {
+    ($tags:ident, $expr:expr, $tag_key:expr) => {
+        match $expr {
+            Ok(s) => {
+                debug!("SoapySDR RX {}: {s}", $tag_key);
+                $tags.push(Tag::new(
+                    0,
+                    concat!("SoapySdrSource::", $tag_key),
+                    TagValue::String(s),
+                ));
+            }
+            Err(e) => debug!("SoapySDR RX {} error: {e}", $tag_key),
+        }
+    };
 }
 
 impl SoapySdrSourceBuilder<'_> {
@@ -41,13 +57,33 @@ impl SoapySdrSourceBuilder<'_> {
     }
     /// Build the source object.
     pub fn build(self) -> Result<(SoapySdrSource, ReadStream<Complex>)> {
-        debug!("SoapySDR RX driver: {}", self.dev.driver_key()?);
-        debug!("SoapySDR RX hardware: {}", self.dev.hardware_key()?);
+        let mut tags = vec![
+            Tag::new(
+                0,
+                "SoapySdrSource::channel",
+                TagValue::U64(self.channel as u64),
+            ),
+            Tag::new(
+                0,
+                "SoapySdrSource::frequency",
+                TagValue::Float(self.freq as Float),
+            ),
+            Tag::new(
+                0,
+                "SoapySdrSource::sample_rate",
+                TagValue::Float(self.samp_rate as Float),
+            ),
+        ];
+        log_and_tag!(tags, self.dev.driver_key(), "driver");
+        log_and_tag!(tags, self.dev.hardware_key(), "hardware");
         debug!("SoapySDR RX hardware info: {}", self.dev.hardware_info()?);
-        debug!(
-            "SoapySDR RX frontend mapping: {}",
-            self.dev.frontend_mapping(soapysdr::Direction::Rx)?
+        log_and_tag!(
+            tags,
+            self.dev.frontend_mapping(soapysdr::Direction::Rx),
+            "frontend_mapping"
         );
+        log_and_tag!(tags, self.dev.get_clock_source(), "clock_source");
+        log_and_tag!(tags, self.dev.get_time_source(), "time_source");
         // TODO: enable once
         // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
         /*
@@ -65,10 +101,6 @@ impl SoapySdrSourceBuilder<'_> {
         debug!(
             "SoapySDR RX clock sources: {:?}",
             self.dev.list_clock_sources()?
-        );
-        debug!(
-            "SoapySDR RX active clock source: {:?}",
-            self.dev.get_clock_source()?
         );
         let chans = self.dev.num_channels(soapysdr::Direction::Rx)?;
         debug!("SoapySDR RX channels : {chans}");
@@ -127,13 +159,19 @@ impl SoapySdrSourceBuilder<'_> {
         self.dev
             .set_gain(soapysdr::Direction::Rx, self.channel, gain)?;
         if let Some(a) = self.antenna {
+            // TODO: set antenna even if not specified.
+            tags.push(Tag::new(
+                0,
+                "SoapySdrSource::antenna",
+                TagValue::String(a.clone()),
+            ));
             self.dev
                 .set_antenna(soapysdr::Direction::Rx, self.channel, a)?;
         }
         let mut stream = self.dev.rx_stream(&[self.channel])?;
         stream.activate(None)?;
         let (dst, dr) = crate::stream::new_stream();
-        Ok((SoapySdrSource { stream, dst }, dr))
+        Ok((SoapySdrSource { stream, dst, tags }, dr))
     }
 }
 
@@ -144,6 +182,8 @@ pub struct SoapySdrSource {
     stream: soapysdr::RxStream<Complex>,
     #[rustradio(out)]
     dst: WriteStream<Complex>,
+    #[rustradio(default)]
+    tags: Vec<Tag>,
 }
 
 impl SoapySdrSource {
@@ -180,7 +220,11 @@ impl Block for SoapySdrSource {
                 return Err(e.into());
             }
         };
-        o.produce(n, &[]);
+        if n > 0 {
+            // Tags are always with offset zero.
+            o.produce(n, &self.tags);
+            self.tags.clear();
+        }
         Ok(BlockRet::Again)
     }
 }
