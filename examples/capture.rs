@@ -12,7 +12,7 @@ use rustradio::graph::GraphRunner;
 use rustradio::parse_frequency;
 use rustradio::sigmf::{self, Annotation, SigMF};
 use rustradio::stream::{ReadStream, TagValue, WriteStream};
-use rustradio::{Complex, Float, blockchain};
+use rustradio::{Complex, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -35,8 +35,13 @@ struct Opt {
     #[arg(short, default_value = "0")]
     verbose: usize,
 
-    #[arg(long = "volume", default_value = "1.0")]
-    volume: Float,
+    /// Set time source.
+    #[arg(long)]
+    time_source: Option<String>,
+
+    /// Set clock source.
+    #[arg(long)]
+    clock_source: Option<String>,
 }
 
 #[derive(rustradio_macros::Block)]
@@ -129,6 +134,12 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     let dev = soapysdr::Device::new(&*opt.driver)?;
+    if let Some(clock) = &opt.clock_source {
+        dev.set_clock_source(clock.as_bytes())?;
+    }
+    if let Some(time) = &opt.time_source {
+        dev.set_time_source(time.as_bytes())?;
+    }
     let (tx, rx) = std::sync::mpsc::channel();
     let prev = blockchain![
         g,
