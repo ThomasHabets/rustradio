@@ -11,7 +11,7 @@ use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
 use rustradio::parse_frequency;
 use rustradio::sigmf::{self, Annotation, SigMF};
-use rustradio::stream::{ReadStream, WriteStream};
+use rustradio::stream::{ReadStream, TagValue, WriteStream};
 use rustradio::{Complex, Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
@@ -50,6 +50,9 @@ struct Metadata {
     tx: std::sync::mpsc::Sender<SigMF>,
     #[rustradio(default)]
     pos: u64,
+
+    #[rustradio(default)]
+    frequency: Option<f64>,
 }
 
 impl rustradio::block::Block for Metadata {
@@ -67,11 +70,36 @@ impl rustradio::block::Block for Metadata {
             o.slice()[..n].copy_from_slice(&i.slice()[..n]);
             i.consume(n);
             o.produce(n, &tags);
+            let mut new_capture = false;
             for tag in tags {
+                match (tag.key(), tag.val()) {
+                    ("SoapySdrSource::frequency", TagValue::Float(f)) => {
+                        let old = self.frequency;
+                        self.frequency = Some(*f as _);
+                        if old != self.frequency {
+                            new_capture = true;
+                        }
+                    }
+                    ("SoapySdrSource::hardware", TagValue::String(hw)) => {
+                        if self.sigmf.global.core_hw.is_none() {
+                            self.sigmf.global.core_hw = Some(hw.to_string());
+                        }
+                    }
+                    // TODO: Geolocation.
+                    _ => {}
+                }
                 self.sigmf.annotations.push(Annotation {
                     core_sample_start: self.pos + tag.pos() as u64,
                     core_generator: Some("RustRadio".to_string()),
                     core_label: Some(format!("{} {}", tag.key(), tag.val())),
+                    ..Default::default()
+                });
+            }
+            if new_capture {
+                self.sigmf.captures.push(sigmf::Capture {
+                    core_sample_start: self.pos,
+                    core_frequency: self.frequency,
+                    // TODO: datetime.
                     ..Default::default()
                 });
             }
@@ -82,6 +110,7 @@ impl rustradio::block::Block for Metadata {
 
 impl Drop for Metadata {
     fn drop(&mut self) {
+        // TODO: set sha512
         self.tx.send(std::mem::take(&mut self.sigmf)).unwrap()
     }
 }
@@ -114,12 +143,14 @@ fn main() -> Result<()> {
                     core_version: sigmf::VERSION.to_string(),
                     core_datatype: "cf32".to_string(),
                     core_sample_rate: Some(opt.samp_rate),
+                    core_recorder: Some("RustRadio".to_string()),
+                    // TODO:
+                    // * author
+                    // * description
+                    // * hw
+                    // * license
                     ..Default::default()
                 },
-                captures: vec![sigmf::Capture {
-                    core_sample_start: 0,
-                    ..Default::default()
-                }],
                 ..Default::default()
             },
             tx
