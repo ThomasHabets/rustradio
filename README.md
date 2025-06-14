@@ -36,6 +36,4 @@ A library for digital signals processing in the spirit of GNU Radio.
   * Great for hardware like audio, SDRs.
   * Max ceiling for e.g. TCP streams.
   * Maybe both. Strobe could do with being able to just say.
-* Tag positions should probably have native width. If nothing else then to fit
-  with SigMF.
 * At least one example of dynamically updating parameters.

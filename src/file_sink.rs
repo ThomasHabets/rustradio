@@ -6,7 +6,7 @@ use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, ReadStream};
-use crate::{Result, Sample};
+use crate::{Error, Result, Sample};
 
 /// File write mode.
 #[derive(Clone, Copy)]
@@ -28,34 +28,41 @@ pub struct FileSink<T: Sample> {
     f: BufWriter<std::fs::File>,
     #[rustradio(in)]
     src: ReadStream<T>,
+    filename: std::path::PathBuf,
 }
 
 impl<T: Sample> FileSink<T> {
     /// Create new FileSink block.
-    pub fn new<P: AsRef<std::path::Path>>(
+    pub fn new<P: Into<std::path::PathBuf>>(
         src: ReadStream<T>,
         filename: P,
         mode: Mode,
     ) -> Result<Self> {
-        debug!("Opening sink {}", filename.as_ref().display());
-        let f = BufWriter::new(match mode {
-            Mode::Create => std::fs::File::options()
-                .read(false)
-                .write(true)
-                .create_new(true)
-                .open(filename)?,
-            Mode::Overwrite => std::fs::File::create(filename)?,
-            Mode::Append => std::fs::File::options()
-                .read(false)
-                .append(true)
-                .open(filename)?,
-        });
-        Ok(Self { f, src })
+        let filename = filename.into();
+        debug!("Opening sink {}", filename.display());
+        let f = BufWriter::new(
+            match mode {
+                Mode::Create => std::fs::File::options()
+                    .read(false)
+                    .write(true)
+                    .create_new(true)
+                    .open(&filename),
+                Mode::Overwrite => std::fs::File::create(&filename),
+                Mode::Append => std::fs::File::options()
+                    .read(false)
+                    .append(true)
+                    .open(&filename),
+            }
+            .map_err(|e| Error::file_io(e, &filename))?,
+        );
+        Ok(Self { f, src, filename })
     }
 
     /// Flush the write buffer.
     pub fn flush(&mut self) -> Result<()> {
-        Ok(self.f.flush()?)
+        self.f
+            .flush()
+            .map_err(|e| Error::file_io(e, &self.filename))
     }
 }
 
@@ -73,8 +80,12 @@ where
         i.iter().for_each(|s: &T| {
             v.extend(&s.serialize());
         });
-        self.f.write_all(&v)?;
-        self.f.flush()?;
+        self.f
+            .write_all(&v)
+            .map_err(|e| Error::file_io(e, &self.filename))?;
+        self.f
+            .flush()
+            .map_err(|e| Error::file_io(e, &self.filename))?;
         i.consume(n);
         Ok(BlockRet::Again)
     }
@@ -87,34 +98,41 @@ pub struct NoCopyFileSink<T> {
     f: BufWriter<std::fs::File>,
     #[rustradio(in)]
     src: NCReadStream<T>,
+    filename: std::path::PathBuf,
 }
 
 impl<T> NoCopyFileSink<T> {
     /// Create new NoCopyFileSink block.
-    pub fn new<P: AsRef<std::path::Path>>(
+    pub fn new<P: Into<std::path::PathBuf>>(
         src: NCReadStream<T>,
         filename: P,
         mode: Mode,
     ) -> Result<Self> {
-        debug!("Opening sink {}", filename.as_ref().display());
-        let f = BufWriter::new(match mode {
-            Mode::Create => std::fs::File::options()
-                .read(false)
-                .write(true)
-                .create_new(true)
-                .open(filename)?,
-            Mode::Overwrite => std::fs::File::create(filename)?,
-            Mode::Append => std::fs::File::options()
-                .read(false)
-                .append(true)
-                .open(filename)?,
-        });
-        Ok(Self { f, src })
+        let filename = filename.into();
+        debug!("Opening sink {}", filename.display());
+        let f = BufWriter::new(
+            match mode {
+                Mode::Create => std::fs::File::options()
+                    .read(false)
+                    .write(true)
+                    .create_new(true)
+                    .open(&filename),
+                Mode::Overwrite => std::fs::File::create(&filename),
+                Mode::Append => std::fs::File::options()
+                    .read(false)
+                    .append(true)
+                    .open(&filename),
+            }
+            .map_err(|e| Error::file_io(e, &filename))?,
+        );
+        Ok(Self { f, src, filename })
     }
 
     /// Flush the write buffer.
     pub fn flush(&mut self) -> Result<()> {
-        Ok(self.f.flush()?)
+        self.f
+            .flush()
+            .map_err(|e| Error::file_io(e, &self.filename))
     }
 }
 
@@ -128,8 +146,12 @@ where
             //let s2 = format!["{:?}", s].into();
             let mut v = s.serialize();
             v.push(10); // Newline.
-            self.f.write_all(&v)?;
-            self.f.flush()?;
+            self.f
+                .write_all(&v)
+                .map_err(|e| Error::file_io(e, &self.filename))?;
+            self.f
+                .flush()
+                .map_err(|e| Error::file_io(e, &self.filename))?;
             Ok(BlockRet::Again)
         } else {
             Ok(BlockRet::WaitForStream(&self.src, 1))
