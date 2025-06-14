@@ -2,7 +2,7 @@
 use std::io::BufWriter;
 use std::io::Write;
 
-use log::debug;
+use log::{debug, error};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, ReadStream};
@@ -21,6 +21,44 @@ pub enum Mode {
     Append,
 }
 
+/// Builder for file sink.
+pub struct FileSinkBuilder<T: Sample> {
+    filename: std::path::PathBuf,
+    flush: bool,
+    mode: Mode,
+    _dummy: std::marker::PhantomData<T>,
+}
+
+impl<T: Sample> FileSinkBuilder<T> {
+    /// Create new FileSinkBuilder.
+    /// Mode defaults to Create.
+    pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
+        Self {
+            filename: filename.into(),
+            flush: false,
+            mode: Mode::Create,
+            _dummy: std::marker::PhantomData,
+        }
+    }
+    /// Set mode.
+    pub fn mode(mut self, m: Mode) -> Self {
+        self.mode = m;
+        self
+    }
+    /// Set flush mode (flush after every write).
+    pub fn flush(mut self, v: bool) -> Self {
+        self.flush = v;
+        self
+    }
+    /// Build the FileSink.
+    pub fn build(self, src: ReadStream<T>) -> Result<FileSink<T>> {
+        FileSink::new(src, self.filename, self.mode).map(|mut b| {
+            b.flush = self.flush;
+            b
+        })
+    }
+}
+
 /// Send stream to raw file.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
@@ -29,9 +67,14 @@ pub struct FileSink<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
     filename: std::path::PathBuf,
+    flush: bool,
 }
 
 impl<T: Sample> FileSink<T> {
+    /// Create new builder.
+    pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSinkBuilder<T> {
+        FileSinkBuilder::new(filename)
+    }
     /// Create new FileSink block.
     pub fn new<P: Into<std::path::PathBuf>>(
         src: ReadStream<T>,
@@ -55,14 +98,30 @@ impl<T: Sample> FileSink<T> {
             }
             .map_err(|e| Error::file_io(e, &filename))?,
         );
-        Ok(Self { f, src, filename })
+        Ok(Self {
+            f,
+            src,
+            filename,
+            flush: false,
+        })
     }
 
     /// Flush the write buffer.
-    pub fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> Result<()> {
         self.f
             .flush()
             .map_err(|e| Error::file_io(e, &self.filename))
+    }
+}
+
+impl<T: Sample> Drop for FileSink<T> {
+    fn drop(&mut self) {
+        if let Err(e) = self.flush() {
+            error!(
+                "FileSink: Failed to flush to {} on Drop: {e}",
+                self.filename.display()
+            );
+        }
     }
 }
 
@@ -83,11 +142,49 @@ where
         self.f
             .write_all(&v)
             .map_err(|e| Error::file_io(e, &self.filename))?;
-        self.f
-            .flush()
-            .map_err(|e| Error::file_io(e, &self.filename))?;
+        if self.flush {
+            self.flush()?;
+        }
         i.consume(n);
         Ok(BlockRet::Again)
+    }
+}
+
+/// Builder for file sink.
+pub struct NoCopyFileSinkBuilder<T> {
+    filename: std::path::PathBuf,
+    flush: bool,
+    mode: Mode,
+    _dummy: std::marker::PhantomData<T>,
+}
+
+impl<T> NoCopyFileSinkBuilder<T> {
+    /// Create new FileSinkBuilder.
+    /// Mode defaults to Create.
+    pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
+        Self {
+            filename: filename.into(),
+            flush: false,
+            mode: Mode::Create,
+            _dummy: std::marker::PhantomData,
+        }
+    }
+    /// Set mode.
+    pub fn mode(mut self, m: Mode) -> Self {
+        self.mode = m;
+        self
+    }
+    /// Set flush mode (flush after every write).
+    pub fn flush(mut self, v: bool) -> Self {
+        self.flush = v;
+        self
+    }
+    /// Build the FileSink.
+    pub fn build(self, src: NCReadStream<T>) -> Result<NoCopyFileSink<T>> {
+        NoCopyFileSink::new(src, self.filename, self.mode).map(|mut b| {
+            b.flush = self.flush;
+            b
+        })
     }
 }
 
@@ -99,9 +196,14 @@ pub struct NoCopyFileSink<T> {
     #[rustradio(in)]
     src: NCReadStream<T>,
     filename: std::path::PathBuf,
+    flush: bool,
 }
 
 impl<T> NoCopyFileSink<T> {
+    /// Create new builder.
+    pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> NoCopyFileSinkBuilder<T> {
+        NoCopyFileSinkBuilder::new(filename)
+    }
     /// Create new NoCopyFileSink block.
     pub fn new<P: Into<std::path::PathBuf>>(
         src: NCReadStream<T>,
@@ -125,7 +227,12 @@ impl<T> NoCopyFileSink<T> {
             }
             .map_err(|e| Error::file_io(e, &filename))?,
         );
-        Ok(Self { f, src, filename })
+        Ok(Self {
+            f,
+            src,
+            filename,
+            flush: false,
+        })
     }
 
     /// Flush the write buffer.
@@ -133,6 +240,17 @@ impl<T> NoCopyFileSink<T> {
         self.f
             .flush()
             .map_err(|e| Error::file_io(e, &self.filename))
+    }
+}
+
+impl<T> Drop for NoCopyFileSink<T> {
+    fn drop(&mut self) {
+        if let Err(e) = self.flush() {
+            error!(
+                "NoCopyFileSink: Failed to flush to {} on Drop: {e}",
+                self.filename.display()
+            );
+        }
     }
 }
 
@@ -149,9 +267,9 @@ where
             self.f
                 .write_all(&v)
                 .map_err(|e| Error::file_io(e, &self.filename))?;
-            self.f
-                .flush()
-                .map_err(|e| Error::file_io(e, &self.filename))?;
+            if self.flush {
+                self.flush()?;
+            }
             Ok(BlockRet::Again)
         } else {
             Ok(BlockRet::WaitForStream(&self.src, 1))

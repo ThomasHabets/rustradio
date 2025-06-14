@@ -175,11 +175,11 @@ fn main() -> Result<()> {
 
     // Save to file.
     let mode = Mode::Overwrite;
-    g.add(Box::new(FileSink::new(
-        prev,
-        opt.output.with_extension("sigmf-data"),
-        mode,
-    )?));
+    g.add(Box::new(
+        FileSink::builder(opt.output.with_extension("sigmf-data"))
+            .mode(mode)
+            .build(prev)?,
+    ));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
