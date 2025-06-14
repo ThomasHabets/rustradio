@@ -73,6 +73,11 @@ impl SoapySdrSourceBuilder<'_> {
             ),
             Tag::new(
                 0,
+                "SoapySdrSource::input_gain",
+                TagValue::Float(self.igain as Float),
+            ),
+            Tag::new(
+                0,
                 "SoapySdrSource::frequency",
                 TagValue::Float(self.freq as Float),
             ),
