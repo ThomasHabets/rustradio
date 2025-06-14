@@ -5,6 +5,8 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::{Complex, Error, Float, Result};
 
+const TIME_TAG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
 impl From<soapysdr::Error> for Error {
     fn from(e: soapysdr::Error) -> Self {
         Error::device(e, "soapysdr")
@@ -19,6 +21,7 @@ pub struct SoapySdrSourceBuilder<'a> {
     igain: f64,
     samp_rate: f64,
     freq: f64,
+    gps_coords: bool,
 }
 
 macro_rules! log_and_tag {
@@ -55,6 +58,11 @@ impl SoapySdrSourceBuilder<'_> {
         self.antenna = Some(a.into());
         self
     }
+    /// Set whether to generate GPS coordinate tags.
+    pub fn gps_coordinates(mut self, v: bool) -> Self {
+        self.gps_coords = v;
+        self
+    }
     /// Build the source object.
     pub fn build(self) -> Result<(SoapySdrSource, ReadStream<Complex>)> {
         let mut tags = vec![
@@ -84,34 +92,64 @@ impl SoapySdrSourceBuilder<'_> {
         );
         log_and_tag!(tags, self.dev.get_clock_source(), "clock_source");
         log_and_tag!(tags, self.dev.get_time_source(), "time_source");
-        // TODO: enable once
+        // TODO: enable when
         // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
         /*
+        let allowed_sensors = {
+            let mut a: std::collections::HashSet::<&str> = [
+                "gps_time",
+                "gps_locked",
+                "ref_locked",
+            ].iter().cloned().collect();
+            if self.gps_coords {
+                a.insert("gps_gpgga");
+                a.insert("gps_gprmc");
+                a.insert("gps_servo");
+            }
+            a
+        };
         for sensor in self.dev.list_sensors()? {
             debug!(
                 "SoapySDR RX sensor {sensor}: {:?}",
                 self.dev.get_sensor_info(&sensor)?
             );
-            debug!(
-                "SoapySDR RX sensor {sensor}: {:?}",
-                self.dev.read_sensor(&sensor)?
-            );
+            let read = self.dev.read_sensor(&sensor)?.to_string();
+            debug!( "SoapySDR RX sensor {sensor}: {read:?}");
+            if allowed_sensors.contains(sensor.as_str()) {
+                tags.push(Tag::new(0, format!("SoapySdrSource::sensor_{sensor}"), TagValue::String(read)));
+            }
         }
         */
         debug!(
             "SoapySDR RX clock sources: {:?}",
             self.dev.list_clock_sources()?
         );
+        debug!(
+            "SoapySDR RX time sources: {:?}",
+            self.dev.list_time_sources()?
+        );
+        if let Ok(t) = self.dev.get_hardware_time(None) {
+            tags.push(Tag::new(
+                0,
+                "SoapySdrSource::hardware_time",
+                TagValue::I64(t),
+            ));
+        }
         let chans = self.dev.num_channels(soapysdr::Direction::Rx)?;
         debug!("SoapySDR RX channels : {chans}");
         for channel in 0..chans {
-            // TODO: enable once
+            // TODO: enable when
             // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
             /*
             for sensor in self.dev.list_channel_sensors(soapysdr::Direction::Rx, channel)? {
                 match self.dev.read_channel_sensor(soapysdr::Direction::Rx, channel, &sensor) {
-                    Ok(s) => debug!("SoapySDR RX channel sensor {sensor}: {s}"),
-                    Err(e) => debug!("SoapySDR RX channel sensor {sensor} error: {e}"),
+                    Ok(s) => {
+                        debug!("SoapySDR RX channel {channel} sensor {sensor}: {s}");
+                        if self.channel == channel {
+                            tags.push(Tag::new(0, format!("SoapySdrSource::sensor_channel_{sensor}"), TagValue::String(s)));
+                        }
+                    },
+                    Err(e) => debug!("SoapySDR RX channel {channel} sensor {sensor} error: {e}"),
                 }
             }
             */
@@ -171,7 +209,15 @@ impl SoapySdrSourceBuilder<'_> {
         let mut stream = self.dev.rx_stream(&[self.channel])?;
         stream.activate(None)?;
         let (dst, dr) = crate::stream::new_stream();
-        Ok((SoapySdrSource { stream, dst, tags }, dr))
+        Ok((
+            SoapySdrSource {
+                stream,
+                dst,
+                tags,
+                last_time_tag: None,
+            },
+            dr,
+        ))
     }
 }
 
@@ -184,6 +230,9 @@ pub struct SoapySdrSource {
     dst: WriteStream<Complex>,
     #[rustradio(default)]
     tags: Vec<Tag>,
+
+    #[rustradio(default)]
+    last_time_tag: Option<std::time::Instant>,
 }
 
 impl SoapySdrSource {
@@ -196,6 +245,7 @@ impl SoapySdrSource {
             channel: 0,
             igain: 0.5,
             antenna: None,
+            gps_coords: false,
         }
     }
 }
@@ -221,6 +271,21 @@ impl Block for SoapySdrSource {
             }
         };
         if n > 0 {
+            let _ = self.last_time_tag;
+            let _ = TIME_TAG_INTERVAL;
+            // TODO: enable when
+            // <https://github.com/kevinmehall/rust-soapysdr/pull/42> is merged.
+            /*
+            if match self.last_time_tag {
+                None => true,
+                Some(x) if x.elapsed() > TIME_TAG_INTERVAL => true,
+                _ => false,
+            } {
+                let time_ns = self.stream.time_ns();
+                self.tags.push(Tag::new(0, "SoapySdrSource::time_ns", TagValue::I64(time_ns)));
+                self.last_time_tag = Some(std::time::Instant::now());
+            }
+            */
             // Tags are always with offset zero.
             o.produce(n, &self.tags);
             self.tags.clear();

@@ -23,7 +23,7 @@ tempfile = "3.19"
 rtlsdr = {version = "0.1.4", optional=true}
 fast-math = {version = "0.1", optional=true}
 libc = "0.2.149"
-#soapysdr = { path = "../../src/rust-soapysdr", version = "0.4", optional = true }
+#soapysdr = { path = "../rust-soapysdr", version = "0.4", optional = true }
 soapysdr = { version = "0.4", optional = true }
 serde_json = "1.0"
 serde = {version = "1.0", features = ["derive"]}

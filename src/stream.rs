@@ -27,6 +27,9 @@ pub enum TagValue {
 
     /// U64 value.
     U64(u64),
+
+    /// I64 value.
+    I64(i64),
 }
 
 impl std::fmt::Display for TagValue {
@@ -36,6 +39,7 @@ impl std::fmt::Display for TagValue {
             TagValue::Float(s) => write!(f, "Float:{s}"),
             TagValue::Bool(s) => write!(f, "Bool:{s}"),
             TagValue::U64(s) => write!(f, "U64:{s}"),
+            TagValue::I64(s) => write!(f, "I64:{s}"),
         }
     }
 }

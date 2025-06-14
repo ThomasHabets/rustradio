@@ -136,7 +136,7 @@ impl GraphRunner for Graph {
                     BlockRet::Again => {
                         drop(ret);
                         // Block did something.
-                        trace!("… {} was not starved", b.block_name());
+                        //trace!("… {} was not starved", b.block_name());
                         done = false;
                         all_idle = false;
                     }

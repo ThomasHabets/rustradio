@@ -42,6 +42,10 @@ struct Opt {
     /// Set clock source.
     #[arg(long)]
     clock_source: Option<String>,
+
+    /// Enable GPS coordinates.
+    #[arg(long)]
+    gps_coordinates: bool,
 }
 
 #[derive(rustradio_macros::Block)]
@@ -146,6 +150,7 @@ fn main() -> Result<()> {
         prev,
         SoapySdrSource::builder(&dev, opt.freq, opt.samp_rate)
             .igain(opt.gain)
+            .gps_coordinates(opt.gps_coordinates)
             .build()?,
         Metadata::new(
             prev,
