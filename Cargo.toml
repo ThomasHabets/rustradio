@@ -37,6 +37,7 @@ sha2 = "0.10"
 thiserror = "2.0"
 tokio = { version = "1.44", optional = true, features = ["full"] }
 async-trait = "0.1"
+nix = { version = "0.30.1", optional = true, features = ["term"] }
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]
@@ -72,6 +73,7 @@ audio = ["dep:cpal"]
 fftw = ["dep:fftw"]
 async = ["dep:tokio"]
 tokio-unstable = ["tokio/tracing"]
+nix = ["dep:nix"]
 
 [[example]]
 name = "bell202"
