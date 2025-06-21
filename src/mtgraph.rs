@@ -74,6 +74,7 @@ impl crate::graph::GraphRunner for MTGraph {
             let th = std::thread::Builder::new()
                 .name(b.block_name().to_string())
                 .spawn(move || -> Result<BlockStats> {
+                    let name = b.block_name().to_string();
                     let idle_sleep = std::time::Duration::from_millis(1);
                     let mut stats = BlockStats::default();
                     while !cancel_token.is_canceled() {
@@ -82,7 +83,7 @@ impl crate::graph::GraphRunner for MTGraph {
                         let ret = match b.work() {
                             Ok(v) => v,
                             Err(e) => {
-                                error!("Block work function failed: {e}");
+                                error!("Block work function for {name} failed: {e}");
                                 return Err(e);
                             }
                         };
