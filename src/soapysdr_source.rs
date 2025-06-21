@@ -98,14 +98,13 @@ impl SoapySdrSourceBuilder<'_> {
         log_and_tag!(tags, self.dev.get_clock_source(), "clock_source");
         log_and_tag!(tags, self.dev.get_time_source(), "time_source");
         // TODO: enable when
-        // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
+        // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is released.
         /*
         let allowed_sensors = {
-            let mut a: std::collections::HashSet::<&str> = [
-                "gps_time",
-                "gps_locked",
-                "ref_locked",
-            ].iter().cloned().collect();
+            let mut a: std::collections::HashSet<&str> = ["gps_time", "gps_locked", "ref_locked"]
+                .iter()
+                .cloned()
+                .collect();
             if self.gps_coords {
                 a.insert("gps_gpgga");
                 a.insert("gps_gprmc");
@@ -119,9 +118,13 @@ impl SoapySdrSourceBuilder<'_> {
                 self.dev.get_sensor_info(&sensor)?
             );
             let read = self.dev.read_sensor(&sensor)?.to_string();
-            debug!( "SoapySDR RX sensor {sensor}: {read:?}");
+            debug!("SoapySDR RX sensor {sensor}: {read:?}");
             if allowed_sensors.contains(sensor.as_str()) {
-                tags.push(Tag::new(0, format!("SoapySdrSource::sensor_{sensor}"), TagValue::String(read)));
+                tags.push(Tag::new(
+                    0,
+                    format!("SoapySdrSource::sensor_{sensor}"),
+                    TagValue::String(read),
+                ));
             }
         }
         */
@@ -144,16 +147,27 @@ impl SoapySdrSourceBuilder<'_> {
         debug!("SoapySDR RX channels : {chans}");
         for channel in 0..chans {
             // TODO: enable when
-            // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
+            // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is
+            // released.
             /*
-            for sensor in self.dev.list_channel_sensors(soapysdr::Direction::Rx, channel)? {
-                match self.dev.read_channel_sensor(soapysdr::Direction::Rx, channel, &sensor) {
+            for sensor in self
+                .dev
+                .list_channel_sensors(soapysdr::Direction::Rx, channel)?
+            {
+                match self
+                    .dev
+                    .read_channel_sensor(soapysdr::Direction::Rx, channel, &sensor)
+                {
                     Ok(s) => {
                         debug!("SoapySDR RX channel {channel} sensor {sensor}: {s}");
                         if self.channel == channel {
-                            tags.push(Tag::new(0, format!("SoapySdrSource::sensor_channel_{sensor}"), TagValue::String(s)));
+                            tags.push(Tag::new(
+                                0,
+                                format!("SoapySdrSource::sensor_channel_{sensor}"),
+                                TagValue::String(s),
+                            ));
                         }
-                    },
+                    }
                     Err(e) => debug!("SoapySDR RX channel {channel} sensor {sensor} error: {e}"),
                 }
             }
@@ -279,7 +293,8 @@ impl Block for SoapySdrSource {
             let _ = self.last_time_tag;
             let _ = TIME_TAG_INTERVAL;
             // TODO: enable when
-            // <https://github.com/kevinmehall/rust-soapysdr/pull/42> is merged.
+            // <https://github.com/kevinmehall/rust-soapysdr/pull/42> is
+            // released.
             /*
             if match self.last_time_tag {
                 None => true,
@@ -287,7 +302,11 @@ impl Block for SoapySdrSource {
                 _ => false,
             } {
                 let time_ns = self.stream.time_ns();
-                self.tags.push(Tag::new(0, "SoapySdrSource::time_ns", TagValue::I64(time_ns)));
+                self.tags.push(Tag::new(
+                    0,
+                    "SoapySdrSource::time_ns",
+                    TagValue::I64(time_ns),
+                ));
                 self.last_time_tag = Some(std::time::Instant::now());
             }
             */
