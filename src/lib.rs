@@ -505,6 +505,25 @@ pub fn check_environment() -> Result<Vec<Feature>> {
     }
 }
 
+/// Parse verbosity like "error", "warn", …
+///
+/// For use with clap. E.g.:
+///
+/// ```rust
+/// use rustradio::parse_verbosity;
+/// #[derive(clap::Parser)]
+/// struct Opt {
+///     #[arg(long, value_parser=parse_verbosity)]
+///     verbose: usize,
+/// }
+/// ```
+pub fn parse_verbosity(in_s: &str) -> std::result::Result<usize, String> {
+    use std::str::FromStr;
+    log::Level::from_str(in_s)
+        .map_err(|e| format!("{e}"))
+        .map(|v| v as usize - 1)
+}
+
 /// Parse frequencies like "100k", "2M", etc.
 ///
 /// For use with clap. E.g.:

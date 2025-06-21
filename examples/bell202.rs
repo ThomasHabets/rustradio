@@ -1,40 +1,45 @@
 //! Bell 202 modem. Most common used modem for AX.25.
 //!
+//! This example got its own blog post. See
+//! <https://blog.habets.se/2025/06/Software-defined-KISS-modem.html>.
+//!
 //! ## Examples
 //!
 //! ### Send/receive APRS
 //!
-//! 1. Run the modem: `bell202 --freq 433800000 -d driver=uhd --ogain=0.5`
-//! 2. Connect to port 7878 using some app that can talk APRS using KISS. :-)
+//! 1. Run the modem: `bell202 --freq 144.8m -d driver=uhd --ogain=0.5`
+//! 2. Connect to port 7878 using some app that can talk APRS using KISS.
 //!
 //! ### Remote SoapySDR, connect to kernel AX.25
 //!
 //! 1. On the machine with the SDR, run `SoapySDRServer --bind`
-//! 2. Start bell202: `bell202 --freq 433800000 -d soapy=0,remote=hostname-here,driver=remote,remote:driver=uhd --ogain 0.5`
-//! 3. Create a TCP-tty bridge: `socat -d -d PTY,raw,echo=0 TCP:localhost:7878`
-//! 4. Connect to kernel: `kissattach /dev/tty/<tty from prev command>
-//!    radioname` (set up radioname in /etc/ax25/axports)
-//! 5. Disable CRC on kernel KISS: `kissparms -c 1 -p radioname`
+//! 2. Start bell202: `bell202 --freq 433.8m -d soapy=0,remote=hostname-here,driver=remote,remote:driver=uhd --ogain 0.5 --tty ./convenience.symlink`
+//! 3. Connect to kernel: `kissattach ./convenience.symlink radioname` (set up radioname in /etc/ax25/axports)
+//! 4. Disable CRC on kernel KISS: `kissparms -c 1 -p radioname`
 //!
 //! Kernel stack should now be up and working with bell202 as the modem.
 use std::io::{Read, Write};
 
 use anyhow::Result;
 use clap::Parser;
+use log::info;
 
 use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
-use rustradio::parse_frequency;
+use rustradio::{parse_frequency, parse_verbosity};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
 struct Opt {
+    /// SoapySDR driver string.
     #[arg(short)]
     driver: String,
-    #[arg(short, default_value = "0")]
+
+    /// Verbosity level.
+    #[arg(short, value_parser=parse_verbosity, default_value_t = 0)]
     verbose: usize,
 
     /// TX/RX frequency.
@@ -68,15 +73,16 @@ struct Opt {
     tty: Option<std::path::PathBuf>,
 }
 
+// Get a reader and a writer where we'll be talking KISS.
 fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + Send>)> {
     if let Some(addr) = &opt.tcp_listen {
         let listener = std::net::TcpListener::bind(addr)?;
-        println!("Awaiting connection");
+        info!("Awaiting connection");
         let (tcp, addr) = listener.accept()?;
         tcp.set_read_timeout(Some(std::time::Duration::from_millis(500)))?;
         drop(listener);
-        println!("Connect from {addr}");
-        println!("Setting up device");
+        info!("Connect from {addr}");
+        info!("Setting up device");
         let rx = tcp.try_clone()?;
         return Ok((Box::new(tcp), Box::new(rx)));
     }
@@ -95,12 +101,14 @@ fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + S
             // Input is from a successful openpty().
             let ptr = unsafe { libc::ptsname(master.as_raw_fd()) };
             if ptr.is_null() {
-                panic!();
+                return Err(anyhow::Error::msg(
+                    "ptsname() on newly created TTY returned NULL",
+                ));
             }
             // SAFETY:
             // We have checked for null above.
             let slave_name = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
-            log::info!("Slave tty device: {slave_name}");
+            info!("Slave tty device: {slave_name}");
             std::os::unix::fs::symlink(slave_name, path)?;
             let rx = master.try_clone()?;
             std::mem::forget(slave);
@@ -125,12 +133,12 @@ pub fn main() -> Result<()> {
 
     let mut g = MTGraph::new();
 
-    let (tcp, rx) = get_kiss_stream(&opt)?;
+    let (kiss, rx) = get_kiss_stream(&opt)?;
     let dev = soapysdr::Device::new(&*opt.driver)?;
 
     // Transmitter.
     {
-        println!("Setting up transmitter");
+        info!("Setting up transmitter");
         let cancel = g.cancel_token();
         let baud = 1200.0;
         let audio_rate = 48000.0;
@@ -172,7 +180,7 @@ pub fn main() -> Result<()> {
 
     // Receiver.
     {
-        println!("Setting up receiver");
+        info!("Setting up receiver");
         let samp_rate = 300_000.0f32;
         let samp_rate_2 = 50_000.0;
         let freq1 = 1200.0;
@@ -225,8 +233,7 @@ pub fn main() -> Result<()> {
             KissEncode::new(prev),
             PduToStream::new(prev),
         ];
-        // TODO: decode.
-        g.add(Box::new(WriterSink::new(prev, tcp)));
+        g.add(Box::new(WriterSink::new(prev, kiss)));
     }
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
