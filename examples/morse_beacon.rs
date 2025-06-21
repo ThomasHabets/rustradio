@@ -63,6 +63,25 @@ pub fn main() -> Result<()> {
     if let Some(clock) = &opt.clock_source {
         dev.set_clock_source(clock.as_bytes())?;
     }
+    let mut g = MTGraph::new();
+    if false {
+        // Receiver. Disabled for now.
+        use rustradio::file_sink::Mode;
+        let prev = blockchain![
+            g,
+            prev,
+            SoapySdrSource::builder(&dev, 739_500_000.0, 300_000.0)
+                .igain(0.7)
+                .build()?,
+        ];
+        let mode = Mode::Overwrite;
+        g.add(Box::new(
+            FileSink::builder("morse-300ksps.c32")
+                .mode(mode)
+                .build(prev)?,
+        ));
+    }
+
     // TODO: enable once
     // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
     /*
@@ -77,7 +96,6 @@ pub fn main() -> Result<()> {
         }
     });
     */
-    let mut g = MTGraph::new();
 
     let amp = opt.amplitude;
     // 20 WPM is 60ms time unit.
