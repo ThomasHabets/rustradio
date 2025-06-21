@@ -17,6 +17,8 @@
 //! 5. Disable CRC on kernel KISS: `kissparms -c 1 -p radioname`
 //!
 //! Kernel stack should now be up and working with bell202 as the modem.
+use std::io::{Read, Write};
+
 use anyhow::Result;
 use clap::Parser;
 
@@ -55,10 +57,29 @@ struct Opt {
         use_value_delimiter = true
     )]
     symbol_taps: Vec<Float>,
+
+    /// Listen for KISS on this address.
+    #[arg(long)]
+    tcp_listen: Option<String>,
+}
+
+fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + Send>)> {
+    if let Some(addr) = &opt.tcp_listen {
+        let listener = std::net::TcpListener::bind(addr)?;
+        println!("Awaiting connection");
+        let (tcp, addr) = listener.accept()?;
+        tcp.set_read_timeout(Some(std::time::Duration::from_millis(500)))?;
+        drop(listener);
+        println!("Connect from {addr}");
+        println!("Setting up device");
+        let rx = tcp.try_clone()?;
+        return Ok((Box::new(tcp), Box::new(rx)));
+    }
+    Err(anyhow::Error::msg("-tcp is mandatory"))
 }
 
 pub fn main() -> Result<()> {
-    println!("soapy_fm receiver example");
+    println!("bell202 modem");
     let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
@@ -72,13 +93,7 @@ pub fn main() -> Result<()> {
 
     let mut g = MTGraph::new();
 
-    let listener = std::net::TcpListener::bind("[::]:7878")?;
-    println!("Awaiting connection");
-    let (tcp, addr) = listener.accept()?;
-    tcp.set_read_timeout(Some(std::time::Duration::from_millis(500)))?;
-    drop(listener);
-    println!("Connect from {addr}");
-    println!("Setting up device");
+    let (tcp, rx) = get_kiss_stream(&opt)?;
     let dev = soapysdr::Device::new(&*opt.driver)?;
 
     // Transmitter.
@@ -90,7 +105,7 @@ pub fn main() -> Result<()> {
         let prev = blockchain![
             g,
             prev,
-            ReaderSource::new(tcp.try_clone()?),
+            ReaderSource::new(rx),
             KissFrame::new(prev),
             KissDecode::new(prev),
             FcsAdder::new(prev),
