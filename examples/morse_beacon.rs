@@ -28,6 +28,10 @@ struct Opt {
     #[arg(long, default_value_t = 0.0)]
     ogain: f64,
 
+    /// Amplitude.
+    #[arg(long, default_value_t = 1.0)]
+    amplitude: f64,
+
     /// Morse code speed in words per minute.
     #[arg(long, default_value_t = 20.0)]
     wpm: f32,
@@ -75,6 +79,7 @@ pub fn main() -> Result<()> {
     */
     let mut g = MTGraph::new();
 
+    let amp = opt.amplitude;
     // 20 WPM is 60ms time unit.
     let raw_sps = (opt.wpm / 20.0) / 0.06;
     let prev = blockchain![
@@ -89,7 +94,10 @@ pub fn main() -> Result<()> {
             .deci((100.0 * raw_sps) as usize)
             .interp((100.0 * opt.sample_rate) as usize)
             .build(prev)?,
-        Map::keep_tags(prev, "ToComplex", |s| Complex::new(s as Float, 0.0)),
+        Map::keep_tags(prev, "ToComplex", move |s| Complex::new(
+            amp as Float * s as Float,
+            0.0
+        )),
     ];
     g.add(Box::new(
         SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
