@@ -109,7 +109,20 @@ fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + S
             // We have checked for null above.
             let slave_name = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
             info!("Slave tty device: {slave_name}");
-            std::os::unix::fs::symlink(slave_name, path)?;
+            if let Err(e) = std::os::unix::fs::symlink(&slave_name, path) {
+                if e.kind() != std::io::ErrorKind::AlreadyExists
+                    || !path.symlink_metadata()?.is_symlink()
+                {
+                    Err(rustradio::Error::file_io(e, path))?;
+                }
+                log::trace!(
+                    "Symlink {} already exists. Attempting to delete it",
+                    path.display()
+                );
+                std::fs::remove_file(path).map_err(|e| rustradio::Error::file_io(e, path))?;
+                std::os::unix::fs::symlink(slave_name, path)
+                    .map_err(|e| rustradio::Error::file_io(e, path))?;
+            }
             let rx = master.try_clone()?;
             std::mem::forget(slave);
             return Ok((Box::new(File::from(master)), Box::new(File::from(rx))));
