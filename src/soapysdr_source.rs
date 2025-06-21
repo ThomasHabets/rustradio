@@ -1,11 +1,74 @@
 //! SoapySDR source.
-use log::debug;
+use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
+
+use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::{Complex, Error, Float, Result};
 
+// Sensors and time_ns are re-read this often.
 const TIME_TAG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+enum SensorType {
+    Float,
+    U64,
+    Bool,
+}
+
+// Allowlist of sensors that don't accidentally reveal secrets.
+static ALLOWED_SENSORS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    ["gps_time", "gps_locked", "ref_locked", "lo_locked"]
+        .into_iter()
+        .collect()
+});
+
+// If GPS tags are enabled, these are the sensor names.
+//
+// Should not be enabled by default, since they can be sensitive.
+static POSITION_SENSORS: LazyLock<HashSet<&str>> = LazyLock::new(|| {
+    ["gps_gpgga", "gps_gprmc", "gps_servo"]
+        .into_iter()
+        .collect()
+});
+
+// If tag is not listed, or fails to parse, then it defaults to String.
+static SENSOR_TYPE: LazyLock<HashMap<&str, SensorType>> = LazyLock::new(|| {
+    [
+        ("temp", SensorType::Float),
+        ("rssi", SensorType::Float),
+        ("gps_time", SensorType::U64),
+        ("ref_locked", SensorType::Bool),
+        ("gps_locked", SensorType::Bool),
+        ("lo_locked", SensorType::Bool),
+    ]
+    .into_iter()
+    .collect()
+});
+
+// Turn a tag value into a typed TagValue. Defaults to String if unknown or
+// failing to parse.
+fn make_sensor_tag(tag: &str, val: &str) -> TagValue {
+    match SENSOR_TYPE.get(tag) {
+        Some(SensorType::Float) => val
+            .parse::<Float>()
+            .map(TagValue::Float)
+            .unwrap_or_else(|e| {
+                trace!("Failed to parse sensor tag {tag} value {val} as float: {e}");
+                TagValue::String(val.to_string())
+            }),
+        Some(SensorType::U64) => val.parse::<u64>().map(TagValue::U64).unwrap_or_else(|e| {
+            trace!("Failed to parse sensor tag {tag} value {val} as u64: {e}");
+            TagValue::String(val.to_string())
+        }),
+        Some(SensorType::Bool) => val.parse::<bool>().map(TagValue::Bool).unwrap_or_else(|e| {
+            trace!("Failed to parse sensor tag {tag} value {val} as bool: {e}");
+            TagValue::String(val.to_string())
+        }),
+        None => TagValue::String(val.to_string()),
+    }
+}
 
 impl From<soapysdr::Error> for Error {
     fn from(e: soapysdr::Error) -> Self {
@@ -89,6 +152,7 @@ impl SoapySdrSourceBuilder<'_> {
         ];
         log_and_tag!(tags, self.dev.driver_key(), "driver");
         log_and_tag!(tags, self.dev.hardware_key(), "hardware");
+        // Hardware info has serial numbers.
         debug!("SoapySDR RX hardware info: {}", self.dev.hardware_info()?);
         log_and_tag!(
             tags,
@@ -98,14 +162,9 @@ impl SoapySdrSourceBuilder<'_> {
         log_and_tag!(tags, self.dev.get_clock_source(), "clock_source");
         log_and_tag!(tags, self.dev.get_time_source(), "time_source");
         let allowed_sensors = {
-            let mut a: std::collections::HashSet<&str> = ["gps_time", "gps_locked", "ref_locked"]
-                .iter()
-                .cloned()
-                .collect();
+            let mut a = ALLOWED_SENSORS.clone();
             if self.gps_coords {
-                a.insert("gps_gpgga");
-                a.insert("gps_gprmc");
-                a.insert("gps_servo");
+                a.extend(&*POSITION_SENSORS);
             }
             a
         };
@@ -116,13 +175,6 @@ impl SoapySdrSourceBuilder<'_> {
             );
             let read = self.dev.read_sensor(&sensor)?.to_string();
             debug!("SoapySDR RX sensor {sensor}: {read:?}");
-            if allowed_sensors.contains(sensor.as_str()) {
-                tags.push(Tag::new(
-                    0,
-                    format!("SoapySdrSource::sensor_{sensor}"),
-                    TagValue::String(read),
-                ));
-            }
         }
         debug!(
             "SoapySDR RX clock sources: {:?}",
@@ -150,16 +202,7 @@ impl SoapySdrSourceBuilder<'_> {
                     .dev
                     .read_channel_sensor(soapysdr::Direction::Rx, channel, &sensor)
                 {
-                    Ok(s) => {
-                        debug!("SoapySDR RX channel {channel} sensor {sensor}: {s}");
-                        if self.channel == channel {
-                            tags.push(Tag::new(
-                                0,
-                                format!("SoapySdrSource::sensor_channel_{sensor}"),
-                                TagValue::String(s),
-                            ));
-                        }
-                    }
+                    Ok(s) => debug!("SoapySDR RX channel {channel} sensor {sensor}: {s}"),
                     Err(e) => debug!("SoapySDR RX channel {channel} sensor {sensor} error: {e}"),
                 }
             }
@@ -221,6 +264,9 @@ impl SoapySdrSourceBuilder<'_> {
         let (dst, dr) = crate::stream::new_stream();
         Ok((
             SoapySdrSource {
+                dev: self.dev.clone(),
+                channel: self.channel,
+                allowed_sensors,
                 stream,
                 dst,
                 tags,
@@ -235,6 +281,9 @@ impl SoapySdrSourceBuilder<'_> {
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct SoapySdrSource {
+    dev: soapysdr::Device,
+    channel: usize,
+    allowed_sensors: HashSet<&'static str>,
     stream: soapysdr::RxStream<Complex>,
     #[rustradio(out)]
     dst: WriteStream<Complex>,
@@ -257,6 +306,59 @@ impl SoapySdrSource {
             antenna: None,
             gps_coords: false,
         }
+    }
+    fn add_sensor_tags(&mut self) -> Result<()> {
+        self.dev
+            .list_sensors()?
+            .into_iter()
+            .filter(|sensor| {
+                let s: &str = sensor;
+                self.allowed_sensors.contains(s)
+            })
+            .map(|sensor| {
+                self.dev.read_sensor(&sensor).map(|s| {
+                    self.tags.push(Tag::new(
+                        0,
+                        format!("SoapySdrSource::sensor_{sensor}"),
+                        make_sensor_tag(&sensor, &s),
+                    ));
+                })
+            })
+            .for_each(|r| {
+                if let Err(e) = r {
+                    debug!("SoapySdrSource failed to attach sensor tags: {e}");
+                }
+            });
+        Ok(())
+    }
+    fn add_channel_sensor_tags(&mut self) -> Result<()> {
+        self.dev
+            .list_channel_sensors(soapysdr::Direction::Rx, self.channel)?
+            .into_iter()
+            .filter(|sensor| {
+                let s: &str = sensor;
+                self.allowed_sensors.contains(s)
+            })
+            .map(|sensor| {
+                (
+                    sensor.clone(),
+                    self.dev
+                        .read_channel_sensor(soapysdr::Direction::Rx, self.channel, &sensor)
+                        .map(|s| {
+                            self.tags.push(Tag::new(
+                                0,
+                                format!("SoapySdrSource::sensor_channel_{sensor}"),
+                                make_sensor_tag(&sensor, &s),
+                            ));
+                        }),
+                )
+            })
+            .for_each(|r| {
+                if let (s, Err(e)) = r {
+                    debug!("SoapySdrSource failed to attach channel sensor tag {s}: {e}");
+                }
+            });
+        Ok(())
     }
 }
 
@@ -292,6 +394,12 @@ impl Block for SoapySdrSource {
                     "SoapySdrSource::time_ns",
                     TagValue::I64(time_ns),
                 ));
+                if let Err(e) = self.add_sensor_tags() {
+                    debug!("SoapySdrSource failed to attach sensor tags: {e}");
+                }
+                if let Err(e) = self.add_channel_sensor_tags() {
+                    debug!("SoapySdrSource failed to attach channel sensor tags: {e}");
+                }
                 self.last_time_tag = Some(std::time::Instant::now());
             }
             // Tags are always with offset zero.
