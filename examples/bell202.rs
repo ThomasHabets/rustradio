@@ -62,10 +62,10 @@ struct Opt {
     #[arg(long)]
     tcp_listen: Option<String>,
 
-    /// Listen for KISS on a tty.
+    /// Listen for KISS on a tty. Create symlink to the new TTY for this path.
     #[cfg(feature = "nix")]
     #[arg(long)]
-    tty: bool,
+    tty: Option<std::path::PathBuf>,
 }
 
 fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + Send>)> {
@@ -82,14 +82,14 @@ fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + S
     }
     #[cfg(feature = "nix")]
     {
-        if opt.tcp_listen.is_some() && opt.tty {
+        if opt.tcp_listen.is_some() && opt.tty.is_some() {
             return Err(anyhow::Error::msg("-tcp and -tty are mutually exclusive"));
         }
         use nix::pty::{OpenptyResult, openpty};
         use std::ffi::CStr;
         use std::fs::File;
         use std::os::fd::AsRawFd;
-        if opt.tty {
+        if let Some(path) = &opt.tty {
             let OpenptyResult { master, slave } = openpty(None, None)?;
             // SAFETY:
             // Input is from a successful openpty().
@@ -100,7 +100,8 @@ fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + S
             // SAFETY:
             // We have checked for null above.
             let slave_name = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
-            println!("Slave device: {slave_name}");
+            log::info!("Slave tty device: {slave_name}");
+            std::os::unix::fs::symlink(slave_name, path)?;
             let rx = master.try_clone()?;
             std::mem::forget(slave);
             return Ok((Box::new(File::from(master)), Box::new(File::from(rx))));
