@@ -1555,6 +1555,7 @@ dependencies = [
  "itertools",
  "libc",
  "log",
+ "nix",
  "num-complex",
  "rand",
  "ratatui",

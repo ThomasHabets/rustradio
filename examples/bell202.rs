@@ -61,9 +61,17 @@ struct Opt {
     /// Listen for KISS on this address.
     #[arg(long)]
     tcp_listen: Option<String>,
+
+    /// Listen for KISS on a tty.
+    #[cfg(feature = "nix")]
+    #[arg(long)]
+    tty: bool,
 }
 
 fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + Send>)> {
+    if opt.tcp_listen.is_some() && opt.tty {
+        return Err(anyhow::Error::msg("-tcp and -tty are mutually exclusive"));
+    }
     if let Some(addr) = &opt.tcp_listen {
         let listener = std::net::TcpListener::bind(addr)?;
         println!("Awaiting connection");
@@ -75,7 +83,26 @@ fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + S
         let rx = tcp.try_clone()?;
         return Ok((Box::new(tcp), Box::new(rx)));
     }
-    Err(anyhow::Error::msg("-tcp is mandatory"))
+    #[cfg(feature = "nix")]
+    {
+        use nix::pty::{OpenptyResult, openpty};
+        use std::ffi::CStr;
+        use std::fs::File;
+        use std::os::fd::AsRawFd;
+        if opt.tty {
+            let OpenptyResult { master, slave } = openpty(None, None)?;
+            let ptr = unsafe { libc::ptsname(master.as_raw_fd()) };
+            if ptr.is_null() {
+                panic!();
+            }
+            let slave_name = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
+            println!("Slave device: {slave_name}");
+            let rx = master.try_clone()?;
+            std::mem::forget(slave);
+            return Ok((Box::new(File::from(master)), Box::new(File::from(rx))));
+        }
+    }
+    Err(anyhow::Error::msg("-tcp or -tty is mandatory"))
 }
 
 pub fn main() -> Result<()> {
