@@ -52,9 +52,6 @@ impl SoapySdrSinkBuilder<'_> {
             "SoapySDR TX frontend mapping: {}",
             self.dev.frontend_mapping(dir)?
         );
-        // TODO: enable once
-        // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
-        /*
         for sensor in self.dev.list_sensors()? {
             debug!(
                 "SoapySDR TX sensor {sensor}: {:?}",
@@ -65,7 +62,6 @@ impl SoapySdrSinkBuilder<'_> {
                 self.dev.read_sensor(&sensor)?
             );
         }
-        */
         debug!(
             "SoapySDR TX clock sources: {:?}",
             self.dev.list_clock_sources()?
@@ -77,16 +73,12 @@ impl SoapySdrSinkBuilder<'_> {
         let chans = self.dev.num_channels(dir)?;
         debug!("SoapySDR TX channels : {chans}");
         for channel in 0..chans {
-            // TODO: enable once
-            // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
-            /*
             for sensor in self.dev.list_channel_sensors(dir, channel)? {
                 match self.dev.read_channel_sensor(dir, channel, &sensor) {
                     Ok(s) => debug!("SoapySDR TX channel sensor {sensor}: {s}"),
                     Err(e) => debug!("SoapySDR TX channel sensor {sensor} error: {e}"),
                 }
             }
-            */
             debug!(
                 "SoapySDR TX channel {channel} antennas: {:?}",
                 self.dev.antennas(dir, channel)?

@@ -97,9 +97,6 @@ impl SoapySdrSourceBuilder<'_> {
         );
         log_and_tag!(tags, self.dev.get_clock_source(), "clock_source");
         log_and_tag!(tags, self.dev.get_time_source(), "time_source");
-        // TODO: enable when
-        // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is released.
-        /*
         let allowed_sensors = {
             let mut a: std::collections::HashSet<&str> = ["gps_time", "gps_locked", "ref_locked"]
                 .iter()
@@ -127,7 +124,6 @@ impl SoapySdrSourceBuilder<'_> {
                 ));
             }
         }
-        */
         debug!(
             "SoapySDR RX clock sources: {:?}",
             self.dev.list_clock_sources()?
@@ -146,10 +142,6 @@ impl SoapySdrSourceBuilder<'_> {
         let chans = self.dev.num_channels(soapysdr::Direction::Rx)?;
         debug!("SoapySDR RX channels : {chans}");
         for channel in 0..chans {
-            // TODO: enable when
-            // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is
-            // released.
-            /*
             for sensor in self
                 .dev
                 .list_channel_sensors(soapysdr::Direction::Rx, channel)?
@@ -171,7 +163,6 @@ impl SoapySdrSourceBuilder<'_> {
                     Err(e) => debug!("SoapySDR RX channel {channel} sensor {sensor} error: {e}"),
                 }
             }
-            */
             debug!(
                 "SoapySDR RX channel {channel} antennas: {:?}",
                 self.dev.antennas(soapysdr::Direction::Rx, channel)?
@@ -290,12 +281,6 @@ impl Block for SoapySdrSource {
             }
         };
         if n > 0 {
-            let _ = self.last_time_tag;
-            let _ = TIME_TAG_INTERVAL;
-            // TODO: enable when
-            // <https://github.com/kevinmehall/rust-soapysdr/pull/42> is
-            // released.
-            /*
             if match self.last_time_tag {
                 None => true,
                 Some(x) if x.elapsed() > TIME_TAG_INTERVAL => true,
@@ -309,7 +294,6 @@ impl Block for SoapySdrSource {
                 ));
                 self.last_time_tag = Some(std::time::Instant::now());
             }
-            */
             // Tags are always with offset zero.
             o.produce(n, &self.tags);
             self.tags.clear();
