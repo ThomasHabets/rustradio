@@ -11,6 +11,7 @@
 //! ```
 use anyhow::Result;
 use clap::Parser;
+use log::info;
 
 use rustradio::blockchain;
 use rustradio::blocks::*;
@@ -58,6 +59,10 @@ struct Opt {
     #[arg(long, value_parser=humantime::parse_duration, default_value = "10s")]
     interval: std::time::Duration,
 
+    /// GPS status interval.
+    #[arg(long, value_parser=humantime::parse_duration, default_value = "5s")]
+    gps_interval: std::time::Duration,
+
     /// Message to beacon out.
     msg: String,
 }
@@ -100,20 +105,27 @@ pub fn main() -> Result<()> {
         ));
     }
 
-    // TODO: enable once
-    // <https://github.com/kevinmehall/rust-soapysdr/pull/41> is merged.
-    /*
     let dev2 = dev.clone();
+    let gps_interval = opt.gps_interval;
     std::thread::spawn(move || {
         loop {
-            log::debug!("GPS status: {}: time: {}",
-                       dev2.read_sensor("gps_locked").unwrap_or("<error>".to_string()),
-                       dev2.read_sensor("gps_time").unwrap_or("<error>".to_string()),
-                       );
-            std::thread::sleep(std::time::Duration::from_secs(5));
+            let s = [
+                dev2.read_sensor("gps_locked")
+                    .map(|s| format!("locked: {s}"))
+                    .unwrap_or("".to_string()),
+                dev2.read_sensor("gps_time")
+                    .map(|s| format!("time: {s}"))
+                    .unwrap_or("".to_string()),
+            ]
+            .into_iter()
+            .collect::<Vec<_>>()
+            .join(" ");
+            if !s.is_empty() {
+                info!("GPS {s}");
+            }
+            std::thread::sleep(gps_interval);
         }
     });
-    */
 
     let amp = opt.amplitude;
     // 20 WPM is 60ms time unit.
