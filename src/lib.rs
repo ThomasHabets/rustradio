@@ -520,7 +520,7 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 pub fn parse_verbosity(in_s: &str) -> std::result::Result<usize, String> {
     use std::str::FromStr;
     log::Level::from_str(in_s)
-        .map_err(|e| format!("{e}"))
+        .map_err(|e| format!("{e}. Valid values are: error, warn, info, debug, trace"))
         .map(|v| v as usize - 1)
 }
 

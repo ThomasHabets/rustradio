@@ -1,4 +1,14 @@
 //! Morse code beacon.
+//!
+//! ```text
+//! cargo run -F soapysdr --example morse_beacon -- \
+//!     --sample-rate 320k \
+//!     --freq 436.6m \
+//!     -d 'driver=uhd' \
+//!     --ogain 0.8 \
+//!     --clock-source gpsdo \
+//!     'M0XXX TESTING'
+//! ```
 use anyhow::Result;
 use clap::Parser;
 
@@ -6,22 +16,26 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
-use rustradio::parse_frequency;
 use rustradio::{Complex, Float};
+use rustradio::{parse_frequency, parse_verbosity};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
 struct Opt {
+    /// SoapySDR driver string.
     #[arg(short)]
     driver: String,
-    #[arg(short, default_value = "0")]
+
+    /// Verbosity level.
+    #[arg(short, value_parser=parse_verbosity, default_value = "info")]
     verbose: usize,
 
     /// TX/RX frequency.
     #[arg(long, value_parser=parse_frequency)]
     freq: f64,
 
-    #[arg(long, value_parser=parse_frequency, default_value_t = 300000.0)]
+    /// SDR sample rate.
+    #[arg(long, value_parser=parse_frequency, default_value = "300k")]
     sample_rate: f64,
 
     /// Output gain. 0.0-1.0.
@@ -36,7 +50,7 @@ struct Opt {
     #[arg(long, default_value_t = 20.0)]
     wpm: f32,
 
-    /// Set clock source.
+    /// Set clock source. Valid values are SDR dependent.
     #[arg(long)]
     clock_source: Option<String>,
 
