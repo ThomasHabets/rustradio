@@ -54,6 +54,10 @@ struct Opt {
     #[arg(long)]
     clock_source: Option<String>,
 
+    /// Message repeat interval.
+    #[arg(long, value_parser=humantime::parse_duration, default_value = "10s")]
+    interval: std::time::Duration,
+
     /// Message to beacon out.
     msg: String,
 }
@@ -117,7 +121,7 @@ pub fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        Strobe::new(std::time::Duration::from_secs(10), &opt.msg),
+        Strobe::new(opt.interval, &opt.msg),
         MorseEncode::new(prev),
         PduToStream::new(prev),
         RationalResampler::builder()
