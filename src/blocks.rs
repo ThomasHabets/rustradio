@@ -12,7 +12,7 @@ pub use crate::convert::{ComplexToFloat, FloatToComplex, Inspect, Map, NCMap};
 pub use crate::correlate_access_code::{CorrelateAccessCode, CorrelateAccessCodeTag};
 pub use crate::debug_sink::{DebugFilter, DebugSink, DebugSinkNoCopy};
 pub use crate::delay::Delay;
-pub use crate::descrambler::Descrambler;
+pub use crate::descrambler::{Descrambler, Scrambler};
 pub use crate::fft::Fft;
 pub use crate::fft_filter::FftFilter;
 pub use crate::fft_filter::FftFilterFloat;
