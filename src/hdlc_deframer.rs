@@ -125,7 +125,7 @@ impl HdlcDeframer {
             State::Unsynced(v) => {
                 let n = (*v >> 1) | (bit << 7);
                 if n == 0x7e {
-                    debug!("HdlcDeframer: Found flag!");
+                    trace!("HdlcDeframer: Found flag!");
                     State::Synced((0, Vec::with_capacity(self.max_size)))
                 } else {
                     State::Unsynced(n)
@@ -204,6 +204,7 @@ impl HdlcDeframer {
                             return Ok(State::Synced((0, Vec::with_capacity(self.max_size))));
                         }
                         self.decoded += 1;
+                        debug!("HdlcDeframer: Correctly decoded packet: {data:?}");
                         self.dst.push(data.to_vec(), tags);
                     } else {
                         self.decoded += 1;
