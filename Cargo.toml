@@ -81,6 +81,10 @@ name = "bell202"
 required-features = ["soapysdr"]
 
 [[example]]
+name = "g3ruh"
+required-features = ["soapysdr"]
+
+[[example]]
 name = "capture"
 required-features = ["soapysdr"]
 
