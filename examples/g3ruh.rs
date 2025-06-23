@@ -1,7 +1,8 @@
 //! G3RUH modem. Second most common used modem for AX.25.
 //!
-//! DON'T KNOW IF IT ACTUALLY WORKS.
-//! Receiption of packets have occurred. Transmit path not tested.
+//! At least one packet has been received successfully.
+//! At least one packet has been sent successfully.
+//! Not tested for real.
 //!
 //! This example got its own blog post. See
 //! <https://blog.habets.se/2025/06/Software-defined-KISS-modem.html>.
