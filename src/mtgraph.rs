@@ -9,6 +9,9 @@ use log::{debug, error, info};
 use crate::block::{Block, BlockRet};
 use crate::graph::{CancellationToken, get_cpu_time};
 
+const MIN_IDLE_SLEEP: std::time::Duration = std::time::Duration::from_millis(1);
+const MAX_IDLE_SLEEP: std::time::Duration = std::time::Duration::from_millis(100);
+
 #[derive(Default, Debug)]
 struct BlockStats {
     elapsed: std::time::Duration,
@@ -75,7 +78,7 @@ impl crate::graph::GraphRunner for MTGraph {
                 .name(b.block_name().to_string())
                 .spawn(move || -> Result<BlockStats> {
                     let name = b.block_name().to_string();
-                    let idle_sleep = std::time::Duration::from_millis(1);
+                    let mut idle_sleep = MIN_IDLE_SLEEP;
                     let mut stats = BlockStats::default();
                     while !cancel_token.is_canceled() {
                         let st = Instant::now();
@@ -89,7 +92,7 @@ impl crate::graph::GraphRunner for MTGraph {
                         };
                         stats.elapsed += st.elapsed();
                         match ret {
-                            BlockRet::Again => {}
+                            BlockRet::Again => idle_sleep = MIN_IDLE_SLEEP,
                             BlockRet::EOF => {
                                 break;
                             }
@@ -109,6 +112,10 @@ impl crate::graph::GraphRunner for MTGraph {
                             }
                             BlockRet::Pending => {
                                 std::thread::sleep(idle_sleep);
+                                idle_sleep *= 2;
+                                if idle_sleep > MAX_IDLE_SLEEP {
+                                    idle_sleep = MAX_IDLE_SLEEP;
+                                }
                             }
                         }
                     }
