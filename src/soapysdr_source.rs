@@ -247,6 +247,10 @@ impl SoapySdrSourceBuilder<'_> {
             .set_sample_rate(soapysdr::Direction::Rx, self.channel, self.samp_rate)?;
         let gr = self.dev.gain_range(soapysdr::Direction::Rx, self.channel)?;
         let gain = gr.minimum + self.igain * (gr.maximum - gr.minimum);
+        debug!(
+            "SoapySdrSource: input gain {} in range {}-{} became {gain}",
+            self.igain, gr.minimum, gr.maximum
+        );
         self.dev
             .set_gain(soapysdr::Direction::Rx, self.channel, gain)?;
         if let Some(a) = self.antenna {

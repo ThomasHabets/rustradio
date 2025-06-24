@@ -1,11 +1,20 @@
 //! G3RUH modem. Second most common used modem for AX.25.
 //!
-//! At least one packet has been received successfully.
-//! At least one packet has been sent successfully.
-//! Not tested for real.
+//! ## Testing notes
 //!
-//! This example got its own blog post. See
-//! <https://blog.habets.se/2025/06/Software-defined-KISS-modem.html>.
+//! * Local endpoint: this tool and USRP B200
+//! * Remote endpoint: Kenwood TH-D75 9600 KISS.
+//! * For faster testing, run with t1=1 and t2=1
+//! * My setup has D75 on my desk with an antenna. B200 input gain 0.076, output
+//!   gain 0.5.
+//! * Weak point is clearly decoding.
+//! * Especially decoding seems to not work well with multiple received packets
+//!   in a row. I see only the last packet in `axlisten`.
+//! * Suspected problem: SymbolSync.
+//! * An AX.25 implementation supporting SREJ would really help.
+//!
+//! ## References
+//! * <https://www.amsat.org/amsat/articles/g3ruh/109.html>
 //!
 //! ## Examples
 //!
@@ -180,9 +189,9 @@ pub fn main() -> Result<()> {
                 .interp(if_rate as usize)
                 .build(prev)?,
             Map::keep_tags(prev, "bits_to_pn", |s| if s > 0 {
-                5000.0 as Float
+                3000.0 as Float
             } else {
-                -5000.0
+                -3000.0
             }),
             Vco::new(prev, 2.0 * std::f64::consts::PI / if_rate),
             MultiplyConst::new(prev, 0.5.into()),
@@ -194,8 +203,8 @@ pub fn main() -> Result<()> {
                 prev,
                 rustradio::fir::low_pass_complex(
                     opt.sample_rate as Float,
-                    12_500.0,
-                    100.0,
+                    8_800.0,
+                    1000.0,
                     &rustradio::window::WindowType::Hamming,
                 )
             ),

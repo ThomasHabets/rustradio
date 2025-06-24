@@ -10,7 +10,7 @@ use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream};
 
-const SYNC_BYTES: usize = 10;
+const SYNC_BYTES: usize = 20;
 const SYNC: &[u8] = &[0, 1, 1, 1, 1, 1, 1, 0];
 
 /// FCS adder.
