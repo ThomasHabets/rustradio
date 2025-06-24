@@ -42,6 +42,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
+use rustradio::stream::ReadStream;
 use rustradio::{parse_frequency, parse_verbosity};
 
 #[derive(clap::Parser, Debug)]
@@ -89,6 +90,10 @@ struct Opt {
     #[cfg(feature = "nix")]
     #[arg(long)]
     tty: Option<std::path::PathBuf>,
+
+    /// Use WPCR instead of the regular decoder.
+    #[arg(long)]
+    wpcr: bool,
 }
 
 // Get a reader and a writer where we'll be talking KISS.
@@ -147,6 +152,73 @@ fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + S
         }
     }
     Err(anyhow::Error::msg("-tcp or -tty is mandatory"))
+}
+
+// Take I/Q stream and turn it into P/N floats representing bits.
+fn receiver_traditional(
+    opt: &Opt,
+    g: &mut MTGraph,
+    prev: ReadStream<rustradio::Complex>,
+) -> Result<ReadStream<Float>> {
+    let samp_rate_2 = 50_000.0;
+    let baud = 9600.0;
+    Ok(blockchain![
+        g,
+        prev,
+        RationalResampler::builder()
+            .deci(opt.sample_rate as usize)
+            .interp(samp_rate_2 as usize)
+            .build(prev)?,
+        QuadratureDemod::new(prev, 1.0),
+        SymbolSync::new(
+            prev,
+            samp_rate_2 / baud,
+            opt.symbol_max_deviation,
+            Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
+            Box::new(rustradio::iir_filter::IirFilter::new(&opt.symbol_taps)),
+        ),
+    ])
+}
+
+// Take I/Q stream and turn it into P/N floats representing bits.
+fn receiver_wpcr(
+    opt: &Opt,
+    g: &mut MTGraph,
+    prev: ReadStream<rustradio::Complex>,
+) -> Result<ReadStream<Float>> {
+    let samp_rate_2 = 50_000.0;
+
+    let prev = blockchain![
+        g,
+        prev,
+        RationalResampler::builder()
+            .deci(opt.sample_rate as usize)
+            .interp(samp_rate_2 as usize)
+            .build(prev)?,
+    ];
+    // Tee out signal strength.
+    let iir_alpha = 0.01;
+    let threshold = 0.1;
+    let (b, prev, burst_tee) = Tee::new(prev);
+    g.add(Box::new(b));
+    let burst_tee = blockchain![
+        g,
+        burst_tee,
+        ComplexToMag2::new(burst_tee),
+        SinglePoleIirFilter::new(burst_tee, iir_alpha)
+            .ok_or(anyhow::Error::msg("bad IIR parameters"))?,
+    ];
+    Ok(blockchain![
+        g,
+        prev,
+        QuadratureDemod::new(prev, 1.0),
+        BurstTagger::new(prev, burst_tee, threshold, "burst".to_string()),
+        // 255*8*0.192 sps = 10625
+        StreamToPdu::new(prev, "burst".to_string(), samp_rate_2 as usize, 11000),
+        Midpointer::new(prev),
+        Wpcr::builder(prev).samp_rate(samp_rate_2).build(),
+        VecToStream::new(prev),
+    ])
 }
 
 pub fn main() -> Result<()> {
@@ -220,8 +292,6 @@ pub fn main() -> Result<()> {
     // Receiver.
     {
         info!("Setting up receiver");
-        let samp_rate_2 = 50_000.0;
-        let baud = 9600.0;
         let prev = blockchain![
             g,
             prev,
@@ -237,18 +307,15 @@ pub fn main() -> Result<()> {
                     &rustradio::window::WindowType::Hamming,
                 )
             ),
-            RationalResampler::builder()
-                .deci(opt.sample_rate as usize)
-                .interp(samp_rate_2 as usize)
-                .build(prev)?,
-            QuadratureDemod::new(prev, 1.0),
-            SymbolSync::new(
-                prev,
-                samp_rate_2 / baud,
-                opt.symbol_max_deviation,
-                Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
-                Box::new(rustradio::iir_filter::IirFilter::new(&opt.symbol_taps)),
-            ),
+        ];
+        let prev = if opt.wpcr {
+            receiver_wpcr(&opt, &mut g, prev)?
+        } else {
+            receiver_traditional(&opt, &mut g, prev)?
+        };
+        let prev = blockchain![
+            g,
+            prev,
             BinarySlicer::new(prev),
             NrziDecode::new(prev),
             Descrambler::g3ruh(prev),
