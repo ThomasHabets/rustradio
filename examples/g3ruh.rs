@@ -96,6 +96,25 @@ struct Opt {
     wpcr: bool,
 }
 
+#[cfg(feature = "nix")]
+fn set_nonblock(file: std::fs::File) -> std::io::Result<std::fs::File> {
+    use libc::{F_GETFL, F_SETFL, O_NONBLOCK, fcntl};
+    use std::os::unix::io::AsRawFd;
+    let fd = file.as_raw_fd();
+    // SAFETY:
+    // Carefully written syscall.
+    unsafe {
+        let flags = fcntl(fd, F_GETFL);
+        if flags < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        if fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    Ok(file)
+}
+
 // Get a reader and a writer where we'll be talking KISS.
 fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + Send>)> {
     if let Some(addr) = &opt.tcp_listen {
@@ -148,7 +167,10 @@ fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + S
             }
             let rx = master.try_clone()?;
             std::mem::forget(slave);
-            return Ok((Box::new(File::from(master)), Box::new(File::from(rx))));
+            return Ok((
+                Box::new(set_nonblock(File::from(master))?),
+                Box::new(File::from(rx)),
+            ));
         }
     }
     Err(anyhow::Error::msg("-tcp or -tty is mandatory"))
