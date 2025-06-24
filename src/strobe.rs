@@ -21,6 +21,8 @@ impl<T: Send + Clone> Block for Strobe<T> {
         let now = std::time::Instant::now();
         match self.last {
             None => {}
+            // TODO: because returning Pending sleeps for a bit, it won't be
+            // exactly on target. Should Pending take an Option<Duration>?
             Some(last) if now < last + self.period => return Ok(BlockRet::Pending),
             Some(_) => {}
         }

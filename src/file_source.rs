@@ -2,7 +2,7 @@
 use std::io::BufReader;
 use std::io::{Read, Seek};
 
-use log::{debug, trace, warn};
+use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
@@ -103,16 +103,13 @@ where
             let mut buffer = vec![0; get_bytes];
             let n = self.f.read(&mut buffer[..])?;
             if n == 0 {
-                warn!(
+                debug!(
                     "EOF on {}. Repeat: {:?}",
                     self.filename.display(),
                     self.repeat
                 );
                 if self.repeat.again() {
                     self.f.seek(std::io::SeekFrom::Start(0))?;
-                    // This is not quite the definition of "pending", but I
-                    // wanted to get rid of Noop, and it'll do for now.
-                    // TODO: loop instead.
                     return Ok(BlockRet::Again);
                 }
                 return Ok(BlockRet::EOF);
@@ -133,6 +130,7 @@ where
 
         let have = self.buf.len() / sample_size;
         if have == 0 {
+            // Don't have a full sample.
             return Ok(BlockRet::Pending);
         }
 
