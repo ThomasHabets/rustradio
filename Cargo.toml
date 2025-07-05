@@ -100,6 +100,10 @@ required-features = ["soapysdr"]
 name = "tone"
 required-features = ["audio"]
 
+[[example]]
+name = "airspy_am_decode"
+required-features = ["audio"]
+
 [profile.release]
 # debug = true
 
