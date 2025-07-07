@@ -5,8 +5,8 @@ use log::warn;
 use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
-use rustradio::parse_verbosity;
 use rustradio::{Complex, Float, blockchain};
+use rustradio::{parse_frequency, parse_verbosity};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -15,11 +15,21 @@ struct Opt {
     #[arg(short)]
     input: String,
 
+    /// Verbosity level.
     #[arg(short, value_parser=parse_verbosity, default_value="info")]
     verbose: usize,
 
+    /// Multiply audio by this before sending to sound card.
     #[arg(long = "volume", default_value = "0.1")]
     volume: Float,
+
+    /// Sample rate.
+    #[arg(long, value_parser=parse_frequency, default_value="2.5M")]
+    sample_rate: f64,
+
+    /// Audio sample rate.
+    #[arg(long, value_parser=parse_frequency, default_value="48k")]
+    audio_rate: f64,
 }
 
 pub fn main() -> Result<()> {
@@ -34,8 +44,6 @@ pub fn main() -> Result<()> {
         .init()?;
 
     let mut g = MTGraph::new();
-    let samp_rate = 2_500_000f32;
-    let audio_rate = 48000;
 
     let prev = blockchain![
         g,
@@ -43,7 +51,7 @@ pub fn main() -> Result<()> {
         FileSource::builder(&opt.input)
             // .repeat(rustradio::Repeat::infinite())
             .build()?,
-        Map::keep_tags(prev, "ishort to complex", |v: u32| {
+        Map::keep_tags(prev, "AirSPY to Complex", |v: u32| {
             let i = (v & 0xffff) as u16 as i16;
             let q = ((v >> 16) & 0xffff) as u16 as i16;
             Complex::new(i as Float, q as Float) / 1000.0
@@ -51,31 +59,31 @@ pub fn main() -> Result<()> {
         FftFilter::new(
             prev,
             rustradio::fir::low_pass_complex(
-                samp_rate,
+                opt.sample_rate as Float,
                 12_500.0,
                 10_000.0,
                 &rustradio::window::WindowType::Hamming,
             )
         ),
-        Map::keep_tags(prev, "am decode", |v| v.norm()),
+        Map::keep_tags(prev, "AM decode", |v| v.norm()),
         FftFilterFloat::new(
             prev,
             &rustradio::fir::low_pass(
-                samp_rate,
-                audio_rate as Float,
+                opt.sample_rate as Float,
+                opt.audio_rate as Float,
                 500.0,
                 &rustradio::window::WindowType::Hamming,
             )
         ),
         RationalResampler::builder()
-            .deci(samp_rate as usize)
-            .interp(audio_rate)
+            .deci(opt.sample_rate as usize)
+            .interp(opt.audio_rate as usize)
             .build(prev)?,
         MultiplyConst::new(prev, opt.volume),
     ];
 
     if true {
-        g.add(Box::new(AudioSink::new(prev, audio_rate as u64)?));
+        g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));
     } else {
         g.add(Box::new(FileSink::new(
             prev,
