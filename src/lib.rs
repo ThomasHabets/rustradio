@@ -14,8 +14,6 @@
 // I don't like the recommended syntax.
 // Commented on https://github.com/rust-lang/rust/pull/138677
 #![allow(mismatched_lifetime_syntaxes)]
-// Unstable clippy keeps recommending unstable syntax.
-#![allow(clippy::collapsible_if)]
 
 /*! This create provides a framework for running SDR (software defined
 radio) applications.

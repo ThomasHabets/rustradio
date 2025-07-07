@@ -45,10 +45,10 @@ fn encode(msg: &str) -> Vec<u8> {
                     });
                 }
                 // Inter-character gap: 3 zeros, unless next is space or end
-                if let Some(next) = chars.peek() {
-                    if *next != ' ' {
-                        out.extend(CHAR_GAP);
-                    }
+                if let Some(next) = chars.peek()
+                    && *next != ' '
+                {
+                    out.extend(CHAR_GAP);
                 }
             }
             'a'..='z' => {
@@ -62,10 +62,10 @@ fn encode(msg: &str) -> Vec<u8> {
                     });
                 }
                 // Inter-character gap: 3 zeros, unless next is space or end
-                if let Some(next) = chars.peek() {
-                    if *next != ' ' {
-                        out.extend(CHAR_GAP);
-                    }
+                if let Some(next) = chars.peek()
+                    && *next != ' '
+                {
+                    out.extend(CHAR_GAP);
                 }
             }
             // Inter-word gap: 7 zeros (we already have one 0 from last symbol)
