@@ -171,7 +171,7 @@ impl HdlcDeframer {
                 // Remove partial flag.
                 bits.truncate(bits.len() - 7);
 
-                if bits.len() % 8 != 0 {
+                if !bits.len().is_multiple_of(8) {
                     trace!(
                         "HdlcDeframer: Packet len not multiple of 8: {} {:?}",
                         bits.len(),

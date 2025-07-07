@@ -146,7 +146,7 @@ impl Circ {
     #[must_use]
     fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         let ez = std::mem::size_of::<T>();
-        debug_assert!(self.len % ez == 0);
+        debug_assert!(self.len.is_multiple_of(ez));
         debug_assert!(
             end - start <= self.len / ez / 2,
             "requested {start} to {end} ({} entries) of {} but len is {}",

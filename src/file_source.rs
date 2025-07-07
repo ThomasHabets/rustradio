@@ -114,7 +114,7 @@ where
                 }
                 return Ok(BlockRet::EOF);
             }
-            if self.buf.is_empty() && (n % sample_size) == 0 {
+            if self.buf.is_empty() && n.is_multiple_of(sample_size) {
                 // Fast path when reading only whole samples.
                 o.fill_from_iter(
                     buffer

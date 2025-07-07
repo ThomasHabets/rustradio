@@ -128,7 +128,7 @@ impl Lfsr {
 }
 
 fn bits_to_bytes(bits: &[u8]) -> Vec<u8> {
-    assert![bits.len() % 8 == 0];
+    assert![bits.len().is_multiple_of(8)];
     let mut bytes = vec![];
     for chunk in bits.chunks(8) {
         let mut byte = 0u8;
