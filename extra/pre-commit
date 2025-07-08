@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
 set -ueo pipefail
+if [[ ${NO_PRECOMMIT:-} = true ]]; then
+        exit 0
+fi
 
 exec schedtool -D -e tickbox --dir tickbox/precommit
 
