@@ -39,7 +39,7 @@ struct Opt {
     driver: String,
 
     /// Verbosity level.
-    #[arg(short, value_parser=parse_verbosity, default_value_t = 0)]
+    #[arg(short, value_parser=parse_verbosity, default_value = "info")]
     verbose: usize,
 
     /// TX/RX frequency.
