@@ -14,7 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Rustup
+    - name: Rustup upgrade
+      run: rustup install nightly
+    - name: Rustup install nightly
       run: rustup install nightly
     - name: Rustup install nightly clippy
       run: rustup component add --toolchain nightly clippy
