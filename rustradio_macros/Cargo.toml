@@ -12,9 +12,12 @@ keywords = ["SDR", "radio"]
 proc-macro2 = "1.0.89"
 quote = "1.0.37"
 syn = { version = "2.0.87", features = ["extra-traits"]}
+rustradio_macros_code = { path = "../rustradio_macros_code"}
 
 [dev-dependencies]
+# Needed for doctests to build.
 rustradio = { path = ".." }
+itertools = "0.14.0"
 
 [lib]
 proc-macro = true
