@@ -4,5 +4,5 @@ export RUSTFLAGS="--cfg tokio_unstable"
 cargo +nightly 2> /dev/null > /dev/null && {
         export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.nightly.all-features"
         cd "$TICKBOX_TEMPDIR/work"
-        exec cargo +nightly test --all-features
+        exec cargo +nightly test --workspace --all-features
 }
