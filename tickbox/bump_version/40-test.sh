@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec cargo test
+exec cargo test --workspace

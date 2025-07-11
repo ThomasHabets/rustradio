@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd rustradio_macros
-exec cargo publish
+for dir in rustradio_macros_code rustradio_macros; do
+        cargo publish
+done
