@@ -22,7 +22,7 @@ g.add(Box::new(sink));
 */
 use crate::{Result, Sample};
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockEOF, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
 /// Turn samples into text.
@@ -42,6 +42,12 @@ impl<T: Sample> ToText<T> {
     pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
         (Self { srcs, dst }, dr)
+    }
+}
+
+impl<T: Sample + std::fmt::Debug> BlockEOF for ToText<T> {
+    fn eof(&mut self) -> bool {
+        self.srcs.iter().all(|s| s.eof())
     }
 }
 

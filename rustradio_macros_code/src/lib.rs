@@ -64,8 +64,11 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
 
 #[derive(Default, PartialEq, Debug)]
 enum Sync {
+    // `sync`. Pass tags through as is.
     Value,
+    // `sync_tag`. Also allow tag modification.
     Tag,
+    // `sync_nocopy_tag`. Like `sync_tag` but for NoCopy.
     NoCopyTag,
     #[default]
     General,
@@ -548,6 +551,9 @@ impl<'a> Parsed<'a> {
         })
     }
     fn expand_eof(&self) -> Option<TokenStream> {
+        if self.attrs.noeof {
+            return None;
+        }
         let name = self.name;
         let path = self.attrs.path();
         let (impl_generics, ty_generics, _) = &self.generics;
@@ -563,10 +569,6 @@ impl<'a> Parsed<'a> {
                     }
                  }
             });
-        }
-
-        if self.attrs.noeof || in_names.is_empty() {
-            return None;
         }
         Some(quote! {
              impl #impl_generics #path::block::BlockEOF for #name #ty_generics #where_clause {
@@ -604,6 +606,14 @@ impl<'a> Parsed<'a> {
 pub fn derive_block(input: TokenStream) -> TokenStream {
     let input = syn::parse2::<syn::DeriveInput>(input).unwrap();
     let p = Parsed::parse(&input).unwrap();
+    // Sanity check.
+    match p.attrs.sync {
+        Sync::Value | Sync::Tag | Sync::NoCopyTag => {
+            assert!(!p.inputs.is_empty());
+            assert!(!p.outputs.is_empty());
+        }
+        Sync::General => {}
+    }
     p.expand()
 }
 
@@ -612,14 +622,208 @@ mod tests {
     use super::*;
 
     #[test]
-    fn got_sections() {
-        let input = quote! {
-            struct MyBlock {}
-        };
-
+    fn derive_baseline() {
+        let input = quote! { struct MyBlock {} };
         let actual = derive_block(input);
 
         assert!(actual.to_string().contains("BlockEOF for MyBlock"));
         assert!(actual.to_string().contains("BlockName for MyBlock"));
+        assert!(!actual.to_string().contains("process_sync"));
+        assert!(!actual.to_string().contains("custom_name"));
+        assert!(
+            !actual.to_string().contains("fn work "),
+            "{}",
+            actual.to_string()
+        );
+        assert!(
+            !actual.to_string().contains("fn new "),
+            "{}",
+            actual.to_string()
+        );
+        assert!(
+            !actual.to_string().contains("fn out "),
+            "{}",
+            actual.to_string()
+        );
+        assert!(actual.to_string().contains("fn eof "));
+    }
+
+    #[test]
+    fn derive_custom_name() {
+        let input = quote! { #[rustradio(custom_name)] struct MyBlock {} };
+        let actual = derive_block(input);
+        assert!(actual.to_string().contains("custom_name"));
+    }
+
+    #[test]
+    fn derive_noeof() {
+        let input = quote! { #[rustradio(noeof)] struct MyBlock {} };
+        let actual = derive_block(input);
+        assert!(
+            !actual.to_string().contains("fn eof "),
+            "{}",
+            actual.to_string()
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn derive_sync_no_input() {
+        derive_block(quote! {
+            #[rustradio(sync)]
+            struct MyBlock {
+                #[rustradio(out)]
+                dst: WriteStream<Float>,
+            }
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn derive_sync_tag_no_output() {
+        derive_block(quote! {
+            #[rustradio(sync)]
+            struct MyBlock {
+                #[rustradio(in)]
+                src: ReadStream<Float>,
+            }
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn derive_sync_tag_no_input() {
+        derive_block(quote! {
+            #[rustradio(sync)]
+            struct MyBlock {
+                #[rustradio(out)]
+                dst: WriteStream<Float>,
+            }
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn derive_sync_no_output() {
+        derive_block(quote! {
+            #[rustradio(sync)]
+            struct MyBlock {
+                #[rustradio(in)]
+                src: ReadStream<Float>,
+            }
+        });
+    }
+
+    #[test]
+    fn derive_sync() {
+        let input = quote! {
+            #[rustradio(sync)]
+            struct MyBlock {
+                #[rustradio(in)]
+                src: ReadStream<Float>,
+                #[rustradio(out)]
+                dst: WriteStream<Float>,
+            }
+        };
+        let actual = derive_block(input);
+        assert!(
+            actual.to_string().contains("fn work "),
+            "{}",
+            actual.to_string()
+        );
+        assert!(!actual.to_string().contains("fn process_sync "));
+        assert!(
+            actual.to_string().contains("fn process_sync_tags "),
+            "{}",
+            actual.to_string()
+        );
+        assert!(actual.to_string().contains("process_sync_tags "));
+    }
+
+    #[test]
+    fn derive_sync_tag() {
+        let input = quote! {
+            #[rustradio(sync_tag)]
+            struct MyBlock {
+                #[rustradio(in)]
+                src: ReadStream<Float>,
+                #[rustradio(out)]
+                dst: WriteStream<Float>,
+            }
+        };
+        let actual = derive_block(input);
+        assert!(
+            actual.to_string().contains("fn work "),
+            "{}",
+            actual.to_string()
+        );
+        assert!(
+            !actual.to_string().contains("fn process_sync"),
+            "{}",
+            actual.to_string()
+        );
+    }
+
+    #[test]
+    fn derive_struct_bad_combo() {
+        for (name, q) in [
+            (
+                "sync and sync_tag",
+                quote! {#[rustradio(sync,sync_tag)] struct B { } },
+            ),
+            (
+                "sync and sync_nocopy_tag",
+                quote! {#[rustradio(sync,sync_nocopy_tag)] struct B { } },
+            ),
+            (
+                "sync_tag and sync_nocopy_tag",
+                quote! {#[rustradio(sync_tag,sync_nocopy_tag)] struct B { } },
+            ),
+            ("empty bound", quote! {#[rustradio(bound)] struct B { } }),
+            ("unknown attr", quote! {#[rustradio(in)] struct B { } }),
+        ]
+        .into_iter()
+        {
+            let result = std::panic::catch_unwind(|| {
+                derive_block(q);
+            });
+            assert!(result.is_err(), "Expected {name} to panic. It didn't");
+        }
+    }
+
+    #[test]
+    fn derive_field_bad_combo() {
+        for (name, q) in [
+            // In and.
+            ("in and out", quote! {struct B { #[rustradio(in, out)] } }),
+            ("in and into", quote! {struct B { #[rustradio(in, into)] } }),
+            (
+                "in and default",
+                quote! {struct B { #[rustradio(in, default)] } },
+            ),
+            // Out and.
+            (
+                "out and default",
+                quote! {struct B { #[rustradio(default, out)] } },
+            ),
+            (
+                "out and into",
+                quote! {struct B { #[rustradio(out, into)] } },
+            ),
+            // Default and.
+            (
+                "into and default",
+                quote! {struct B { #[rustradio(default, into)] } },
+            ),
+            // Unknown.
+            ("unknown arg", quote! {struct B { #[rustradio(new)] } }),
+        ]
+        .into_iter()
+        {
+            let result = std::panic::catch_unwind(|| {
+                derive_block(q);
+            });
+            assert!(result.is_err(), "Expected {name} to panic. It didn't");
+        }
     }
 }

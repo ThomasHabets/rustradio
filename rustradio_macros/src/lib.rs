@@ -35,6 +35,7 @@
 ///   `work()`.
 /// * `sync_tag`: Same as `sync`, but allow tag processing using
 ///   `process_sync_tags()`.
+/// * `sync_nocopy_tag`: Same as `sync_tag`, but for nocopy streams.
 /// * `custom_name`: Call `custom_name()` instead of using the struct name, as
 ///   name.
 /// * `noeof`: Don't generate `eof()` logic.
