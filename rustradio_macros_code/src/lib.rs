@@ -573,11 +573,7 @@ impl<'a> Parsed<'a> {
         Some(quote! {
              impl #impl_generics #path::block::BlockEOF for #name #ty_generics #where_clause {
                 fn eof(&mut self) -> bool {
-                    if true #(&&self.#in_names.eof())* {
-                        true
-                    } else {
-                        false
-                    }
+                    #(self.#in_names.eof())&&*
                 }
              }
         })
@@ -646,6 +642,51 @@ mod tests {
             actual.to_string()
         );
         assert!(actual.to_string().contains("fn eof "));
+    }
+
+    #[test]
+    fn derive_minimal() {
+        let input = quote! { struct MyBlock {} };
+        let actual = derive_block(input);
+        let expected = quote! {
+            impl rustradio::block::BlockName for MyBlock {
+                fn block_name(&self) -> &str {
+                    "MyBlock"
+                }
+            }
+            impl rustradio::block::BlockEOF for MyBlock {
+                fn eof (& mut self) -> bool { false }
+            }
+        };
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn derive_some_options() {
+        let input = quote! {
+            #[rustradio(crate, new, custom_name)]
+            struct MyBlock {
+                #[rustradio(in)]
+                src: ReadStream<Float>,
+            }
+        };
+        let actual = derive_block(input);
+        let expected = quote! {
+            impl MyBlock {
+                pub fn new(src: ReadStream < Float >,) -> (Self) {
+                    (Self { src, })
+                }
+            }
+            impl crate::block::BlockName for MyBlock {
+                fn block_name(&self) -> &str {
+                    self.custom_name()
+                }
+            }
+            impl crate::block::BlockEOF for MyBlock {
+                fn eof (& mut self) -> bool { self.src.eof() }
+            }
+        };
+        assert_eq!(actual.to_string(), expected.to_string());
     }
 
     #[test]
