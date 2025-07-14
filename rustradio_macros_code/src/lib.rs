@@ -668,13 +668,30 @@ mod tests {
             struct MyBlock {
                 #[rustradio(in)]
                 src: ReadStream<Float>,
+                #[rustradio(out)]
+                dst: WriteStream<Complex>,
+                #[rustradio(default)]
+                foo: u32,
+                bar: Float,
+                #[rustradio(into)]
+                baz: usize,
             }
         };
         let actual = derive_block(input);
         let expected = quote! {
             impl MyBlock {
-                pub fn new(src: ReadStream < Float >,) -> (Self) {
-                    (Self { src, })
+                pub fn new<Intobaz: Into<usize> >(
+                    src: ReadStream <Float>,
+                    bar: Float,
+                    baz: Intobaz) -> (Self, <WriteStream<Complex> as crate::stream::StreamReadSide>::ReadSide) {
+                    let dst = <WriteStream<Complex> >::new();
+                    (Self {
+                        src,
+                        dst: dst.0,
+                        baz: baz.into(),
+                        bar,
+                        foo: <u32>::default(),
+                    }, dst.1)
                 }
             }
             impl crate::block::BlockName for MyBlock {
