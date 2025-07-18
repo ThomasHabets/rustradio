@@ -76,6 +76,7 @@ fftw = ["dep:fftw"]
 async = ["dep:tokio"]
 tokio-unstable = ["tokio/tracing"]
 nix = ["dep:nix"]
+wasm = []
 
 [[example]]
 name = "bell202"

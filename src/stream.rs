@@ -429,8 +429,7 @@ pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
         #[cfg(feature = "async")]
         acvr: tokio::sync::Notify::new(),
     });
-    let id =
-        crate::circular_buffer::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     (
         NCWriteStream {
             id,

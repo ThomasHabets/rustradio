@@ -205,7 +205,10 @@ pub mod soapysdr_source;
 
 pub mod block;
 pub mod blocks;
+
+#[cfg(not(feature = "wasm"))]
 pub mod circular_buffer;
+
 pub mod graph;
 pub mod mtgraph;
 pub mod stream;
@@ -219,6 +222,9 @@ pub type Float = f32;
 
 /// Complex (I/Q) data.
 pub type Complex = num_complex::Complex<Float>;
+
+pub(crate) static NEXT_STREAM_ID: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(1);
 
 /// RustRadio error.
 #[derive(thiserror::Error, Debug)]

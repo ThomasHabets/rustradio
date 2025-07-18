@@ -342,14 +342,11 @@ pub struct Buffer<T> {
     dummy: std::marker::PhantomData<T>,
 }
 
-pub(crate) static NEXT_STREAM_ID: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(1);
-
 impl<T> Buffer<T> {
     /// Create a new Buffer.
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
-            id: NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             state: Arc::new(BufferInner {
                 lock: Mutex::new(BufferState {
                     rpos: 0,
