@@ -11,8 +11,8 @@
 /// use rustradio::block::{Block, BlockRet};
 /// use rustradio::stream::{ReadStream, WriteStream};
 /// #[derive(rustradio_macros::Block)]
-/// #[rustradio(new)]
-/// pub struct MyBlock<T: Copy + Send + Sync> {
+/// #[rustradio(new, bound="T: Copy + Send + Sync + Default")]
+/// pub struct MyBlock<T> {
 ///   #[rustradio(in)]
 ///   src: ReadStream<T>,
 ///   #[rustradio(out)]

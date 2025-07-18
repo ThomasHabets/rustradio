@@ -218,12 +218,20 @@ pub mod block;
 pub mod blocks;
 
 #[cfg(not(feature = "wasm"))]
-pub mod circular_buffer;
+pub mod nowasm;
 
 #[cfg(feature = "wasm")]
-pub mod circular_buffer {}
+pub mod wasm;
+
+pub mod sys {
+    #[cfg(not(feature = "wasm"))]
+    pub use super::nowasm::export::*;
+    #[cfg(feature = "wasm")]
+    pub use super::wasm::export::*;
+}
 
 pub mod graph;
+#[cfg(not(feature = "wasm"))]
 pub mod mtgraph;
 pub mod stream;
 pub mod window;

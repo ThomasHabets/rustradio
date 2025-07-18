@@ -348,6 +348,8 @@ pub struct Buffer<T> {
 
 impl<T> Buffer<T> {
     /// Create a new Buffer.
+    ///
+    /// Size is in bytes.
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
@@ -467,7 +469,7 @@ impl<T: Copy> Buffer<T> {
     /// Consume samples from input buffer.
     ///
     /// Will only be called from the read buffer.
-    pub(in crate::circular_buffer) fn consume(&self, n: usize) {
+    pub(in crate::nowasm::circular_buffer) fn consume(&self, n: usize) {
         use std::ops::Bound::{Excluded, Included};
 
         let mut s = self.state.lock.lock().unwrap();
@@ -510,7 +512,7 @@ impl<T: Copy> Buffer<T> {
     /// Produce samples (commit writes).
     ///
     /// Will only be called from the write buffer.
-    pub(in crate::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
+    pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
         if n == 0 {
             debug_assert!(tags.is_empty());
             if !tags.is_empty() {
@@ -586,7 +588,7 @@ impl<T: Copy> Buffer<T> {
             }
         }
         drop(s);
-        tags.sort_by_key(super::stream::Tag::pos);
+        tags.sort_by_key(Tag::pos);
         Ok((BufferReader::new(self, start, end), tags))
     }
 
