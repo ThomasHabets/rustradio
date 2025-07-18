@@ -1564,7 +1564,6 @@ dependencies = [
  "cpal",
  "crossterm 0.29.0",
  "ctrlc",
- "errno",
  "fast-math",
  "fftw",
  "humantime",

@@ -46,7 +46,7 @@ impl Map {
         //   pointer assumption is restricted to Map.
         let buf = unsafe { libc::mmap(ptr, len as size_t, PROT_READ | PROT_WRITE, flags, fd, 0) };
         if std::ptr::eq(buf, MAP_FAILED) {
-            let e = errno::errno();
+            let e = std::io::Error::last_os_error();
             return Err(Error::msg(format!(
                 "mmap(){}: {e}",
                 if ptr.is_null() {
@@ -62,7 +62,7 @@ impl Map {
             // length, so this has to be fine.
             let rc = unsafe { libc::munmap(buf, len as size_t) };
             if rc != 0 {
-                let e = errno::errno();
+                let e = std::io::Error::last_os_error();
                 panic!("Failed to unmap buffer just mapped in the failure path: {e}");
             }
             return Err(Error::msg("mmap() allocated in the wrong place"));
@@ -79,7 +79,7 @@ impl Drop for Map {
         // SAFETY: This is what we mmapped.
         let rc = unsafe { libc::munmap(self.base as *mut c_void, self.len) };
         if rc != 0 {
-            let e = errno::errno();
+            let e = std::io::Error::last_os_error();
             panic!("munmap() failed on circular buffer: {e}");
         }
     }

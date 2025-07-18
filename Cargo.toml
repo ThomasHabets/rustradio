@@ -30,7 +30,6 @@ soapysdr = { version = "0.4.2", optional = true }
 serde_json = "1.0"
 serde = {version = "1.0", features = ["derive"]}
 cpal = { version = "0.15", features = ["jack"], optional=true }
-errno = "0.3"
 rustradio_macros = { version = "0.14.2", path = "rustradio_macros" }
 rayon = "1.10"
 itertools = "0.13"
@@ -105,8 +104,6 @@ required-features = ["audio"]
 [[example]]
 name = "airspy_am_decode"
 required-features = ["audio"]
-
-[profile.release]
 # debug = true
 
 [profile.nodebug]
