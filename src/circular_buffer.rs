@@ -367,24 +367,22 @@ impl<T> Buffer<T> {
             dummy: std::marker::PhantomData,
         })
     }
+}
 
-    pub(crate) fn id(&self) -> usize {
+impl<T: Send + Sync> crate::Buffer<T> for Buffer<T> {
+    fn id(&self) -> usize {
         self.id
     }
 
-    /// Return length of buffer, ignoring how much is in use, and the
-    /// double buffer.
-    #[must_use]
-    pub fn total_size(&self) -> usize {
+    fn total_size(&self) -> usize {
         self.circ.total_size() / self.member_size
     }
 
-    /// Available space to write, in bytes.
-    #[must_use]
-    pub fn free(&self) -> usize {
+    fn free(&self) -> usize {
         self.state.lock.lock().unwrap().free()
     }
-    pub fn wait_for_write(&self, need: usize) -> usize {
+
+    fn wait_for_write(&self, need: usize) -> usize {
         self.state
             .cv
             .wait_timeout_while(self.state.lock.lock().unwrap(), SYNC_SLEEP_TIME, |s| {
@@ -395,7 +393,7 @@ impl<T> Buffer<T> {
             .free()
     }
     #[cfg(feature = "async")]
-    pub async fn wait_for_write_async(&self, _need: usize) -> usize {
+    async fn wait_for_write_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
         let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
@@ -403,7 +401,7 @@ impl<T> Buffer<T> {
             _ = self.state.acvw.notified() => 1,
         }
     }
-    pub fn wait_for_read(&self, need: usize) -> usize {
+    fn wait_for_read(&self, need: usize) -> usize {
         self.state
             .cv
             .wait_timeout_while(self.state.lock.lock().unwrap(), SYNC_SLEEP_TIME, |s| {
@@ -414,7 +412,7 @@ impl<T> Buffer<T> {
             .used
     }
     #[cfg(feature = "async")]
-    pub async fn wait_for_read_async(&self, _need: usize) -> usize {
+    async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
         let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
@@ -521,7 +519,7 @@ impl<T: Copy> Buffer<T> {
     /// Get the read slice.
     ///
     /// TODO: no need for Result in API.
-    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(self: Arc<Self>) -> Result<(dyn crate::BufferReader<T>, Vec<Tag>)> {
         let s = self.state.lock.lock().unwrap();
         let (start, end) = s.read_range();
         let mut tags = Vec::with_capacity(s.tags.len());

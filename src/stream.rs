@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 
-use crate::circular_buffer;
 use crate::{Error, Float, Len, Result};
 
 /// Tag position in the current stream.
@@ -169,7 +168,7 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
 /// `read_buf()`.
 #[derive(Debug)]
 pub struct ReadStream<T> {
-    circ: Arc<circular_buffer::Buffer<T>>,
+    circ: Arc<dyn crate::Buffer<T>>,
 }
 
 impl<T: Copy> ReadStream<T> {
@@ -177,7 +176,7 @@ impl<T: Copy> ReadStream<T> {
     #[cfg(test)]
     #[must_use]
     pub fn from_slice(data: &[T]) -> Self {
-        let circ = Arc::new(circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap()); // TODO
+        let circ = Arc::new(crate::Buffer::new(DEFAULT_STREAM_SIZE).unwrap()); // TODO
         let mut wb = circ.clone().write_buf().unwrap();
         wb.fill_from_slice(data);
         wb.produce(data.len(), &[]);
@@ -195,7 +194,7 @@ impl<T: Copy> ReadStream<T> {
     /// "consume" from it.
     ///
     /// See [`WriteStream::write_buf`] for details about the refcount checks.
-    pub fn read_buf(&self) -> Result<(circular_buffer::BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(&self) -> Result<(dyn crate::BufferReader<T>, Vec<Tag>)> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "read_buf() called with refcount {refcount}");
         if refcount > 3 {
@@ -243,7 +242,7 @@ impl<T> ReadStream<T> {
 /// The write part of a stream.
 #[derive(Debug)]
 pub struct WriteStream<T> {
-    circ: Arc<circular_buffer::Buffer<T>>,
+    circ: Arc<dyn crate::Buffer<T>>,
 }
 
 impl<T> WriteStream<T> {
@@ -287,7 +286,7 @@ impl<T: Copy> WriteStream<T> {
     /// will be caught by MTGraph testing during development.
     ///
     /// The above also goes for [`ReadStream::read_buf`].
-    pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>> {
+    pub fn write_buf(&self) -> Result<dyn crate::BufferWriter<T>> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "write_buf() called with refcount {refcount}");
         if refcount > 3 {
@@ -322,7 +321,7 @@ impl<T: Copy> WriteStream<T> {
 /// Basically anything that GNU Radio would *not* call a message port.
 #[must_use]
 pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
-    let circ = Arc::new(circular_buffer::Buffer::new(DEFAULT_STREAM_SIZE).unwrap());
+    let circ = Arc::new(crate::Buffer::new(DEFAULT_STREAM_SIZE).unwrap());
     (WriteStream { circ: circ.clone() }, ReadStream { circ })
 }
 

@@ -350,6 +350,35 @@ error_from!(
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub trait Buffer<T>: Send + Sync {
+    #[must_use]
+    fn id(&self) -> usize;
+
+    /// Return length of buffer, ignoring how much is in use, and the
+    /// double buffer.
+    #[must_use]
+    fn total_size(&self) -> usize;
+
+    /// Available space to write, in bytes.
+    #[must_use]
+    fn free(&self) -> usize;
+    fn wait_for_write(&self, need: usize) -> usize;
+
+    #[cfg(feature = "async")]
+    async fn wait_for_write_async(&self, _need: usize) -> usize;
+
+    fn wait_for_read(&self, need: usize) -> usize;
+
+    #[cfg(feature = "async")]
+    async fn wait_for_read_async(&self, _need: usize) -> usize;
+}
+
+pub trait BufferReader<T>: Send + Sync {
+}
+
+pub trait BufferWriter<T>: Send + Sync {
+}
+
 /// Repeat between zero and infinite times.
 #[derive(Debug)]
 pub struct Repeat {
