@@ -372,8 +372,7 @@ impl<T> Buffer<T> {
         })
     }
 
-    #[must_use]
-    pub(crate) fn id(&self) -> usize {
+    pub fn id(&self) -> usize {
         self.id
     }
 
@@ -510,7 +509,7 @@ impl<T: Copy> Buffer<T> {
     /// Produce samples (commit writes).
     ///
     /// Will only be called from the write buffer.
-    pub(in crate::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
+    pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
         if n == 0 {
             debug_assert!(tags.is_empty());
             if !tags.is_empty() {

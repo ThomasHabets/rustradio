@@ -7,6 +7,7 @@ use crate::{Error, Result};
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
+use crate::sys::{Instant, get_cpu_time, sleep};
 
 /**
 Abstraction over graph executors.
@@ -90,16 +91,43 @@ impl Graph {
     }
 }
 
+/// Get CPU time spent so far by this process.
 #[must_use]
 pub(crate) fn get_cpu_time() -> std::time::Duration {
-    use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
-    // SAFETY: Zeroing out a timespec struct is just all zeroes.
-    let mut ts: timespec = unsafe { std::mem::zeroed() };
-    // SAFETY: Local variable written my C function.
-    let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &raw mut ts) };
-    assert!((rc == 0), "clock_gettime()");
-    std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+    #[cfg(feature = "wasm")]
+    {
+        std::time::Duration::from_secs(0)
+    }
+    #[cfg(not(feature = "wasm"))]
+    {
+        use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
+        // SAFETY: Zeroing out a timespec struct is just all zeroes.
+        let mut ts: timespec = unsafe { std::mem::zeroed() };
+        // SAFETY: Local variable written my C function.
+        let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
+        if rc != 0 {
+            panic!("clock_gettime()");
+        }
+        std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+    }
+    #[cfg(feature = "wasm")]
+    std::time::Duration::from_secs(1)
+    let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
+    if rc != 0 {
+        panic!("clock_gettime()");
+    }
 }
+
+fn sleep(d: std::time::Duration) {
+    if !cfg!(feature = "wasm") {
+        std::thread::sleep(d);
+    }
+}
+
+#[cfg(feature = "wasm")]
+type Instant = crate::wasm::export::Instant;
+#[cfg(not(feature = "wasm"))]
+type Instant = std::time::Instant;
 
 impl GraphRunner for Graph {
     fn add(&mut self, b: Box<dyn Block + Send>) {
@@ -174,7 +202,7 @@ impl GraphRunner for Graph {
             if all_idle {
                 let idle_sleep = std::time::Duration::from_millis(10);
                 trace!("No output or consumption from any block. Sleeping a bit.");
-                std::thread::sleep(idle_sleep);
+                sleep(idle_sleep);
             }
         }
         self.spent_time = Some(st.elapsed());
