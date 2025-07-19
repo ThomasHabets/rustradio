@@ -367,22 +367,23 @@ impl<T> Buffer<T> {
             dummy: std::marker::PhantomData,
         })
     }
-}
 
-impl<T: Send + Sync> crate::Buffer<T> for Buffer<T> {
-    fn id(&self) -> usize {
+    pub fn id(&self) -> usize {
         self.id
     }
 
-    fn total_size(&self) -> usize {
+    /// Return length of buffer, ignoring how much is in use, and the
+    /// double buffer.
+    pub fn total_size(&self) -> usize {
         self.circ.total_size() / self.member_size
     }
 
-    fn free(&self) -> usize {
+    /// Available space to write, in bytes.
+    pub fn free(&self) -> usize {
         self.state.lock.lock().unwrap().free()
     }
 
-    fn wait_for_write(&self, need: usize) -> usize {
+    pub fn wait_for_write(&self, need: usize) -> usize {
         self.state
             .cv
             .wait_timeout_while(self.state.lock.lock().unwrap(), SYNC_SLEEP_TIME, |s| {
@@ -393,7 +394,7 @@ impl<T: Send + Sync> crate::Buffer<T> for Buffer<T> {
             .free()
     }
     #[cfg(feature = "async")]
-    async fn wait_for_write_async(&self, _need: usize) -> usize {
+    pub async fn wait_for_write_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
         let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
@@ -401,7 +402,7 @@ impl<T: Send + Sync> crate::Buffer<T> for Buffer<T> {
             _ = self.state.acvw.notified() => 1,
         }
     }
-    fn wait_for_read(&self, need: usize) -> usize {
+    pub fn wait_for_read(&self, need: usize) -> usize {
         self.state
             .cv
             .wait_timeout_while(self.state.lock.lock().unwrap(), SYNC_SLEEP_TIME, |s| {
@@ -412,7 +413,7 @@ impl<T: Send + Sync> crate::Buffer<T> for Buffer<T> {
             .used
     }
     #[cfg(feature = "async")]
-    async fn wait_for_read_async(&self, _need: usize) -> usize {
+    pub async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
         let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
@@ -433,7 +434,7 @@ impl<T: Copy> Buffer<T> {
     /// Consume samples from input buffer.
     ///
     /// Will only be called from the read buffer.
-    pub(in crate::circular_buffer) fn consume(&self, n: usize) {
+    pub(in crate::nowasm::circular_buffer) fn consume(&self, n: usize) {
         let mut s = self.state.lock.lock().unwrap();
         assert!(
             n <= s.used,
@@ -475,7 +476,7 @@ impl<T: Copy> Buffer<T> {
     /// Produce samples (commit writes).
     ///
     /// Will only be called from the write buffer.
-    pub(in crate::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
+    pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
         if n == 0 {
             debug_assert!(tags.is_empty());
             if !tags.is_empty() {
@@ -519,7 +520,7 @@ impl<T: Copy> Buffer<T> {
     /// Get the read slice.
     ///
     /// TODO: no need for Result in API.
-    pub fn read_buf(self: Arc<Self>) -> Result<(dyn crate::BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let s = self.state.lock.lock().unwrap();
         let (start, end) = s.read_range();
         let mut tags = Vec::with_capacity(s.tags.len());

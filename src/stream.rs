@@ -168,7 +168,7 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
 /// `read_buf()`.
 #[derive(Debug)]
 pub struct ReadStream<T> {
-    circ: Arc<dyn crate::Buffer<T>>,
+    circ: Arc<crate::Buffer<T>>,
 }
 
 impl<T: Copy> ReadStream<T> {
@@ -194,7 +194,7 @@ impl<T: Copy> ReadStream<T> {
     /// "consume" from it.
     ///
     /// See [`WriteStream::write_buf`] for details about the refcount checks.
-    pub fn read_buf(&self) -> Result<(dyn crate::BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(&self) -> Result<(crate::BufferReader<T>, Vec<Tag>)> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "read_buf() called with refcount {refcount}");
         if refcount > 3 {
@@ -242,10 +242,10 @@ impl<T> ReadStream<T> {
 /// The write part of a stream.
 #[derive(Debug)]
 pub struct WriteStream<T> {
-    circ: Arc<dyn crate::Buffer<T>>,
+    circ: Arc<crate::Buffer<T>>,
 }
 
-impl<T> WriteStream<T> {
+impl<T: Default+Clone> WriteStream<T> {
     /// Create new stream pair.
     #[must_use]
     pub fn new() -> (WriteStream<T>, ReadStream<T>) {
@@ -286,7 +286,7 @@ impl<T: Copy> WriteStream<T> {
     /// will be caught by MTGraph testing during development.
     ///
     /// The above also goes for [`ReadStream::read_buf`].
-    pub fn write_buf(&self) -> Result<dyn crate::BufferWriter<T>> {
+    pub fn write_buf(&self) -> Result<crate::BufferWriter<T>> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "write_buf() called with refcount {refcount}");
         if refcount > 3 {
@@ -320,7 +320,7 @@ impl<T: Copy> WriteStream<T> {
 ///
 /// Basically anything that GNU Radio would *not* call a message port.
 #[must_use]
-pub fn new_stream<T>() -> (WriteStream<T>, ReadStream<T>) {
+pub fn new_stream<T: Default+Clone>() -> (WriteStream<T>, ReadStream<T>) {
     let circ = Arc::new(crate::Buffer::new(DEFAULT_STREAM_SIZE).unwrap());
     (WriteStream { circ: circ.clone() }, ReadStream { circ })
 }
