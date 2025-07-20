@@ -49,6 +49,37 @@ impl<In, F> Inspect<In, F> {
     }
 }
 
+/// Block to convert from u8 to other sample types.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, new, bound = "T: Default+Clone")]
+pub struct Parse<T> {
+    #[rustradio(in)]
+    src: ReadStream<u8>,
+    #[rustradio(out)]
+    dst: WriteStream<T>,
+}
+
+impl<T: Sample<Type = T>> Block for Parse<T> {
+    fn work(&mut self) -> Result<BlockRet> {
+        // TODO: make more efficient by doing batches.
+        loop {
+            // TODO: handle tags.
+            let (i, _) = self.src.read_buf()?;
+            if i.len() < T::size() {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            }
+            let mut o = self.dst.write_buf()?;
+            if o.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
+            let s = T::parse(&i.slice()[..T::size()])?;
+            o.slice()[0] = s;
+            o.produce(1, &[]);
+            i.consume(T::size());
+        }
+    }
+}
+
 /// Arbitrary mapping using a lambda.
 ///
 /// A Map block transforms one sample at a time, from input to output. The input
