@@ -2,7 +2,7 @@
  */
 use std::time::Instant;
 
-use crate::Result;
+use crate::{Error, Result};
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
@@ -128,7 +128,9 @@ impl GraphRunner for Graph {
                 let name = b.block_name().to_owned();
                 let st = Instant::now();
                 let st_cpu = get_cpu_time();
-                let ret = b.work()?;
+                let ret = b
+                    .work()
+                    .map_err(|e| Error::wrap(e, format!("in block {name}")))?;
 
                 self.times[n] += st.elapsed();
                 self.cpu_times[n] += get_cpu_time() - st_cpu;
