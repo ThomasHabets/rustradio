@@ -12,7 +12,7 @@ pub mod export {
         used: usize,
         stream: Vec<T>,
     }
-    impl<T: Default+Clone> BufferState<T> {
+    impl<T: Default + Clone> BufferState<T> {
         fn new(size: usize) -> Self {
             Self {
                 rpos: 0,
@@ -41,7 +41,7 @@ pub mod export {
         id: usize,
         state: Mutex<BufferState<T>>,
     }
-    impl<T: Clone+Default> Buffer<T> {
+    impl<T: Clone + Default> Buffer<T> {
         pub fn new(size: usize) -> Result<Self> {
             Ok(Self {
                 id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),

@@ -218,7 +218,6 @@ pub mod wasm;
 #[cfg(feature = "wasm")]
 pub use wasm::export::*;
 
-#[cfg(not(feature = "wasm"))]
 pub mod graph;
 #[cfg(not(feature = "wasm"))]
 pub mod mtgraph;

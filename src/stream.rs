@@ -245,7 +245,7 @@ pub struct WriteStream<T> {
     circ: Arc<crate::Buffer<T>>,
 }
 
-impl<T: Default+Clone> WriteStream<T> {
+impl<T: Default + Clone> WriteStream<T> {
     /// Create new stream pair.
     #[must_use]
     pub fn new() -> (WriteStream<T>, ReadStream<T>) {
@@ -320,7 +320,7 @@ impl<T: Copy> WriteStream<T> {
 ///
 /// Basically anything that GNU Radio would *not* call a message port.
 #[must_use]
-pub fn new_stream<T: Default+Clone>() -> (WriteStream<T>, ReadStream<T>) {
+pub fn new_stream<T: Default + Clone>() -> (WriteStream<T>, ReadStream<T>) {
     let circ = Arc::new(crate::Buffer::new(DEFAULT_STREAM_SIZE).unwrap());
     (WriteStream { circ: circ.clone() }, ReadStream { circ })
 }
