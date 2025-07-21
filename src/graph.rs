@@ -89,18 +89,23 @@ impl Graph {
 /// Get CPU time spent so far by this process.
 #[must_use]
 pub(crate) fn get_cpu_time() -> std::time::Duration {
-    if cfg!(feature = "wasm") {
-        return std::time::Duration::from_secs(0);
+    #[cfg(feature = "wasm")]
+    {
+        std::time::Duration::from_secs(0)
     }
-    use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
-    // SAFETY: Zeroing out a timespec struct is just all zeroes.
-    let mut ts: timespec = unsafe { std::mem::zeroed() };
-    // SAFETY: Local variable written my C function.
-    let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
-    if rc != 0 {
-        panic!("clock_gettime()");
+    #[cfg(not(feature = "wasm"))]
+    {
+        use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
+        // SAFETY: Zeroing out a timespec struct is just all zeroes.
+        use libc::timespec;
+        let mut ts: timespec = unsafe { std::mem::zeroed() };
+        // SAFETY: Local variable written my C function.
+        let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
+        if rc != 0 {
+            panic!("clock_gettime()");
+        }
+        std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
     }
-    std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
 }
 
 fn sleep(d: std::time::Duration) {
@@ -109,15 +114,10 @@ fn sleep(d: std::time::Duration) {
     }
 }
 
-struct Instant {}
-impl Instant {
-    fn now() -> Self {
-        Self {}
-    }
-    fn elapsed(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(0)
-    }
-}
+#[cfg(feature = "wasm")]
+type Instant = crate::wasm::export::Instant;
+#[cfg(not(feature = "wasm"))]
+type Instant = std::time::Instant;
 
 impl GraphRunner for Graph {
     fn add(&mut self, b: Box<dyn Block + Send>) {

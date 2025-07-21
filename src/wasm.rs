@@ -3,7 +3,25 @@ pub mod export {
     use crate::stream::Tag;
     use std::sync::Arc;
     use std::sync::Mutex;
-    //use std::collections::VecDeque;
+
+    /// Fake std::time::Instant.
+    pub(crate) struct Instant {
+        ts: f64,
+    }
+    impl Instant {
+        pub(crate) fn now() -> Self {
+            Self { ts: Self::now2() }
+        }
+        fn now2() -> f64 {
+            web_sys::window()
+                .and_then(|v| v.performance())
+                .map(|v| v.now())
+                .unwrap_or_default()
+        }
+        pub(crate) fn elapsed(&self) -> std::time::Duration {
+            std::time::Duration::from_millis((Self::now2() - self.ts) as u64)
+        }
+    }
 
     #[derive(Debug)]
     struct BufferState<T> {
