@@ -86,22 +86,27 @@ impl Graph {
     }
 }
 
+/// Get CPU time spent so far by this process.
 #[must_use]
 pub(crate) fn get_cpu_time() -> std::time::Duration {
-    #[cfg(not(feature = "wasm"))]
-    {
-        use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
-        // SAFETY: Zeroing out a timespec struct is just all zeroes.
-        let mut ts: timespec = unsafe { std::mem::zeroed() };
-        // SAFETY: Local variable written my C function.
-        let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
-        if rc != 0 {
-            panic!("clock_gettime()");
-        }
-        std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+    if cfg!(feature = "wasm") {
+        return std::time::Duration::from_secs(0);
     }
-    #[cfg(feature = "wasm")]
-    std::time::Duration::from_secs(1)
+    use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
+    // SAFETY: Zeroing out a timespec struct is just all zeroes.
+    let mut ts: timespec = unsafe { std::mem::zeroed() };
+    // SAFETY: Local variable written my C function.
+    let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
+    if rc != 0 {
+        panic!("clock_gettime()");
+    }
+    std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+}
+
+fn sleep(d: std::time::Duration) {
+    if !cfg!(features = "wasm") {
+        std::thread::sleep(d);
+    }
 }
 
 struct Instant {}
@@ -111,10 +116,9 @@ impl Instant {
     }
     fn elapsed(&self) -> std::time::Duration {
         // TODO
-        std::time::Duration::from_secs(1)
+        std::time::Duration::from_secs(0)
     }
 }
-//std::time::Instant::now()
 
 impl GraphRunner for Graph {
     fn add(&mut self, b: Box<dyn Block + Send>) {
@@ -189,7 +193,7 @@ impl GraphRunner for Graph {
             if all_idle {
                 let idle_sleep = std::time::Duration::from_millis(10);
                 trace!("No output or consumption from any block. Sleeping a bit.");
-                //std::thread::sleep(idle_sleep);
+                sleep(idle_sleep);
             }
         }
         self.spent_time = Some(st.elapsed());
