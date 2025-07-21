@@ -209,14 +209,15 @@ pub mod blocks;
 #[cfg(not(feature = "wasm"))]
 pub mod nowasm;
 
-#[cfg(not(feature = "wasm"))]
-pub use nowasm::export::*;
-
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-#[cfg(feature = "wasm")]
-pub use wasm::export::*;
+pub mod sys {
+    #[cfg(not(feature = "wasm"))]
+    pub use super::nowasm::export::*;
+    #[cfg(feature = "wasm")]
+    pub use super::wasm::export::*;
+}
 
 pub mod graph;
 #[cfg(not(feature = "wasm"))]

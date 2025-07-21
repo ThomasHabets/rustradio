@@ -7,7 +7,8 @@ use crate::Result;
 use log::{debug, error, info};
 
 use crate::block::{Block, BlockRet};
-use crate::graph::{CancellationToken, get_cpu_time};
+use crate::graph::CancellationToken;
+use crate::sys::get_cpu_time;
 
 const MIN_IDLE_SLEEP: std::time::Duration = std::time::Duration::from_millis(1);
 const MAX_IDLE_SLEEP: std::time::Duration = std::time::Duration::from_millis(100);

@@ -4,6 +4,7 @@ use crate::{Error, Result};
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
+use crate::sys::get_cpu_time;
 
 /**
 Abstraction over graph executors.
@@ -83,27 +84,6 @@ impl Graph {
             cpu_times: Vec::new(),
             cancel_token: CancellationToken::new(),
         }
-    }
-}
-
-/// Get CPU time spent so far by this process.
-#[must_use]
-pub(crate) fn get_cpu_time() -> std::time::Duration {
-    #[cfg(feature = "wasm")]
-    {
-        std::time::Duration::from_secs(0)
-    }
-    #[cfg(not(feature = "wasm"))]
-    {
-        use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
-        // SAFETY: Zeroing out a timespec struct is just all zeroes.
-        let mut ts: timespec = unsafe { std::mem::zeroed() };
-        // SAFETY: Local variable written my C function.
-        let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
-        if rc != 0 {
-            panic!("clock_gettime()");
-        }
-        std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
     }
 }
 
