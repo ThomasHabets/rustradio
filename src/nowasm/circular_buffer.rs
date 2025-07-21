@@ -374,15 +374,16 @@ impl<T> Buffer<T> {
 
     /// Return length of buffer, ignoring how much is in use, and the
     /// double buffer.
+    #[must_use]
     pub fn total_size(&self) -> usize {
         self.circ.total_size() / self.member_size
     }
 
     /// Available space to write, in bytes.
+    #[must_use]
     pub fn free(&self) -> usize {
         self.state.lock.lock().unwrap().free()
     }
-
     pub fn wait_for_write(&self, need: usize) -> usize {
         self.state
             .cv

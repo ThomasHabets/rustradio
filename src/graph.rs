@@ -97,7 +97,6 @@ pub(crate) fn get_cpu_time() -> std::time::Duration {
     {
         use libc::{CLOCK_PROCESS_CPUTIME_ID, clock_gettime, timespec};
         // SAFETY: Zeroing out a timespec struct is just all zeroes.
-        use libc::timespec;
         let mut ts: timespec = unsafe { std::mem::zeroed() };
         // SAFETY: Local variable written my C function.
         let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
