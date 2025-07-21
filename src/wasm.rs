@@ -1,3 +1,6 @@
+//! This module contains wasm versions of various code.
+//!
+//! It must fail gracefully when used in a web worker.
 pub mod export {
     use crate::Result;
     use crate::stream::Tag;
