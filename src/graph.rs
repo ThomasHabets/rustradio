@@ -104,7 +104,7 @@ pub(crate) fn get_cpu_time() -> std::time::Duration {
 }
 
 fn sleep(d: std::time::Duration) {
-    if !cfg!(features = "wasm") {
+    if !cfg!(feature = "wasm") {
         std::thread::sleep(d);
     }
 }
@@ -115,7 +115,6 @@ impl Instant {
         Self {}
     }
     fn elapsed(&self) -> std::time::Duration {
-        // TODO
         std::time::Duration::from_secs(0)
     }
 }
