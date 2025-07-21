@@ -15,6 +15,7 @@ pub(crate) fn get_cpu_time() -> std::time::Duration {
 pub mod export {
     pub use super::circular_buffer;
     pub(crate) use super::get_cpu_time;
+    pub use std::time::Instant;
     pub type Buffer<T> = circular_buffer::Buffer<T>;
     pub type BufferReader<T> = circular_buffer::BufferReader<T>;
     pub type BufferWriter<T> = circular_buffer::BufferWriter<T>;

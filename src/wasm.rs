@@ -37,13 +37,20 @@ struct BufferState<T> {
     used: usize,
     stream: Vec<T>,
 }
-impl<T: Default + Clone> BufferState<T> {
+impl<T> BufferState<T> {
     fn new(size: usize) -> Self {
+        let mut stream: Vec<std::mem::MaybeUninit<T>> = Vec::with_capacity(size);
+        // SAFETY: set_len is safe here because we are manually managing
+        // initialization
+        let stream = unsafe {
+            stream.set_len(size);
+            std::mem::transmute(stream)
+        };
         Self {
             rpos: 0,
             wpos: 0,
             used: 0,
-            stream: vec![T::default(); size],
+            stream,
         }
     }
 }
@@ -66,7 +73,7 @@ pub struct Buffer<T> {
     id: usize,
     state: Mutex<BufferState<T>>,
 }
-impl<T: Clone + Default> Buffer<T> {
+impl<T> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),

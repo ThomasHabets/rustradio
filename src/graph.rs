@@ -4,7 +4,7 @@ use crate::{Error, Result};
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::sys::get_cpu_time;
+use crate::sys::{Instant, get_cpu_time, sleep};
 
 /**
 Abstraction over graph executors.
@@ -86,17 +86,6 @@ impl Graph {
         }
     }
 }
-
-fn sleep(d: std::time::Duration) {
-    if !cfg!(feature = "wasm") {
-        std::thread::sleep(d);
-    }
-}
-
-#[cfg(feature = "wasm")]
-type Instant = crate::wasm::export::Instant;
-#[cfg(not(feature = "wasm"))]
-type Instant = std::time::Instant;
 
 impl GraphRunner for Graph {
     fn add(&mut self, b: Box<dyn Block + Send>) {

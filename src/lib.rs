@@ -217,6 +217,13 @@ pub mod sys {
     pub use super::nowasm::export::*;
     #[cfg(feature = "wasm")]
     pub use super::wasm::export::*;
+
+    /// Sleep.
+    pub fn sleep(d: std::time::Duration) {
+        if !cfg!(feature = "wasm") {
+            std::thread::sleep(d);
+        }
+    }
 }
 
 pub mod graph;
