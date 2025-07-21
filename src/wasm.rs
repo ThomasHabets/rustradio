@@ -1,7 +1,6 @@
 //! This module contains wasm versions of various code.
 //!
 //! It must fail gracefully when used in a web worker.
-pub mod export {
     use crate::Result;
     use crate::stream::Tag;
     use std::sync::Arc;
@@ -234,4 +233,9 @@ pub mod export {
             self.len() == 0
         }
     }
+pub mod export {
+    pub(crate) use super::Instant;
+    pub type Buffer<T> = super::Buffer<T>;
+    pub type BufferReader<T> = super::BufferReader<T>;
+    pub type BufferWriter<T> = super::BufferWriter<T>;
 }
