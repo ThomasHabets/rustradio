@@ -32,6 +32,7 @@ impl<T: Sample> FileSourceBuilder<T> {
     }
 
     /// Repeat mode.
+    #[must_use]
     pub fn repeat(mut self, r: Repeat) -> Self {
         self.repeat = r;
         self

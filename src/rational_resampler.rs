@@ -67,6 +67,7 @@ impl<T> RationalResamplerBuilderInterp<T> {
     }
 }
 impl<T> RationalResamplerBuilderDeci<T> {
+    #[must_use]
     pub fn interp(self, interp: usize) -> RationalResamplerBuilderBoth<T> {
         RationalResamplerBuilderBoth {
             deci: self.deci,

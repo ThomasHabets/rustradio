@@ -247,6 +247,7 @@ impl<T: Sample + Type> SigMFSourceBuilder<T> {
     ///
     /// This is used e.g. if you just want the bytes of the data stream, to
     /// checksum or something.
+    #[must_use]
     pub fn ignore_type_error(mut self) -> Self {
         self.ignore_type_error = true;
         self

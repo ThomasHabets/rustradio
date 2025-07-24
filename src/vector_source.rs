@@ -18,6 +18,7 @@ impl<T: Sample> VectorSourceBuilder<T> {
         self
     }
     /// Populate tags.
+    #[must_use]
     pub fn tags(mut self, tags: &[Tag]) -> VectorSourceBuilder<T> {
         self.block.tags.extend(tags.iter().cloned());
         self

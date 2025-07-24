@@ -167,6 +167,7 @@ where
     /// Set the decimation to the given value.
     ///
     /// The default is 1, meaning no decimation.
+    #[must_use]
     pub fn deci(mut self, deci: usize) -> Self {
         self.deci = deci;
         self

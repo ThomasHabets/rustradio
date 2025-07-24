@@ -12,6 +12,7 @@ static FIELD_ATTRS: &[&str] = &["in", "out", "default", "into"];
 // See example at:
 // * https://docs.rs/syn/latest/syn/struct.Attribute.html#method.parse_nested_meta
 // * https://docs.rs/syn/latest/syn/meta/fn.parser.html
+#[must_use]
 fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
     attrs: I,
     name: &str,
@@ -44,6 +45,7 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 /// Return the inner type of a generic type.
 ///
 /// E.g. given ReadStream<Float>, return Float.
+#[must_use]
 fn inner_type(ty: &syn::Type) -> &syn::Type {
     if let syn::Type::Path(p) = &ty {
         let segment = p.path.segments.last().unwrap();
@@ -85,6 +87,7 @@ struct StructAttrs {
 }
 
 impl StructAttrs {
+    #[must_use]
     fn path(&self) -> proc_macro2::TokenStream {
         if self.internal {
             quote! { crate }
@@ -92,6 +95,7 @@ impl StructAttrs {
             quote! { rustradio }
         }
     }
+    #[must_use]
     fn parse(attrs: &[Attribute]) -> StructAttrs {
         let mut ret = StructAttrs::default();
         let mut bounds = Vec::new();
@@ -139,6 +143,7 @@ impl StructAttrs {
     }
 }
 
+#[must_use]
 fn merge_where_clauses(
     struct_clause: Option<&syn::WhereClause>,
     macro_clause: Option<&syn::WhereClause>,
@@ -215,6 +220,7 @@ impl<'a> Parsed<'a> {
                 .collect(),
         })
     }
+    #[must_use]
     fn in_name_types(&self) -> Vec<proc_macro2::TokenStream> {
         self.inputs
             .iter()
@@ -225,6 +231,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn parm_name_types(&self) -> Vec<proc_macro2::TokenStream> {
         self.parms
             .iter()
@@ -239,18 +246,21 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn in_names(&self) -> Vec<&syn::Ident> {
         self.inputs
             .iter()
             .map(|field| field.ident.as_ref().unwrap())
             .collect()
     }
+    #[must_use]
     fn out_names(&self) -> Vec<&syn::Ident> {
         self.outputs
             .iter()
             .map(|field| field.ident.as_ref().unwrap())
             .collect()
     }
+    #[must_use]
     fn in_tag_names(&self) -> Vec<syn::Ident> {
         self.inputs
             .iter()
@@ -260,6 +270,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn out_tag_names(&self) -> Vec<syn::Ident> {
         self.outputs
             .iter()
@@ -269,6 +280,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn out_tag_names_tmp(&self) -> Vec<syn::Ident> {
         self.outputs
             .iter()
@@ -278,6 +290,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn out_names_samp(&self) -> Vec<syn::Ident> {
         self.outputs
             .iter()
@@ -287,6 +300,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn parm_into_names(&self) -> Vec<&syn::Ident> {
         self.parms
             .iter()
@@ -299,6 +313,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn parm_no_into_names(&self) -> Vec<&syn::Ident> {
         self.parms
             .iter()
@@ -311,6 +326,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn parm_into_types(&self) -> Vec<TokenStream> {
         self.parms
             .iter()
@@ -326,6 +342,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn fields_defaulted(&self) -> Vec<TokenStream> {
         self.defaults
             .iter()
@@ -336,12 +353,14 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn outval_types(&self) -> Vec<&syn::Type> {
         self.outputs
             .iter()
             .map(|field| inner_type(&field.ty))
             .collect()
     }
+    #[must_use]
     fn inval_name_types(&self) -> Vec<TokenStream> {
         self.inputs
             .iter()
@@ -352,6 +371,7 @@ impl<'a> Parsed<'a> {
             })
             .collect()
     }
+    #[must_use]
     fn intag_name_types(&self) -> Vec<TokenStream> {
         let path = self.attrs.path();
         self.inputs
@@ -364,6 +384,7 @@ impl<'a> Parsed<'a> {
             .collect()
     }
 
+    #[must_use]
     fn expand_sync_nocopy_work(&self) -> Option<TokenStream> {
         match self.attrs.sync {
             Sync::NoCopyTag => {}
@@ -396,6 +417,7 @@ impl<'a> Parsed<'a> {
         })
     }
 
+    #[must_use]
     fn expand_sync_work(&self) -> Option<TokenStream> {
         match self.attrs.sync {
             Sync::General | Sync::NoCopyTag => return None,
@@ -477,6 +499,7 @@ impl<'a> Parsed<'a> {
             }
         })
     }
+    #[must_use]
     fn expand_sync_tags(&self) -> Option<TokenStream> {
         if !matches![self.attrs.sync, Sync::Value] {
             return None;
@@ -493,6 +516,7 @@ impl<'a> Parsed<'a> {
         let first_tags = &in_tag_names[0];
         Some(quote! {
                 impl #impl_generics #name #ty_generics #where_clause {
+                    #[must_use]
                     fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types, std::borrow::Cow<'a, [#path::stream::Tag]>),*) {
                         let (#(#out_names),*) = self.process_sync(#(#in_names,)*);
                         (#(#out_names,std::borrow::Cow::Borrowed(#first_tags)),*)
@@ -500,6 +524,7 @@ impl<'a> Parsed<'a> {
                 }
         })
     }
+    #[must_use]
     fn expand_new(&self) -> Option<TokenStream> {
         if !self.attrs.generate_new {
             return None;
@@ -518,6 +543,7 @@ impl<'a> Parsed<'a> {
         let out_types: Vec<_> = self.outputs.iter().map(|field| &field.ty).collect();
         Some(quote! {
             impl #impl_generics #name #ty_generics #where_clause {
+                #[must_use]
                 pub fn new #(<#parm_into_types>),*(#(#in_name_types,)*#(#parm_name_types),*) -> (Self #(,<#out_types as #path::stream::StreamReadSide>::ReadSide)*) {
                     #(let #out_names = <#out_types>::new();)*
                     (Self {
@@ -531,6 +557,7 @@ impl<'a> Parsed<'a> {
             }
         })
     }
+    #[must_use]
     fn expand_blockname(&self) -> Option<TokenStream> {
         let name = self.name;
         let name_str = name.to_string();
@@ -550,6 +577,7 @@ impl<'a> Parsed<'a> {
         }
         })
     }
+    #[must_use]
     fn expand_eof(&self) -> Option<TokenStream> {
         if self.attrs.noeof {
             return None;
@@ -578,6 +606,7 @@ impl<'a> Parsed<'a> {
              }
         })
     }
+    #[must_use]
     fn expand(&self) -> TokenStream {
         let e: Vec<_> = [
             self.expand_new(),
@@ -599,6 +628,7 @@ impl<'a> Parsed<'a> {
 /// Backend function for the rustradio_macros::Block derive macro.
 ///
 /// Use the macro, not this function.
+#[must_use]
 pub fn derive_block(input: TokenStream) -> TokenStream {
     let input = syn::parse2::<syn::DeriveInput>(input).unwrap();
     let p = Parsed::parse(&input).unwrap();
@@ -680,6 +710,7 @@ mod tests {
         let actual = derive_block(input);
         let expected = quote! {
             impl MyBlock {
+                #[must_use]
                 pub fn new<Intobaz: Into<usize> >(
                     src: ReadStream <Float>,
                     bar: Float,
@@ -727,7 +758,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn derive_sync_no_input() {
-        derive_block(quote! {
+        let _ = derive_block(quote! {
             #[rustradio(sync)]
             struct MyBlock {
                 #[rustradio(out)]
@@ -739,7 +770,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn derive_sync_tag_no_output() {
-        derive_block(quote! {
+        let _ = derive_block(quote! {
             #[rustradio(sync)]
             struct MyBlock {
                 #[rustradio(in)]
@@ -751,7 +782,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn derive_sync_tag_no_input() {
-        derive_block(quote! {
+        let _ = derive_block(quote! {
             #[rustradio(sync)]
             struct MyBlock {
                 #[rustradio(out)]
@@ -763,7 +794,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn derive_sync_no_output() {
-        derive_block(quote! {
+        let _ = derive_block(quote! {
             #[rustradio(sync)]
             struct MyBlock {
                 #[rustradio(in)]
@@ -843,7 +874,7 @@ mod tests {
         .into_iter()
         {
             let result = std::panic::catch_unwind(|| {
-                derive_block(q);
+                let _ = derive_block(q);
             });
             assert!(result.is_err(), "Expected {name} to panic. It didn't");
         }
@@ -879,7 +910,7 @@ mod tests {
         .into_iter()
         {
             let result = std::panic::catch_unwind(|| {
-                derive_block(q);
+                let _ = derive_block(q);
             });
             assert!(result.is_err(), "Expected {name} to panic. It didn't");
         }

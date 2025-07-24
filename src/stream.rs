@@ -308,6 +308,7 @@ impl<T: Copy> WriteStream<T> {
     }
 
     #[cfg(feature = "async")]
+    #[must_use]
     pub async fn wait_for_write_async(&self, need: usize) -> bool {
         self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
     }
@@ -517,6 +518,7 @@ impl<T> NCWriteStream<T> {
 
 impl<T: Len> NCReadStream<T> {
     /// Get the size of the front packet.
+    #[must_use]
     pub fn peek_size(&self) -> Option<usize> {
         self.inner.lock.lock().unwrap().front().map(|e| e.val.len())
     }

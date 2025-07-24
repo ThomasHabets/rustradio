@@ -46,6 +46,7 @@ impl<T: Sample> FileSinkBuilder<T> {
         self
     }
     /// Set flush mode (flush after every write).
+    #[must_use]
     pub fn flush(mut self, v: bool) -> Self {
         self.flush = v;
         self
@@ -175,6 +176,7 @@ impl<T> NoCopyFileSinkBuilder<T> {
         self
     }
     /// Set flush mode (flush after every write).
+    #[must_use]
     pub fn flush(mut self, v: bool) -> Self {
         self.flush = v;
         self

@@ -142,6 +142,7 @@ impl AudioSink {
         Self::new_opts(src, sample_rate, None)
     }
     /// Create a builder.
+    #[must_use]
     pub fn builder() -> AudioSinkBuilder {
         AudioSinkBuilder::default()
     }
