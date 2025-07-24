@@ -54,6 +54,7 @@ pub struct Tag {
 
 impl Tag {
     /// Create new tag.
+    #[must_use]
     pub fn new<T: Into<String>>(pos: TagPos, key: T, val: TagValue) -> Self {
         Self {
             pos,
@@ -65,6 +66,7 @@ impl Tag {
     /// Get pos.
     ///
     /// Relative to the current window.
+    #[must_use]
     pub fn pos(&self) -> TagPos {
         self.pos
     }
@@ -77,11 +79,13 @@ impl Tag {
     }
 
     /// Get tag key.
+    #[must_use]
     pub fn key(&self) -> &str {
         &self.key
     }
 
     /// Get tag value.
+    #[must_use]
     pub fn val(&self) -> &TagValue {
         &self.val
     }
@@ -467,6 +471,7 @@ impl<T> NCReadStream<T> {
     }
 
     /// Return true is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         let has = self.inner.lock.lock().unwrap().len();
         has == 0
@@ -485,6 +490,7 @@ impl<T> StreamReadSide for NCWriteStream<T> {
 }
 impl<T> NCWriteStream<T> {
     /// Create a new stream pair.
+    #[must_use]
     pub fn new() -> (NCWriteStream<T>, NCReadStream<T>) {
         new_nocopy_stream()
     }
@@ -502,6 +508,7 @@ impl<T> NCWriteStream<T> {
     }
 
     /// Remaining capacity.
+    #[must_use]
     pub fn remaining(&self) -> usize {
         let has = self.inner.lock.lock().unwrap().len();
         self.inner.capacity - has

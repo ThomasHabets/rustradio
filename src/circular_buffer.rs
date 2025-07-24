@@ -368,6 +368,7 @@ impl<T> Buffer<T> {
         })
     }
 
+    #[must_use]
     pub(crate) fn id(&self) -> usize {
         self.id
     }
@@ -425,6 +426,7 @@ impl<T> Buffer<T> {
 }
 
 impl<T> Buffer<T> {
+    #[must_use]
     pub(crate) fn is_empty(&self) -> bool {
         let state = self.state.lock.lock().unwrap();
         state.used == 0
@@ -510,10 +512,12 @@ impl<T: Copy> Buffer<T> {
         self.state.acvr.notify_waiters();
     }
 
+    #[must_use]
     pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
         self.circ.full_buffer::<T>(start, end)
     }
 
+    #[must_use]
     pub(crate) fn slice_mut(&self, start: usize, end: usize) -> &mut [T] {
         self.circ.full_buffer::<T>(start, end)
     }
