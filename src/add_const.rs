@@ -9,6 +9,7 @@ use crate::stream::{ReadStream, Tag, WriteStream};
 /// This is basically example code. We have AddConst and add_const doing the
 /// same thing.
 #[allow(clippy::type_complexity)]
+#[must_use]
 pub fn add_const<T>(
     src: ReadStream<T>,
     val: T,
@@ -61,6 +62,7 @@ impl<T> AddConst<T>
 where
     T: Sample + std::ops::Add<Output = T>,
 {
+    #[must_use]
     fn process_sync(&self, a: T) -> T {
         a + self.val
     }

@@ -20,6 +20,7 @@ pub struct Delay<T: Sample> {
 
 impl<T: Sample> Delay<T> {
     /// Create new Delay block.
+    #[must_use]
     pub fn new(src: ReadStream<T>, delay: usize) -> (Self, ReadStream<T>) {
         let (dst, dr) = crate::stream::new_stream();
         (

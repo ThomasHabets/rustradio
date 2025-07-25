@@ -69,6 +69,7 @@ impl ZeroCrossing {
     }
 
     /// Return clock stream.
+    #[must_use]
     pub fn out_clock(&mut self) -> ReadStream<Float> {
         assert!(self.out_clock.is_none());
         let (w, r) = crate::stream::new_stream();

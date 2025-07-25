@@ -171,6 +171,7 @@ pub struct AuDecode {
 
 impl AuDecode {
     /// Create new AuDecode block.
+    #[must_use]
     pub fn new(src: ReadStream<u8>, bitrate: u32) -> (Self, ReadStream<Float>) {
         let (dst, dr) = crate::stream::new_stream();
         (

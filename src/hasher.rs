@@ -33,6 +33,7 @@ impl Drop for Hasher {
     }
 }
 
+#[must_use]
 pub fn sha512(src: ReadStream<u8>) -> (Hasher, NCReadStream<Vec<u8>>) {
     Hasher::new(src, sha2::Sha512::new())
 }

@@ -39,6 +39,7 @@ pub struct ToText<T> {
 
 impl<T> ToText<T> {
     /// Create new ToText block.
+    #[must_use]
     pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
         (Self { srcs, dst }, dr)

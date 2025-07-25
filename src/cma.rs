@@ -22,6 +22,7 @@ pub struct CmaEqualizer {
 }
 
 impl CmaEqualizer {
+    #[must_use]
     pub fn new(
         ntaps: usize,
         desired_modulus: Float,

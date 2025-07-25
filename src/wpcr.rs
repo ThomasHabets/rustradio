@@ -107,6 +107,7 @@ pub struct Wpcr {
 
 impl Wpcr {
     /// Create new WpcrBuilder.
+    #[must_use]
     pub fn builder(src: NCReadStream<Vec<Float>>) -> WpcrBuilder {
         let (wpcr, out) = Wpcr::new(src);
         WpcrBuilder { wpcr, out }

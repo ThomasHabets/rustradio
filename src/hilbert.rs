@@ -33,6 +33,7 @@ pub struct Hilbert {
 
 impl Hilbert {
     /// Create new hilber transformer with this many taps.
+    #[must_use]
     pub fn new(
         src: ReadStream<Float>,
         ntaps: usize,

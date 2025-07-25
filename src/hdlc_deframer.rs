@@ -285,6 +285,7 @@ const FCSTAB: &[u16] = &[
 ];
 
 // Calculate checksum. Code ported from RFC1662.
+#[must_use]
 pub(crate) fn calc_crc(data: &[u8]) -> u16 {
     data.iter().fold(0xffffu16, |fcs, byte| {
         let byte = *byte as u16;

@@ -51,6 +51,7 @@ pub struct MTGraph {
 
 impl MTGraph {
     /// Create a new flowgraph.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             spent_time: None,
