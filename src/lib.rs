@@ -194,6 +194,12 @@ pub mod zero_crossing;
 #[cfg(feature = "audio")]
 pub mod audio_sink;
 
+#[cfg(feature = "pipewire")]
+pub mod pipewire_sink;
+
+#[cfg(feature = "pipewire")]
+pub mod pipewire_source;
+
 #[cfg(feature = "rtlsdr")]
 pub mod rtlsdr_source;
 

@@ -66,3 +66,8 @@ pub use crate::soapysdr_source::SoapySdrSource;
 
 #[cfg(feature = "audio")]
 pub use crate::audio_sink::AudioSink;
+
+#[cfg(feature = "pipewire")]
+pub use crate::pipewire_sink::PipewireSink;
+#[cfg(feature = "pipewire")]
+pub use crate::pipewire_source::PipewireSource;
