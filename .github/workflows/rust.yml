@@ -27,7 +27,7 @@ jobs:
     - name: apt-get update
       run:  sudo apt-get update
     - name: Dependencies
-      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev schedtool
+      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev schedtool libpipewire-0.3-dev
     - name: Install tickbox
       run: cargo install tickbox
     - name: Run tickbox
