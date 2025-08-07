@@ -4,10 +4,8 @@ no-default-features = false
 
 [advisories]
 ignore = [
-    #"RUSTSEC-0000-0000",
-    #{ id = "RUSTSEC-0000-0000", reason = "you can specify a reason the advisory is ignored" },
-    #"a-crate-that-is-yanked@0.1.1", # you can also ignore yanked crate versions if you wish
-    #{ crate = "a-crate-that-is-yanked@0.1.1", reason = "you can specify why you are ignoring the yanked crate" },
+    # paste is abandoned. ratatui drops the dependency after 0.29.0.
+    "RUSTSEC-2024-0436",
 ]
 
 [licenses]
@@ -49,7 +47,10 @@ version = "0.8.0"
 
 [bans]
 multiple-versions = "allow"
-wildcards = "warn"
+# Must allow wildcard for now because macro crates come in through relative
+# paths. That's normally fine, but crates.io doesn't allow it for published
+# crates, so here we are.
+wildcards = "allow"
 allow-wildcard-paths = true
 highlight = "all"
 workspace-default-features = "allow"
@@ -67,6 +68,8 @@ deny = [
     # is a direct dependency of the otherwise banned crate
     #{ crate = "ansi_term@0.11.0", wrappers = ["this-crate-directly-depends-on-ansi_term"] },
 ]
+#[[bans.skip]]
+#name = "rustradio_macros"
 
 [sources]
 unknown-registry = "deny"

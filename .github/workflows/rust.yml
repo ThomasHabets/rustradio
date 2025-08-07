@@ -20,6 +20,8 @@ jobs:
       run: rustup install nightly
     - name: Rustup install nightly clippy
       run: rustup component add --toolchain nightly clippy
+    - name: cargo install
+      run: cargo install cargo-deny
     - name: Build
       run: cargo build --verbose
     - name: Build examples
