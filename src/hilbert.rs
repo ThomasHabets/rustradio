@@ -57,7 +57,7 @@ impl Hilbert {
 }
 
 impl Block for Hilbert {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         debug_assert_eq!(self.ntaps, self.history.len());
         let (ii, tags) = self.src.read_buf()?;
         let i = ii.slice();

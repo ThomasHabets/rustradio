@@ -51,7 +51,7 @@ pub struct Midpointer {
     dst: NCWriteStream<Vec<Float>>,
 }
 impl Block for Midpointer {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let v = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some((x, _tags)) => x,
@@ -192,7 +192,7 @@ impl Wpcr {
 }
 
 impl Block for Wpcr {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: handle tags.
         let x = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),

@@ -14,7 +14,7 @@ pub struct ConstantSource<T: Sample> {
 }
 
 impl<T: Sample> Block for ConstantSource<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;
         o.slice().fill(self.val);
         let n = o.len();

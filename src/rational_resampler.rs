@@ -133,7 +133,7 @@ impl<T: Sample> RationalResampler<T> {
 }
 
 impl<T: Sample> Block for RationalResampler<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: retain tags.
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {

@@ -26,7 +26,7 @@ impl<T> Block for WriterSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: make nonblock.
         loop {
             let (i, _) = self.src.read_buf()?;

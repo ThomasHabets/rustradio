@@ -108,7 +108,7 @@ impl RtlSdrSource {
 }
 
 impl Block for RtlSdrSource {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let mut o = self.dst.write_buf()?;
             if o.is_empty() {

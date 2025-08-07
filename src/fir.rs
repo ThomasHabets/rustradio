@@ -225,7 +225,7 @@ impl<T> Block for FirFilter<T>
 where
     T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (input, mut tags) = self.src.read_buf()?;
 
         // Get number of input samples we intend to consume.

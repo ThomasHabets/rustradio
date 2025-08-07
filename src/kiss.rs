@@ -88,7 +88,7 @@ pub struct KissDecode {
 }
 
 impl Block for KissDecode {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
@@ -154,7 +154,7 @@ pub struct KissFrame {
 }
 
 impl Block for KissFrame {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let old_state = std::mem::replace(&mut self.state, FrameState::Unsynced);
             self.state = match old_state {
@@ -233,7 +233,7 @@ pub struct KissEncode {
 }
 
 impl Block for KissEncode {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let Some((x, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));

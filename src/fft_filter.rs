@@ -275,7 +275,7 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
 }
 
 impl<T: Engine> Block for FftFilter<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: multithread this.
         loop {
             let mut o = self.dst.write_buf()?;
@@ -406,7 +406,7 @@ impl<T: Engine> FftFilterFloat<T> {
 }
 
 impl<T: Engine> Block for FftFilterFloat<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // Convert input to Complex.
         {
             let (outer_in, tags) = self.src.read_buf()?;

@@ -14,7 +14,7 @@ pub struct PipewireSource {
 }
 
 impl Block for PipewireSource {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let _ = self.dst;
         todo!()
     }

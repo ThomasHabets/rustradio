@@ -13,7 +13,7 @@ pub struct NullSink<T: Sample> {
 }
 
 impl<T: Sample> Block for NullSink<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, _) = self.src.read_buf()?;
         let n = i.len();
         i.consume(n);

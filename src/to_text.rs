@@ -53,7 +53,7 @@ impl<T> BlockEOF for ToText<T> {
 }
 
 impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: This implementation locks and unlocks a lot, as it
         // aquires samples.  Ideally it should process
         // min(self.srcs...) samples, or until output buffer is full,

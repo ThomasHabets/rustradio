@@ -17,7 +17,7 @@ pub struct Hasher {
 }
 
 impl Block for Hasher {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, _) = self.src.read_buf()?;
         let n = i.len();
         self.hasher.update(i.slice());

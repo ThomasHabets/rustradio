@@ -130,7 +130,7 @@ impl<T> Block for FileSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
         if n == 0 {
@@ -260,7 +260,7 @@ impl<T> Block for NoCopyFileSink<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Default,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         if let Some((s, _tags)) = self.src.pop() {
             // TODO: write tags.
             //let s2 = format!["{:?}", s].into();

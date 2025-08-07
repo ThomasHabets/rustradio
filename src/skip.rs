@@ -16,7 +16,7 @@ pub struct Skip<T: Sample> {
 }
 
 impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, tags) = self.src.read_buf()?;
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));

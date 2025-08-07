@@ -19,7 +19,7 @@ impl<T> Block for DebugSinkNoCopy<T>
 where
     T: std::fmt::Debug + Default + Send + Sync + 'static,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (v, _tags) = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some(x) => x,
@@ -58,7 +58,7 @@ impl<T> Block for DebugFilter<T>
 where
     T: Sample + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, tags) = self.src.read_buf()?;
 
         let tags: HashMap<usize, Vec<Tag>> =
@@ -104,7 +104,7 @@ impl<T> Block for DebugSink<T>
 where
     T: Sample + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, tags) = self.src.read_buf()?;
 
         let tags: HashMap<usize, Vec<Tag>> =

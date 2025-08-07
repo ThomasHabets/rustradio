@@ -39,7 +39,7 @@ impl<T: Send + Sync + 'static> Drop for PduWriter<T> {
 }
 
 impl<T: Sample> Block for PduWriter<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let packet = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some((x, _tags)) => x,

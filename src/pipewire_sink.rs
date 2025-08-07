@@ -42,7 +42,7 @@ impl PipewireSink {
 }
 
 impl Block for PipewireSink {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         todo!()
     }
 }

@@ -9,11 +9,6 @@
     feature(stdarch_riscv_feature_detection)
 )]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-// The below lints are in unstable only.
-#![allow(unknown_lints)]
-// I don't like the recommended syntax.
-// Commented on https://github.com/rust-lang/rust/pull/138677
-#![allow(mismatched_lifetime_syntaxes)]
 
 /*! This create provides a framework for running SDR (software defined
 radio) applications.

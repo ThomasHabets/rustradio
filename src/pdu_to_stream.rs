@@ -19,7 +19,7 @@ pub struct PduToStream<T: Sample> {
 }
 
 impl<T: Sample> Block for PduToStream<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             while self.buf.is_empty() {
                 let Some((pdu, tags)) = self.src.pop() else {

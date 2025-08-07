@@ -205,7 +205,7 @@ impl Drop for AudioSink {
 }
 
 impl Block for AudioSink {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, _tags) = self.src.read_buf()?;
         let n = i.len();
         for (pos, x) in i.iter().enumerate() {

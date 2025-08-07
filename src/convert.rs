@@ -60,7 +60,7 @@ pub struct Parse<T> {
 }
 
 impl<T: Sample<Type = T>> Block for Parse<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: make more efficient by doing batches.
         loop {
             // TODO: handle tags.
@@ -206,7 +206,7 @@ where
     Out: Send + Sync,
     F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: handle tags.
         loop {
             let Some((x, tags)) = self.src.pop() else {

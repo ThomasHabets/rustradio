@@ -136,7 +136,7 @@ pub trait Block: BlockName + BlockEOF + Send {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.
-    fn work(&mut self) -> Result<BlockRet>;
+    fn work(&mut self) -> Result<BlockRet<'_>>;
 }
 
 #[cfg(test)]

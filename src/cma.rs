@@ -47,7 +47,7 @@ impl CmaEqualizer {
 }
 
 impl Block for CmaEqualizer {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (input, tags) = self.src.read_buf()?;
         let mut output = self.dst.write_buf()?;
 

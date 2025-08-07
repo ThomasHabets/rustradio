@@ -49,7 +49,7 @@ impl<T: Sample> Delay<T> {
 }
 
 impl<T: Sample> Block for Delay<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         {
             let o = self.dst.write_buf()?;
             if o.is_empty() {

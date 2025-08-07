@@ -17,7 +17,7 @@ pub struct Strobe<T: Send + Clone> {
 }
 
 impl<T: Send + Clone> Block for Strobe<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let now = std::time::Instant::now();
         match self.last {
             None => {}

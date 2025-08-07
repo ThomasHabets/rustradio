@@ -87,7 +87,7 @@ impl<T> Block for VectorSource<T>
 where
     T: Sample,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         if self.data.is_empty() {
             return Ok(BlockRet::EOF);
         }

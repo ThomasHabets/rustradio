@@ -134,7 +134,7 @@ pub struct SoapySdrSink {
 
 impl SoapySdrSink {
     /// Create new builder.
-    pub fn builder(dev: &soapysdr::Device, freq: f64, samp_rate: f64) -> SoapySdrSinkBuilder {
+    pub fn builder(dev: &soapysdr::Device, freq: f64, samp_rate: f64) -> SoapySdrSinkBuilder<'_> {
         SoapySdrSinkBuilder {
             dev,
             freq,
@@ -147,7 +147,7 @@ impl SoapySdrSink {
 }
 
 impl Block for SoapySdrSink {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let timeout_us = 10_000;
         let (i, _tags) = self.src.read_buf()?;
         let ilen = i.len();

@@ -26,7 +26,7 @@ pub struct FcsAdder {
 }
 
 impl Block for FcsAdder {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let Some((mut data, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
@@ -83,7 +83,7 @@ fn hdlc_encode(data: &[u8]) -> Vec<u8> {
 }
 
 impl Block for HdlcFramer {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let Some((x, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));

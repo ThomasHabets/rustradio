@@ -49,7 +49,7 @@ impl Iterator for SignalSourceComplex {
 }
 
 impl Block for SignalSourceComplex {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;
         let n = o.len();
         for (to, from) in o.slice().iter_mut().zip(self.take(n)) {
@@ -100,7 +100,7 @@ impl Iterator for SignalSourceFloat {
 }
 
 impl Block for SignalSourceFloat {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;
         let n = o.len();
         o.slice()

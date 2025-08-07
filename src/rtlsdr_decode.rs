@@ -16,7 +16,7 @@ pub struct RtlSdrDecode {
 }
 
 impl Block for RtlSdrDecode {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: handle tags.
         let (input, _tags) = self.src.read_buf()?;
         let isamples = input.len() & !1;

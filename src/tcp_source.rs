@@ -39,7 +39,7 @@ impl<T> Block for TcpSource<T>
 where
     T: Sample<Type = T> + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;
         let size = T::size();
         let mut buffer = vec![0; o.len()];

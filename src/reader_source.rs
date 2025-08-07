@@ -74,7 +74,7 @@ impl<T> Block for ReaderSource<T>
 where
     T: Sample<Type = T> + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let size = T::size();
         loop {
             let mut o = self.dst.write_buf()?;

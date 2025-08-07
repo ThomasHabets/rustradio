@@ -32,7 +32,7 @@ impl<T: Send + Sync> VectorSinkNoCopy<T> {
 }
 
 impl<T: Send + Sync> Block for VectorSinkNoCopy<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut s = self.storage.lock().unwrap();
         while let Some((val, tags)) = self.src.pop() {
             if s.len() > self.max_size {
@@ -106,7 +106,7 @@ impl<T: Sample> VectorSink<T> {
 }
 
 impl<T: Sample> Block for VectorSink<T> {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut storage = self.storage.lock().unwrap();
         let (i, tags) = self.src.read_buf()?;
         let ilen = i.len();

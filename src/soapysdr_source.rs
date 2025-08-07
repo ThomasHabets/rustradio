@@ -300,7 +300,7 @@ pub struct SoapySdrSource {
 
 impl SoapySdrSource {
     /// Create new SoapySdrSource builder.
-    pub fn builder(dev: &soapysdr::Device, freq: f64, samp_rate: f64) -> SoapySdrSourceBuilder {
+    pub fn builder(dev: &soapysdr::Device, freq: f64, samp_rate: f64) -> SoapySdrSourceBuilder<'_> {
         SoapySdrSourceBuilder {
             dev,
             freq,
@@ -374,7 +374,7 @@ fn ai_string(ai: &soapysdr::ArgInfo) -> String {
 }
 
 impl Block for SoapySdrSource {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let timeout_us = 10_000;
         let mut o = self.dst.write_buf()?;
         let n = match self.stream.read(&mut [&mut o.slice()], timeout_us) {

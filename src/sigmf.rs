@@ -559,7 +559,7 @@ impl<T> Block for SigMFSource<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Type,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         if self.left == 0 {
             if self.repeat.again() {
                 self.file.seek(std::io::SeekFrom::Start(self.range.0))?;

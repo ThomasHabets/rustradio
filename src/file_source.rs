@@ -88,7 +88,7 @@ impl<T> Block for FileSource<T>
 where
     T: Sample<Type = T> + std::fmt::Debug,
 {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;
         let sample_size = T::size();
         let have = self.buf.len() / sample_size;

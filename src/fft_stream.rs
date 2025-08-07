@@ -52,7 +52,7 @@ impl FftStream {
 }
 
 impl Block for FftStream {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         let (input, _tags) = self.src.read_buf()?;
         let ii = input.slice();
         if ii.len() < self.size {

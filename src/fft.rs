@@ -24,7 +24,7 @@ impl Fft {
 }
 
 impl Block for Fft {
-    fn work(&mut self) -> Result<BlockRet> {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let Some((msg, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
