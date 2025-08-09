@@ -69,6 +69,7 @@ mod tests {
     use crate::Float;
     use crate::block::Block;
     use crate::blocks::VectorSource;
+    use crate::stream::{Tag, TagValue};
 
     #[test]
     fn add_float() -> crate::Result<()> {
@@ -83,10 +84,18 @@ mod tests {
 
         let (mut add, os) = Add::new(a, b);
         add.work()?;
-        let (res, _) = os.read_buf()?;
+        let (res, tags) = os.read_buf()?;
         let want: Vec<_> = (0..10).map(|i| 3 * i).collect();
         let got: Vec<_> = res.slice().iter().map(|f| *f as usize).collect();
         assert_eq!(got, want);
+        assert_eq!(
+            tags,
+            &[
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                Tag::new(0, "VectorSource::first", TagValue::Bool(true))
+            ]
+        );
         Ok(())
     }
 }
