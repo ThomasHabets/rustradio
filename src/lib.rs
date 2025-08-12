@@ -108,7 +108,6 @@ g.run()?;
 * `soapysdr`: Add dependency on `soapysdr`, for its various SDR support.
 * `fast-math`: Add a dependency in order to speed up some math.
 * `audio`: Add support for `AudioSink`.
-* `fftw`: Add support to use `libfftw` instead of `rustfft`.
 * `async`: Add support for `AsyncGraph`.
 * `tokio-unstable`: For async graphs, allow use of tokio unstable API,
 

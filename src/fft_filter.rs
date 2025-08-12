@@ -1,177 +1,23 @@
 //! FFT filter. Like a FIR filter, but more efficient when there are many taps.
 //!
-//! Backend can be the rustfft crate, or FFTW, if the `fftw` feature is enabled.
-//! FFTW is a little bit faster, but requires the system library as a
-//! dependency.
-//!
 //! ## Further reading:
 //! * <https://en.wikipedia.org/wiki/Fast_Fourier_transform>
 //! * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
-use crate::Result;
 use log::trace;
+use std::sync::Arc;
 
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 
-/// FFT engine.
-///
-/// This can be either RustFFT, a pure Rust dependency, or FFTW, an external
-/// standard implementation written in C.
-///
-/// FFTW is a little bit faster.
-pub trait Engine: Send {
-    /// Run runs an FFT round. Input and output is always the size of the FFT.
-    fn run(&mut self, i: &mut [Complex]);
-
-    /// Return the number of taps used.
-    ///
-    /// This is just so that we don't have to keep track of both the engine and the original tap
-    /// len.
-    #[must_use]
-    fn tap_len(&self) -> usize;
-}
-
 #[must_use]
-fn calc_fft_size(from: usize) -> usize {
+const fn calc_fft_size(from: usize) -> usize {
     let mut n = 1;
     while n < from {
         n <<= 1;
     }
     2 * n
-}
-
-#[cfg(feature = "fftw")]
-pub mod rr_fftw {
-    use super::*;
-    use fftw::plan::{C2CPlan, C2CPlan32};
-
-    /// FFT `Engine` for FFTW.
-    pub struct FftwEngine {
-        tap_len: usize,
-        taps_fft: Vec<Complex>,
-        fft: C2CPlan32,
-        ifft: C2CPlan32,
-    }
-
-    impl FftwEngine {
-        /// Create new FFTW engine, given taps.
-        #[must_use]
-        pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
-            let mut taps_fft = taps.into();
-            let tap_len = taps_fft.len();
-            let fft_size = calc_fft_size(taps_fft.len());
-            // Create FFT planners.
-            let mut fft: C2CPlan32 = C2CPlan::aligned(
-                &[fft_size],
-                fftw::types::Sign::Forward,
-                fftw::types::Flag::MEASURE,
-            )
-            .unwrap();
-            let ifft: C2CPlan32 = C2CPlan::aligned(
-                &[fft_size],
-                fftw::types::Sign::Backward,
-                fftw::types::Flag::MEASURE,
-            )
-            .unwrap();
-
-            // Pre-FFT the taps.
-            taps_fft.resize(fft_size, Complex::default());
-            let mut tmp = taps_fft.clone();
-            fft.c2c(&mut tmp, &mut taps_fft).unwrap();
-
-            // Normalization is actually the square root of this
-            // expression, but since we'll do two FFTs we can just skip
-            // the square root here and do it just once here in setup.
-            {
-                let f = 1.0 / taps_fft.len() as Float;
-                taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
-            }
-            Self {
-                fft,
-                ifft,
-                taps_fft,
-                tap_len,
-            }
-        }
-    }
-
-    impl Engine for FftwEngine {
-        fn run(&mut self, i: &mut [Complex]) {
-            use std::mem::MaybeUninit;
-
-            let fft_size = self.taps_fft.len();
-
-            // Ugly option: create un-initialized.
-            let mut tmp: Vec<MaybeUninit<Complex>> = Vec::with_capacity(fft_size);
-            // SAFETy:
-            // It'll be filled.
-            let mut tmp = unsafe {
-                tmp.set_len(fft_size);
-                std::mem::transmute::<Vec<MaybeUninit<Complex>>, Vec<Complex>>(tmp)
-            };
-
-            // Safer option: Create zeroed.
-            // let mut tmp: Vec<Complex> = vec![Complex::default(); fft_size];
-
-            // TODO: can we find a way to do this in-place?
-            self.fft.c2c(i, &mut tmp).unwrap();
-            sum_vec(&mut tmp, &self.taps_fft);
-            self.ifft.c2c(&mut tmp, i).unwrap();
-        }
-        fn tap_len(&self) -> usize {
-            self.tap_len
-        }
-    }
-}
-
-pub mod rr_rustfft {
-    use super::*;
-    use std::sync::Arc;
-    /// FFT `Engine` using crate `rustfft`.
-    pub struct RustFftEngine {
-        tap_len: usize,
-        taps_fft: Vec<Complex>,
-        fft: Arc<dyn rustfft::Fft<Float>>,
-        ifft: Arc<dyn rustfft::Fft<Float>>,
-    }
-    impl RustFftEngine {
-        /// Create new rustfft engine, given taps.
-        #[must_use]
-        pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
-            let taps = taps.into();
-            let fft_size = calc_fft_size(taps.len());
-            let mut planner = rustfft::FftPlanner::new();
-            let fft = planner.plan_fft_forward(fft_size);
-            let ifft = planner.plan_fft_inverse(fft_size);
-            let mut taps_fft = taps.to_vec();
-            taps_fft.resize(fft_size, Complex::default());
-            fft.process(&mut taps_fft);
-            // Normalization is actually the square root of this
-            // expression, but since we'll do two FFTs we can just skip
-            // the square root here and do it just once here in setup.
-            {
-                let f = 1.0 / taps_fft.len() as Float;
-                taps_fft.iter_mut().for_each(|s: &mut Complex| *s *= f);
-            }
-            Self {
-                fft,
-                ifft,
-                taps_fft,
-                tap_len: taps.len(),
-            }
-        }
-    }
-    impl Engine for RustFftEngine {
-        fn run(&mut self, i: &mut [Complex]) {
-            self.fft.process(i);
-            sum_vec(i, &self.taps_fft);
-            self.ifft.process(i);
-        }
-        fn tap_len(&self) -> usize {
-            self.tap_len
-        }
-    }
 }
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -203,36 +49,32 @@ pub mod rr_rustfft {
 /// * <https://en.wikipedia.org/wiki/Overlap%E2%80%93add_method>
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FftFilter<T: Engine> {
+pub struct FftFilter {
     buf: Vec<Complex>,
+
+    // Number of samples per FFT batch.
     nsamples: usize,
+
+    // FFT size.
     fft_size: usize,
+
+    // Temporare storage between FFT batches.
     tail: Vec<Complex>,
-    engine: T,
+
+    // FFT sized vector to filter with in the frequency domain.
+    taps_fft: Vec<Complex>,
+
+    // FFT Engines.
+    fft: Arc<dyn rustfft::Fft<Float>>,
+    ifft: Arc<dyn rustfft::Fft<Float>>,
+
     #[rustradio(in)]
     src: ReadStream<Complex>,
     #[rustradio(out)]
     dst: WriteStream<Complex>,
 }
 
-#[cfg(feature = "fftw")]
-impl FftFilter<rr_fftw::FftwEngine> {
-    /// Create a new FftFilter block, selecting the best FFT engine.
-    ///
-    /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
-    /// Otherwise it's RustFFT.
-    pub fn new<T: Into<Vec<Complex>>>(
-        src: ReadStream<Complex>,
-        taps: T,
-    ) -> (Self, ReadStream<Complex>) {
-        trace!("FftFilter: defaulting to FFTW");
-        let engine = rr_fftw::FftwEngine::new(taps);
-        Self::new_engine(src, engine)
-    }
-}
-
-#[cfg(not(feature = "fftw"))]
-impl FftFilter<rr_rustfft::RustFftEngine> {
+impl FftFilter {
     /// Create a new FftFilter block, selecting the best FFT engine.
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
@@ -242,17 +84,30 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
         taps: T,
     ) -> (Self, ReadStream<Complex>) {
         trace!("FftFilter: defaulting to RustFFT");
-        let engine = rr_rustfft::RustFftEngine::new(taps);
-        Self::new_engine(src, engine)
-    }
-}
-impl<T: Engine> FftFilter<T> {
-    /// Create new FftFilter, given an engine.
-    #[must_use]
-    pub fn new_engine(src: ReadStream<Complex>, engine: T) -> (Self, ReadStream<Complex>) {
+
+        // Get taps & calculate FFT size.
+        let mut taps = taps.into();
+        let tap_len = taps.len();
+        let fft_size = calc_fft_size(taps.len());
+
+        // Create FFT plan.
+        let mut planner = rustfft::FftPlanner::new();
+        let fft = planner.plan_fft_forward(fft_size);
+        let ifft = planner.plan_fft_inverse(fft_size);
+
+        // Create filter.
+        taps.resize(fft_size, Complex::default());
+        fft.process(&mut taps);
+        // Normalization is actually the square root of this
+        // expression, but since we'll do two FFTs we can just skip
+        // the square root here and do it just once here in setup.
+        {
+            let f = 1.0 / taps.len() as Float;
+            taps.iter_mut().for_each(|s: &mut Complex| *s *= f);
+        }
+
         // Set up FFT / batch size.
-        let fft_size = calc_fft_size(engine.tap_len());
-        let nsamples = fft_size - engine.tap_len();
+        let nsamples = fft_size - tap_len;
 
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -260,8 +115,10 @@ impl<T: Engine> FftFilter<T> {
                 src,
                 dst,
                 fft_size,
-                tail: vec![Complex::default(); engine.tap_len()],
-                engine,
+                tail: vec![Complex::default(); tap_len],
+                fft,
+                ifft,
+                taps_fft: taps,
                 buf: Vec::with_capacity(fft_size),
                 nsamples,
             },
@@ -274,7 +131,7 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
     left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y)
 }
 
-impl<T: Engine> Block for FftFilter<T> {
+impl Block for FftFilter {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: multithread this.
         loop {
@@ -312,7 +169,9 @@ impl<T: Engine> Block for FftFilter<T> {
 
             // Run FFT.
             self.buf.resize(self.fft_size, Complex::default());
-            self.engine.run(&mut self.buf);
+            self.fft.process(&mut self.buf);
+            sum_vec(&mut self.buf, &self.taps_fft);
+            self.ifft.process(&mut self.buf);
 
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {
@@ -345,8 +204,8 @@ impl<T: Engine> Block for FftFilter<T> {
 /// performance than the Complex filter.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FftFilterFloat<T: Engine> {
-    complex: FftFilter<T>,
+pub struct FftFilterFloat {
+    complex: FftFilter,
     #[rustradio(in)]
     src: ReadStream<Float>,
     #[rustradio(out)]
@@ -355,42 +214,17 @@ pub struct FftFilterFloat<T: Engine> {
     inner_out: ReadStream<Complex>,
 }
 
-#[cfg(feature = "fftw")]
-impl FftFilterFloat<rr_fftw::FftwEngine> {
+impl FftFilterFloat {
     /// Create a new FftFilterFloat block, selecting the best FFT engine.
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
     pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
-        let engine = rr_fftw::FftwEngine::new(taps);
-        Self::new_engine(src, engine)
-    }
-}
-
-#[cfg(not(feature = "fftw"))]
-impl FftFilterFloat<rr_rustfft::RustFftEngine> {
-    /// Create a new FftFilterFloat block, selecting the best FFT engine.
-    ///
-    /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
-    /// Otherwise it's RustFFT.
-    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
-        let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
-        let engine = rr_rustfft::RustFftEngine::new(taps);
-        Self::new_engine(src, engine)
-    }
-}
-
-impl<T: Engine> FftFilterFloat<T> {
-    /// Create a new FftFilterFloat block.
-    ///
-    /// Use `new()` if to make your application code engine agnostic.
-    #[must_use]
-    pub fn new_engine(src: ReadStream<Float>, engine: T) -> (Self, ReadStream<Float>) {
         use crate::stream::StreamWait;
         let (inner_in, r) = crate::stream::new_stream();
         assert_eq!(inner_in.id(), r.id(), "{}", inner_in.id() - r.id());
-        let (complex, inner_out) = FftFilter::new_engine(r, engine);
+        let (complex, inner_out) = FftFilter::new(r, taps);
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -405,7 +239,7 @@ impl<T: Engine> FftFilterFloat<T> {
     }
 }
 
-impl<T: Engine> Block for FftFilterFloat<T> {
+impl Block for FftFilterFloat {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         // Convert input to Complex.
         {
