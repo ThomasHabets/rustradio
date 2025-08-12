@@ -382,10 +382,14 @@ impl Repeat {
     pub fn again(&mut self) -> bool {
         self.count += 1;
         match self.repeater {
-            Repeater::Finite(n) => {
-                self.repeater = Repeater::Finite(n - 1);
-                n > 1
+            Repeater::Finite(0) => {
+                log::error!(
+                    "Repeat::again() called when repeat is 0, count {}",
+                    self.count
+                );
+                false
             }
+            Repeater::Finite(n) => self.count < n,
             Repeater::Infinite => true,
         }
     }
@@ -394,7 +398,7 @@ impl Repeat {
     #[must_use]
     pub fn done(&self) -> bool {
         match self.repeater {
-            Repeater::Finite(n) => n == 0,
+            Repeater::Finite(n) => self.count >= n,
             Repeater::Infinite => false,
         }
     }
@@ -789,5 +793,61 @@ pub mod tests {
                 (Ok(got), Some(want)) => panic!("For {i} got {got} want {want}"),
             }
         }
+    }
+
+    #[test]
+    fn repeat_test_infinite() {
+        let mut r = Repeat::infinite();
+        for n in 0..100 {
+            assert_eq!(n, r.count());
+            assert!(!r.done());
+            assert!(r.again());
+        }
+    }
+
+    #[test]
+    fn repeat_test_none() {
+        let mut r = Repeat::finite(0);
+        assert_eq!(0, r.count());
+        assert!(r.done());
+        assert!(!r.again());
+        assert_eq!(1, r.count());
+        assert!(r.done());
+        assert!(!r.again());
+        assert_eq!(2, r.count());
+    }
+
+    #[test]
+    fn repeat_test_one() {
+        let mut r = Repeat::finite(1);
+        assert_eq!(0, r.count());
+        assert!(!r.done());
+
+        assert!(!r.again());
+        assert_eq!(1, r.count());
+        assert!(r.done());
+
+        assert!(!r.again());
+        assert_eq!(2, r.count());
+        assert!(r.done());
+    }
+
+    #[test]
+    fn repeat_test_three() {
+        let mut r = Repeat::finite(3);
+        assert_eq!(0, r.count());
+        assert!(!r.done());
+
+        assert!(r.again());
+        assert_eq!(1, r.count());
+        assert!(!r.done());
+
+        assert!(r.again());
+        assert_eq!(2, r.count());
+        assert!(!r.done());
+
+        assert!(!r.again());
+        assert_eq!(3, r.count());
+        assert!(r.done());
     }
 }
