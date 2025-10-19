@@ -26,7 +26,13 @@ impl<T: Sample> VectorSourceBuilder<T> {
     /// Build the VectorSource.
     pub fn build(self) -> Result<(VectorSource<T>, ReadStream<T>)> {
         if !self.block.tags.is_empty() {
-            let maxtag = self.block.tags.iter().map(|t| t.pos()).max().unwrap_or(0);
+            let maxtag = self
+                .block
+                .tags
+                .iter()
+                .map(|t| t.pos())
+                .max()
+                .expect("a nonempty tag list must have a maximum");
             if maxtag >= self.block.data.len() {
                 return Err(Error::msg(format!(
                     "provided tags with position up to {maxtag}, but the data is only {} samples",
