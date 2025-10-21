@@ -271,7 +271,14 @@ impl<T: Engine> FftFilter<T> {
 }
 
 fn sum_vec(left: &mut [Complex], right: &[Complex]) {
-    left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y)
+    #[cfg(not(feature = "volk"))]
+    {
+        left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y)
+    }
+    #[cfg(feature = "volk")]
+    {
+        volk::volk_32fc_x2_multiply_32fc_inplace(left, &right)
+    }
 }
 
 impl<T: Engine> Block for FftFilter<T> {
