@@ -22,8 +22,8 @@ allow = [
 ]
 exceptions = [
     # Feature `fftw` brings in a GPL liability.
-    { allow = ["GPL-2.0"], crate = "fftw" },
-    { allow = ["GPL-2.0"], crate = "fftw-sys" },
+    { allow = ["GPL-2.0-or-later"], crate = "fftw" },
+    { allow = ["GPL-2.0-or-later"], crate = "fftw-sys" },
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
@@ -34,13 +34,13 @@ confidence-threshold = 0.8
 # aren't accepted for every possible crate as with the normal allow list
 [[licenses.clarify]]
 name = "fftw"
-expression = "GPL-2.0"
+expression = "GPL-2.0-or-later"
 license-files = [
     { path = "LICENSE.md", hash = 0xb3398f27 }
 ]
 [[licenses.clarify]]
 name = "fftw-sys"
-expression = "GPL-2.0"
+expression = "GPL-2.0-or-later"
 license-files = [
     { path = "LICENSE.md", hash = 0xb3398f27 }
 ]
