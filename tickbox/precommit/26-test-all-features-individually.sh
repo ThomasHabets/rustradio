@@ -7,4 +7,7 @@ cd "$TICKBOX_TEMPDIR/work"
 for feature in rtlsdr soapysdr fast-math audio fftw simd async nix pipewire; do
         export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.feature.${feature}"
         cargo +nightly test -F "${feature}"
+        if [[ ${CLEANUP:-} = true ]]; then
+                rm -fr "${CARGO_TARGET_DIR?}"
+        fi
 done
