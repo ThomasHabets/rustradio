@@ -373,7 +373,7 @@ impl FftFilterFloat<rr_rustfft::RustFftEngine> {
     /// Create a new `FftFilterFloat` block, selecting the best FFT engine.
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
-    /// Otherwise it's `RustFFT`.
+    /// Otherwise it's RustFFT.
     #[must_use]
     pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
