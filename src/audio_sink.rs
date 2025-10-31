@@ -172,12 +172,8 @@ impl AudioSink {
             })?;
         // Try to receive sender.
         let sender = {
-            let s = match rx.recv() {
-                Ok(s) => s,
-                Err(e) => return Err(e.into()),
-            };
             // Ensure stream started ok.
-            match s {
+            match rx.recv()? {
                 Ok(s) => Some(s),
                 Err(e) => return Err(e),
             }
