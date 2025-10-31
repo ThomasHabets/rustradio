@@ -73,12 +73,12 @@ impl<T: Sample> BurstTagger<T> {
         _tv_tags: &[Tag],
     ) -> (T, Cow<'a, [Tag]>) {
         let cur = tv > self.threshold;
-        let tags = if cur != self.last {
+        let tags = if cur == self.last {
+            Cow::Borrowed(tags)
+        } else {
             let mut owned_tags: Vec<Tag> = tags.to_vec();
             owned_tags.push(Tag::new(0, self.tag.clone(), TagValue::Bool(cur)));
             Cow::Owned(owned_tags)
-        } else {
-            Cow::Borrowed(tags)
         };
         self.last = cur;
         (s, tags)

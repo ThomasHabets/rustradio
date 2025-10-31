@@ -38,7 +38,7 @@ pub struct ToText<T> {
 }
 
 impl<T> ToText<T> {
-    /// Create new ToText block.
+    /// Create new `ToText` block.
     #[must_use]
     pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
@@ -48,7 +48,7 @@ impl<T> ToText<T> {
 
 impl<T> BlockEOF for ToText<T> {
     fn eof(&mut self) -> bool {
-        self.srcs.iter().all(|s| s.eof())
+        self.srcs.iter().all(super::stream::ReadStream::eof)
     }
 }
 

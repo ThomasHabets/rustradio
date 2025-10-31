@@ -15,6 +15,6 @@ pub struct BinarySlicer {
 
 impl BinarySlicer {
     fn process_sync(&self, a: Float) -> u8 {
-        if a > 0.0 { 1 } else { 0 }
+        u8::from(a > 0.0)
     }
 }

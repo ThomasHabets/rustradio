@@ -128,7 +128,10 @@ impl<T: Sample> Block for StreamToPdu<T> {
                     self.done();
                 }
             } else if let Some(tv) = get_tag_val_bool(&tags, i as TagPos, &self.tag) {
-                if !tv {
+                if tv {
+                    // Start of burst, save first sample.
+                    self.buf.push(*sample);
+                } else {
                     // End of burst.
                     if self.tail > 0 {
                         self.buf.push(*sample);
@@ -138,9 +141,6 @@ impl<T: Sample> Block for StreamToPdu<T> {
                     } else {
                         self.endcounter = Some(self.tail - 1);
                     }
-                } else {
-                    // Start of burst, save first sample.
-                    self.buf.push(*sample);
                 }
             } else if !self.buf.is_empty() {
                 // Burst continuation.

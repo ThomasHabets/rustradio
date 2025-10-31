@@ -39,12 +39,13 @@ pub struct ZeroCrossing {
 }
 
 impl ZeroCrossing {
-    /** Create new ZeroCrossing block.
+    /** Create new `ZeroCrossing` block.
 
     # Args
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
     * `max_deviation`: Not currently used.
      */
+    #[must_use]
     pub fn new(
         src: ReadStream<Float>,
         sps: Float,

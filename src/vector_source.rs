@@ -5,7 +5,7 @@ use crate::Repeat;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
-/// VectorSource builder.
+/// `VectorSource` builder.
 pub struct VectorSourceBuilder<T: Sample> {
     block: VectorSource<T>,
     out: ReadStream<T>,
@@ -13,6 +13,7 @@ pub struct VectorSourceBuilder<T: Sample> {
 
 impl<T: Sample> VectorSourceBuilder<T> {
     /// Set a finite repeat count.
+    #[must_use]
     pub fn repeat(mut self, r: Repeat) -> VectorSourceBuilder<T> {
         self.block.set_repeat(r);
         self
@@ -23,14 +24,14 @@ impl<T: Sample> VectorSourceBuilder<T> {
         self.block.tags.extend(tags.iter().cloned());
         self
     }
-    /// Build the VectorSource.
+    /// Build the `VectorSource`.
     pub fn build(self) -> Result<(VectorSource<T>, ReadStream<T>)> {
         if !self.block.tags.is_empty() {
             let maxtag = self
                 .block
                 .tags
                 .iter()
-                .map(|t| t.pos())
+                .map(super::stream::Tag::pos)
                 .max()
                 .expect("a nonempty tag list must have a maximum");
             if maxtag >= self.block.data.len() {
@@ -60,7 +61,8 @@ where
 }
 
 impl<T: Sample> VectorSource<T> {
-    /// New VectorSource builder.
+    /// New `VectorSource` builder.
+    #[must_use]
     pub fn builder(data: Vec<T>) -> VectorSourceBuilder<T> {
         let (block, out) = VectorSource::new(data);
         VectorSourceBuilder { block, out }
@@ -69,6 +71,7 @@ impl<T: Sample> VectorSource<T> {
     /// Create new Vector Source block.
     ///
     /// Optionally the data can repeat.
+    #[must_use]
     pub fn new(data: Vec<T>) -> (Self, ReadStream<T>) {
         let (dst, dr) = crate::stream::new_stream();
         (

@@ -63,6 +63,7 @@ impl WindowType {
     /// Return max attenuation.
     ///
     /// TODO: More description.
+    #[must_use]
     pub fn max_attenuation(&self) -> Float {
         match self {
             // TODO: what are these magic numbers?
@@ -74,6 +75,7 @@ impl WindowType {
     }
 
     /// Make a window of a dynamic type.
+    #[must_use]
     pub fn make_window(&self, ntaps: usize) -> Window {
         match self {
             WindowType::Blackman => blackman(ntaps),

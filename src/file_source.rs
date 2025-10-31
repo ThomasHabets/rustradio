@@ -8,7 +8,7 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Repeat, Result, Sample};
 
-/// FileSource builder.
+/// `FileSource` builder.
 pub struct FileSourceBuilder<T: Sample> {
     filename: std::path::PathBuf,
     repeat: Repeat,
@@ -24,7 +24,7 @@ impl<T: Sample> FileSourceBuilder<T> {
             _dummy: std::marker::PhantomData,
         }
     }
-    /// Build the FileSource.
+    /// Build the `FileSource`.
     pub fn build(self) -> Result<(FileSource<T>, ReadStream<T>)> {
         let (mut block, dst) = FileSource::new(self.filename)?;
         block.repeat(self.repeat);
@@ -59,7 +59,7 @@ impl<T: Sample> FileSource<T> {
     pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSourceBuilder<T> {
         FileSourceBuilder::<T>::new(filename)
     }
-    /// Create new FileSource block.
+    /// Create new `FileSource` block.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Result<(Self, ReadStream<T>)> {
         let filename = filename.into();
         let f = BufReader::new(

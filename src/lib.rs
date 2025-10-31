@@ -603,9 +603,7 @@ impl Sample for Complex {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        if data.len() != Self::size() {
-            panic!("TODO: Complex is wrong size");
-        }
+        assert!((data.len() == Self::size()), "TODO: Complex is wrong size");
         let i = Float::from_le_bytes(data[0..Self::size() / 2].try_into()?);
         let q = Float::from_le_bytes(data[Self::size() / 2..].try_into()?);
         Ok(Complex::new(i, q))
@@ -624,9 +622,7 @@ impl Sample for Float {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        if data.len() != Self::size() {
-            panic!("TODO: Float is wrong size");
-        }
+        assert!((data.len() == Self::size()), "TODO: Float is wrong size");
         Ok(Float::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
@@ -640,9 +636,7 @@ impl Sample for u8 {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        if data.len() != Self::size() {
-            panic!("TODO: u8 is wrong size");
-        }
+        assert!((data.len() == Self::size()), "TODO: u8 is wrong size");
         Ok(data[0])
     }
     fn serialize(&self) -> Vec<u8> {
@@ -656,9 +650,7 @@ impl Sample for u32 {
         4
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        if data.len() != Self::size() {
-            panic!("TODO: Float is wrong size");
-        }
+        assert!((data.len() == Self::size()), "TODO: Float is wrong size");
         Ok(u32::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
@@ -672,9 +664,7 @@ impl Sample for i32 {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        if data.len() != Self::size() {
-            panic!("TODO: Float is wrong size");
-        }
+        assert!((data.len() == Self::size()), "TODO: Float is wrong size");
         Ok(i32::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
@@ -682,7 +672,7 @@ impl Sample for i32 {
     }
 }
 
-/// Trivial trait for types that have .len().
+/// Trivial trait for types that have `.len()`.
 #[allow(clippy::len_without_is_empty)]
 pub trait Len {
     /// Get the length.

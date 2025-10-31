@@ -73,6 +73,7 @@ fn sum_product_avx(vec1: &[f32], vec2: &[f32]) -> f32 {
 impl Fir<Float> {
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
+    #[must_use]
     pub fn filter_float(&self, input: &[Float]) -> Float {
         // AVX is faster, when available.
         #[cfg(all(
@@ -144,7 +145,7 @@ where
             .collect()
     }
 
-    /// Like filter_n, but avoids a copy when there's a destination in mind.
+    /// Like `filter_n`, but avoids a copy when there's a destination in mind.
     pub fn filter_n_inplace(&self, input: &[T], deci: usize, out: &mut [T]) {
         out.iter_mut()
             .enumerate()
@@ -174,6 +175,7 @@ where
     }
 
     /// Build a `FirFilter` with the provided settings.
+    #[must_use]
     pub fn build(self, src: ReadStream<T>) -> (FirFilter<T>, ReadStream<T>) {
         let (mut block, stream) = FirFilter::new(src, &self.taps);
         block.deci = self.deci;
@@ -198,7 +200,7 @@ impl<T> FirFilter<T>
 where
     T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    /// Create new FirFilterBuilder, with the supplied taps.
+    /// Create new `FirFilterBuilder`, with the supplied taps.
     pub fn builder(taps: &[T]) -> FirFilterBuilder<T> {
         FirFilterBuilder {
             taps: taps.to_vec(),
@@ -282,6 +284,7 @@ where
 /// Create a multiband filter.
 ///
 /// TODO: this is untested.
+#[must_use]
 pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Vec<Complex>> {
     if taps != window.0.len() {
         return None;
@@ -314,6 +317,7 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Opti
 }
 
 /// Create taps for a low pass filter as complex taps.
+#[must_use]
 pub fn low_pass_complex(
     samp_rate: Float,
     cutoff: Float,
@@ -336,6 +340,7 @@ fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> u
 ///
 /// TODO: this could be faster if we supported filtering a Complex by a Float.
 /// A low pass filter doesn't actually need complex taps.
+#[must_use]
 pub fn low_pass(
     samp_rate: Float,
     cutoff: Float,
@@ -373,6 +378,7 @@ pub fn low_pass(
 }
 
 /// Generate hilbert transformer filter.
+#[must_use]
 pub fn hilbert(window: &Window) -> Vec<Float> {
     let ntaps = window.0.len();
     let mid = (ntaps - 1) / 2;

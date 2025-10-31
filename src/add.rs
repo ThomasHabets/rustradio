@@ -1,6 +1,6 @@
 //! Add two streams.
 //!
-//! To add a constant value to a stream, instead use AddConst.
+//! To add a constant value to a stream, instead use `AddConst`.
 use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
@@ -9,7 +9,7 @@ use crate::stream::{ReadStream, WriteStream};
 /// Output tags are taken from the first stream. Tags from the other input
 /// stream is discarded.
 ///
-/// To add a constant value to a stream, instead use AddConst.
+/// To add a constant value to a stream, instead use `AddConst`.
 ///
 /// ```
 /// use rustradio::graph::{Graph, GraphRunner};

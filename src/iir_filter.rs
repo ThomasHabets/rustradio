@@ -24,7 +24,7 @@ impl Clamp for Float {
 
 /// General IIR filter.
 ///
-/// TODO: also add filter_n?
+/// TODO: also add `filter_n`?
 pub trait Filter<T: Sample>: Send {
     /// Filter from one input sample.
     fn filter(&mut self, input: T) -> T;
@@ -33,10 +33,10 @@ pub trait Filter<T: Sample>: Send {
     fn fill(&mut self, s: T);
 }
 
-/// A ClampedFilter is like a regular filter, but clamps the output value to be
+/// A `ClampedFilter` is like a regular filter, but clamps the output value to be
 /// between the minimum and the maximum.
 ///
-/// TODO: also add filter_n?
+/// TODO: also add `filter_n`?
 pub trait ClampedFilter<T: Sample + Clamp>: Filter<T> {
     /// Filter from one input sample, but with clamped output.
     fn filter_clamped(&mut self, input: T, mi: T, mx: T) -> T;

@@ -39,17 +39,20 @@ impl<T> Default for RationalResamplerBuilder<T> {
     }
 }
 impl<T> RationalResamplerBuilder<T> {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             dummy: std::marker::PhantomData,
         }
     }
+    #[must_use]
     pub fn deci(self, deci: usize) -> RationalResamplerBuilderDeci<T> {
         RationalResamplerBuilderDeci {
             deci,
             dummy: self.dummy,
         }
     }
+    #[must_use]
     pub fn interp(self, interp: usize) -> RationalResamplerBuilderInterp<T> {
         RationalResamplerBuilderInterp {
             interp,
@@ -58,6 +61,7 @@ impl<T> RationalResamplerBuilder<T> {
     }
 }
 impl<T> RationalResamplerBuilderInterp<T> {
+    #[must_use]
     pub fn deci(self, deci: usize) -> RationalResamplerBuilderBoth<T> {
         RationalResamplerBuilderBoth {
             interp: self.interp,
@@ -102,11 +106,12 @@ pub struct RationalResampler<T: Sample> {
 
 impl<T: Sample> RationalResampler<T> {
     /// Create builder.
+    #[must_use]
     pub fn builder() -> RationalResamplerBuilder<T> {
         RationalResamplerBuilder::<T>::new()
     }
 
-    /// Create new RationalResampler block.
+    /// Create new `RationalResampler` block.
     ///
     /// A common pattern to convert between arbitrary sample rates X
     /// and Y is to decimate by X and interpolate by Y.

@@ -4,7 +4,7 @@ For now an initial yes/no bit block. Future work should add tagging.
 */
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
-/// CorrelateAccessCode outputs 1 if CAC matches.
+/// `CorrelateAccessCode` outputs 1 if CAC matches.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, sync)]
 pub struct CorrelateAccessCode {
@@ -20,6 +20,7 @@ pub struct CorrelateAccessCode {
 
 impl CorrelateAccessCode {
     /// Create new correlate access block.
+    #[must_use]
     pub fn new(src: ReadStream<u8>, code: Vec<u8>, allowed_diffs: usize) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -45,11 +46,11 @@ impl CorrelateAccessCode {
             .zip(&self.code)
             .filter(|(a, b)| a != b)
             .count();
-        if diffs <= self.allowed_diffs { 1 } else { 0 }
+        u8::from(diffs <= self.allowed_diffs)
     }
 }
 
-/// CorrelateAccessCode outputs 1 if CAC matches.
+/// `CorrelateAccessCode` outputs 1 if CAC matches.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, sync_tag)]
 pub struct CorrelateAccessCodeTag {

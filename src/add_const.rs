@@ -6,7 +6,7 @@ use crate::stream::{ReadStream, Tag, WriteStream};
 
 /// Add const value, implemented in terms of Map.
 ///
-/// This is basically example code. We have AddConst and add_const doing the
+/// This is basically example code. We have `AddConst` and `add_const` doing the
 /// same thing.
 #[allow(clippy::type_complexity)]
 #[must_use]
@@ -23,7 +23,7 @@ where
     crate::convert::Map::keep_tags(src, "add_const", move |x| x + val)
 }
 
-/// AddConst adds a constant value to every sample.
+/// `AddConst` adds a constant value to every sample.
 ///
 /// Tags are preserved.
 ///

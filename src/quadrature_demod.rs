@@ -25,7 +25,7 @@ use crate::{Complex, Float};
 /// [This article][vectorized] gives some good illustrations.
 ///
 /// Enabling the `fast-math` feature (dependency) speeds up
-/// QuadratureDemod by about 4x.
+/// `QuadratureDemod` by about 4x.
 ///
 /// [vectorized]: https://mazzo.li/posts/vectorized-atan2.html
 #[derive(rustradio_macros::Block)]
@@ -71,9 +71,9 @@ impl QuadratureDemod {
 /// parameters.
 ///
 /// For 9600bps AX.25 it works fine, if the sample rate is high
-/// enough. At 50ksps QuadratureDemod works well, but FastFM does
-/// not. At 500ksps FastFM performs just as well in my tests. But
-/// FastFM at 500ksps is about half the speed of QuadratureDemod at
+/// enough. At 50ksps `QuadratureDemod` works well, but `FastFM` does
+/// not. At 500ksps `FastFM` performs just as well in my tests. But
+/// `FastFM` at 500ksps is about half the speed of `QuadratureDemod` at
 /// 50ksps.
 ///
 /// Really, just use `QuadratureDemod` unless it's shown to be too slow

@@ -34,7 +34,7 @@ impl Lfsr {
     fn next_descramble(&mut self, i: u8) -> u8 {
         assert!(i <= 1);
         let ret = 1 & (self.shift_reg & self.mask).count_ones() as u8 ^ i;
-        self.shift_reg = (self.shift_reg >> 1) | ((i as u64) << self.len);
+        self.shift_reg = (self.shift_reg >> 1) | (u64::from(i) << self.len);
         ret
     }
     /// Clock the LFSR.
@@ -42,7 +42,7 @@ impl Lfsr {
         assert!(i <= 1);
         let ret = (self.shift_reg & 1) as u8;
         let tmp = 1 & (self.shift_reg & self.mask).count_ones() as u8 ^ i;
-        self.shift_reg = (self.shift_reg >> 1) | ((tmp as u64) << self.len);
+        self.shift_reg = (self.shift_reg >> 1) | (u64::from(tmp) << self.len);
         ret
     }
 }
@@ -60,6 +60,7 @@ pub struct Descrambler {
 impl Descrambler {
     /// Create new descrambler.
     // TODO: take an lfsr, partly so that we can generate this new()
+    #[must_use]
     pub fn new(src: ReadStream<u8>, mask: u64, seed: u64, len: u8) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -73,6 +74,7 @@ impl Descrambler {
     }
 
     /// Create a descrambler with G3RUH parameters.
+    #[must_use]
     pub fn g3ruh(src: ReadStream<u8>) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -102,6 +104,7 @@ pub struct Scrambler {
 }
 impl Scrambler {
     /// Create a descrambler with G3RUH parameters.
+    #[must_use]
     pub fn g3ruh(src: ReadStream<u8>) -> (Self, ReadStream<u8>) {
         let (dst, dr) = crate::stream::new_stream();
         (

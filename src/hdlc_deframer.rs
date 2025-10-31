@@ -186,7 +186,10 @@ impl HdlcDeframer {
                         .collect();
                     debug!("HdlcDeframer: Captured packet: {bytes:0>2x?}");
                     let tags = &[Tag::new(0, "packet_pos", TagValue::U64(stream_pos))];
-                    if !self.keep_checksum {
+                    if self.keep_checksum {
+                        self.decoded += 1;
+                        self.dst.push(bytes, tags);
+                    } else {
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);
                         let (newdata, crc, fixed) = find_right_crc(data, got_crc, self.fix_bits);
@@ -206,9 +209,6 @@ impl HdlcDeframer {
                         self.decoded += 1;
                         debug!("HdlcDeframer: Correctly decoded packet: {data:?}");
                         self.dst.push(data.to_vec(), tags);
-                    } else {
-                        self.decoded += 1;
-                        self.dst.push(bytes, tags);
                     }
                 }
 
@@ -288,7 +288,7 @@ const FCSTAB: &[u16] = &[
 #[must_use]
 pub(crate) fn calc_crc(data: &[u8]) -> u16 {
     data.iter().fold(0xffffu16, |fcs, byte| {
-        let byte = *byte as u16;
+        let byte = u16::from(*byte);
         let ofs = ((fcs ^ byte) & 0xff) as usize;
         (fcs >> 8) ^ FCSTAB[ofs]
     }) ^ 0xffff

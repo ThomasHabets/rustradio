@@ -4,8 +4,8 @@
 convert floating point values (think audio waveform) into upper
 sideband.
 
-Then again I guess you can do the same with a FloatToComplex plus
-FftFilter.
+Then again I guess you can do the same with a `FloatToComplex` plus
+`FftFilter`.
 
 This implementation is a pretty inefficient.
 

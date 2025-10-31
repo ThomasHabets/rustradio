@@ -82,12 +82,14 @@ pub struct WpcrBuilder {
 
 impl WpcrBuilder {
     /// Set sample rate. Used to tag with frequency.
+    #[must_use]
     pub fn samp_rate(mut self, s: Float) -> WpcrBuilder {
         self.wpcr.set_samp_rate(Some(s));
         self
     }
 
     /// Build Wpcr block.
+    #[must_use]
     pub fn build(self) -> (Wpcr, NCReadStream<Vec<Float>>) {
         (self.wpcr, self.out)
     }
@@ -106,7 +108,7 @@ pub struct Wpcr {
 }
 
 impl Wpcr {
-    /// Create new WpcrBuilder.
+    /// Create new `WpcrBuilder`.
     #[must_use]
     pub fn builder(src: NCReadStream<Vec<Float>>) -> WpcrBuilder {
         let (wpcr, out) = Wpcr::new(src);
@@ -147,12 +149,11 @@ impl Wpcr {
         d.truncate(d.len() / 2);
 
         // Find best match.
-        let bin = match find_best_bin(&d) {
-            Some(bin) => bin,
-            None => {
-                trace!("No best bin found, giving up on burst");
-                return None;
-            }
+        let bin = if let Some(bin) = find_best_bin(&d) {
+            bin
+        } else {
+            trace!("No best bin found, giving up on burst");
+            return None;
         };
 
         // Translate frequency and phase.

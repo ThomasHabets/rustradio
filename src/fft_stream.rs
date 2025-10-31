@@ -26,7 +26,8 @@ pub struct FftStream {
 }
 
 impl FftStream {
-    /// Create a new FftStream.
+    /// Create a new `FftStream`.
+    #[must_use]
     pub fn new(src: ReadStream<Complex>, size: usize) -> (Self, ReadStream<Complex>) {
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);

@@ -9,7 +9,7 @@ use crate::stream::{NCWriteStream, ReadStream, Tag};
 
 const HEADER_SIZE: usize = 15 * 8;
 
-/// SYNC_WORD is the pattern of bits (after the clock sync preamble) that
+/// `SYNC_WORD` is the pattern of bits (after the clock sync preamble) that
 /// indicate the start of an IL2P frame.
 ///
 /// Another word for these bits is 0xF15E48.
@@ -100,7 +100,7 @@ impl Pids {
 
 /// LFSR as used by IL2P.
 ///
-/// Input is XORed into the masked positions of the shift register,
+/// Input is `XORed` into the masked positions of the shift register,
 /// and output is just the last bit in it.
 ///
 /// Len is implied by seed and mask.
@@ -122,7 +122,7 @@ impl Lfsr {
         assert!(i <= 1);
         let i = i & 1;
         let ret = 1 & (i ^ self.shift_reg as u8);
-        self.shift_reg = (self.shift_reg >> 1) ^ (self.mask * i as u64);
+        self.shift_reg = (self.shift_reg >> 1) ^ (self.mask * u64::from(i));
         ret
     }
 }
@@ -302,22 +302,24 @@ impl Header {
                 | ((data[9] & 0x40) >> 4)
                 | ((data[10] & 0x40) >> 5)
                 | ((data[11] & 0x40) >> 6),
-            payload_size: ((data[2] as u16 & 0x80) << 2)
-                | ((data[3] as u16 & 0x80) << 1)
-                | (data[4] as u16 & 0x80)
-                | ((data[5] as u16 & 0x80) >> 1)
-                | ((data[6] as u16 & 0x80) >> 2)
-                | ((data[7] as u16 & 0x80) >> 3)
-                | ((data[8] as u16 & 0x80) >> 4)
-                | ((data[9] as u16 & 0x80) >> 5)
-                | ((data[10] as u16 & 0x80) >> 6)
-                | ((data[11] as u16 & 0x80) >> 7),
+            payload_size: ((u16::from(data[2]) & 0x80) << 2)
+                | ((u16::from(data[3]) & 0x80) << 1)
+                | (u16::from(data[4]) & 0x80)
+                | ((u16::from(data[5]) & 0x80) >> 1)
+                | ((u16::from(data[6]) & 0x80) >> 2)
+                | ((u16::from(data[7]) & 0x80) >> 3)
+                | ((u16::from(data[8]) & 0x80) >> 4)
+                | ((u16::from(data[9]) & 0x80) >> 5)
+                | ((u16::from(data[10]) & 0x80) >> 6)
+                | ((u16::from(data[11]) & 0x80) >> 7),
         })
     }
     fn describe(&self) -> String {
-        match self.hdrtype1 {
-            true => match self.ui {
-                false => match self.pid {
+        if self.hdrtype1 {
+            if self.ui {
+                "UI"
+            } else {
+                match self.pid {
                     Pids::AX25_UNNUMBERED => match (self.control >> 2) & 0xF {
                         0x0 => "invalid 0x00",
                         0x1 => "SABM",
@@ -338,10 +340,10 @@ impl Header {
                         16.. => "Can't happen",
                     },
                     _ => "other PID",
-                },
-                true => "UI",
-            },
-            false => "type0 IL2P",
+                }
+            }
+        } else {
+            "type0 IL2P"
         }
         .into()
     }

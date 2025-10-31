@@ -191,10 +191,9 @@ impl Block for KissFrame {
                         if sample == KISS_FEND {
                             if v.is_empty() {
                                 continue;
-                            } else {
-                                done = true;
-                                break;
                             }
+                            done = true;
+                            break;
                         }
                         if v.len() < MAX_LEN {
                             v.push(sample);
@@ -241,8 +240,7 @@ impl Block for KissEncode {
             let port = match tags
                 .iter()
                 .find(|t| t.key() == ENCODE_PORT_TAG)
-                .map(|t| t.val())
-                .unwrap_or(&TagValue::U64(0))
+                .map_or(&TagValue::U64(0), super::stream::Tag::val)
             {
                 TagValue::U64(port) if *port < 0x10 => *port & 0xf,
                 other => {

@@ -14,11 +14,12 @@ use crate::{Float, Result};
 /// Timing Error Detector.
 pub trait Ted: Send {}
 
-/// ZeroCrossing TED.
+/// `ZeroCrossing` TED.
 pub struct TedZeroCrossing {}
 
 impl TedZeroCrossing {
     /// Create new TED.
+    #[must_use]
     pub fn new() -> Self {
         Self {}
     }
@@ -61,11 +62,12 @@ pub struct SymbolSync {
 }
 
 impl SymbolSync {
-    /** Create new SymbolSync block.
+    /** Create new `SymbolSync` block.
 
     # Args
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
      */
+    #[must_use]
     pub fn new(
         src: ReadStream<Float>,
         sps: Float,

@@ -54,6 +54,7 @@ pub struct Capture {
 }
 
 impl Capture {
+    #[must_use]
     pub fn new(start: u64) -> Self {
         Self {
             core_sample_start: start,
@@ -179,6 +180,7 @@ impl SigMF {
     /// Create new SigMF object from a data type.
     ///
     /// TODO: Should probably not be done from outside the crate.
+    #[must_use]
     pub fn new(typ: String) -> Self {
         Self {
             global: Global {
@@ -234,11 +236,13 @@ pub struct SigMFSourceBuilder<T> {
 
 impl<T: Sample + Type> SigMFSourceBuilder<T> {
     /// Force a certain sample rate.
+    #[must_use]
     pub fn sample_rate(mut self, rate: f64) -> Self {
         self.sample_rate = Some(rate);
         self
     }
     /// Force a certain sample rate.
+    #[must_use]
     pub fn repeat(mut self, repeat: Repeat) -> Self {
         self.repeat = repeat;
         self
@@ -333,6 +337,7 @@ impl<T: Sample + Type> SigMFSource<T> {
     ///
     /// If the exact file name exists, then treat it as an Archive.
     /// If it does not, fall back to checking for separate Recording files.
+    #[must_use]
     pub fn builder(filename: std::path::PathBuf) -> SigMFSourceBuilder<T> {
         SigMFSourceBuilder {
             filename,
@@ -348,7 +353,7 @@ impl<T: Sample + Type> SigMFSource<T> {
     /// If the exact file name exists, then treat it as an Archive.
     /// If it does not, fall back to checking for separate Recording files.
     ///
-    /// If samp_rate is provided, and the metadata also provides a sample rate,
+    /// If `samp_rate` is provided, and the metadata also provides a sample rate,
     /// then they *must* match, or an error is returned.
     pub fn new<P: AsRef<std::path::Path>>(
         path: P,

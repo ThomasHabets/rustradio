@@ -75,6 +75,7 @@ where
         + std::ops::Add<T, Output = T>,
 {
     /// Create new block.
+    #[must_use]
     pub fn new(src: ReadStream<T>, alpha: Float) -> Option<(Self, ReadStream<T>)> {
         let (dst, dr) = crate::stream::new_stream();
         Some((

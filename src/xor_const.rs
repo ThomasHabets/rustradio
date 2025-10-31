@@ -2,7 +2,7 @@
 use crate::Sample;
 use crate::stream::{ReadStream, WriteStream};
 
-/// XorConst xors a constant value to every sample.
+/// `XorConst` xors a constant value to every sample.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
 pub struct XorConst<T>

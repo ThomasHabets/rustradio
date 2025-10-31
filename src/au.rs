@@ -62,6 +62,7 @@ impl AuEncode {
     /// * `encoding`: currently only `Encoding::Pcm16` is implemented.
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
+    #[must_use]
     pub fn new(
         src: ReadStream<Float>,
         encoding: Encoding,
@@ -125,7 +126,7 @@ impl Block for AuEncode {
         }
 
         type S = i16;
-        let scale = S::MAX as Float;
+        let scale = Float::from(S::MAX);
         let ss = std::mem::size_of::<S>();
 
         let (i, _tags) = self.src.read_buf()?;
@@ -170,7 +171,7 @@ pub struct AuDecode {
 }
 
 impl AuDecode {
-    /// Create new AuDecode block.
+    /// Create new `AuDecode` block.
     #[must_use]
     pub fn new(src: ReadStream<u8>, bitrate: u32) -> (Self, ReadStream<Float>) {
         let (dst, dr) = crate::stream::new_stream();
@@ -257,14 +258,14 @@ impl Block for AuDecode {
                     .chunks_exact(2)
                     .map(|chunk| {
                         let bytes = [chunk[0], chunk[1]];
-                        (i16::from_be_bytes(bytes) as Float) / 32767.0
+                        Float::from(i16::from_be_bytes(bytes)) / 32767.0
                     })
                     .collect::<Vec<Float>>();
                 o.fill_from_iter(v);
                 o.produce(n / 2, &[]);
                 i.consume(n);
             }
-        };
+        }
         Ok(BlockRet::Again)
     }
 }

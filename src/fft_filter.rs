@@ -144,7 +144,7 @@ pub mod rr_rustfft {
             let mut planner = rustfft::FftPlanner::new();
             let fft = planner.plan_fft_forward(fft_size);
             let ifft = planner.plan_fft_inverse(fft_size);
-            let mut taps_fft = taps.to_vec();
+            let mut taps_fft = taps.clone();
             taps_fft.resize(fft_size, Complex::default());
             fft.process(&mut taps_fft);
             // Normalization is actually the square root of this
@@ -233,7 +233,7 @@ impl FftFilter<rr_fftw::FftwEngine> {
 
 #[cfg(not(feature = "fftw"))]
 impl FftFilter<rr_rustfft::RustFftEngine> {
-    /// Create a new FftFilter block, selecting the best FFT engine.
+    /// Create a new `FftFilter` block, selecting the best FFT engine.
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
@@ -247,7 +247,7 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
     }
 }
 impl<T: Engine> FftFilter<T> {
-    /// Create new FftFilter, given an engine.
+    /// Create new `FftFilter`, given an engine.
     #[must_use]
     pub fn new_engine(src: ReadStream<Complex>, engine: T) -> (Self, ReadStream<Complex>) {
         // Set up FFT / batch size.
@@ -271,7 +271,7 @@ impl<T: Engine> FftFilter<T> {
 }
 
 fn sum_vec(left: &mut [Complex], right: &[Complex]) {
-    left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y)
+    left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y);
 }
 
 impl<T: Engine> Block for FftFilter<T> {
@@ -339,9 +339,9 @@ impl<T: Engine> Block for FftFilter<T> {
 ///
 /// Works just like [`FftFilter`], but for Float input, output, and taps.
 ///
-/// In fact, the current implementation of FftFilterFloat is just
-/// FftFilter hiding under a trenchcoat. Counter intuitively
-/// therefore, this Float version of the FftFilter has a little worse
+/// In fact, the current implementation of `FftFilterFloat` is just
+/// `FftFilter` hiding under a trenchcoat. Counter intuitively
+/// therefore, this Float version of the `FftFilter` has a little worse
 /// performance than the Complex filter.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
@@ -370,10 +370,11 @@ impl FftFilterFloat<rr_fftw::FftwEngine> {
 
 #[cfg(not(feature = "fftw"))]
 impl FftFilterFloat<rr_rustfft::RustFftEngine> {
-    /// Create a new FftFilterFloat block, selecting the best FFT engine.
+    /// Create a new `FftFilterFloat` block, selecting the best FFT engine.
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
-    /// Otherwise it's RustFFT.
+    /// Otherwise it's `RustFFT`.
+    #[must_use]
     pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
         let engine = rr_rustfft::RustFftEngine::new(taps);
@@ -382,7 +383,7 @@ impl FftFilterFloat<rr_rustfft::RustFftEngine> {
 }
 
 impl<T: Engine> FftFilterFloat<T> {
-    /// Create a new FftFilterFloat block.
+    /// Create a new `FftFilterFloat` block.
     ///
     /// Use `new()` if to make your application code engine agnostic.
     #[must_use]
@@ -394,9 +395,9 @@ impl<T: Engine> FftFilterFloat<T> {
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
+                complex,
                 src,
                 dst,
-                complex,
                 inner_in,
                 inner_out,
             },

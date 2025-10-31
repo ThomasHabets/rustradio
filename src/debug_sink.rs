@@ -6,7 +6,7 @@ use crate::{Result, Sample};
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos};
 
-/// Nocopy version of DebugSink.
+/// Nocopy version of `DebugSink`.
 // TODO: maybe merge with DebugSink using an enum?
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
@@ -78,7 +78,7 @@ where
                         .collect::<Vec<_>>()
                         .join(",")
                 })
-                .unwrap_or("".to_string());
+                .unwrap_or_default();
             self.dst.push(format!["{s:?} {ts}"], &[]);
         });
         let l = i.slice().len();
@@ -124,7 +124,7 @@ where
                         .collect::<Vec<_>>()
                         .join(",")
                 })
-                .unwrap_or("".to_string());
+                .unwrap_or_default();
             println!("debug: {s:?} {ts}");
         });
         let l = i.slice().len();

@@ -8,7 +8,7 @@ use crate::stream::{NCReadStream, ReadStream, Tag};
 use crate::{Result, Sample};
 
 type NCStorage<T> = Vec<(T, Vec<Tag>)>;
-/// VectorSinkNoCopy.
+/// `VectorSinkNoCopy`.
 ///
 /// This block is really only useful for unit tests. It takes what comes from
 /// the stream and just adds it to a vector. Tags are stored to another vector.
@@ -26,6 +26,7 @@ pub struct VectorSinkNoCopy<T: Send + Sync> {
 }
 
 impl<T: Send + Sync> VectorSinkNoCopy<T> {
+    #[must_use]
     pub fn storage(&self) -> Arc<Mutex<NCStorage<T>>> {
         Arc::clone(&self.storage)
     }
@@ -44,7 +45,7 @@ impl<T: Send + Sync> Block for VectorSinkNoCopy<T> {
     }
 }
 
-/// VectorSink.
+/// `VectorSink`.
 ///
 /// This block is really only useful for unit tests. It takes what comes from
 /// the stream and just adds it to a vector. Tags are stored to another vector.
@@ -61,7 +62,7 @@ pub struct VectorSink<T: Sample> {
     max_size: usize,
 }
 
-/// Hook is a hook into getting the data and tags written to the VectorSink.
+/// Hook is a hook into getting the data and tags written to the `VectorSink`.
 pub struct Hook<T> {
     inner: Arc<Mutex<(Vec<T>, Vec<Tag>)>>,
 }
@@ -76,19 +77,19 @@ impl<T: Sample> Hook<T> {
 }
 
 /// Lock a read only reference to the samples and tags written to the
-/// VectorSink.
+/// `VectorSink`.
 ///
-/// The VectorSink is unable to write anything new while the Data is alive.
+/// The `VectorSink` is unable to write anything new while the Data is alive.
 pub struct Data<'a, T> {
     inner: MutexGuard<'a, (Vec<T>, Vec<Tag>)>,
 }
 impl<T: Sample> Data<'_, T> {
-    /// Get a slice of the data written to the VectorSink.
+    /// Get a slice of the data written to the `VectorSink`.
     #[must_use]
     pub fn samples(&self) -> &[T] {
         &self.inner.0
     }
-    /// Get a slice of the tags written to the VectorSink.
+    /// Get a slice of the tags written to the `VectorSink`.
     #[must_use]
     pub fn tags(&self) -> &[Tag] {
         &self.inner.1

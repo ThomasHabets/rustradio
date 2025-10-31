@@ -49,7 +49,7 @@ pub enum BlockRet<'a> {
     ///
     /// Example: `RtlSdrSource` may not currently have any new data, but we
     /// can't control when it does. But maybe this example would be better
-    /// served with WaitForFunc? That way at least a multithreaded graph
+    /// served with `WaitForFunc`? That way at least a multithreaded graph
     /// executor can sleep.
     Pending,
 
@@ -62,7 +62,7 @@ pub enum BlockRet<'a> {
     /// For a single threaded graph, it would stall all blocks, so it's not
     /// called at all, and thus becomes equivalent to returning `Again`.
     ///
-    /// Discouraged: Prefer WaitForStream when possible.
+    /// Discouraged: Prefer `WaitForStream` when possible.
     WaitForFunc(Box<dyn Fn() + 'a>),
 
     /// Signal that we're waiting for a stream. Either an input or output

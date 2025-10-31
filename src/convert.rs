@@ -164,7 +164,7 @@ impl<In, Out, F> Map<In, Out, F> {
 
 /// Arbitrary mapping of non-copy streams using a lambda.
 ///
-/// A NCMap block transforms one input sample at a time into one or more
+/// A `NCMap` block transforms one input sample at a time into one or more
 /// outputs. The input and output can be different types.
 ///
 /// If there's more than one input or output stream, then you have to make a

@@ -96,7 +96,7 @@ impl Tag {
 /// Larger means better batching, but more RAM used. Twice as much virtual
 /// address space as RAM is used.
 ///
-/// Some experimentation with the multithreaded GraphRunner on 2025-02-15 with
+/// Some experimentation with the multithreaded `GraphRunner` on 2025-02-15 with
 /// ax25-1200-rx, in real time:
 /// * 40_000KiB: 0.929s
 /// *  4_000KiB: 1.066
@@ -107,8 +107,8 @@ const DEFAULT_NOCOPY_CAPACITY: usize = 1_000;
 
 /// Wait on a stream.
 ///
-/// For ReadStream, wait until there's enough to read.
-/// For WriteStream, wait until there's enough to write something.
+/// For `ReadStream`, wait until there's enough to read.
+/// For `WriteStream`, wait until there's enough to write something.
 #[async_trait]
 pub trait StreamWait {
     /// ID shared between read and write side.
@@ -167,9 +167,9 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     }
 }
 
-/// ReadStream is the reading side of a stream.
+/// `ReadStream` is the reading side of a stream.
 ///
-/// From the ReadStream you can get windows into the current stream by calling
+/// From the `ReadStream` you can get windows into the current stream by calling
 /// `read_buf()`.
 #[derive(Debug)]
 pub struct ReadStream<T> {
@@ -195,7 +195,7 @@ impl<T: Copy> ReadStream<T> {
         self.circ.total_size()
     }
 
-    /// Return a BufferReader allowing you to read from the stream, and
+    /// Return a `BufferReader` allowing you to read from the stream, and
     /// "consume" from it.
     ///
     /// See [`WriteStream::write_buf`] for details about the refcount checks.
@@ -269,26 +269,26 @@ impl<T: Copy> WriteStream<T> {
         self.circ.free()
     }
 
-    /// Return a BufferWriter for writing to the stream.
+    /// Return a `BufferWriter` for writing to the stream.
     ///
-    /// Ideally having a BufferWriter active on a stream should be prevented
+    /// Ideally having a `BufferWriter` active on a stream should be prevented
     /// statically, but I've not come up with a way to do that.
     ///
     /// Having `write_buf` hold on to a mutable reference won't work, because
     /// streams are owned by blocks, and blocks need to be able to call their
     /// own mutable methods.
     ///
-    /// BufferWriters do get an Arc to the circ buffer, though, so there should
+    /// `BufferWriters` do get an Arc to the circ buffer, though, so there should
     /// never be more than four references:
     /// * The source block.
     /// * The destination block.
-    /// * The source BufferWriter.
-    /// * The destination BufferReader.
+    /// * The source `BufferWriter`.
+    /// * The destination `BufferReader`.
     ///
     /// So this function needs to be called when the refcount is 3 or lower.
     ///
     /// Having more than four references is a definite coding bug, and hopefully
-    /// will be caught by MTGraph testing during development.
+    /// will be caught by `MTGraph` testing during development.
     ///
     /// The above also goes for [`ReadStream::read_buf`].
     pub fn write_buf(&self) -> Result<circular_buffer::BufferWriter<T>> {
@@ -446,7 +446,7 @@ pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
 
 impl<T> NCReadStream<T> {
     /// Pop one sample.
-    /// Ideally this should only be NoCopy.
+    /// Ideally this should only be `NoCopy`.
     #[must_use]
     pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
         // TODO: attach tags.
@@ -464,10 +464,10 @@ impl<T> NCReadStream<T> {
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
-        if !self.inner.lock.lock().unwrap().is_empty() {
-            false
-        } else {
+        if self.inner.lock.lock().unwrap().is_empty() {
             Arc::strong_count(&self.inner) == 1
+        } else {
+            false
         }
     }
 
@@ -496,7 +496,7 @@ impl<T> NCWriteStream<T> {
         new_nocopy_stream()
     }
     /// Push one sample, handing off ownership.
-    /// Ideally this should only be NoCopy.
+    /// Ideally this should only be `NoCopy`.
     ///
     /// This function doesn't enforce capacity. If there's a risk of
     /// overflowing, then check `remaining()` before pushing.

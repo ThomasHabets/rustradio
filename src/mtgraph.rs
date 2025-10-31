@@ -156,7 +156,7 @@ impl crate::graph::GraphRunner for MTGraph {
 
     /// Return a string with stats about where time went.
     ///
-    /// MTGraph can't measure per block CPU time, since rayon and other block
+    /// `MTGraph` can't measure per block CPU time, since rayon and other block
     /// threading is not measurable.
     fn generate_stats(&self) -> Option<String> {
         let elapsed = self.spent_time?.as_secs_f64();
@@ -172,7 +172,7 @@ impl crate::graph::GraphRunner for MTGraph {
             .keys()
             .map(|(n, name)| format!("{name}/{n}"))
             .collect();
-        let ml = names.iter().map(|b| b.len()).max().unwrap(); // unwrap: can only fail if block list is empty.
+        let ml = names.iter().map(std::string::String::len).max().unwrap(); // unwrap: can only fail if block list is empty.
         let ml = std::cmp::max(ml, "Elapsed seconds".len());
 
         let dashes = "-".repeat(ml + 52) + "\n";

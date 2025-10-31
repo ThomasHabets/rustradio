@@ -68,7 +68,7 @@ impl Map {
             return Err(Error::msg("mmap() allocated in the wrong place"));
         }
         Ok(Self {
-            base: buf as *mut c_uchar,
+            base: buf.cast::<c_uchar>(),
             len,
         })
     }
@@ -77,7 +77,7 @@ impl Map {
 impl Drop for Map {
     fn drop(&mut self) {
         // SAFETY: This is what we mmapped.
-        let rc = unsafe { libc::munmap(self.base as *mut c_void, self.len) };
+        let rc = unsafe { libc::munmap(self.base.cast::<c_void>(), self.len) };
         if rc != 0 {
             let e = std::io::Error::last_os_error();
             panic!("munmap() failed on circular buffer: {e}");
@@ -157,7 +157,8 @@ impl Circ {
         // SAFETY: This is a mut cast for memory that C++ would call non-pointer
         // POD. Data races are possible from this in general, but will be
         // prevented by the stream API.
-        let buf = unsafe { std::slice::from_raw_parts_mut(self.map.base as *mut T, self.len / ez) };
+        let buf =
+            unsafe { std::slice::from_raw_parts_mut(self.map.base.cast::<T>(), self.len / ez) };
         &mut buf[start..end]
     }
 }
@@ -211,7 +212,7 @@ impl BufferState {
     }
 }
 
-/// BufferReader is an RAII'd fixed window read slice with some helper functions.
+/// `BufferReader` is an RAII'd fixed window read slice with some helper functions.
 pub struct BufferReader<T> {
     parent: Arc<Buffer<T>>,
     start: usize,
@@ -246,7 +247,7 @@ impl<T: Copy> BufferReader<T> {
         self.end - self.start
     }
 
-    /// is_empty convenience function.
+    /// `is_empty` convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.end == self.start
@@ -261,7 +262,7 @@ impl<T: Copy> std::ops::Index<usize> for BufferReader<T> {
     }
 }
 
-/// BufferWriter is an RAII fixed window slice with some helper functions.
+/// `BufferWriter` is an RAII fixed window slice with some helper functions.
 pub struct BufferWriter<T> {
     parent: Arc<Buffer<T>>,
     start: usize,
@@ -311,7 +312,7 @@ impl<T: Copy> BufferWriter<T> {
         self.end - self.start
     }
 
-    /// is_empty convenience function.
+    /// `is_empty` convenience function.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.end == self.start
@@ -385,6 +386,7 @@ impl<T> Buffer<T> {
     pub fn free(&self) -> usize {
         self.state.lock.lock().unwrap().free()
     }
+    #[must_use]
     pub fn wait_for_write(&self, need: usize) -> usize {
         self.state
             .cv
@@ -404,6 +406,7 @@ impl<T> Buffer<T> {
             _ = self.state.acvw.notified() => 1,
         }
     }
+    #[must_use]
     pub fn wait_for_read(&self, need: usize) -> usize {
         self.state
             .cv
@@ -555,7 +558,7 @@ impl<T: Copy> Buffer<T> {
             }
         }
         drop(s);
-        tags.sort_by_key(|a| a.pos());
+        tags.sort_by_key(super::stream::Tag::pos);
         Ok((BufferReader::new(self, start, end), tags))
     }
 

@@ -76,6 +76,7 @@ pub struct Graph {
 
 impl Graph {
     /// Create a new flowgraph.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             spent_time: None,
@@ -94,10 +95,8 @@ pub(crate) fn get_cpu_time() -> std::time::Duration {
     // SAFETY: Zeroing out a timespec struct is just all zeroes.
     let mut ts: timespec = unsafe { std::mem::zeroed() };
     // SAFETY: Local variable written my C function.
-    let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut ts) };
-    if rc != 0 {
-        panic!("clock_gettime()");
-    }
+    let rc = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &raw mut ts) };
+    assert!((rc == 0), "clock_gettime()");
     std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
 }
 
@@ -163,7 +162,7 @@ impl GraphRunner for Graph {
                     BlockRet::EOF => {
                         eof[n] = true;
                     }
-                };
+                }
                 if eof[n] {
                     info!("{name} EOF, exiting");
                 }
@@ -197,13 +196,13 @@ impl GraphRunner for Graph {
         let total = self
             .times
             .iter()
-            .cloned()
+            .copied()
             .sum::<std::time::Duration>()
             .as_secs_f64();
         let block_cpu = self
             .cpu_times
             .iter()
-            .cloned()
+            .copied()
             .sum::<std::time::Duration>()
             .as_secs_f64();
         let ml = self
@@ -311,6 +310,7 @@ pub struct CancellationToken {
 
 impl CancellationToken {
     /// Create new cancellation token.
+    #[must_use]
     pub fn new() -> Self {
         CancellationToken {
             inner: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -323,6 +323,7 @@ impl CancellationToken {
     }
 
     /// Check if the token is cancelled.
+    #[must_use]
     pub fn is_canceled(&self) -> bool {
         self.inner.load(std::sync::atomic::Ordering::SeqCst)
     }

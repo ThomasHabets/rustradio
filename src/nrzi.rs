@@ -5,7 +5,7 @@ use crate::stream::{ReadStream, WriteStream};
 ///
 /// <https://en.wikipedia.org/wiki/Non-return-to-zero>
 ///
-/// The same effect as NrziDecode can be had by doing:
+/// The same effect as `NrziDecode` can be had by doing:
 ///
 /// ```text
 /// let (prev, b) = blockchain![g, prev, Tee::new(prev)];

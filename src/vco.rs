@@ -25,7 +25,7 @@ pub struct Vco {
 
 impl Vco {
     fn process_sync(&mut self, a: Float) -> Complex {
-        self.phase += self.k * (a as f64);
+        self.phase += self.k * f64::from(a);
         if self.phase > MX {
             self.phase -= MX;
         }

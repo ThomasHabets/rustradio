@@ -19,7 +19,8 @@ pub struct SignalSourceComplex {
 
 /// Generate pure complex sine sine.
 impl SignalSourceComplex {
-    /// Create new SignalSourceComplex block.
+    /// Create new `SignalSourceComplex` block.
+    #[must_use]
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> (Self, ReadStream<Complex>) {
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -27,7 +28,7 @@ impl SignalSourceComplex {
                 dst,
                 current: 0.0,
                 amplitude,
-                rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
+                rad_per_sample: 2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate),
             },
             dr,
         )
@@ -76,7 +77,8 @@ pub struct SignalSourceFloat {
 
 /// Generate pure complex sine sine.
 impl SignalSourceFloat {
-    /// Create new SignalSourceFloat block.
+    /// Create new `SignalSourceFloat` block.
+    #[must_use]
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> (Self, ReadStream<Float>) {
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -84,7 +86,7 @@ impl SignalSourceFloat {
                 dst,
                 current: 0.0,
                 amplitude,
-                rad_per_sample: 2.0 * std::f64::consts::PI * (freq as f64) / (samp_rate as f64),
+                rad_per_sample: 2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate),
             },
             dr,
         )

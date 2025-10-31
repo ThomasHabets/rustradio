@@ -30,7 +30,7 @@ pub struct FileSinkBuilder<T: Sample> {
 }
 
 impl<T: Sample> FileSinkBuilder<T> {
-    /// Create new FileSinkBuilder.
+    /// Create new `FileSinkBuilder`.
     /// Mode defaults to Create.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
         Self {
@@ -41,6 +41,7 @@ impl<T: Sample> FileSinkBuilder<T> {
         }
     }
     /// Set mode.
+    #[must_use]
     pub fn mode(mut self, m: Mode) -> Self {
         self.mode = m;
         self
@@ -51,7 +52,7 @@ impl<T: Sample> FileSinkBuilder<T> {
         self.flush = v;
         self
     }
-    /// Build the FileSink.
+    /// Build the `FileSink`.
     pub fn build(self, src: ReadStream<T>) -> Result<FileSink<T>> {
         FileSink::new(src, self.filename, self.mode).map(|mut b| {
             b.flush = self.flush;
@@ -76,7 +77,7 @@ impl<T: Sample> FileSink<T> {
     pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSinkBuilder<T> {
         FileSinkBuilder::new(filename)
     }
-    /// Create new FileSink block.
+    /// Create new `FileSink` block.
     pub fn new<P: Into<std::path::PathBuf>>(
         src: ReadStream<T>,
         filename: P,
@@ -160,7 +161,7 @@ pub struct NoCopyFileSinkBuilder<T> {
 }
 
 impl<T> NoCopyFileSinkBuilder<T> {
-    /// Create new FileSinkBuilder.
+    /// Create new `FileSinkBuilder`.
     /// Mode defaults to Create.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
         Self {
@@ -171,6 +172,7 @@ impl<T> NoCopyFileSinkBuilder<T> {
         }
     }
     /// Set mode.
+    #[must_use]
     pub fn mode(mut self, m: Mode) -> Self {
         self.mode = m;
         self
@@ -181,7 +183,7 @@ impl<T> NoCopyFileSinkBuilder<T> {
         self.flush = v;
         self
     }
-    /// Build the FileSink.
+    /// Build the `FileSink`.
     pub fn build(self, src: NCReadStream<T>) -> Result<NoCopyFileSink<T>> {
         NoCopyFileSink::new(src, self.filename, self.mode).map(|mut b| {
             b.flush = self.flush;
@@ -206,7 +208,7 @@ impl<T> NoCopyFileSink<T> {
     pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> NoCopyFileSinkBuilder<T> {
         NoCopyFileSinkBuilder::new(filename)
     }
-    /// Create new NoCopyFileSink block.
+    /// Create new `NoCopyFileSink` block.
     pub fn new<P: Into<std::path::PathBuf>>(
         src: NCReadStream<T>,
         filename: P,
