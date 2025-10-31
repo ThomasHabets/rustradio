@@ -13,6 +13,8 @@ use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Error, Float, Result};
 
+const AU_MAGIC: u32 = 0x2e73_6e64_u32;
+
 /// Au support several encodings. This code currently has only one.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Encoding {
@@ -79,13 +81,13 @@ impl AuEncode {
         let mut v = Vec::with_capacity(28);
 
         // Magic
-        v.extend(0x2e736e64u32.to_be_bytes());
+        v.extend(AU_MAGIC.to_be_bytes());
 
         // Data offset.
         v.extend(28u32.to_be_bytes());
 
         // Size, or all ones if unknown.
-        v.extend(0xffffffffu32.to_be_bytes());
+        v.extend(0xffff_ffff_u32.to_be_bytes());
 
         // Mode.
         v.extend((encoding as u32).to_be_bytes());
@@ -202,7 +204,7 @@ impl Block for AuDecode {
                 let magic = i.iter().take(4).copied().collect::<Vec<_>>();
                 let magic = u32::from_be_bytes(magic.try_into().unwrap());
                 i.consume(4);
-                if magic != 0x2e736e64u32 {
+                if magic != AU_MAGIC {
                     return Err(Error::msg(".au magic value not found"));
                 }
                 self.state = DecodeState::WaitingSize;

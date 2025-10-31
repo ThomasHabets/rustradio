@@ -36,9 +36,8 @@ pub struct VecToStream<T: Sample> {
 
 impl<T: Sample> Block for VecToStream<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let n = match self.src.peek_size() {
-            None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
-            Some(x) => x,
+        let Some(n) = self.src.peek_size() else {
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         };
         let mut o = self.dst.write_buf()?;
         if n > o.len() {

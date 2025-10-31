@@ -20,9 +20,8 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 ) -> bool {
     attrs.into_iter().any(|attr| {
         //eprintln!("{:?}", attr);
-        let meta_list = match &attr.meta {
-            Meta::List(meta_list) => meta_list,
-            _ => return false,
+        let Meta::List(meta_list) = &attr.meta else {
+            return false;
         };
         //eprintln!("  {:?}", attr.meta);
         if !meta_list.path.is_ident("rustradio") {
@@ -31,9 +30,7 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
         let mut found = false;
         attr.parse_nested_meta(|meta| {
             let s = meta.path.get_ident().expect("path without ident");
-            if !valid.iter().any(|v| s == v) {
-                panic!("Invalid attr {s}");
-            }
+            assert!(valid.iter().any(|v| s == v), "Invalid attr {s}");
             found |= meta.path.is_ident(name);
             Ok(())
         })
@@ -44,7 +41,7 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
 
 /// Return the inner type of a generic type.
 ///
-/// E.g. given ReadStream<Float>, return Float.
+/// E.g. given `ReadStream<Float>`, return `Float`.
 #[must_use]
 fn inner_type(ty: &syn::Type) -> &syn::Type {
     if let syn::Type::Path(p) = &ty {
@@ -121,15 +118,15 @@ impl StructAttrs {
                         "new" => ret.generate_new = true,
                         "sync" => {
                             assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
-                            ret.sync = Sync::Value
+                            ret.sync = Sync::Value;
                         }
                         "sync_tag" => {
                             assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
-                            ret.sync = Sync::Tag
+                            ret.sync = Sync::Tag;
                         }
                         "sync_nocopy_tag" => {
                             assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
-                            ret.sync = Sync::NoCopyTag
+                            ret.sync = Sync::NoCopyTag;
                         }
                         other => panic!("invalid attr {other}"),
                     }
@@ -625,7 +622,7 @@ impl<'a> Parsed<'a> {
     }
 }
 
-/// Backend function for the rustradio_macros::Block derive macro.
+/// Backend function for the `rustradio_macros::Block` derive macro.
 ///
 /// Use the macro, not this function.
 #[must_use]

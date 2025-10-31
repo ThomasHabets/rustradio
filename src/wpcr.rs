@@ -149,9 +149,7 @@ impl Wpcr {
         d.truncate(d.len() / 2);
 
         // Find best match.
-        let bin = if let Some(bin) = find_best_bin(&d) {
-            bin
-        } else {
+        let Some(bin) = find_best_bin(&d) else {
             trace!("No best bin found, giving up on burst");
             return None;
         };

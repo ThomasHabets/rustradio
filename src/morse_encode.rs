@@ -82,12 +82,9 @@ fn encode(msg: &str) -> Vec<u8> {
 impl MorseEncode {
     fn process_sync_tags<'a>(&mut self, msg: String, tags: &'a [Tag]) -> (Vec<u8>, Cow<'a, [Tag]>) {
         let mut tags = tags.to_vec();
-        tags.push(Tag::new(
-            0,
-            "MorseEncode::message",
-            TagValue::String(msg.clone()),
-        ));
-        (encode(&msg), Cow::Owned(tags))
+        let enc = encode(&msg);
+        tags.push(Tag::new(0, "MorseEncode::message", TagValue::String(msg)));
+        (enc, Cow::Owned(tags))
     }
 }
 

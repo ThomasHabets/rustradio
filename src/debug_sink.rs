@@ -20,9 +20,8 @@ where
     T: std::fmt::Debug + Default + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (v, _tags) = match self.src.pop() {
-            None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
-            Some(x) => x,
+        let Some((v, _tags)) = self.src.pop() else {
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
         };
 
         // TODO: print tags.
