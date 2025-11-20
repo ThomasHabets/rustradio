@@ -1,7 +1,8 @@
 //! Quadrature demod, the core of an FM demodulator.
 
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Float};
+use crate::{Complex, Float, Result};
+use crate::block::{Block, BlockRet};
 
 /// Quadrature demod, the core of an FM demodulator.
 ///
@@ -29,18 +30,44 @@ use crate::{Complex, Float};
 ///
 /// [vectorized]: https://mazzo.li/posts/vectorized-atan2.html
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, sync)]
+#[rustradio(crate, new)]
 pub struct QuadratureDemod {
     gain: Float,
-    #[rustradio(default)]
-    last: Complex,
     #[rustradio(in)]
     src: ReadStream<Complex>,
     #[rustradio(out)]
     dst: WriteStream<Float>,
+
+    #[rustradio(default)]
+    tmp: Vec<Complex>,
 }
 
-impl QuadratureDemod {
+impl Block for QuadratureDemod {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
+        let (inp, _) = self.src.read_buf()?;
+        if inp.len() < 2{
+            return Ok(BlockRet::WaitForStream(&self.src, 2));
+        }
+        let mut out = self.dst.write_buf()?;
+        if out.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
+        let n = inp.len().min(out.len());
+        let n1 = n - 1;
+        let o = &mut out.slice()[..n1];
+        let i = &inp.slice()[..n];
+        if self.tmp.len() < n {
+            self.tmp.resize(n, Complex::default());
+        }
+        volk::volk_32fc_x2_multiply_conjugate_32fc(&mut self.tmp[..n1], &i[1..n], &i[..n1]);
+        for i in 0..n1 {
+            o[i] = self.gain * fast_math::atan2(self.tmp[i].im, self.tmp[i].re);
+        }
+        //volk::volk_32fc_s32f_atan2_32f(&mut out.slice()[..n], &inp.slice()[..n], self.gain);
+        inp.consume(n1);
+        out.produce(n1, &[]);
+        Ok(BlockRet::Pending)
+            /*
     fn process_sync(&mut self, s: Complex) -> Float {
         let t = s * self.last.conj();
         self.last = s;
@@ -50,6 +77,8 @@ impl QuadratureDemod {
 
         #[cfg(not(feature = "fast-math"))]
         return self.gain * t.im.atan2(t.re);
+    }
+    */
     }
 }
 
