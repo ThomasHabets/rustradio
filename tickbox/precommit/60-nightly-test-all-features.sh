@@ -5,7 +5,7 @@ cargo +nightly 2> /dev/null > /dev/null && {
         export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.nightly.all-features"
         cd "$TICKBOX_TEMPDIR/work"
         # This is not "all features" because wasm.
-        cargo +nightly test --workspace -F simd,rtlsdr,soapysdr,fast-math,audio,fftw,async,tokio-unstable,nix,pipewire
+        cargo +nightly test --workspace -F simd,rtlsdr,soapysdr,fast-math,audio,fftw,async,tokio-unstable,nix,pipewire,volk
         if [[ ${CLEANUP:-} = true ]]; then
                 rm -fr "${CARGO_TARGET_DIR?}"
         fi
