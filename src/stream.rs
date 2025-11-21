@@ -15,6 +15,7 @@ pub type TagPos = usize;
 
 /// Enum of tag values.
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[non_exhaustive]
 pub enum TagValue {
     /// String value.
     String(String),
