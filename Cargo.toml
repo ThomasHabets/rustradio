@@ -3,7 +3,7 @@ members = ["rustradio_macros", "rustradio_macros_code"]
 
 [package]
 name = "rustradio"
-version = "0.14.3"
+version = "0.15.0"
 edition = "2024"
 license = "MIT"
 authors = ["Thomas Habets <thomas@habets.se>"]
@@ -30,7 +30,7 @@ soapysdr = { version = "0.4.2", optional = true }
 serde_json = "1.0"
 serde = {version = "1.0", features = ["derive"]}
 cpal = { version = "0.15", features = ["jack"], optional=true }
-rustradio_macros = { version = "0.14.3", path = "rustradio_macros" }
+rustradio_macros = { version = "0.15.0", path = "rustradio_macros" }
 rayon = "1.10"
 itertools = "0.13"
 tar = "0.4"
