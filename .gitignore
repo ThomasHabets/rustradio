@@ -17,3 +17,4 @@ examples/gr/*.py
 data/
 wb2osz/
 *.swp
+tmp/
