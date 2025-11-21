@@ -210,6 +210,9 @@ pub mod blocks;
 #[cfg(not(feature = "wasm"))]
 pub mod circular_buffer;
 
+#[cfg(feature = "wasm")]
+pub mod circular_buffer {}
+
 pub mod graph;
 pub mod mtgraph;
 pub mod stream;
