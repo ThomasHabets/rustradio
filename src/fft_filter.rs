@@ -166,7 +166,6 @@ pub mod rr_rustfft {
         fn run(&mut self, i: &mut [Complex]) {
             self.fft.process(i);
             sum_vec(i, &self.taps_fft);
-            //volk::volk_32fc_x2_multiply_32fc_inplace(i, &self.taps_fft);
             self.ifft.process(i);
         }
         fn tap_len(&self) -> usize {
@@ -271,7 +270,11 @@ impl<T: Engine> FftFilter<T> {
     }
 }
 
+#[inline]
 fn sum_vec(left: &mut [Complex], right: &[Complex]) {
+    #[cfg(feature = "volk")]
+    volk::volk_32fc_x2_multiply_32fc_inplace(left, &right);
+    #[cfg(not(feature = "volk"))]
     left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y);
 }
 
