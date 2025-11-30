@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1814,7 +1814,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "itertools 0.14.0",
  "proc-macro2",
@@ -1826,7 +1826,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros_code"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "proc-macro2",
  "quote",
