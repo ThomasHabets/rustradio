@@ -11,4 +11,6 @@ sed -i "s/^version = \"${CURRENT?}\"/version = \"${NEW?}\"/" \
         Cargo.toml \
         rustradio_macros/Cargo.toml \
         rustradio_macros_code/Cargo.toml
-sed -i -r 's/^(rustradio_macros.*version = ")[0-9.]+(".*)/\1'"${NEW}"'\2/' Cargo.toml
+sed -i -r 's/^(rustradio_macros.*version = ")[0-9.]+(".*)/\1'"${NEW}"'\2/' \
+        Cargo.toml \
+        rustradio_macros/Cargo.toml
