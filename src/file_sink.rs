@@ -78,6 +78,10 @@ impl<T: Sample> FileSink<T> {
         FileSinkBuilder::new(filename)
     }
     /// Create new `FileSink` block.
+    ///
+    /// # Errors
+    ///
+    /// Any failure to open the named file.
     pub fn new<P: Into<std::path::PathBuf>>(
         src: ReadStream<T>,
         filename: P,
@@ -184,6 +188,10 @@ impl<T> NoCopyFileSinkBuilder<T> {
         self
     }
     /// Build the `FileSink`.
+    ///
+    /// # Errors
+    ///
+    /// Any failure to open the named file.
     pub fn build(self, src: NCReadStream<T>) -> Result<NoCopyFileSink<T>> {
         NoCopyFileSink::new(src, self.filename, self.mode).map(|mut b| {
             b.flush = self.flush;
@@ -240,6 +248,10 @@ impl<T> NoCopyFileSink<T> {
     }
 
     /// Flush the write buffer.
+    ///
+    /// # Errors
+    ///
+    /// Any IO error to flush the underlying file.
     pub fn flush(&mut self) -> Result<()> {
         self.f
             .flush()

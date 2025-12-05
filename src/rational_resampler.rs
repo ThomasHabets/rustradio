@@ -2,7 +2,7 @@
 /*
 * Unlike the rational resampler in GNURadio, this one doesn't filter.
  */
-use crate::{Result, Sample};
+use crate::{Error, Result, Sample};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
@@ -81,6 +81,11 @@ impl<T> RationalResamplerBuilderDeci<T> {
     }
 }
 impl<T: Sample> RationalResamplerBuilderBoth<T> {
+    /// Build the block.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the interpolation or decimation value is 0.
     pub fn build(self, src: ReadStream<T>) -> Result<(RationalResampler<T>, ReadStream<T>)> {
         RationalResampler::new(src, self.interp, self.deci)
     }
@@ -120,6 +125,12 @@ impl<T: Sample> RationalResampler<T> {
         mut interp: usize,
         mut deci: usize,
     ) -> Result<(Self, ReadStream<T>)> {
+        if deci == 0 {
+            return Err(Error::msg("RationalResampler created using deci 0"));
+        }
+        if interp == 0 {
+            return Err(Error::msg("RationalResampler created using interp 0"));
+        }
         let g = gcd(deci, interp);
         deci /= g;
         interp /= g;

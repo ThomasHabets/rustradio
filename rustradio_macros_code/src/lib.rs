@@ -555,7 +555,7 @@ impl<'a> Parsed<'a> {
         })
     }
     #[must_use]
-    fn expand_blockname(&self) -> Option<TokenStream> {
+    fn expand_blockname(&self) -> TokenStream {
         let name = self.name;
         let name_str = name.to_string();
         let nameval = if self.attrs.custom_name {
@@ -566,13 +566,13 @@ impl<'a> Parsed<'a> {
         let (impl_generics, ty_generics, _) = &self.generics;
         let struct_where = &self.struct_where;
         let path = self.attrs.path();
-        Some(quote! {
+        quote! {
             impl #impl_generics #path::block::BlockName for #name #ty_generics #struct_where {
-            fn block_name(&self) -> &str {
-                #nameval
+                fn block_name(&self) -> &str {
+                    #nameval
+                }
             }
         }
-        })
     }
     #[must_use]
     fn expand_eof(&self) -> Option<TokenStream> {
@@ -610,7 +610,7 @@ impl<'a> Parsed<'a> {
             self.expand_sync_nocopy_work(),
             self.expand_sync_work(),
             self.expand_sync_tags(),
-            self.expand_blockname(),
+            Some(self.expand_blockname()),
             self.expand_eof(),
         ]
         .into_iter()
