@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::marker::{Send, Sync};
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -62,7 +63,7 @@ fn inner_type(ty: &syn::Type) -> &syn::Type {
 }
 
 #[derive(Default, PartialEq, Debug)]
-enum Sync {
+enum SyncBlock {
     // `sync`. Pass tags through as is.
     Value,
     // `sync_tag`. Also allow tag modification.
@@ -79,7 +80,7 @@ struct StructAttrs {
     custom_name: bool,
     generate_new: bool,
     noeof: bool,
-    sync: Sync,
+    sync: SyncBlock,
     bounds: Option<syn::WhereClause>,
 }
 
@@ -117,16 +118,28 @@ impl StructAttrs {
                         "noeof" => ret.noeof = true,
                         "new" => ret.generate_new = true,
                         "sync" => {
-                            assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
-                            ret.sync = Sync::Value;
+                            assert_eq!(
+                                ret.sync,
+                                SyncBlock::General,
+                                "Only one sync tag can be used"
+                            );
+                            ret.sync = SyncBlock::Value;
                         }
                         "sync_tag" => {
-                            assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
-                            ret.sync = Sync::Tag;
+                            assert_eq!(
+                                ret.sync,
+                                SyncBlock::General,
+                                "Only one sync tag can be used"
+                            );
+                            ret.sync = SyncBlock::Tag;
                         }
                         "sync_nocopy_tag" => {
-                            assert_eq!(ret.sync, Sync::General, "Only one sync tag can be used");
-                            ret.sync = Sync::NoCopyTag;
+                            assert_eq!(
+                                ret.sync,
+                                SyncBlock::General,
+                                "Only one sync tag can be used"
+                            );
+                            ret.sync = SyncBlock::NoCopyTag;
                         }
                         other => panic!("invalid attr {other}"),
                     }
@@ -172,12 +185,17 @@ struct Parsed<'a> {
 }
 
 impl<'a> Parsed<'a> {
-    fn parse(input: &'a DeriveInput) -> Result<Self, std::fmt::Error> {
+    fn parse(input: &'a DeriveInput) -> Result<Self, Box<dyn std::error::Error>> {
         let Data::Struct(data_struct) = &input.data else {
-            panic!("can only use on struct");
+            return Err(Box::<dyn std::error::Error + Send + Sync>::from(
+                "can only use on struct",
+            ));
         };
         let Fields::Named(fields_named) = &data_struct.fields else {
-            panic!("Fields is what? {:?}", data_struct.fields);
+            return Err(Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "Fields is unexpected: {:?}",
+                data_struct.fields
+            )));
         };
         let attrs = StructAttrs::parse(&input.attrs);
         let (generics, struct_where) = {
@@ -384,8 +402,8 @@ impl<'a> Parsed<'a> {
     #[must_use]
     fn expand_sync_nocopy_work(&self) -> Option<TokenStream> {
         match self.attrs.sync {
-            Sync::NoCopyTag => {}
-            Sync::General | Sync::Tag | Sync::Value => return None,
+            SyncBlock::NoCopyTag => {}
+            SyncBlock::General | SyncBlock::Tag | SyncBlock::Value => return None,
         }
         let name = self.name;
         let path = self.attrs.path();
@@ -417,8 +435,8 @@ impl<'a> Parsed<'a> {
     #[must_use]
     fn expand_sync_work(&self) -> Option<TokenStream> {
         match self.attrs.sync {
-            Sync::General | Sync::NoCopyTag => return None,
-            Sync::Tag | Sync::Value => {}
+            SyncBlock::General | SyncBlock::NoCopyTag => return None,
+            SyncBlock::Tag | SyncBlock::Value => {}
         }
         let name = self.name;
         let path = self.attrs.path();
@@ -498,7 +516,7 @@ impl<'a> Parsed<'a> {
     }
     #[must_use]
     fn expand_sync_tags(&self) -> Option<TokenStream> {
-        if !matches![self.attrs.sync, Sync::Value] {
+        if !matches![self.attrs.sync, SyncBlock::Value] {
             return None;
         }
         let name = self.name;
@@ -631,11 +649,11 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     let p = Parsed::parse(&input).unwrap();
     // Sanity check.
     match p.attrs.sync {
-        Sync::Value | Sync::Tag | Sync::NoCopyTag => {
+        SyncBlock::Value | SyncBlock::Tag | SyncBlock::NoCopyTag => {
             assert!(!p.inputs.is_empty());
             assert!(!p.outputs.is_empty());
         }
-        Sync::General => {}
+        SyncBlock::General => {}
     }
     p.expand()
 }
