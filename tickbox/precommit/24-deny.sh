@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -ueo pipefail
-if [[ "$NO_NET" = "true" ]]; then
+if [[ "${NO_NET:-}" = "true" ]]; then
         exit 0
 fi
 cd "$TICKBOX_TEMPDIR/work"
