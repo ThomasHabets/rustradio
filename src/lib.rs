@@ -317,6 +317,22 @@ impl Error {
     }
 }
 
+/// Create default `From<T>` for `Error`, with optional extra context.
+///
+/// ## Example
+///
+/// ```text
+/// use rustradio::error_from;
+/// error_from!(
+///     "audio",
+///     cpal::PlayStreamError,
+///     cpal::BuildStreamError,
+///     cpal::DevicesError,
+///     cpal::DeviceNameError,
+///     cpal::SupportedStreamConfigsError,
+///     cpal::DefaultStreamConfigError,
+/// );
+/// ```
 #[macro_export]
 macro_rules! error_from {
     ($ctx:literal, $($err_ty:ty),* $(,)?) => {
@@ -335,6 +351,25 @@ macro_rules! error_from {
     };
 }
 
+/// Helper macro for creating a series of one-in, one-out blocks and adding them
+/// to a graph.
+///
+/// ## Example
+///
+/// ```
+/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::blocks::*;
+/// use rustradio::blockchain;
+///
+/// let mut g = Graph::new();
+/// let prev = blockchain![
+///     g,      // Graph object.
+///     prev,   // Variable to use for the streams from block to block.
+///     SignalSourceFloat::new(44100.0, 1000.0, 1.0),
+///     MultiplyConst::new(prev, 2.0),
+///     MultiplyConst::new(prev, 4.0),
+/// ];
+/// ```
 #[macro_export]
 macro_rules! blockchain {
     ($g:expr, $prev:ident, $($cons:expr),* $(,)?) => {{
@@ -355,6 +390,7 @@ error_from!(
     std::num::TryFromIntError,
 );
 
+/// Result convenience type.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Repeat between zero and infinite times.
@@ -422,6 +458,7 @@ enum Repeater {
     Infinite,
 }
 
+/// A CPU feature, such as `AVX` (x86) or `Vector` (RISC-V).
 pub struct Feature {
     name: String,
     build: bool,
@@ -439,6 +476,7 @@ impl Feature {
     }
 }
 
+/// Turn list of features into a nicely formatted table.
 #[must_use]
 pub fn environment_str(features: &[Feature]) -> String {
     let mut s = "Feature   Build Detected\n".to_string();
@@ -451,6 +489,13 @@ pub fn environment_str(features: &[Feature]) -> String {
     s
 }
 
+/// Check that the code wasn't built with features not detected at runtime.
+///
+/// This is a bigger problem than merely a runtime error would imply. If built
+/// for features that are not here, that can only mean UB, before main() even
+/// runs. So maybe this checking function doesn't actually add any value.
+///
+/// It does return the state of the features, though.
 pub fn check_environment() -> Result<Vec<Feature>> {
     #[allow(unused_mut)]
     let mut assumptions: Vec<Feature> = Vec::new();
@@ -555,6 +600,10 @@ pub fn parse_verbosity(in_s: &str) -> std::result::Result<usize, String> {
 ///     sample_rate: f64,
 /// }
 /// ```
+///
+/// Supported features:
+/// * k/m/g suffix (case insensitive).
+/// * underscores are stripped.
 pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
     let s_binding;
     let s = if in_s.contains('_') {
@@ -582,7 +631,7 @@ pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
         }
     };
     Ok(nums.parse::<f64>().map_err(|e| {
-        format!("Invalid number {in_s}: {e}. Has to be a float with optional k/mg suffix")
+        format!("Invalid number {in_s}: {e}. Has to be a float with optional k/m/g suffix")
     })? * mul)
 }
 
@@ -760,6 +809,7 @@ pub mod tests {
     fn frequency() {
         for (i, want) in &[
             ("", None),
+            (".", None),
             ("k", None),
             ("r", None),
             (".k", None),
@@ -771,6 +821,7 @@ pub mod tests {
             ("3.k", Some(3_000.0f64)),
             ("100", Some(100.0)),
             ("123k", Some(123_000.0)),
+            ("123kk", None),
             ("123.78922K", Some(123_789.22)),
             ("321m", Some(321_000_000.0)),
             ("2.45g", Some(2_450_000_000.0)),
