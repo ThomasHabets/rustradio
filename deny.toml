@@ -17,7 +17,6 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "Unicode-3.0",
     "BSD-3-Clause",
-    "Zlib",
     "ISC",
     "LGPL-3.0-only", # volk
 ]
