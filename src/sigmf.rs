@@ -552,14 +552,6 @@ impl<T: Sample + Type> SigMFSource<T> {
     }
 }
 
-fn u64_to_clamped_usize(v: u64) -> usize {
-    if v > (usize::MAX as u64) {
-        usize::MAX
-    } else {
-        v as usize
-    }
-}
-
 impl<T> Block for SigMFSource<T>
 where
     T: Sample<Type = T> + std::fmt::Debug + Type,
@@ -581,7 +573,7 @@ where
         let have = self.buf.len() / sample_size;
         let want = o.len();
         if have == 0 {
-            let left = u64_to_clamped_usize(self.left);
+            let left = usize::try_from(self.left).unwrap_or(usize::MAX);
             let want_bytes = std::cmp::min(want * sample_size, left);
             assert_ne!(want_bytes, 0);
             let mut buffer = vec![0; want_bytes];
