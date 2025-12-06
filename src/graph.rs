@@ -1,5 +1,6 @@
 /*! Graphs contain blocks connected by streams, and run them.
  */
+use std::fmt::Write;
 use std::time::Instant;
 
 use crate::{Error, Result};
@@ -225,8 +226,9 @@ impl GraphRunner for Graph {
         );
         s.push_str(&dashes);
         for (n, b) in self.blocks.iter().enumerate() {
-            s.push_str(&format!(
-                "{:<width$} {:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
+            let _ = writeln!(
+                s,
+                "{:<width$} {:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}",
                 b.block_name(),
                 self.times[n].as_secs_f32(),
                 100.0 * self.times[n].as_secs_f64() / total,
@@ -234,19 +236,21 @@ impl GraphRunner for Graph {
                 100.0 * self.cpu_times[n].as_secs_f64() / block_cpu,
                 self.cpu_times[n].as_secs_f32() / self.times[n].as_secs_f32(),
                 width = ml,
-            ));
+            );
         }
         s.push_str(&dashes);
-        s.push_str(&format!(
-            "{:<width$} {total:secw$.secd$} {:>pw$.pd$}% {block_cpu:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
+        let _ = writeln!(
+            s,
+            "{:<width$} {total:secw$.secd$} {:>pw$.pd$}% {block_cpu:secw$.secd$} {:>pw$.pd$}% {:5.1}",
             "All blocks",
             100.0 * total / elapsed,
             100.0 * block_cpu / elapsed_cpu,
             block_cpu / elapsed,
             width = ml,
-        ));
-        s.push_str(&format!(
-            "{:<width$} {:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
+        );
+        let _ = writeln!(
+            s,
+            "{:<width$} {:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}",
             "Non-block time",
             elapsed - total,
             100.0 * (elapsed - total) / elapsed,
@@ -254,16 +258,17 @@ impl GraphRunner for Graph {
             100.0 * (elapsed_cpu - block_cpu) / elapsed_cpu,
             (elapsed_cpu - block_cpu) / (elapsed - total),
             width = ml,
-        ));
-        s.push_str(&format!(
-            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
+        );
+        let _ = writeln!(
+            s,
+            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}",
             "Elapsed seconds",
             100.0,
             elapsed_cpu,
             100.0,
             elapsed_cpu / elapsed,
             width = ml,
-        ));
+        );
         Some(s)
     }
 

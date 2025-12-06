@@ -1,6 +1,7 @@
 /*! Multithreaded version of Graph, otherwise the same as graph.rs.
  */
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::time::Instant;
 
 use crate::Result;
@@ -197,28 +198,31 @@ impl crate::graph::GraphRunner for MTGraph {
             ));
         }
         s.push_str(&dashes);
-        s.push_str(&format!(
-            "{:<width$} {total:secw$.secd$} {:>pw$.pd$}%\n",
+        let _ = writeln!(
+            s,
+            "{:<width$} {total:secw$.secd$} {:>pw$.pd$}%",
             "All blocks",
             100.0 * total / elapsed,
             width = ml,
-        ));
+        );
         // This is nonsetse data at the moment. Skip it.
-        s.push_str(&format!(
-            "{:<width$} {:secw$.secd$} {:>pw$.pd$}%\n",
+        let _ = writeln!(
+            s,
+            "{:<width$} {:secw$.secd$} {:>pw$.pd$}%",
             "Non-block time",
             elapsed - total,
             100.0 * (elapsed - total) / elapsed,
             width = ml,
-        ));
-        s.push_str(&format!(
-            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}% {elapsed_cpu:secw$.secd$} {:>pw$.pd$}% {:5.1}\n",
+        );
+        let _ = writeln!(
+            s,
+            "{:<width$} {elapsed:secw$.secd$} {:>pw$.pd$}% {elapsed_cpu:secw$.secd$} {:>pw$.pd$}% {:5.1}",
             "Elapsed seconds",
             100.0,
             100.0,
             elapsed_cpu / elapsed,
             width = ml,
-        ));
+        );
         Some(s)
     }
 
