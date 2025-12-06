@@ -577,6 +577,10 @@ pub fn check_environment() -> Result<Vec<Feature>> {
 ///     verbose: usize,
 /// }
 /// ```
+///
+/// # Errors
+///
+/// If the log level is not one of the known strings.
 pub fn parse_verbosity(in_s: &str) -> std::result::Result<usize, String> {
     use std::str::FromStr;
     log::Level::from_str(in_s)
@@ -645,6 +649,11 @@ pub trait Sample: Copy + Default + Send + Sync + 'static {
     fn size() -> usize;
 
     /// Parse one sample.
+    ///
+    /// # Errors
+    ///
+    /// For the currently implemented Sample types, it can only fail if the
+    /// passed byte slice is of the wrong size.
     fn parse(data: &[u8]) -> Result<Self::Type>;
 
     /// Serialize one sample.
@@ -658,7 +667,12 @@ impl Sample for Complex {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        assert!((data.len() == Self::size()), "TODO: Complex is wrong size");
+        if data.len() != Self::size() {
+            return Err(Error::msg(format!(
+                "Tried to parse Complex from {} bytes",
+                data.len()
+            )));
+        }
         let i = Float::from_le_bytes(data[0..Self::size() / 2].try_into()?);
         let q = Float::from_le_bytes(data[Self::size() / 2..].try_into()?);
         Ok(Complex::new(i, q))
@@ -677,7 +691,12 @@ impl Sample for Float {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        assert!((data.len() == Self::size()), "TODO: Float is wrong size");
+        if data.len() != Self::size() {
+            return Err(Error::msg(format!(
+                "Tried to parse Float from {} bytes",
+                data.len()
+            )));
+        }
         Ok(Float::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
@@ -691,7 +710,12 @@ impl Sample for u8 {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        assert!((data.len() == Self::size()), "TODO: u8 is wrong size");
+        if data.len() != Self::size() {
+            return Err(Error::msg(format!(
+                "Tried to parse u8 from {} bytes",
+                data.len()
+            )));
+        }
         Ok(data[0])
     }
     fn serialize(&self) -> Vec<u8> {
@@ -705,7 +729,12 @@ impl Sample for u32 {
         4
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        assert!((data.len() == Self::size()), "TODO: Float is wrong size");
+        if data.len() != Self::size() {
+            return Err(Error::msg(format!(
+                "Tried to parse u32 from {} bytes",
+                data.len()
+            )));
+        }
         Ok(u32::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
@@ -719,7 +748,12 @@ impl Sample for i32 {
         std::mem::size_of::<Self>()
     }
     fn parse(data: &[u8]) -> Result<Self::Type> {
-        assert!((data.len() == Self::size()), "TODO: Float is wrong size");
+        if data.len() != Self::size() {
+            return Err(Error::msg(format!(
+                "Tried to parse i32 from {} bytes",
+                data.len()
+            )));
+        }
         Ok(i32::from_le_bytes(data[0..Self::size()].try_into()?))
     }
     fn serialize(&self) -> Vec<u8> {
