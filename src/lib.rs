@@ -479,10 +479,12 @@ impl Feature {
 /// Turn list of features into a nicely formatted table.
 #[must_use]
 pub fn environment_str(features: &[Feature]) -> String {
+    use std::fmt::Write;
     let mut s = "Feature   Build Detected\n".to_string();
     for feature in features {
-        s += &format!(
-            "{:10} {:-5}    {:-5}\n",
+        let _ = writeln!(
+            s,
+            "{:10} {:-5}    {:-5}",
             feature.name, feature.build, feature.detected
         );
     }
@@ -492,10 +494,15 @@ pub fn environment_str(features: &[Feature]) -> String {
 /// Check that the code wasn't built with features not detected at runtime.
 ///
 /// This is a bigger problem than merely a runtime error would imply. If built
-/// for features that are not here, that can only mean UB, before main() even
+/// for features that are not here, that can only mean UB, before `main()` even
 /// runs. So maybe this checking function doesn't actually add any value.
 ///
 /// It does return the state of the features, though.
+///
+/// # Errors
+///
+/// If there are enabled processor features that are not supported. Though
+/// again, this is UB.
 pub fn check_environment() -> Result<Vec<Feature>> {
     #[allow(unused_mut)]
     let mut assumptions: Vec<Feature> = Vec::new();
@@ -608,6 +615,10 @@ pub fn parse_verbosity(in_s: &str) -> std::result::Result<usize, String> {
 /// Supported features:
 /// * k/m/g suffix (case insensitive).
 /// * underscores are stripped.
+///
+/// # Errors
+///
+/// If frequency string is not of a valid form.
 pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
     let s_binding;
     let s = if in_s.contains('_') {
@@ -620,7 +631,7 @@ pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
     let (nums, mul) = {
         let last = match s.chars().last() {
             None => return Err("empty string is not a frequency".into()),
-            Some(ch) => ch.to_lowercase().next().unwrap(),
+            Some(ch) => ch.to_lowercase().next().ok_or("Empty string")?,
         };
         if s.len() > 1 {
             let rest = &s[..(s.len() - 1)];
