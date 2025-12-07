@@ -85,7 +85,7 @@ pub mod rr_fftw {
             // the square root here and do it just once here in setup.
             {
                 let f = 1.0 / taps_fft.len() as Float;
-                for s in taps_fft.iter_mut() {
+                for s in &mut taps_fft {
                     *s *= f;
                 }
             }
@@ -154,7 +154,7 @@ pub mod rr_rustfft {
             // the square root here and do it just once here in setup.
             {
                 let f = 1.0 / taps_fft.len() as Float;
-                for s in taps_fft.iter_mut() {
+                for s in &mut taps_fft {
                     *s *= f;
                 }
             }

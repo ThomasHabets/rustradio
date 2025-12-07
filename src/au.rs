@@ -115,6 +115,8 @@ impl AuEncode {
 
 impl Block for AuEncode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        type S = i16;
+
         let mut o = self.dst.write_buf()?;
         if let Some(h) = &self.header {
             let n = std::cmp::min(h.len(), o.len());
@@ -127,7 +129,6 @@ impl Block for AuEncode {
             return Ok(BlockRet::Again);
         }
 
-        type S = i16;
         let scale = Float::from(S::MAX);
         let ss = std::mem::size_of::<S>();
 

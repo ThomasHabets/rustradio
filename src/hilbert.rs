@@ -91,11 +91,13 @@ impl Block for Hilbert {
         iv.extend(&self.history);
         iv.extend(i.iter().take(inout).copied());
 
-        use rayon::prelude::*;
-        o.par_iter_mut().take(n).enumerate().for_each(|(i, val)| {
-            let t = &iv[i..(i + self.ntaps)];
-            *val = Complex::new(iv[i + self.ntaps / 2], self.filter.filter_float(t));
-        });
+        {
+            use rayon::prelude::*;
+            o.par_iter_mut().take(n).enumerate().for_each(|(i, val)| {
+                let t = &iv[i..(i + self.ntaps)];
+                *val = Complex::new(iv[i + self.ntaps / 2], self.filter.filter_float(t));
+            });
+        }
 
         oo.produce(n, &tags);
 

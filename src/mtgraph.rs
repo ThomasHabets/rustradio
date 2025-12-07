@@ -189,13 +189,14 @@ impl crate::graph::GraphRunner for MTGraph {
         for (n, stats) in self.block_stats.values().enumerate() {
             let tt = stats.elapsed;
             let name = &names[n];
-            s.push_str(&format!(
-                "{name:<width$} {:secw$.secd$} {:>pw$.pd$}%                         {:7}\n",
+            let _ = writeln!(
+                s,
+                "{name:<width$} {:secw$.secd$} {:>pw$.pd$}%                         {:7}",
                 tt.as_secs_f32(),
                 100.0 * tt.as_secs_f64() / total,
                 stats.work_calls,
                 width = ml,
-            ));
+            );
         }
         s.push_str(&dashes);
         let _ = writeln!(

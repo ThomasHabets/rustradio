@@ -140,7 +140,6 @@ mod tests {
 
     #[tokio::test]
     async fn nullsink() -> Result<()> {
-        eprintln!("Hello");
         use crate::agraph::AsyncGraph;
         use crate::blocks::{NullSink, VectorSource};
         use crate::graph::GraphRunner;

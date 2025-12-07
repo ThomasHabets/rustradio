@@ -441,6 +441,8 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the read buffer.
     pub(in crate::circular_buffer) fn consume(&self, n: usize) {
+        use std::ops::Bound::{Excluded, Included};
+
         let mut s = self.state.lock.lock().unwrap();
         assert!(
             n <= s.used,
@@ -449,7 +451,6 @@ impl<T: Copy> Buffer<T> {
             s.used
         );
         let newpos = (s.rpos + n) % s.capacity();
-        use std::ops::Bound::{Excluded, Included};
 
         let keys: Vec<TagPos> = if newpos > s.rpos {
             s.tags

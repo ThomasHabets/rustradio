@@ -87,9 +87,10 @@ impl Fir<Float> {
         #[allow(unreachable_code)]
         {
             use std::simd::num::SimdFloat;
+            type Batch = std::simd::f32x8;
+
             let batch_n = 8;
             // How will this work if Float is f64?
-            type Batch = std::simd::f32x8;
             let partial = input
                 .chunks_exact(batch_n)
                 .zip(self.taps.chunks_exact(batch_n))
@@ -271,7 +272,7 @@ where
         if self.deci == 1 {
             out.produce(out_n, &tags);
         } else {
-            for t in tags.iter_mut() {
+            for t in &mut tags {
                 t.set_pos(t.pos() / self.deci);
             }
             out.produce(out_n, &tags);
@@ -288,10 +289,11 @@ where
 /// TODO: this is untested.
 #[must_use]
 pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Vec<Complex>> {
+    use rustfft::FftPlanner;
+
     if taps != window.0.len() {
         return None;
     }
-    use rustfft::FftPlanner;
 
     let mut ideal = vec![Complex::new(0.0, 0.0); taps];
     let scale = (taps as Float) / 2.0;

@@ -128,7 +128,12 @@ g.run()?;
 [sparslog]: https://github.com/ThomasHabets/sparslog
 [gnuradio]: https://www.gnuradio.org/
  */
+// Enable some normally pedantic clippies.
 #![deny(clippy::needless_for_each)]
+#![deny(clippy::explicit_iter_loop)]
+#![deny(clippy::items_after_statements)]
+#![deny(clippy::format_push_string)]
+#![deny(clippy::return_self_not_must_use)]
 // Macro.
 pub use rustradio_macros;
 

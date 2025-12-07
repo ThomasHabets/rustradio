@@ -15,6 +15,7 @@ fn ai_string(ai: &soapysdr::ArgInfo) -> String {
 }
 
 /// SoapySDR sink builder.
+#[must_use]
 pub struct SoapySdrSinkBuilder<'a> {
     dev: &'a soapysdr::Device,
     antenna: Option<String>,

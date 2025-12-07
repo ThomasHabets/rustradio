@@ -14,6 +14,7 @@ use crate::{Float, Sample};
 /// Needed for `ClampedFilter`.
 pub trait Clamp {
     /// Return clamped value.
+    #[must_use]
     fn clamp(&self, mi: Self, mx: Self) -> Self;
 }
 impl Clamp for Float {

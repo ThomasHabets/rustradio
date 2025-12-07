@@ -7,15 +7,20 @@ use crate::{Float, Result};
 ///
 /// Setting audio rate is mandatory.
 #[derive(Default)]
+#[must_use]
 pub struct PipewireSinkBuilder {
     audio_rate: u32,
 }
 
 impl PipewireSinkBuilder {
+    /// Build the `PipewireSink` block.
     pub fn build(self, src: ReadStream<Float>) -> Result<PipewireSink> {
         let p = PipewireSink::new(src, self.audio_rate)?;
         Ok(p)
     }
+    /// Set desired audio rate.
+    ///
+    /// E.g. 44100.
     pub fn audio_rate(mut self, r: u32) -> Self {
         self.audio_rate = r;
         self
@@ -33,6 +38,7 @@ pub struct PipewireSink {
 }
 
 impl PipewireSink {
+    /// Create a builder.
     pub fn builder() -> PipewireSinkBuilder {
         PipewireSinkBuilder::default()
     }

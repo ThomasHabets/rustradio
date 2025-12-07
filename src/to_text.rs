@@ -20,6 +20,8 @@ g.add(Box::new(sink));
 # Ok::<(), anyhow::Error>(())
 ```
 */
+use std::fmt::Write;
+
 use crate::{Result, Sample};
 
 use crate::block::{Block, BlockEOF, BlockRet};
@@ -72,7 +74,7 @@ impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
                         if tag.pos() != 0 {
                             break;
                         }
-                        s += &format!("{}={:?}", tag.key(), tag.val());
+                        let _ = write!(s, "{}={:?}", tag.key(), tag.val());
                     }
                     s += ")";
                 }

@@ -77,6 +77,7 @@ impl From<soapysdr::Error> for Error {
 }
 
 /// SoapySDR source builder.
+#[must_use]
 pub struct SoapySdrSourceBuilder<'a> {
     dev: &'a soapysdr::Device,
     antenna: Option<String>,

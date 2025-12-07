@@ -53,7 +53,7 @@ impl<T: Sample> Block for PduWriter<T> {
         debug!("Saving PDU to {full:?}");
         let mut f = std::fs::File::create(full)?;
         let mut v = Vec::with_capacity(T::size() * packet.len());
-        for s in packet.iter() {
+        for s in &packet {
             v.extend(&s.serialize());
         }
         f.write_all(&v)?;
