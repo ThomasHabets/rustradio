@@ -370,7 +370,9 @@ mod tests {
     fn ncmap_double_inplace() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
         let (mut m, out) = NCMap::new(rx, "nctest", |mut packet: Vec<u8>, tags| {
-            packet.iter_mut().for_each(|v| *v = *v + *v);
+            for v in packet.iter_mut() {
+                *v = *v + *v;
+            }
             vec![(packet, tags)]
         });
         let mut sink = VectorSinkNoCopy::new(out, 10);

@@ -271,7 +271,9 @@ where
         if self.deci == 1 {
             out.produce(out_n, &tags);
         } else {
-            tags.iter_mut().for_each(|t| t.set_pos(t.pos() / self.deci));
+            for t in tags.iter_mut() {
+                t.set_pos(t.pos() / self.deci);
+            }
             out.produce(out_n, &tags);
         }
         // While we could keep track of which stream is the constraining factor,
