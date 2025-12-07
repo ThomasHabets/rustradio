@@ -136,6 +136,12 @@ pub trait Block: BlockName + BlockEOF + Send {
     /// Block work function
     ///
     /// A block implementation keeps track of its own inputs and outputs.
+    ///
+    /// # Errors
+    ///
+    /// If a block work function errors, then it has failed for good. The state
+    /// of the graph as a whole starts becoming meaningless, and the Graph will
+    /// shut down.
     fn work(&mut self) -> Result<BlockRet<'_>>;
 }
 
