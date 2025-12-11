@@ -31,7 +31,6 @@ where
 /// ```
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), anyhow::Error> {
-/// eprintln!("Hello");
 /// use rustradio::graph::GraphRunner;
 /// use rustradio::agraph::AsyncGraph;
 /// use rustradio::blocks::{VectorSource,NullSink};
@@ -40,6 +39,7 @@ where
 /// let mut g = AsyncGraph::new();
 /// g.add(Box::new(src));
 /// g.add(Box::new(sink));
+/// eprintln!("Running graph");
 /// g.run_async().await?;
 /// # Ok(())
 /// # }
