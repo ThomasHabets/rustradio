@@ -117,8 +117,6 @@ mod tests {
 
     #[test]
     fn delay_change() -> Result<()> {
-        // TODO: fix
-        /*
         let s = ReadStream::from_slice(&[1u32, 2]);
         let (mut delay, o) = Delay::new(s, 1);
 
@@ -128,6 +126,8 @@ mod tests {
             assert_eq!(res.slice(), vec![0, 1, 2]);
         }
 
+        // TODO: fix
+        /*
         // 3,4 => 0,3,4
         {
             let mut b = s.write_buf()?;
