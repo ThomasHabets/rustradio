@@ -96,13 +96,16 @@ pub struct Circ {
 impl Circ {
     /// Create a new circular buffer.
     fn new(size: usize) -> Result<Self> {
+        fn set_len(f: &std::fs::File, size: usize) -> Result<()> {
+            f.set_len(size as u64)
+                .map_err(|e| Error::wrap(e, format!("circular buffer temp file set_len({size})")))
+        }
+
         let size_x2 = size * 2;
         // Annotating the temp dir directory may help in case of not enough
         // space, permissions, etc.
-        let errfix = |e| Error::file_io(e, std::env::temp_dir());
-        let f = tempfile::tempfile().map_err(errfix)?;
-        f.set_len(size_x2 as u64)?;
-
+        let f = tempfile::tempfile().map_err(|e| Error::file_io(e, std::env::temp_dir()))?;
+        set_len(&f, size_x2)?;
         // Map first half.
         let mut map = Map::new(&f, size_x2)?;
 
@@ -115,7 +118,7 @@ impl Circ {
         map.len = size;
 
         // Shrink file.
-        f.set_len(size as u64).map_err(errfix)?;
+        set_len(&f, size)?;
 
         Ok(Self {
             len: size_x2,
