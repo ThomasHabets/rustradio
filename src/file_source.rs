@@ -156,6 +156,17 @@ mod tests {
     use crate::{Complex, Float};
 
     #[test]
+    fn source_dst_full() -> Result<()> {
+        let (mut src, _) = FileSource::<Float>::new("/dev/zero")?;
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::Again], "{ret:?}");
+        drop(ret);
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::WaitForStream(_, 1)], "{ret:?}");
+        Ok(())
+    }
+
+    #[test]
     fn source_f32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin");
@@ -168,7 +179,11 @@ mod tests {
         )?;
 
         let (mut src, src_out) = FileSource::<Float>::new(&tmpfn)?;
-        src.work()?;
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::Again], "{ret:?}");
+        drop(ret);
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::EOF], "{ret:?}");
 
         let (res, _) = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
@@ -176,6 +191,69 @@ mod tests {
         assert_eq!(res.slice(), correct);
         Ok(())
     }
+
+    #[test]
+    fn source_f32_partial_tail() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let tmpfn = tmpd.path().join("delme.bin");
+
+        std::fs::write(
+            &tmpfn,
+            vec![0, 0, 128, 63, 0, 0, 64, 64, 195, 245, 72, 64, 195, 245, 72],
+        )?;
+
+        let (mut src, src_out) = FileSource::<Float>::new(&tmpfn)?;
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::Again], "{ret:?}");
+        drop(ret);
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::EOF], "{ret:?}");
+
+        let (res, _) = src_out.read_buf()?;
+        #[allow(clippy::approx_constant)]
+        let correct = vec![1.0 as Float, 3.0, 3.14];
+        assert_eq!(res.slice(), correct);
+        Ok(())
+    }
+
+    #[test]
+    fn source_f32_twice() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let tmpfn = tmpd.path().join("delme.bin");
+
+        std::fs::write(
+            &tmpfn,
+            vec![
+                0, 0, 128, 63, 0, 0, 64, 64, 195, 245, 72, 64, 195, 245, 72, 192,
+            ],
+        )?;
+
+        let (mut src, src_out) = FileSource::<Float>::builder(&tmpfn)
+            .repeat(crate::Repeat::finite(2))
+            .build()?;
+
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::Again], "{ret:?}");
+        drop(ret);
+
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::Again], "{ret:?}");
+        drop(ret);
+
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::Again], "{ret:?}");
+        drop(ret);
+
+        let ret = src.work()?;
+        assert!(matches![ret, BlockRet::EOF], "{ret:?}");
+
+        let (res, _) = src_out.read_buf()?;
+        #[allow(clippy::approx_constant)]
+        let correct = vec![1.0 as Float, 3.0, 3.14, -3.14, 1.0, 3.0, 3.14, -3.14];
+        assert_eq!(res.slice(), correct);
+        Ok(())
+    }
+
     #[test]
     fn source_c32() -> Result<()> {
         let tmpd = tempfile::tempdir()?;

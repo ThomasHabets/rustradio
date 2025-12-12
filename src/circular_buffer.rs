@@ -582,6 +582,13 @@ mod tests {
     use crate::stream::TagValue;
 
     #[test]
+    fn map_empty_file() -> Result<()> {
+        let f = std::fs::File::open("/dev/null")?;
+        assert!(Map::new(&f, 1024).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn circ_reqlen() -> Result<()> {
         let circ = Circ::new(4096)?;
         assert_eq!(circ.total_size(), 4096);
@@ -591,6 +598,20 @@ mod tests {
         assert_eq!(circ.full_buffer::<u32>(1000, 1200).len(), 200);
         assert_eq!(circ.full_buffer::<u32>(2040, 2048).len(), 8);
         Ok(())
+    }
+
+    // Can't even calculate the size of the double buffer.
+    #[test]
+    #[should_panic]
+    fn circ_reqlen_too_big() {
+        let _ = Circ::new(usize::MAX);
+    }
+
+    // We can calculate it, but we either can't create that big a tempfile, or
+    // we can't map it.
+    #[test]
+    fn circ_reqlen_too_big_half() {
+        assert!(Circ::new(usize::MAX >> 1).is_err());
     }
 
     #[test]
