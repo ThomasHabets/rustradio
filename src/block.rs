@@ -94,11 +94,11 @@ impl std::fmt::Debug for BlockRet<'_> {
             f,
             "{}",
             match self {
-                BlockRet::Again => "Again",
-                BlockRet::Pending => "Pending",
-                BlockRet::WaitForFunc(_) => "WaitForFunc",
-                BlockRet::WaitForStream(_, _) => "WaitForStream",
-                BlockRet::EOF => "EOF",
+                BlockRet::Again => "Again".to_string(),
+                BlockRet::Pending => "Pending".to_string(),
+                BlockRet::WaitForFunc(_) => "WaitForFunc".to_string(),
+                BlockRet::WaitForStream(_, n) => format!("WaitForStream(_, {n})"),
+                BlockRet::EOF => "EOF".to_string(),
             }
         )
     }
@@ -179,7 +179,7 @@ mod tests {
         );
         assert_eq!(
             format!("{:?}", BlockRet::WaitForStream(&FakeWait {}, 1)),
-            "WaitForStream"
+            "WaitForStream(_, 1)"
         );
         assert_eq!(format!("{:?}", BlockRet::EOF), "EOF");
     }
