@@ -389,6 +389,12 @@ impl<T> Buffer<T> {
     pub fn free(&self) -> usize {
         self.state.lock.lock().unwrap().free()
     }
+
+    /// Wait for ability to write at least `need` elements.
+    ///
+    /// May return early with a lower value, to not block.
+    ///
+    /// Returns free elements.
     #[must_use]
     pub fn wait_for_write(&self, need: usize) -> usize {
         self.state
@@ -400,15 +406,27 @@ impl<T> Buffer<T> {
             .0
             .free()
     }
+
+    /// Wait for ability to write at least `need` samples.
+    ///
+    /// May return early with a lower value, to not block.
+    ///
+    /// Returns free samples.
     #[cfg(feature = "async")]
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
-        // TODO: loop or something.
+        // TODO: implement properly.
         let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
             _ = sleep => 0,
             _ = self.state.acvw.notified() => 1,
         }
     }
+
+    /// Wait for ability to read `need` samples.
+    ///
+    /// May return early with a lower value, to not block.
+    ///
+    /// Returns number of available samples.
     #[must_use]
     pub fn wait_for_read(&self, need: usize) -> usize {
         self.state
@@ -420,6 +438,12 @@ impl<T> Buffer<T> {
             .0
             .used
     }
+
+    /// Wait for ability to read `need` samples.
+    ///
+    /// May return early with a lower value, to not block.
+    ///
+    /// Returns number of available samples.
     #[cfg(feature = "async")]
     pub async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO: loop or something.
