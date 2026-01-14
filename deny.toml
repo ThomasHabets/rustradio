@@ -4,7 +4,7 @@ no-default-features = false
 
 [advisories]
 ignore = [
-    # paste is abandoned. ratatui drops the dependency after 0.29.0.
+    # paste is abandoned. volk should probably stop using it.
     "RUSTSEC-2024-0436",
 ]
 
