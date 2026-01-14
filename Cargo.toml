@@ -56,7 +56,7 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 stderrlog = "0.6"
 ctrlc = "3.4"
-ratatui = { version = "0.29", features = ["all-widgets"]}
+ratatui = { version = "0.30", features = ["all-widgets"]}
 crossterm = "0.29"
 humantime = "2.2.0"
 # apt install libgoogle-perftools-dev google-perftools
