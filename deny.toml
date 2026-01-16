@@ -4,8 +4,6 @@ no-default-features = false
 
 [advisories]
 ignore = [
-    # paste is abandoned. volk should probably stop using it.
-    "RUSTSEC-2024-0436",
 ]
 
 [licenses]
