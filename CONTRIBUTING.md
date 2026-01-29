@@ -53,7 +53,7 @@ installed using `cargo install tickbox`.
 After that, the same tests ran be run locally with:
 
 ```
-NODIFF=true tickbox --dir tickbox/precommit
+tickbox --dir tickbox/precommit
 ```
 
 They run must faster after the first initial run, but it does take a lot of
@@ -63,17 +63,11 @@ Setting environment `FAST=true` will skip the heaviest of the tests, and is
 recommended. To only run some tests, one can run something like:
 
 ```
-NODIFF=true tickbox \
+tickbox \
     --wait \
     --dir tickbox/precommit \
     --matching '(10|.*fmt|.*deny|.*clippy).*'
 ```
-
-`NODIFF=true` lets the tests run even without any unstaged changes. Normally
-this is run as pre-commit, where there are staged changes.
-
-TODO: The scripts should be updated so that `NODIFF=true` is not needed, but
-detected automatically.
 
 ### Lint objections
 
