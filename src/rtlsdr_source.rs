@@ -24,6 +24,38 @@ use crate::{Error, Result};
 const CHUNK_SIZE: usize = 8192;
 const MAX_CHUNKS_IN_FLIGHT: usize = 1000;
 
+#[derive(Debug, Clone)]
+pub struct RtlSdrControl {
+    tx: mpsc::Sender<RtlSdrCommand>,
+}
+
+#[derive(Debug)]
+enum RtlSdrCommand {
+    CenterFreqHz(u32),
+    TunerGain(i32),
+    SampleRate(u32),
+}
+
+impl RtlSdrControl {
+    /// Retune the RTL-SDR center frequency (in Hz) without rebuilding the graph.
+    pub fn set_center_freq_hz(&self, hz: u32) -> Result<()> {
+        self.tx.send(RtlSdrCommand::CenterFreqHz(hz))?;
+        Ok(())
+    }
+
+    /// Set tuner gain (in dB) without rebuilding the graph.
+    pub fn set_gain_db(&self, gain_db: i32) -> Result<()> {
+        self.tx.send(RtlSdrCommand::TunerGain(gain_db))?;
+        Ok(())
+    }
+
+    /// Set sample rate (in samples per second) without rebuilding the graph.
+    pub fn set_sample_rate(&self, samp_rate: u32) -> Result<()> {
+        self.tx.send(RtlSdrCommand::SampleRate(samp_rate))?;
+        Ok(())
+    }
+}
+
 impl From<rtlsdr::RTLSDRError> for Error {
     fn from(e: rtlsdr::RTLSDRError) -> Self {
         // For some reason RTLSDRError doesn't implement Error.
@@ -46,6 +78,7 @@ pub struct RtlSdrSource {
     #[rustradio(out)]
     dst: WriteStream<u8>,
     buf: Vec<u8>,
+    control_tx: RtlSdrControl,
 }
 
 impl RtlSdrSource {
@@ -67,6 +100,8 @@ impl RtlSdrSource {
         }
 
         let (tx, rx) = mpsc::sync_channel(MAX_CHUNKS_IN_FLIGHT);
+        let (cmd_tx, cmd_rx) = mpsc::channel::<RtlSdrCommand>();
+        let ctrl = RtlSdrControl { tx: cmd_tx };
         thread::Builder::new()
             .name("RtlSdrSource-reader".to_string())
             .spawn(move || -> Result<()> {
@@ -86,6 +121,32 @@ impl RtlSdrSource {
                 dev.reset_buffer()?;
                 tx.send(vec![])?;
                 loop {
+                    // Apply any pending commands. We do this between reads so we don't
+                    // need to interrupt the blocking `read_sync` call.
+                    loop {
+                        match cmd_rx.try_recv() {
+                            Ok(RtlSdrCommand::CenterFreqHz(hz)) => {
+                                if let Err(e) = dev.set_center_freq(hz) {
+                                    warn!("RTL-SDR set_center_freq failed: {e}");
+                                }
+                            }
+                            Ok(RtlSdrCommand::TunerGain(gain)) => {
+                                if let Err(e) = dev.set_tuner_gain(10 * gain) {
+                                    warn!("RTL-SDR set_tuner_gain failed: {e}");
+                                }
+                            }
+                            Ok(RtlSdrCommand::SampleRate(sr)) => {
+                                if let Err(e) = dev.set_sample_rate(sr) {
+                                    warn!("RTL-SDR set_sample_rate failed: {e}");
+                                } else if let Err(e) = dev.reset_buffer() {
+                                    warn!("RTL-SDR reset_buffer after set_sample_rate failed: {e}");
+                                }
+                            }
+                            Err(TryRecvError::Empty) => break,
+                            Err(TryRecvError::Disconnected) => break,
+                        }
+                    }
+
                     let buf = dev.read_sync(CHUNK_SIZE)?;
                     if let Err(e) = tx.send(buf) {
                         warn!("Failed to send message from RTL-SDR read thread to the block");
@@ -101,9 +162,15 @@ impl RtlSdrSource {
                 rx,
                 dst,
                 buf: Vec::new(),
+                control_tx: ctrl,
             },
             dr,
         ))
+    }
+
+    /// Returns a control handle that can retune parameters while the source is running.
+    pub fn control(&self) -> RtlSdrControl {
+        self.control_tx.clone()
     }
 }
 
