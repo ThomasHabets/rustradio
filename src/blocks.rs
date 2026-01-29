@@ -57,7 +57,7 @@ pub use crate::xor_const::XorConst;
 pub use crate::zero_crossing::ZeroCrossing;
 
 #[cfg(feature = "rtlsdr")]
-pub use crate::rtlsdr_source::RtlSdrSource;
+pub use crate::rtlsdr_source::{RtlSdrControl, RtlSdrSource};
 
 #[cfg(feature = "soapysdr")]
 pub use crate::soapysdr_sink::SoapySdrSink;
