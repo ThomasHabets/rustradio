@@ -19,6 +19,20 @@ or "Added").
 
 Check existing history for inspiration, though nothing is perfect.
 
+## Commit sizes
+
+While it's perfectly fine to make one type of change to many blocks in one
+commit, it should be just the one type of change.
+
+If you're struggling to fit all the things a commit does into one line, then
+that's a sign that the commit should be split into multiple commits. Same goes
+for if it has the word "and" in it, or the body of the commit message has a list
+changes.
+
+If a commit inherently needs to do a lot of things in one go, in order to not
+leave a broken intermediate state (see Tests section below), then that's fine.
+But do consider if it can be split.
+
 ## AI
 
 While AI can certainly be involved, you are expected to understand and have
@@ -37,6 +51,9 @@ PR must pass all of these.
 If your PR is not intended to be squashed, then please make sure they all pass
 on all commits. It makes bisections easier in the future to always have a clean
 history. This may not be a hard rule, but attempt to do this.
+
+A PR will not be squashed into one commit to make tests pass at that commit, if
+it means that commit being a mega-commit that does many unrelated things.
 
 A precommit script is provided in `extra/pre-commit`, and can be installed by:
 
