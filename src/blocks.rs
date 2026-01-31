@@ -25,6 +25,7 @@ pub use crate::hdlc_deframer::HdlcDeframer;
 pub use crate::hdlc_framer::{FcsAdder, HdlcFramer};
 pub use crate::hilbert::Hilbert;
 pub use crate::il2p_deframer::Il2pDeframer;
+pub use crate::iq_balance::IqBalance;
 pub use crate::kiss::{KissDecode, KissEncode, KissFrame};
 pub use crate::morse_encode::MorseEncode;
 pub use crate::multiply_const::MultiplyConst;
