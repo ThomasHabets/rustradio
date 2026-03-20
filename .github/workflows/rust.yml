@@ -1,4 +1,4 @@
-name: Rust
+name: Run tests
 
 on:
   push:
@@ -12,6 +12,7 @@ env:
 jobs:
   lowdep:
     runs-on: ubuntu-latest
+    name: Low dependency build
     steps:
     - uses: actions/checkout@v6
     - name: Build
@@ -20,6 +21,7 @@ jobs:
       run: cargo build --verbose --examples
   standard:
     runs-on: ubuntu-latest
+    name: Standard tests
     steps:
     - uses: actions/checkout@v6
     - name: Install Rust nightly
@@ -36,6 +38,7 @@ jobs:
       run: NODIFF=true CLEANUP=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1
   individual_features:
     runs-on: ubuntu-latest
+    name: Individual features
     steps:
     - uses: actions/checkout@v6
     - name: Install Rust nightly
