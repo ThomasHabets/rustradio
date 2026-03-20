@@ -89,6 +89,7 @@ impl rustradio::block::Block for Metadata {
                             new_capture = true;
                         }
                     }
+                    #[allow(clippy::collapsible_match)]
                     ("SoapySdrSource::hardware", TagValue::String(hw)) => {
                         if self.sigmf.global.core_hw.is_none() {
                             self.sigmf.global.core_hw = Some(hw.to_string());
