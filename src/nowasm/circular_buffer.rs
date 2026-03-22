@@ -348,6 +348,8 @@ pub struct Buffer<T> {
 
 impl<T> Buffer<T> {
     /// Create a new Buffer.
+    ///
+    /// Size is in bytes.
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),

@@ -43,7 +43,14 @@ struct BufferState<T> {
     tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 impl<T> BufferState<T> {
-    fn new(size: usize) -> Self {
+    /// Size in bytes.
+    fn new(byte_size: usize) -> Self {
+        let size = byte_size / std::mem::size_of::<T>();
+        assert_eq!(
+            byte_size % std::mem::size_of::<T>(),
+            0,
+            "Buffer size must be multiple of element size"
+        );
         let mut stream = Vec::with_capacity(size);
         (0..size).for_each(|_| {
             // TODO: There should be a better way. But we can't demand `Default`
