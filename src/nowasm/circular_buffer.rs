@@ -372,7 +372,7 @@ impl<T> Buffer<T> {
         })
     }
 
-    pub fn id(&self) -> usize {
+    pub(crate) fn id(&self) -> usize {
         self.id
     }
 
