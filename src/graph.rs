@@ -334,6 +334,7 @@ impl Default for CancellationToken {
 mod tests {
     use super::*;
 
+    #[cfg(not(feature = "wasm"))]
     #[test]
     fn small_test() -> Result<()> {
         use crate::Complex;
