@@ -60,6 +60,11 @@ impl<T> BufferState<T> {
             tags: BTreeMap::default(),
         }
     }
+    // Read range, in samples
+    #[must_use]
+    fn read_range(&self) -> (usize, usize) {
+        (self.rpos, self.rpos + self.used)
+    }
 }
 impl<T> BufferState<T> {
     #[must_use]
@@ -133,12 +138,7 @@ impl<T> Buffer<T> {
     }
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let s = self.state.lock().unwrap();
-        let start = s.rpos;
-        let end = if s.wpos < s.rpos {
-            s.stream.len()
-        } else {
-            s.wpos
-        };
+        let (start, end) = s.read_range();
         let mut tags = Vec::with_capacity(s.tags.len());
         for (n, ts) in &s.tags {
             let modded_n: usize = *n % s.capacity();
