@@ -39,11 +39,15 @@ struct BufferState<T> {
     used: usize,
     stream: Vec<T>,
 }
-impl<T: Default> BufferState<T> {
+impl<T> BufferState<T> {
     fn new(size: usize) -> Self {
         let mut stream = Vec::with_capacity(size);
         (0..size).for_each(|_| {
-            stream.push(T::default());
+            // TODO: There should be a better way. But we can't demand `Default`
+            // trait, since that would infect so much other code.
+            // SAFETY: This should be fine since T's are all ints and floats.
+            let val = unsafe { std::mem::zeroed() };
+            stream.push(val);
         });
         Self {
             rpos: 0,
@@ -54,10 +58,12 @@ impl<T: Default> BufferState<T> {
     }
 }
 impl<T> BufferState<T> {
+    /* Currently not used
     #[must_use]
     fn capacity(&self) -> usize {
         self.size()
     }
+    */
     #[must_use]
     fn free(&self) -> usize {
         self.size() - self.used
@@ -72,7 +78,7 @@ pub struct Buffer<T> {
     id: usize,
     state: Mutex<BufferState<T>>,
 }
-impl<T: Default> Buffer<T> {
+impl<T> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
