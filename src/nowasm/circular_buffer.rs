@@ -466,7 +466,7 @@ impl<T: Copy> Buffer<T> {
     /// Consume samples from input buffer.
     ///
     /// Will only be called from the read buffer.
-    pub(in crate::circular_buffer) fn consume(&self, n: usize) {
+    pub(in crate::nowasm::circular_buffer) fn consume(&self, n: usize) {
         use std::ops::Bound::{Excluded, Included};
 
         let mut s = self.state.lock.lock().unwrap();
@@ -585,7 +585,7 @@ impl<T: Copy> Buffer<T> {
             }
         }
         drop(s);
-        tags.sort_by_key(super::stream::Tag::pos);
+        tags.sort_by_key(Tag::pos);
         Ok((BufferReader::new(self, start, end), tags))
     }
 

@@ -11,6 +11,8 @@ pub(crate) fn get_cpu_time() -> std::time::Duration {
     std::time::Duration::from_secs(0)
 }
 
+pub(crate) fn sleep(_d: std::time::Duration) {}
+
 /// Fake std::time::Instant.
 pub(crate) struct Instant {
     ts: f64,
@@ -245,6 +247,7 @@ impl<T: Copy> BufferWriter<T> {
 pub mod export {
     pub(crate) use super::Instant;
     pub(crate) use super::get_cpu_time;
+    pub(crate) use super::sleep;
     pub type Buffer<T> = super::Buffer<T>;
     pub type BufferReader<T> = super::BufferReader<T>;
     pub type BufferWriter<T> = super::BufferWriter<T>;

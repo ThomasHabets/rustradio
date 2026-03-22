@@ -12,9 +12,17 @@ pub(crate) fn get_cpu_time() -> std::time::Duration {
     }
     std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
 }
+
+pub(crate) fn sleep(d: std::time::Duration) {
+    if !cfg!(feature = "wasm") {
+        std::thread::sleep(d);
+    }
+}
+
 pub mod export {
     pub use super::circular_buffer;
     pub(crate) use super::get_cpu_time;
+    pub(crate) use super::sleep;
     pub use std::time::Instant;
     pub type Buffer<T> = circular_buffer::Buffer<T>;
     pub type BufferReader<T> = circular_buffer::BufferReader<T>;
