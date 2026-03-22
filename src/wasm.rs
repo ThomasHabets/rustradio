@@ -124,7 +124,13 @@ impl<T> Buffer<T> {
     pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
         self.slice_mut(start, end)
     }
+
+    // This is a kind of inner mutability situation, so it should mostly be
+    // safe. Mostly.
+    #[allow(clippy::mut_from_ref)]
     pub(crate) fn slice_mut(&self, start: usize, end: usize) -> &mut [T] {
+        // SAFETY: Ugly cast to mutable. I think it should be fine, but really
+        // this should be thought of more carefully.
         unsafe {
             let l = self.state.lock().unwrap();
             let ptr = l.stream.as_ptr() as *mut T;
