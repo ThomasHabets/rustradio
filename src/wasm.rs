@@ -91,6 +91,7 @@ impl<T> Buffer<T> {
         self.id
     }
     pub(crate) fn is_empty(&self) -> bool {
+        eprintln!("BLEH: {:?}", self.state.lock().unwrap().used);
         self.state.lock().unwrap().used == 0
     }
     pub(crate) fn len(&self) -> usize {
@@ -119,7 +120,7 @@ impl<T> Buffer<T> {
         // TODO: tags.
         let mut l = self.state.lock().unwrap();
         l.wpos = (l.wpos + n) % l.size();
-        l.used += n + 1;
+        l.used += n;
     }
     pub fn total_size(&self) -> usize {
         self.len()

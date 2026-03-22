@@ -22,6 +22,7 @@ where
     F: Fn() + Send,
 {
     fn process_sync(&mut self, s: T) -> T {
+        eprintln!("Process {:?}", s.serialize());
         s
     }
 }
@@ -54,6 +55,7 @@ mod tests {
         assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");
         drop(ib);
         drop(ret);
+        eprintln!("HABETS about to eof");
         assert!(b.eof());
         assert!(!c.load(Ordering::Relaxed));
         drop(b);
