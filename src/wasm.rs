@@ -1,10 +1,12 @@
 //! This module contains wasm versions of various code.
 //!
 //! It must fail gracefully when used in a web worker.
-use crate::Result;
-use crate::stream::Tag;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Mutex;
+
+use crate::Result;
+use crate::stream::{Tag, TagPos};
 
 #[must_use]
 pub(crate) fn get_cpu_time() -> std::time::Duration {
@@ -38,6 +40,7 @@ struct BufferState<T> {
     wpos: usize,
     used: usize,
     stream: Vec<T>,
+    tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 impl<T> BufferState<T> {
     fn new(size: usize) -> Self {
@@ -54,16 +57,15 @@ impl<T> BufferState<T> {
             wpos: 0,
             used: 0,
             stream,
+            tags: BTreeMap::default(),
         }
     }
 }
 impl<T> BufferState<T> {
-    /* Currently not used
     #[must_use]
     fn capacity(&self) -> usize {
         self.size()
     }
-    */
     #[must_use]
     fn free(&self) -> usize {
         self.size() - self.used
@@ -116,9 +118,13 @@ impl<T> Buffer<T> {
         l.rpos = (l.rpos + n) % l.size();
         l.used -= n;
     }
-    pub fn produce(&self, n: usize, _tags: &[Tag]) {
-        // TODO: tags.
+    pub fn produce(&self, n: usize, tags: &[Tag]) {
         let mut l = self.state.lock().unwrap();
+        for tag in tags {
+            let pos = (tag.pos() + l.wpos) % l.capacity();
+            let tag = Tag::new(pos, tag.key(), tag.val().clone());
+            l.tags.entry(pos).or_default().push(tag);
+        }
         l.wpos = (l.wpos + n) % l.size();
         l.used += n;
     }
@@ -126,16 +132,40 @@ impl<T> Buffer<T> {
         self.len()
     }
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let l = self.state.lock().unwrap();
-        let start = l.rpos;
-        let end = if l.wpos < l.rpos {
-            l.stream.len()
+        let s = self.state.lock().unwrap();
+        let start = s.rpos;
+        let end = if s.wpos < s.rpos {
+            s.stream.len()
         } else {
-            l.wpos
+            s.wpos
         };
-        drop(l);
-        // TODO: tag support.
-        Ok((BufferReader::new(self, start, end), vec![]))
+        let mut tags = Vec::with_capacity(s.tags.len());
+        for (n, ts) in &s.tags {
+            let modded_n: usize = *n % s.capacity();
+            if end < s.capacity() && start < s.capacity() {
+                // Start and end are both in first half.
+                if modded_n < start || modded_n > end {
+                    continue;
+                }
+            } else {
+                // Start and end can't both be in the second half, and
+                // end has to be higher than start.
+                assert!(start < s.capacity());
+                if modded_n > (end % s.capacity()) && modded_n < start {
+                    continue;
+                }
+            }
+            for tag in ts {
+                tags.push(Tag::new(
+                    (tag.pos() + s.capacity() - start) % s.capacity(),
+                    tag.key(),
+                    tag.val().clone(),
+                ));
+            }
+        }
+        drop(s);
+        tags.sort_by_key(Tag::pos);
+        Ok((BufferReader::new(self, start, end), tags))
     }
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
         let l = self.state.lock().unwrap();

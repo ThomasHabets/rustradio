@@ -22,7 +22,6 @@ where
     F: Fn() + Send,
 {
     fn process_sync(&mut self, s: T) -> T {
-        eprintln!("Process {:?}", s.serialize());
         s
     }
 }
