@@ -5,11 +5,32 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use wasm_bindgen::prelude::*;
+
 use crate::Result;
 use crate::stream::{Tag, TagPos};
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+    #[wasm_bindgen(js_namespace = performance)]
+    fn now() -> f64;
+}
+
+pub fn initialize_rustradio() {
+    log(&format!(
+        "Initializing RustRadio {} rustc version {} git version {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("RUSTC_VERSION"),
+        env!("GIT_VERSION")
+    ));
+}
+
 #[must_use]
 pub(crate) fn get_cpu_time() -> std::time::Duration {
+    // This is not available in WASM.
+    // We could try using `performance.now()`, but that's wallclock time.
     std::time::Duration::from_secs(0)
 }
 
@@ -298,6 +319,7 @@ impl<T: Copy> BufferWriter<T> {
 pub mod export {
     pub(crate) use super::Instant;
     pub(crate) use super::get_cpu_time;
+    pub use super::initialize_rustradio;
     pub(crate) use super::sleep;
     pub type Buffer<T> = super::Buffer<T>;
     pub type BufferReader<T> = super::BufferReader<T>;

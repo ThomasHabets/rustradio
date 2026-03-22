@@ -2132,6 +2132,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "volk",
+ "wasm-bindgen",
  "web-sys",
 ]
 
