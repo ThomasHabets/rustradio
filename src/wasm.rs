@@ -60,6 +60,12 @@ impl<T> BufferState<T> {
             tags: BTreeMap::default(),
         }
     }
+    // Return write range, in samples.
+    #[must_use]
+    fn write_range(&self) -> (usize, usize) {
+        //eprintln!("Write range: {} {}", self.rpos, self.wpos);
+        (self.wpos, self.wpos + self.free())
+    }
     // Read range, in samples
     #[must_use]
     fn read_range(&self) -> (usize, usize) {
@@ -169,12 +175,7 @@ impl<T> Buffer<T> {
     }
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
         let l = self.state.lock().unwrap();
-        let start = l.wpos;
-        let end = if l.rpos <= l.rpos {
-            l.stream.len()
-        } else {
-            l.rpos
-        };
+        let (start, end) = l.write_range();
         drop(l);
         Ok(BufferWriter::new(self, start, end))
     }

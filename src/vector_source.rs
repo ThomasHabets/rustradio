@@ -264,7 +264,13 @@ mod tests {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
         }
-        assert!(matches![src.work()?, BlockRet::WaitForStream(_, _)]);
+        {
+            let r = src.work()?;
+            assert!(
+                matches![r, BlockRet::WaitForStream(_, _)],
+                "Expected WaitForStream, got {r:?}"
+            );
+        }
         {
             let (res, _) = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
