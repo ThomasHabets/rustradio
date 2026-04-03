@@ -44,70 +44,71 @@ pub struct QuadratureDemod {
 
 impl Block for QuadratureDemod {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (inp, _) = self.src.read_buf()?;
-        if inp.len() < 2 {
-            return Ok(BlockRet::WaitForStream(&self.src, 2));
-        }
-        let mut out = self.dst.write_buf()?;
-        if out.is_empty() {
-            return Ok(BlockRet::WaitForStream(&self.dst, 1));
-        }
-        let n = inp.len().min(out.len());
-        let n1 = n - 1;
-        let o = &mut out.slice()[..n1];
-        let i = &inp.slice()[..n];
-        if self.tmp.len() < n {
-            self.tmp.resize(n, Complex::default());
-        }
-
-        // Conjugate.
-
-        #[cfg(feature = "volk")]
-        volk::volk_32fc_x2_multiply_conjugate_32fc(&mut self.tmp[..n1], &i[1..n], &i[..n1]);
-        #[cfg(not(feature = "volk"))]
-        {
-            for t in 0..n1 {
-                self.tmp[t] = i[t].conj() * i[t + 1];
+        loop {
+            let (inp, _) = self.src.read_buf()?;
+            if inp.len() < 2 {
+                return Ok(BlockRet::WaitForStream(&self.src, 2));
             }
-        }
+            let mut out = self.dst.write_buf()?;
+            if out.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
+            let n = inp.len().min(out.len());
+            let n1 = n - 1;
+            let o = &mut out.slice()[..n1];
+            let i = &inp.slice()[..n];
+            if self.tmp.len() < n {
+                self.tmp.resize(n, Complex::default());
+            }
 
-        // atan2
-        #[cfg(feature = "fast-math")]
-        {
-            for (i, item) in o.iter_mut().enumerate().take(n1) {
-                *item = self.gain * fast_math::atan2(self.tmp[i].im, self.tmp[i].re);
-            }
-            if false {
-                // Maybe this can be faster in some circumstances, but not yet in my
-                // testing.
-                use rayon::iter::IndexedParallelIterator;
-                use rayon::iter::IntoParallelRefIterator;
-                use rayon::iter::IntoParallelRefMutIterator;
-                use rayon::iter::ParallelIterator;
-                o.par_iter_mut()
-                    .zip(self.tmp.par_iter())
-                    .for_each(|(a, b)| {
-                        *a = self.gain * fast_math::atan2(b.im, b.re);
-                    });
-            }
-        }
-        #[cfg(not(feature = "fast-math"))]
-        {
-            // This is way slower than fast-math. Fast-math atan2 is just that
-            // fast. Maybe one day it'll be in volk.
-            //
-            // https://mazzo.li/posts/vectorized-atan2.html
+            // Conjugate.
+
             #[cfg(feature = "volk")]
-            volk::volk_32fc_s32f_atan2_32f(&mut out.slice()[..n1], &self.tmp[..n1], self.gain);
-
+            volk::volk_32fc_x2_multiply_conjugate_32fc(&mut self.tmp[..n1], &i[1..n], &i[..n1]);
             #[cfg(not(feature = "volk"))]
-            o.iter_mut().zip(self.tmp.iter()).for_each(|(a, b)| {
-                *a = self.gain * b.im.atan2(b.re);
-            });
+            {
+                for t in 0..n1 {
+                    self.tmp[t] = i[t].conj() * i[t + 1];
+                }
+            }
+
+            // atan2
+            #[cfg(feature = "fast-math")]
+            {
+                for (i, item) in o.iter_mut().enumerate().take(n1) {
+                    *item = self.gain * fast_math::atan2(self.tmp[i].im, self.tmp[i].re);
+                }
+                if false {
+                    // Maybe this can be faster in some circumstances, but not yet in my
+                    // testing.
+                    use rayon::iter::IndexedParallelIterator;
+                    use rayon::iter::IntoParallelRefIterator;
+                    use rayon::iter::IntoParallelRefMutIterator;
+                    use rayon::iter::ParallelIterator;
+                    o.par_iter_mut()
+                        .zip(self.tmp.par_iter())
+                        .for_each(|(a, b)| {
+                            *a = self.gain * fast_math::atan2(b.im, b.re);
+                        });
+                }
+            }
+            #[cfg(not(feature = "fast-math"))]
+            {
+                // This is way slower than fast-math. Fast-math atan2 is just that
+                // fast. Maybe one day it'll be in volk.
+                //
+                // https://mazzo.li/posts/vectorized-atan2.html
+                #[cfg(feature = "volk")]
+                volk::volk_32fc_s32f_atan2_32f(&mut out.slice()[..n1], &self.tmp[..n1], self.gain);
+
+                #[cfg(not(feature = "volk"))]
+                o.iter_mut().zip(self.tmp.iter()).for_each(|(a, b)| {
+                    *a = self.gain * b.im.atan2(b.re);
+                });
+            }
+            inp.consume(n1);
+            out.produce(n1, &[]);
         }
-        inp.consume(n1);
-        out.produce(n1, &[]);
-        Ok(BlockRet::Pending)
     }
 }
 
