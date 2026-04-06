@@ -3,9 +3,10 @@
 Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
 */
-use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
+
+use async_trait::async_trait;
 
 use crate::{Error, Float, Len, Result};
 
@@ -13,7 +14,7 @@ use crate::{Error, Float, Len, Result};
 pub type TagPos = usize;
 
 /// Enum of tag values.
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum TagValue {
     /// String value.
@@ -45,7 +46,7 @@ impl std::fmt::Display for TagValue {
 }
 
 /// Tags associated with a stream.
-#[derive(Debug, PartialEq, Clone, PartialOrd)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone, PartialOrd)]
 pub struct Tag {
     pos: TagPos,
     key: String,
