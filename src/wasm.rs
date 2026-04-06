@@ -7,8 +7,8 @@ use std::sync::Mutex;
 
 use wasm_bindgen::prelude::*;
 
-use crate::Result;
 use crate::stream::{Tag, TagPos};
+use crate::{Error, Result};
 
 #[wasm_bindgen]
 extern "C" {
@@ -16,6 +16,12 @@ extern "C" {
     fn log(s: &str);
     #[wasm_bindgen(js_namespace = performance)]
     fn now() -> f64;
+}
+
+impl From<Error> for JsValue {
+    fn from(e: Error) -> Self {
+        JsValue::from_str(&format!("RustRadio: {e}"))
+    }
 }
 
 pub fn initialize_rustradio() {
