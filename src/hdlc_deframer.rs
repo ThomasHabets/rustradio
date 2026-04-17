@@ -62,7 +62,7 @@ fn find_right_crc(data: &[u8], got: u16, fix_bits: bool) -> (Option<Vec<u8>>, u1
     }
     for crcbit in 0..16 {
         let newcrc = got ^ (1 << crcbit);
-        if newcrc == got {
+        if newcrc == crc {
             debug!("Fixed bitflip in CRC successfully");
             return (None, newcrc, true);
         }
@@ -416,5 +416,15 @@ mod tests {
             assert!(o.pop().is_none());
         }
         Ok(())
+    }
+    #[test]
+    fn crc_bitfix() {
+        let data = [0x55];
+        let good_crc = calc_crc(&data);
+        let bad_crc = good_crc ^ 0x0001;
+        let (fixed_data, crc, fixed) = find_right_crc(&data, bad_crc, true);
+        assert!(fixed);
+        assert_eq!(fixed_data, None);
+        assert_eq!(crc, good_crc);
     }
 }
