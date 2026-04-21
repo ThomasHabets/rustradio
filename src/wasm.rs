@@ -227,6 +227,16 @@ impl<T> Buffer<T> {
         // TODO
         1
     }
+    #[cfg(feature = "async")]
+    pub async fn wait_for_write_async(&self, _need: usize) -> usize {
+        // TODO
+        1
+    }
+    #[cfg(feature = "async")]
+    pub async fn wait_for_read_async(&self, _need: usize) -> usize {
+        // TODO
+        1
+    }
 }
 
 pub struct BufferReader<T> {
