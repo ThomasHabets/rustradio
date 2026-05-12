@@ -217,7 +217,7 @@ impl Block for Il2pDeframer {
 
         if let Some(Ok(header)) = header {
             info!("Got header");
-            info!("  {:?}", &header);
+            info!("  {header:?}");
             info!("  {} => {}", header.src, header.dst);
             info!("  control: 0x{:x}", header.control);
             info!("  describe: {}", header.describe());
