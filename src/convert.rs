@@ -72,10 +72,19 @@ impl<T: Sample<Type = T>> Block for Parse<T> {
             if o.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let s = T::parse(&i.slice()[..T::size()])?;
-            o.slice()[0] = s;
-            o.produce(1, &[]);
-            i.consume(T::size());
+            let items = o.len().min(i.len() / T::size());
+            let os = o.slice();
+            for (n, s) in i
+                .slice()
+                .chunks_exact(T::size())
+                .take(items)
+                .map(|chunk| T::parse(chunk))
+                .enumerate()
+            {
+                os[n] = s?;
+            }
+            o.produce(items, &[]);
+            i.consume(items * T::size());
         }
     }
 }
