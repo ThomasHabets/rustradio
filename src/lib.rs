@@ -481,7 +481,9 @@ pub struct Feature {
 }
 
 impl Feature {
+    // Currently unused in WASM.
     #[must_use]
+    #[allow(unused)]
     fn new<S: Into<String>>(name: S, build: bool, detected: bool) -> Self {
         Self {
             name: name.into(),
