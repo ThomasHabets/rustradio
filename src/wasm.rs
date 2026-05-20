@@ -61,38 +61,45 @@ impl Instant {
     }
 }
 
+// The stream in BufferState is not actually shared. Producing writes
+// Some-values to it, and consuming writes None.
+//
+// This is not as performant as the circular buffer for non-WASM, but it does
+// work.
 #[derive(Debug)]
 struct BufferState<T> {
     rpos: usize,
     wpos: usize,
     used: usize,
-    stream: Vec<T>,
+    // Option of values so that we don't have to create uninitialized unsafe
+    // values, or rely on Default.
+    stream: Vec<Option<T>>,
     tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 impl<T> BufferState<T> {
+    const _CHECK_NOT_ZERO: () = assert!(
+        std::mem::size_of::<T>() != 0,
+        "Zero sized stream members are not supported"
+    );
+
     /// Size in bytes.
-    fn new(byte_size: usize) -> Self {
-        let size = byte_size / std::mem::size_of::<T>();
-        assert_eq!(
-            byte_size % std::mem::size_of::<T>(),
-            0,
-            "Buffer size must be multiple of element size"
-        );
+    fn new(byte_size: usize) -> Result<Self> {
+        let member_size = std::mem::size_of::<T>();
+        let size = byte_size / member_size;
+        if !byte_size.is_multiple_of(member_size) {
+            return Err(Error::msg(format!(
+                "Buffer size ({byte_size}) must be multiple of element size ({member_size})"
+            )));
+        }
         let mut stream = Vec::with_capacity(size);
-        (0..size).for_each(|_| {
-            // TODO: There should be a better way. But we can't demand `Default`
-            // trait, since that would infect so much other code.
-            // SAFETY: This should be fine since T's are all ints and floats.
-            let val = unsafe { std::mem::zeroed() };
-            stream.push(val);
-        });
-        Self {
+        stream.resize_with(size, || None);
+        Ok(Self {
             rpos: 0,
             wpos: 0,
             used: 0,
             stream,
             tags: BTreeMap::default(),
-        }
+        })
     }
     // Return write range, in samples.
     #[must_use]
@@ -105,8 +112,7 @@ impl<T> BufferState<T> {
     fn read_range(&self) -> (usize, usize) {
         (self.rpos, self.rpos + self.used)
     }
-}
-impl<T> BufferState<T> {
+
     #[must_use]
     fn capacity(&self) -> usize {
         self.size()
@@ -129,7 +135,7 @@ impl<T> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            state: Mutex::new(BufferState::new(size)),
+            state: Mutex::new(BufferState::new(size)?),
         })
     }
 }
@@ -141,83 +147,28 @@ impl<T> Buffer<T> {
         eprintln!("BLEH: {:?}", self.state.lock().unwrap().used);
         self.state.lock().unwrap().used == 0
     }
-    pub(crate) fn len(&self) -> usize {
-        self.state.lock().unwrap().used
-    }
     /// Available space to write, in bytes(?).
     pub(crate) fn free(&self) -> usize {
         self.state.lock().unwrap().free()
     }
-    pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
-        self.slice_mut(start, end)
-    }
-
-    // This is a kind of inner mutability situation, so it should mostly be
-    // safe. Mostly.
-    #[allow(clippy::mut_from_ref)]
-    pub(crate) fn slice_mut(&self, start: usize, end: usize) -> &mut [T] {
-        // SAFETY: Ugly cast to mutable. I think it should be fine, but really
-        // this should be thought of more carefully.
-        unsafe {
-            let l = self.state.lock().unwrap();
-            let ptr = l.stream.as_ptr() as *mut T;
-            std::slice::from_raw_parts_mut(ptr.add(start), end - start)
-        }
-    }
     pub fn consume(&self, n: usize) {
         let mut l = self.state.lock().unwrap();
-        l.rpos = (l.rpos + n) % l.size();
+        assert!(
+            n <= l.used,
+            "trying to consume {n}, but only have {}",
+            l.used
+        );
+        let capacity = l.capacity();
+        for i in 0..n {
+            let pos = (l.rpos + i) % capacity;
+            l.stream[pos] = None;
+            l.tags.remove(&pos);
+        }
+        l.rpos = (l.rpos + n) % capacity;
         l.used -= n;
     }
-    pub fn produce(&self, n: usize, tags: &[Tag]) {
-        let mut l = self.state.lock().unwrap();
-        for tag in tags {
-            let pos = (tag.pos() + l.wpos) % l.capacity();
-            let tag = Tag::new(pos, tag.key(), tag.val().clone());
-            l.tags.entry(pos).or_default().push(tag);
-        }
-        l.wpos = (l.wpos + n) % l.size();
-        l.used += n;
-    }
     pub fn total_size(&self) -> usize {
-        self.len()
-    }
-    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let s = self.state.lock().unwrap();
-        let (start, end) = s.read_range();
-        let mut tags = Vec::with_capacity(s.tags.len());
-        for (n, ts) in &s.tags {
-            let modded_n: usize = *n % s.capacity();
-            if end < s.capacity() && start < s.capacity() {
-                // Start and end are both in first half.
-                if modded_n < start || modded_n > end {
-                    continue;
-                }
-            } else {
-                // Start and end can't both be in the second half, and
-                // end has to be higher than start.
-                assert!(start < s.capacity());
-                if modded_n > (end % s.capacity()) && modded_n < start {
-                    continue;
-                }
-            }
-            for tag in ts {
-                tags.push(Tag::new(
-                    (tag.pos() + s.capacity() - start) % s.capacity(),
-                    tag.key(),
-                    tag.val().clone(),
-                ));
-            }
-        }
-        drop(s);
-        tags.sort_by_key(Tag::pos);
-        Ok((BufferReader::new(self, start, end), tags))
-    }
-    pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
-        let l = self.state.lock().unwrap();
-        let (start, end) = l.write_range();
-        drop(l);
-        Ok(BufferWriter::new(self, start, end))
+        self.state.lock().unwrap().capacity()
     }
     pub fn wait_for_write(&self, _need: usize) -> usize {
         // TODO
@@ -239,21 +190,79 @@ impl<T> Buffer<T> {
     }
 }
 
+impl<T: Copy> Buffer<T> {
+    pub fn produce(&self, samples: &[T], tags: &[Tag]) {
+        if samples.is_empty() {
+            debug_assert!(tags.is_empty());
+            return;
+        }
+        let mut l = self.state.lock().unwrap();
+        assert!(
+            samples.len() <= l.free(),
+            "tried to produce {}, but only {} is free out of {}",
+            samples.len(),
+            l.free(),
+            l.capacity()
+        );
+        let capacity = l.capacity();
+        let wpos = l.wpos;
+        for (i, sample) in samples.iter().copied().enumerate() {
+            l.stream[(wpos + i) % capacity] = Some(sample);
+        }
+        for tag in tags {
+            let pos = (tag.pos() + wpos) % capacity;
+            let tag = Tag::new(pos, tag.key(), tag.val().clone());
+            l.tags.entry(pos).or_default().push(tag);
+        }
+        l.wpos = (wpos + samples.len()) % capacity;
+        l.used += samples.len();
+    }
+    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
+        let s = self.state.lock().unwrap();
+        let (start, end) = s.read_range();
+        let used = end - start;
+        let capacity = s.capacity();
+        let mut stream = Vec::with_capacity(used);
+        for i in 0..used {
+            let pos = (start + i) % capacity;
+            stream.push(s.stream[pos].expect("readable buffer position must be initialized"));
+        }
+        let mut tags = Vec::with_capacity(s.tags.len());
+        for (n, ts) in &s.tags {
+            let relative_pos = (*n + capacity - start) % capacity;
+            if relative_pos >= used {
+                continue;
+            }
+            for tag in ts {
+                tags.push(Tag::new(relative_pos, tag.key(), tag.val().clone()));
+            }
+        }
+        drop(s);
+        tags.sort_by_key(Tag::pos);
+        Ok((BufferReader::new(self, stream), tags))
+    }
+    pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
+        let l = self.state.lock().unwrap();
+        let (start, end) = l.write_range();
+        drop(l);
+        Ok(BufferWriter::new(self, end - start))
+    }
+}
+
 pub struct BufferReader<T> {
     parent: Arc<Buffer<T>>,
-    start: usize,
-    end: usize,
+    stream: Vec<T>,
 }
 impl<T> BufferReader<T> {
     #[must_use]
-    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> Self {
-        Self { parent, start, end }
+    fn new(parent: Arc<Buffer<T>>, stream: Vec<T>) -> Self {
+        Self { parent, stream }
     }
 
     /// Return slice to read from.
     #[must_use]
     pub fn slice(&self) -> &[T] {
-        self.parent.slice(self.start, self.end)
+        &self.stream
     }
 
     /// Helper function to iterate over input instead.
@@ -263,6 +272,11 @@ impl<T> BufferReader<T> {
 
     /// We're done with the buffer. Consume `n` samples.
     pub fn consume(self, n: usize) {
+        assert!(
+            n <= self.stream.len(),
+            "trying to consume {n}, but read buffer only has {}",
+            self.stream.len()
+        );
         self.parent.consume(n);
     }
 
@@ -280,34 +294,47 @@ impl<T> BufferReader<T> {
 }
 pub struct BufferWriter<T> {
     parent: Arc<Buffer<T>>,
-    start: usize,
-    end: usize,
+    len: usize,
+    stream: Vec<T>,
 }
 impl<T> BufferWriter<T> {
     #[must_use]
-    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> BufferWriter<T> {
-        Self { parent, start, end }
+    fn new(parent: Arc<Buffer<T>>, len: usize) -> BufferWriter<T> {
+        Self {
+            parent,
+            len,
+            stream: Vec::new(),
+        }
     }
+}
 
+impl<T: Default> BufferWriter<T> {
     /// Return the slice to write to.
     #[must_use]
     pub fn slice(&mut self) -> &mut [T] {
-        self.parent.slice_mut(self.start, self.end)
+        if self.stream.len() < self.len {
+            self.stream.resize_with(self.len, T::default);
+        }
+        self.stream.as_mut_slice()
     }
 }
 impl<T: Copy> BufferWriter<T> {
     /// Shortcut to save typing for the common operation of copying
     /// from an iterator.
     pub fn fill_from_slice(&mut self, src: &[T]) {
-        self.slice()[..src.len()].copy_from_slice(src);
+        assert!(
+            src.len() <= self.len,
+            "trying to write {} samples into a {} sample buffer",
+            src.len(),
+            self.len
+        );
+        self.stream = src.to_vec();
     }
 
     /// Shortcut to save typing for the common operation of copying
     /// from an iterator.
     pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
-        for (place, item) in self.slice().iter_mut().zip(src) {
-            *place = item;
-        }
+        self.stream = src.into_iter().take(self.len).collect();
     }
 
     /// Having written into the write buffer, now tell the buffer
@@ -317,13 +344,27 @@ impl<T: Copy> BufferWriter<T> {
     // Tags inherently need to be copied in, because they need to be added to
     // the underlying stream.
     pub fn produce(self, n: usize, tags: &[Tag]) {
-        self.parent.produce(n, tags);
+        assert!(
+            n <= self.len,
+            "trying to produce {n} samples from a {} sample buffer",
+            self.len
+        );
+        if n == 0 {
+            debug_assert!(tags.is_empty(), "produced 0 samples with nonzero tags");
+            return;
+        }
+        assert!(
+            n <= self.stream.len(),
+            "trying to produce {n} samples, but only {} samples were written",
+            self.stream.len()
+        );
+        self.parent.produce(&self.stream[..n], tags);
     }
 
     /// len convenience function.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.parent.slice(self.start, self.end).len()
+        self.len
     }
 
     /// is_empty convenience function.
