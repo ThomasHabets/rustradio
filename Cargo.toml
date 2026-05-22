@@ -106,6 +106,10 @@ name = "fm_tx"
 required-features = ["soapysdr"]
 
 [[example]]
+name = "rtl_downsampled"
+required-features = ["rtlsdr"]
+
+[[example]]
 name = "tone"
 required-features = ["audio"]
 
