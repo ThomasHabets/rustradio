@@ -37,6 +37,7 @@ pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
 pub use crate::rational_resampler::RationalResampler;
 pub use crate::reader_source::ReaderSource;
 pub use crate::rtlsdr_decode::RtlSdrDecode;
+pub use crate::rtlsdr_encode::RtlSdrEncode;
 pub use crate::sigmf::SigMFSource;
 pub use crate::signal_source::{SignalSourceComplex, SignalSourceFloat};
 pub use crate::single_pole_iir_filter::SinglePoleIirFilter;

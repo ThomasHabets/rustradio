@@ -176,6 +176,7 @@ pub mod quadrature_demod;
 pub mod rational_resampler;
 pub mod reader_source;
 pub mod rtlsdr_decode;
+pub mod rtlsdr_encode;
 pub mod sigmf;
 pub mod signal_source;
 pub mod single_pole_iir_filter;
