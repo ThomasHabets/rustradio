@@ -149,6 +149,7 @@ pub mod complex_to_mag2;
 pub mod constant_source;
 pub mod convert;
 pub mod correlate_access_code;
+pub mod data_stream;
 pub mod debug_sink;
 pub mod delay;
 pub mod descrambler;
@@ -327,6 +328,19 @@ impl Error {
     ) -> Self {
         let msg = msg.into();
         Self::DeviceError {
+            source: Box::new(source),
+            msg: if msg.is_empty() { None } else { Some(msg) },
+        }
+    }
+
+    /// Helper for `Other`.
+    #[must_use]
+    pub fn other<S: Into<String>>(
+        source: impl std::error::Error + Send + Sync + 'static,
+        msg: S,
+    ) -> Self {
+        let msg = msg.into();
+        Self::Other {
             source: Box::new(source),
             msg: if msg.is_empty() { None } else { Some(msg) },
         }

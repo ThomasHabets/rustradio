@@ -1,32 +1,94 @@
-# Data stream thoughts
+# Data stream protocol
 
-It looks like there's no built in flow control in websockets. We therefore need
-to build some sort of windowing ourselves on the communication from websocket,
-to main thread, to worker.
+This is a small framed protocol for carrying one or more named byte streams over
+a bidirectional byte transport such as stdin/stdout or a websocket.
 
-## Requirements
+The implementation lives in `src/data_stream.rs`. It exposes a synchronous API
+with `SyncReader` and `SyncWriter`, and an asynchronous API with `AsyncReader`
+and `AsyncWriter` behind the `async` feature.
 
-* Performant. Probably want to provide a "receiver window" kind of thing, with
-  periodic updates.
-* Multi-stream. The WASM may only be a UI for a whole flowgraph that runs
-  native.
-* Bidirectional. Browser audio or whatever, could be required to feed back.
-* Support "messages" too, for when the UI needs to tell the websocket server to
-  change frequency.
+## Framing
 
-## Protocol thoughts
+All integers are little-endian.
 
-* TLV. Use little endian, since it's more common. Each packet is prefixed by a
-  32bit length, then its type, then type-specific data.
-* Before any other packet is sent, both sides need to send a "version" packet.
-  We start off with version 0. That packet is therefore the u32 number 2, the
-  u8 number 1 (for version), and then the u32 number 0 (numeric version).
-* Data is always pulled, by sending a RequestData packet, with a "send me up to
-  this much data" window, and a string stream identifier. So that packet is u32
-  number 1+4+string_len, packet type 2 for RequestData, u32 for window size, and
-  the rest is the stream identifier.
-* When there's data, the other side then sends it, if it fits in the announced
-  window, under packet type 3.
-* At any point the RequestData may be re-sent with a new window, bigger or
-  smaller, and the sender then updates it on its side, sending either more, or
-  stopping the send.
+Each packet is:
+
+```text
+u32 packet_len
+u8  packet_type
+u8[packet_len - 1] packet_body
+```
+
+`packet_len` is the number of bytes after the length field, including the packet
+type byte. A length of zero is invalid. Packet type zero is invalid.
+
+The library reader defaults to rejecting packet payloads larger than 64 MiB.
+
+## Stream identifiers
+
+Stream identifiers are represented by the `DataStreamId` newtype. On the wire,
+they are UTF-8 bytes. Invalid UTF-8 is rejected.
+
+## Packet types
+
+### Version: type 1
+
+Both sides must send a Version packet before any other packet. Version 0 is the
+current protocol version.
+
+```text
+u32 packet_len = 5
+u8  packet_type = 1
+u32 version = 0
+```
+
+Readers validate this with `read_version()`.
+
+### RequestData: type 2
+
+Data is pulled by sending RequestData. The receiver sends the current byte
+window it is prepared to accept for a stream.
+
+```text
+u32 packet_len = 1 + 4 + stream_id_len
+u8  packet_type = 2
+u32 window
+u8[stream_id_len] stream_id
+```
+
+The stream ID is the rest of the packet body after `window`.
+
+RequestData may be sent again at any time. The sender replaces the previous
+window for that stream with the new value. A zero window tells the sender to
+stop sending that stream until a later non-zero RequestData arrives.
+
+### Data: type 3
+
+Data carries bytes for one stream.
+
+```text
+u32 packet_len = 1 + 4 + stream_id_len + data_len
+u8  packet_type = 3
+u32 stream_id_len
+u8[stream_id_len] stream_id
+u8[data_len] data
+```
+
+The sender must not send more bytes than the current requested window for that
+stream. After sending a Data packet, the sender reduces its local window for
+that stream by `data_len`.
+
+## Status
+
+Implemented:
+
+* Version
+* RequestData
+* Data
+* Sync reader/writer API
+* Async reader/writer API
+
+Not implemented yet:
+
+* Message/control packet types for actions such as changing frequency
+* In-protocol stream metadata
