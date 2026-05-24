@@ -50,6 +50,7 @@ fn run(opt: Opt) -> Result<()> {
             .deci(samp_rate as usize)
             .interp(samp_rate_2 as usize)
             .build(prev)?,
+        RtlSdrEncode::new(prev),
     ];
     let sink = Box::new(
         FileSink::builder("/dev/stdout")
