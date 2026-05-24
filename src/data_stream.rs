@@ -1,15 +1,12 @@
-//! DATA_STREAM.md protocol helpers.
+//! DataStream implementation.
 //!
-//! Packets are framed as a little-endian `u32` payload length followed by a
-//! one-byte packet type and type-specific payload bytes.
+//! Protocol is documented in DATA_STREAM.md. It's an experimental serialized
+//! version of a stream meant primarily for use on a websocket between native
+//! and a WASM UI.
 //!
-//! The Data packet body is:
-//!
-//! ```text
-//! u32 stream_id_len
-//! u8[stream_id_len] stream_id
-//! u8[] data
-//! ```
+//! This protocol may be replaced by something more "SDR over network" standard.
+//! Though of course for our primary use case it always has to run on top of a
+//! websocket.
 use std::io::{Read, Write};
 
 use crate::{Error, Result};
@@ -240,12 +237,14 @@ fn parse_packet(packet: &[u8]) -> Result<Packet> {
     if packet.is_empty() {
         return Err(Error::msg("packet payload is empty"));
     }
-    match packet[0] {
+    let ret = match packet[0] {
         PACKET_VERSION => parse_version(packet).map(Packet::Version),
         PACKET_REQUEST_DATA => parse_request_data(packet).map(Packet::RequestData),
         PACKET_DATA => parse_data(packet).map(Packet::Data),
         other => Err(Error::msg(format!("unsupported packet type {other}"))),
-    }
+    }?;
+    log::trace!("Got packet: {ret:?}");
+    Ok(ret)
 }
 
 fn parse_version(packet: &[u8]) -> Result<u32> {
