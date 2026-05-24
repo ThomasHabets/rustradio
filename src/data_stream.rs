@@ -307,6 +307,114 @@ fn validate_version(packet: Packet) -> Result<()> {
     }
 }
 
+/// Return the total buffered frame length when `buf` contains a complete packet.
+///
+/// The returned length includes the four-byte length prefix. `Ok(None)` means
+/// the caller should append more bytes before trying to parse.
+fn buffered_packet_len(buf: &[u8], max_packet_len: usize) -> Result<Option<usize>> {
+    if buf.len() < 4 {
+        return Ok(None);
+    }
+
+    let len = u32::from_le_bytes(buf[..4].try_into()?) as usize;
+    if len == 0 {
+        return Err(Error::msg("packet length must include a packet type byte"));
+    }
+    if len > max_packet_len {
+        return Err(Error::msg(format!(
+            "packet length {len} exceeds limit {max_packet_len}"
+        )));
+    }
+
+    let full_len = 4usize
+        .checked_add(len)
+        .ok_or_else(|| Error::msg("packet length overflow"))?;
+    if buf.len() < full_len {
+        return Ok(None);
+    }
+    Ok(Some(full_len))
+}
+
+/// DATA_STREAM.md packet reader for caller-provided byte chunks.
+///
+/// This is useful when the transport already provides bytes, for example from a
+/// websocket frame or a callback-based API. Push any received bytes with
+/// [`Self::push_bytes`], then call [`Self::read_packet`] until it returns
+/// `Ok(None)`.
+pub struct BytesReader {
+    buf: Vec<u8>,
+    max_packet_len: usize,
+}
+
+impl BytesReader {
+    /// Create a reader with [`DEFAULT_MAX_PACKET_LEN`].
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            buf: Vec::new(),
+            max_packet_len: DEFAULT_MAX_PACKET_LEN,
+        }
+    }
+
+    /// Set the maximum accepted packet payload size.
+    #[must_use]
+    pub fn with_max_packet_len(mut self, max_packet_len: usize) -> Self {
+        self.max_packet_len = max_packet_len;
+        self
+    }
+
+    /// Append transport bytes to the reader.
+    pub fn push_bytes(&mut self, bytes: &[u8]) {
+        self.buf.extend_from_slice(bytes);
+    }
+
+    /// Return how many bytes are buffered but not yet parsed.
+    #[must_use]
+    pub fn buffered_len(&self) -> usize {
+        self.buf.len()
+    }
+
+    /// Return true if no bytes are buffered.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
+
+    /// Discard all buffered bytes.
+    pub fn clear(&mut self) {
+        self.buf.clear();
+    }
+
+    /// Parse one packet if a complete frame is buffered.
+    ///
+    /// Returns `Ok(None)` when more bytes are needed.
+    pub fn read_packet(&mut self) -> Result<Option<Packet>> {
+        let Some(full_len) = buffered_packet_len(&self.buf, self.max_packet_len)? else {
+            return Ok(None);
+        };
+        let ret = parse_packet(&self.buf[4..full_len]);
+        self.buf.drain(..full_len);
+        ret.map(Some)
+    }
+
+    /// Read and validate the initial version packet if it is buffered.
+    ///
+    /// Returns `Ok(false)` when more bytes are needed.
+    pub fn read_version(&mut self) -> Result<bool> {
+        let Some(packet) = self.read_packet()? else {
+            return Ok(false);
+        };
+        validate_version(packet)?;
+        Ok(true)
+    }
+}
+
+impl Default for BytesReader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Synchronous DATA_STREAM.md packet reader.
 pub struct SyncReader<R> {
     reader: R,
@@ -638,6 +746,42 @@ mod tests {
         let mut reader = SyncReader::new(Cursor::new(bytes));
         let err = reader.read_version().unwrap_err().to_string();
         assert!(err.contains("expected Version packet"), "{err}");
+        Ok(())
+    }
+
+    #[test]
+    fn bytes_reader_handles_partial_frames() -> Result<()> {
+        let stream_id = DataStreamId::new("rtl-sdr");
+        let mut bytes = Vec::new();
+        {
+            let mut writer = SyncWriter::new(&mut bytes);
+            writer.write_version()?;
+            writer.write_request_data(&stream_id, 1234)?;
+            writer.write_data(&stream_id, &[1, 2, 3, 4])?;
+        }
+
+        let mut reader = BytesReader::new();
+        reader.push_bytes(&bytes[..3]);
+        assert!(!reader.read_version()?);
+        assert_eq!(reader.buffered_len(), 3);
+
+        reader.push_bytes(&bytes[3..9]);
+        assert!(reader.read_version()?);
+        assert!(reader.is_empty());
+
+        reader.push_bytes(&bytes[9..12]);
+        assert_eq!(reader.read_packet()?, None);
+        reader.push_bytes(&bytes[12..]);
+        assert_eq!(
+            reader.read_packet()?,
+            Some(Packet::RequestData(RequestData::new("rtl-sdr", 1234)))
+        );
+        assert_eq!(
+            reader.read_packet()?,
+            Some(Packet::Data(Data::new("rtl-sdr", vec![1, 2, 3, 4])))
+        );
+        assert_eq!(reader.read_packet()?, None);
+        assert!(reader.is_empty());
         Ok(())
     }
 

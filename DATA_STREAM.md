@@ -3,9 +3,10 @@
 This is a small framed protocol for carrying one or more named byte streams over
 a bidirectional byte transport such as stdin/stdout or a websocket.
 
-The implementation lives in `src/data_stream.rs`. It exposes a synchronous API
-with `SyncReader` and `SyncWriter`, and an asynchronous API with `AsyncReader`
-and `AsyncWriter` behind the `async` feature.
+The implementation lives in `src/data_stream.rs`. It exposes a synchronous I/O
+API with `SyncReader` and `SyncWriter`, a byte-fed API with `BytesReader`, and
+an asynchronous I/O API with `AsyncReader` and `AsyncWriter` behind the `async`
+feature.
 
 ## Framing
 
@@ -86,6 +87,7 @@ Implemented:
 * RequestData
 * Data
 * Sync reader/writer API
+* Byte-fed reader API
 * Async reader/writer API
 
 Not implemented yet:
