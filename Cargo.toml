@@ -110,6 +110,10 @@ name = "rtl_downsampled"
 required-features = ["rtlsdr"]
 
 [[example]]
+name = "rtl_data_stream"
+required-features = ["rtlsdr"]
+
+[[example]]
 name = "tone"
 required-features = ["audio"]
 
