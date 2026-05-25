@@ -291,6 +291,12 @@ fn parse_data(packet: &[u8]) -> Result<Data> {
     }
     Ok(Data {
         stream_id: String::from_utf8(packet[5..data_start].to_vec())?.into(),
+        // We can avoid this copy by combining reading and parsing the packet.
+        // But the added code complexity is probably not worth it.
+        //
+        // The `Read` parsers are not all that performance sensitive, and
+        // `BytesReader`, used by WASM, needs to copy from its internal buffer
+        // anyway.
         data: packet[data_start..].to_vec(),
     })
 }
@@ -388,6 +394,8 @@ impl BytesReader {
     /// Parse one packet if a complete frame is buffered.
     ///
     /// Returns `Ok(None)` when more bytes are needed.
+    // It would be nice if this path could be made copy-free, but it complicates
+    // the caller a lot.
     pub fn read_packet(&mut self) -> Result<Option<Packet>> {
         let Some(full_len) = buffered_packet_len(&self.buf, self.max_packet_len)? else {
             return Ok(None);
