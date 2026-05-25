@@ -26,6 +26,23 @@ const PACKET_DATA: u8 = 3;
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DataStreamId(String);
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DataStreamIdRef<'a>(&'a str);
+
+impl DataStreamIdRef<'_> {
+    /// Return the identifier as bytes.
+    #[must_use]
+    fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+
+    /// Return the identifier as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
 impl DataStreamId {
     /// Create a stream identifier.
     #[must_use]
@@ -39,16 +56,16 @@ impl DataStreamId {
         &self.0
     }
 
-    /// Return the identifier as bytes.
-    #[must_use]
-    fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-
     /// Consume the identifier and return the inner string.
     #[must_use]
     pub fn into_string(self) -> String {
         self.0
+    }
+
+    /// Return the identifier as a string slice.
+    #[must_use]
+    pub fn as_ref(&self) -> DataStreamIdRef<'_> {
+        DataStreamIdRef(&self.0)
     }
 }
 
@@ -77,6 +94,12 @@ impl std::borrow::Borrow<str> for DataStreamId {
 }
 
 impl std::fmt::Display for DataStreamId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::fmt::Display for DataStreamIdRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
@@ -149,16 +172,32 @@ impl Packet {
     pub fn as_ref(&self) -> PacketRef<'_> {
         match self {
             Packet::Version(version) => PacketRef::Version(*version),
-            Packet::RequestData(req) => PacketRef::RequestData {
-                stream_id: &req.stream_id,
+            Packet::RequestData(req) => PacketRef::RequestData(RequestDataRef {
+                stream_id: DataStreamIdRef(&req.stream_id.0),
                 window: req.window,
-            },
-            Packet::Data(data) => PacketRef::Data {
-                stream_id: &data.stream_id,
+            }),
+            Packet::Data(data) => PacketRef::Data(DataRef {
+                stream_id: DataStreamIdRef(&data.stream_id.0),
                 data: &data.data,
-            },
+            }),
         }
     }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct DataRef<'a> {
+    /// Protocol stream identifier.
+    pub stream_id: DataStreamIdRef<'a>,
+    /// Data bytes.
+    pub data: &'a [u8],
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct RequestDataRef<'a> {
+    /// Protocol stream identifier.
+    pub stream_id: DataStreamIdRef<'a>,
+    /// Updated receive window, in bytes.
+    pub window: usize,
 }
 
 /// Borrowed DATA_STREAM.md packet for writing.
@@ -168,26 +207,16 @@ impl Packet {
 ///
 /// It has a drawback that every packet type, and its members, kind of need to
 /// be implemented twice.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum PacketRef<'a> {
     /// Protocol version.
     Version(u32),
 
     /// Request more data for a stream.
-    RequestData {
-        /// Protocol stream identifier.
-        stream_id: &'a DataStreamId,
-        /// Updated receive window, in bytes.
-        window: usize,
-    },
+    RequestData(RequestDataRef<'a>),
 
     /// Data bytes for a stream.
-    Data {
-        /// Protocol stream identifier.
-        stream_id: &'a DataStreamId,
-        /// Data bytes.
-        data: &'a [u8],
-    },
+    Data(DataRef<'a>),
 }
 
 fn as_u32(value: usize, what: &str) -> Result<u32> {
@@ -247,6 +276,20 @@ fn parse_packet(packet: &[u8]) -> Result<Packet> {
     Ok(ret)
 }
 
+fn parse_packet_ref(packet: &[u8]) -> Result<PacketRef<'_>> {
+    if packet.is_empty() {
+        return Err(Error::msg("packet payload is empty"));
+    }
+    let ret = match packet[0] {
+        PACKET_VERSION => parse_version(packet).map(PacketRef::Version),
+        PACKET_REQUEST_DATA => parse_request_data_ref(packet).map(PacketRef::RequestData),
+        PACKET_DATA => parse_data_ref(packet).map(PacketRef::Data),
+        other => Err(Error::msg(format!("unsupported packet type {other}"))),
+    }?;
+    log::trace!("Got packet: {ret:?}");
+    Ok(ret)
+}
+
 fn parse_version(packet: &[u8]) -> Result<u32> {
     if packet.len() != 5 {
         return Err(Error::msg(format!(
@@ -255,6 +298,20 @@ fn parse_version(packet: &[u8]) -> Result<u32> {
         )));
     }
     Ok(u32::from_le_bytes(packet[1..5].try_into()?))
+}
+
+fn parse_request_data_ref(packet: &[u8]) -> Result<RequestDataRef<'_>> {
+    // type(1 byte) + window(4 bytes) + stream ID (1+ byte)
+    if packet.len() < 6 {
+        return Err(Error::msg(format!(
+            "RequestData packet has length {}, want at least 6",
+            packet.len()
+        )));
+    }
+    Ok(RequestDataRef {
+        window: u32::from_le_bytes(packet[1..5].try_into()?) as usize,
+        stream_id: DataStreamIdRef(std::str::from_utf8(&packet[5..]).unwrap()),
+    })
 }
 
 fn parse_request_data(packet: &[u8]) -> Result<RequestData> {
@@ -271,6 +328,16 @@ fn parse_request_data(packet: &[u8]) -> Result<RequestData> {
     })
 }
 
+fn parse_data_ref(packet: &[u8]) -> Result<DataRef<'_>> {
+    // type(1 byte) + window(4 bytes) + stream ID (1+ byte)
+    if packet.len() < 6 {
+        return Err(Error::msg(format!(
+            "Data packet has length {}, want at least 6",
+            packet.len()
+        )));
+    }
+    todo!()
+}
 fn parse_data(packet: &[u8]) -> Result<Data> {
     // type(1 byte) + window(4 bytes) + stream ID (1+ byte)
     if packet.len() < 6 {
@@ -344,6 +411,8 @@ fn buffered_packet_len(buf: &[u8], max_packet_len: usize) -> Result<Option<usize
 pub struct BytesReader {
     buf: Vec<u8>,
     max_packet_len: usize,
+    // Should this be Mutex instead of RefCell?
+    drain_before_next_packet: std::cell::RefCell<usize>,
 }
 
 impl BytesReader {
@@ -353,6 +422,7 @@ impl BytesReader {
         Self {
             buf: Vec::new(),
             max_packet_len: DEFAULT_MAX_PACKET_LEN,
+            drain_before_next_packet: std::cell::RefCell::new(0),
         }
     }
 
@@ -389,12 +459,33 @@ impl BytesReader {
     ///
     /// Returns `Ok(None)` when more bytes are needed.
     pub fn read_packet(&mut self) -> Result<Option<Packet>> {
+        self.do_drain();
         let Some(full_len) = buffered_packet_len(&self.buf, self.max_packet_len)? else {
             return Ok(None);
         };
         let ret = parse_packet(&self.buf[4..full_len]);
         self.buf.drain(..full_len);
         ret.map(Some)
+    }
+
+    /// Parse one packet if a complete frame is buffered.
+    ///
+    /// Returns `Ok(None)` when more bytes are needed.
+    pub fn read_packet_ref(&self) -> Result<Option<PacketRef<'_>>> {
+        let mut drain = self.drain_before_next_packet.borrow_mut();
+        let Some(full_len) = buffered_packet_len(&self.buf[*drain..], self.max_packet_len)? else {
+            return Ok(None);
+        };
+        let ret = parse_packet_ref(&self.buf[(4 + *drain)..full_len]);
+        *drain += full_len;
+        ret.map(Some)
+    }
+
+    /// Drain anything needed for `PacketRef` borrows.
+    pub fn do_drain(&mut self) {
+        let mut drain = self.drain_before_next_packet.borrow_mut();
+        self.buf.drain(..*drain);
+        *drain = 0;
     }
 
     /// Read and validate the initial version packet if it is buffered.
@@ -493,7 +584,7 @@ impl<W: Write> SyncWriter<W> {
                 self.writer.write_all(&[PACKET_VERSION])?;
                 self.writer.write_all(&version.to_le_bytes())?;
             }
-            PacketRef::RequestData { stream_id, window } => {
+            PacketRef::RequestData(RequestDataRef { stream_id, window }) => {
                 let stream_id = stream_id.as_bytes();
                 let len = packet_len(&[4, stream_id.len()])?;
                 let window = as_u32(window, "RequestData window")?;
@@ -502,7 +593,7 @@ impl<W: Write> SyncWriter<W> {
                 self.writer.write_all(&window.to_le_bytes())?;
                 self.writer.write_all(stream_id)?;
             }
-            PacketRef::Data { stream_id, data } => {
+            PacketRef::Data(DataRef { stream_id, data }) => {
                 let stream_id = stream_id.as_bytes();
                 let len = packet_len(&[4, stream_id.len(), data.len()])?;
                 let stream_id_len = as_u32(stream_id.len(), "stream ID length")?;
@@ -524,12 +615,18 @@ impl<W: Write> SyncWriter<W> {
 
     /// Write a RequestData packet.
     pub fn write_request_data(&mut self, stream_id: &DataStreamId, window: usize) -> Result<()> {
-        self.write_packet(PacketRef::RequestData { stream_id, window })
+        self.write_packet(PacketRef::RequestData(RequestDataRef {
+            stream_id: DataStreamIdRef(&stream_id.0),
+            window,
+        }))
     }
 
     /// Write a Data packet.
     pub fn write_data(&mut self, stream_id: &DataStreamId, data: &[u8]) -> Result<()> {
-        self.write_packet(PacketRef::Data { stream_id, data })
+        self.write_packet(PacketRef::Data(DataRef {
+            stream_id: DataStreamIdRef(&stream_id.0),
+            data,
+        }))
     }
 }
 
@@ -539,9 +636,9 @@ pub mod asynchronous {
     use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
     use super::{
-        DEFAULT_MAX_PACKET_LEN, DataStreamId, Error, PACKET_DATA, PACKET_REQUEST_DATA,
-        PACKET_VERSION, PROTOCOL_VERSION, Packet, PacketRef, Result, as_u32, packet_len,
-        parse_packet, validate_version,
+        DEFAULT_MAX_PACKET_LEN, DataRef, DataStreamId, DataStreamIdRef, Error, PACKET_DATA,
+        PACKET_REQUEST_DATA, PACKET_VERSION, PROTOCOL_VERSION, Packet, PacketRef, RequestDataRef,
+        Result, as_u32, packet_len, parse_packet, validate_version,
     };
 
     async fn read_raw_packet<R: AsyncRead + Unpin>(
@@ -657,7 +754,7 @@ pub mod asynchronous {
                     self.writer.write_all(&[PACKET_VERSION]).await?;
                     self.writer.write_all(&version.to_le_bytes()).await?;
                 }
-                PacketRef::RequestData { stream_id, window } => {
+                PacketRef::RequestData(RequestDataRef { stream_id, window }) => {
                     let stream_id = stream_id.as_bytes();
                     let len = packet_len(&[4, stream_id.len()])?;
                     let window = as_u32(window, "RequestData window")?;
@@ -666,7 +763,7 @@ pub mod asynchronous {
                     self.writer.write_all(&window.to_le_bytes()).await?;
                     self.writer.write_all(stream_id).await?;
                 }
-                PacketRef::Data { stream_id, data } => {
+                PacketRef::Data(DataRef { stream_id, data }) => {
                     let stream_id = stream_id.as_bytes();
                     let len = packet_len(&[4, stream_id.len(), data.len()])?;
                     let stream_id_len = as_u32(stream_id.len(), "stream ID length")?;
@@ -693,13 +790,20 @@ pub mod asynchronous {
             stream_id: &DataStreamId,
             window: usize,
         ) -> Result<()> {
-            self.write_packet(PacketRef::RequestData { stream_id, window })
-                .await
+            self.write_packet(PacketRef::RequestData(RequestDataRef {
+                stream_id: DataStreamIdRef(&stream_id.0),
+                window,
+            }))
+            .await
         }
 
         /// Write a Data packet.
         pub async fn write_data(&mut self, stream_id: &DataStreamId, data: &[u8]) -> Result<()> {
-            self.write_packet(PacketRef::Data { stream_id, data }).await
+            self.write_packet(PacketRef::Data(DataRef {
+                stream_id: stream_id.as_ref(),
+                data,
+            }))
+            .await
         }
     }
 }
