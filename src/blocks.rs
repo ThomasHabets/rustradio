@@ -31,6 +31,7 @@ pub use crate::morse_encode::MorseEncode;
 pub use crate::multiply_const::MultiplyConst;
 pub use crate::nrzi::{NrziDecode, NrziEncode};
 pub use crate::null_sink::NullSink;
+pub use crate::pdu_average::PduAverage;
 pub use crate::pdu_to_stream::PduToStream;
 pub use crate::pdu_writer::PduWriter;
 pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
