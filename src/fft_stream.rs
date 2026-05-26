@@ -7,8 +7,18 @@ use crate::Result;
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{ReadStream, WriteStream};
+use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::{Complex, Float};
+
+/// Boolean tag marking each FFT frame in the output stream.
+///
+/// `true` is attached to the first FFT bin and `false` is attached to the last
+/// FFT bin. `StreamToPdu` users should pass `tail = 1` to include the sample
+/// carrying the end tag.
+pub const TAG_FRAME: &str = "FftStream::frame";
+
+/// Tag with the FFT size.
+pub const TAG_FRAME_SIZE: &str = "FftStream::size";
 
 /// Takes a stream of data, runs an FFT on it, and outputs it as a stream.
 /// The consumer of the stream needs to know what the FFT size is, or it won't
@@ -80,9 +90,73 @@ impl Block for FftStream {
                 self.fft.process(chunk);
             });
         }
+        let mut tags = Vec::with_capacity((len / self.size) * 2);
+        for pos in (0..len).step_by(self.size) {
+            tags.push(Tag::new(
+                pos,
+                TAG_FRAME_SIZE,
+                TagValue::U64(u64::try_from(self.size)?),
+            ));
+            tags.push(Tag::new(pos, TAG_FRAME, TagValue::Bool(true)));
+            tags.push(Tag::new(
+                pos + self.size - 1,
+                TAG_FRAME,
+                TagValue::Bool(false),
+            ));
+        }
+
         input.consume(len);
-        o.produce(len, &[]);
+        o.produce(len, &tags);
         Ok(BlockRet::Again)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blocks::StreamToPdu;
+
+    #[test]
+    fn adds_frame_tags() -> Result<()> {
+        let src = ReadStream::from_slice(&[Complex::default(); 8]);
+        let (mut fft, out) = FftStream::new(src, 4);
+
+        assert!(matches!(fft.work()?, BlockRet::Again));
+        let (buf, tags) = out.read_buf()?;
+
+        assert_eq!(buf.len(), 8);
+        assert_eq!(
+            tags,
+            [
+                Tag::new(0, TAG_FRAME_SIZE, TagValue::U64(4)),
+                Tag::new(0, TAG_FRAME, TagValue::Bool(true)),
+                Tag::new(3, TAG_FRAME, TagValue::Bool(false)),
+                Tag::new(4, TAG_FRAME_SIZE, TagValue::U64(4)),
+                Tag::new(4, TAG_FRAME, TagValue::Bool(true)),
+                Tag::new(7, TAG_FRAME, TagValue::Bool(false)),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn output_can_be_batched_by_stream_to_pdu() -> Result<()> {
+        let src = ReadStream::from_slice(&[Complex::default(); 8]);
+        let (mut fft, fft_out) = FftStream::new(src, 4);
+        let (mut to_pdu, pdu_out) = StreamToPdu::new(fft_out, TAG_FRAME, 4, 1);
+
+        assert!(matches!(fft.work()?, BlockRet::Again));
+        assert!(matches!(to_pdu.work()?, BlockRet::Again));
+
+        let (first, tags) = pdu_out.pop().unwrap();
+        assert_eq!(first, vec![Complex::default(); 4]);
+        assert_eq!(tags, &[]);
+
+        let (second, tags) = pdu_out.pop().unwrap();
+        assert_eq!(second, vec![Complex::default(); 4]);
+        assert_eq!(tags, &[]);
+        assert!(pdu_out.pop().is_none());
+        Ok(())
     }
 }
 /* vim: textwidth=80
