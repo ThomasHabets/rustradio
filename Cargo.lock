@@ -2237,6 +2237,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustradio-ui"
+version = "0.1.0"
+
+[[package]]
 name = "rustradio_macros"
 version = "0.16.8"
 dependencies = [
