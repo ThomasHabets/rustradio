@@ -23,7 +23,9 @@ const PACKET_REQUEST_DATA: u8 = 2;
 const PACKET_DATA: u8 = 3;
 
 /// Protocol stream identifier.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub struct DataStreamId(String);
 
 impl DataStreamId {
