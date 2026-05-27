@@ -37,6 +37,7 @@ A library for digital signals processing in the spirit of GNU Radio.
   * Max ceiling for e.g. TCP streams.
   * Maybe both. Strobe could do with being able to just say.
 * At least one example of dynamically updating parameters.
+* Add tags to data stream API.
 
 ## Contributing
 
