@@ -1,3 +1,11 @@
-# Placeholder
+# Rustradio UI library, running as WASM in the browser.
 
-This crate will get the ruwasm code, bit by bit.
+<https://github.com/ThomasHabets/rustradio>
+
+## Status
+
+This code is in the process of being migrated / cleaned up from
+<https://github.com/ThomasHabets/ruwasm>.
+
+This code is a work in progress, and no promises of being backwards
+compatible.
