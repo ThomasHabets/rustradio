@@ -117,8 +117,8 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(bound(
-    serialize = "App::App: Serialize, App::Ready: Serialize",
-    deserialize = "App::App: Deserialize<'de>, App::Ready: Deserialize<'de>",
+    serialize = "App::App: Serialize, App::Ready: Serialize, App::End: Serialize",
+    deserialize = "App::App: Deserialize<'de>, App::Ready: Deserialize<'de>, App::End: Deserialize<'de>",
 ))]
 pub enum WorkerToMainRef<'a, App: ApplicationSpecific = AppEmpty> {
     /// Worker notifying the main UI thread that the rustradio graph has
@@ -141,7 +141,7 @@ pub enum WorkerToMainRef<'a, App: ApplicationSpecific = AppEmpty> {
     DataStream(&'a [u8]),
 
     /// At the end of execution, provide the result as a string.
-    Result(&'a str),
+    End(App::End),
 
     /// A worker log line to be emitted through the main thread logger.
     LogLine { level: log::Level, line: &'a str },
@@ -172,7 +172,6 @@ where
         Ok(serde_wasm_bindgen::from_value(js)?)
     }
 }
-
 
 /// Stream of floats going between worker and UI thread.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
