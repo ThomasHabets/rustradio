@@ -228,7 +228,7 @@ pub struct FloatPduStream {
 
 /// No application specific messages required.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AppEmpty {}
+pub enum AppEmpty {}
 
 impl ApplicationSpecific for AppEmpty {
     type App = AppEmpty;
