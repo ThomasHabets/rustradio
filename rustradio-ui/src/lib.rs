@@ -230,3 +230,167 @@ impl ApplicationSpecific for AppEmpty {
     type Ready = AppEmpty;
     type End = AppEmpty;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    struct TestAppMessage {
+        name: String,
+        payload: String,
+    }
+
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    struct TestStart {
+        sample_rate: u64,
+    }
+
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    struct TestReady {
+        channels: u8,
+    }
+
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    struct TestAppMessageRef<'a> {
+        name: &'a str,
+        payload: &'a str,
+    }
+
+    #[derive(Debug)]
+    struct TestApp;
+
+    impl ApplicationSpecific for TestApp {
+        type App = TestAppMessage;
+        type Start = TestStart;
+        type Ready = TestReady;
+        type End = AppEmpty;
+    }
+
+    #[derive(Debug)]
+    struct TestAppRef<'a>(std::marker::PhantomData<&'a ()>);
+
+    impl<'a> ApplicationSpecific for TestAppRef<'a> {
+        type App = TestAppMessageRef<'a>;
+        type Start = TestStart;
+        type Ready = TestReady;
+        type End = AppEmpty;
+    }
+
+    fn expected_app_message() -> TestAppMessage {
+        TestAppMessage {
+            name: "test app message".to_string(),
+            payload: "test payload".to_string(),
+        }
+    }
+
+    fn assert_main_to_worker_app_message(msg: MainToWorker<TestApp>, expected: &TestAppMessage) {
+        match msg {
+            MainToWorker::ApplicationSpecific(app) => assert_eq!(app, *expected),
+            other => panic!("expected MainToWorker::ApplicationSpecific, got {other:?}"),
+        }
+    }
+
+    fn assert_worker_to_main_app_message(msg: WorkerToMain<TestApp>, expected: &TestAppMessage) {
+        match msg {
+            WorkerToMain::ApplicationSpecific(app) => assert_eq!(app, *expected),
+            other => panic!("expected WorkerToMain::ApplicationSpecific, got {other:?}"),
+        }
+    }
+
+    fn assert_main_to_worker_ref_app_message(
+        msg: MainToWorker<TestAppRef<'_>>,
+        expected: &TestAppMessage,
+    ) {
+        match msg {
+            MainToWorker::ApplicationSpecific(app) => {
+                assert_eq!(app.name, expected.name);
+                assert_eq!(app.payload, expected.payload);
+            }
+            other => panic!("expected MainToWorker::ApplicationSpecific, got {other:?}"),
+        }
+    }
+
+    fn assert_worker_to_main_ref_app_message(
+        msg: WorkerToMainRef<'_, TestAppRef<'_>>,
+        expected: &TestAppMessage,
+    ) {
+        match msg {
+            WorkerToMainRef::ApplicationSpecific(app) => {
+                assert_eq!(app.name, expected.name);
+                assert_eq!(app.payload, expected.payload);
+            }
+            _ => panic!("expected WorkerToMainRef::ApplicationSpecific"),
+        }
+    }
+
+    #[test]
+    fn application_specific_main_to_worker_serializes_between_owned_and_ref_payloads() {
+        let expected = expected_app_message();
+
+        let owned_json = serde_json::to_value(MainToWorker::<TestApp>::ApplicationSpecific(
+            expected.clone(),
+        ))
+        .unwrap();
+        let ref_json = serde_json::to_value(MainToWorker::<TestAppRef<'_>>::ApplicationSpecific(
+            TestAppMessageRef {
+                name: "test app message",
+                payload: "test payload",
+            },
+        ))
+        .unwrap();
+
+        assert_eq!(owned_json, ref_json);
+
+        let decoded: MainToWorker<TestApp> = serde_json::from_value(ref_json).unwrap();
+        assert_main_to_worker_app_message(decoded, &expected);
+    }
+
+    #[test]
+    fn application_specific_worker_to_main_serializes_between_owned_and_ref_payloads() {
+        let expected = expected_app_message();
+
+        let owned_json = serde_json::to_value(WorkerToMain::<TestApp>::ApplicationSpecific(
+            expected.clone(),
+        ))
+        .unwrap();
+        let ref_json = serde_json::to_value(
+            WorkerToMainRef::<TestAppRef<'_>>::ApplicationSpecific(TestAppMessageRef {
+                name: "test app message",
+                payload: "test payload",
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(owned_json, ref_json);
+
+        let decoded: WorkerToMain<TestApp> = serde_json::from_value(ref_json).unwrap();
+        assert_worker_to_main_app_message(decoded, &expected);
+    }
+
+    #[test]
+    fn application_specific_main_to_worker_deserializes_from_json_into_ref_payload() {
+        let expected = expected_app_message();
+        let json = serde_json::to_string(&MainToWorker::<TestApp>::ApplicationSpecific(
+            expected.clone(),
+        ))
+        .unwrap();
+
+        let decoded: MainToWorker<TestAppRef<'_>> = serde_json::from_str(&json).unwrap();
+
+        assert_main_to_worker_ref_app_message(decoded, &expected);
+    }
+
+    #[test]
+    fn application_specific_worker_to_main_deserializes_from_json_into_ref_payload() {
+        let expected = expected_app_message();
+        let json = serde_json::to_string(&WorkerToMain::<TestApp>::ApplicationSpecific(
+            expected.clone(),
+        ))
+        .unwrap();
+
+        let decoded: WorkerToMainRef<'_, TestAppRef<'_>> = serde_json::from_str(&json).unwrap();
+
+        assert_worker_to_main_ref_app_message(decoded, &expected);
+    }
+}

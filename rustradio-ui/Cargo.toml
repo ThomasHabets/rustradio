@@ -17,3 +17,6 @@ rustradio = { version = "0.16.9", features = ["wasm"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.122"
+
+[dev-dependencies]
+serde_json = "1.0.150"
