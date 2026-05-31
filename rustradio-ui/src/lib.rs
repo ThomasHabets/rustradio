@@ -189,60 +189,158 @@ pub struct FloatStreamRef<'a> {
     pub samples: &'a [rustradio::Float],
 }
 
-/// Cow-like float stream payload for `WorkerToMainRef`.
-///
-/// Use `Borrowed` for zero-copy serialization. Deserialization always produces
-/// `Owned`, since `FloatStreamRef` contains borrowed slices.
-#[derive(Serialize)]
-#[serde(untagged)]
-pub enum FloatStreamCow<'a> {
-    Borrowed(FloatStreamRef<'a>),
-    Owned(FloatStream),
+impl FloatStreamRef<'_> {
+    fn to_owned(&self) -> FloatStream {
+        FloatStream {
+            name: self.name.to_string(),
+            tags: self.tags.to_vec(),
+            samples: self.samples.to_vec(),
+        }
+    }
 }
 
-impl<'a> FloatStreamCow<'a> {
-    pub fn into_owned(self) -> FloatStream {
+/// Owned stream type that can produce an equivalent borrowed stream reference.
+pub trait StreamPayload: Sized {
+    type Ref<'a>: Serialize
+    where
+        Self: 'a;
+
+    /// Return the object as the Ref type.
+    fn as_stream_ref(&self) -> Self::Ref<'_>;
+
+    /// Rebuild a borrowed stream ref with the shorter lifetime of `stream`.
+    ///
+    /// Generic code cannot assume that `Self::Ref<'long>` can be used as
+    /// `Self::Ref<'short>`, even when `'long: 'short`. This hook makes that
+    /// lifetime-shortening operation explicit for each ref type.
+    ///
+    /// A mere `clone()` would preserve the same lifetime, so it can't be used
+    /// directly. In other words this is just a `clone()` on the Ref type with
+    /// more lifetime control.
+    fn reborrow_ref<'short, 'long>(stream: &'short Self::Ref<'long>) -> Self::Ref<'short>
+    where
+        'long: 'short,
+        Self: 'long;
+
+    /// Create an owned type from the ref type. Data will be copied.
+    fn from_stream_ref(stream: Self::Ref<'_>) -> Self;
+}
+
+impl StreamPayload for FloatStream {
+    type Ref<'a> = FloatStreamRef<'a>;
+
+    fn as_stream_ref(&self) -> Self::Ref<'_> {
+        FloatStreamRef {
+            name: &self.name,
+            tags: &self.tags,
+            samples: &self.samples,
+        }
+    }
+
+    fn reborrow_ref<'short, 'long>(stream: &'short Self::Ref<'long>) -> Self::Ref<'short>
+    where
+        'long: 'short,
+        Self: 'long,
+    {
+        FloatStreamRef {
+            name: stream.name,
+            tags: stream.tags,
+            samples: stream.samples,
+        }
+    }
+
+    fn from_stream_ref(stream: Self::Ref<'_>) -> Self {
+        stream.to_owned()
+    }
+}
+
+/// Cow-like stream payload for `WorkerToMainRef`.
+///
+/// Use `Borrowed` for zero-copy serialization. Deserialization always produces
+/// `Owned`, since stream reference payloads contain borrowed slices.
+pub enum StreamCow<'a, T: StreamPayload + 'a> {
+    Borrowed(T::Ref<'a>),
+    Owned(T),
+}
+
+impl<'a, T> StreamCow<'a, T>
+where
+    T: StreamPayload + 'a,
+{
+    pub fn borrowed(stream: T::Ref<'a>) -> Self {
+        Self::Borrowed(stream)
+    }
+
+    pub fn owned(stream: T) -> Self {
+        Self::Owned(stream)
+    }
+
+    pub fn into_owned(self) -> T {
         match self {
-            Self::Borrowed(stream) => FloatStream {
-                name: stream.name.to_owned(),
-                tags: stream.tags.to_vec(),
-                samples: stream.samples.to_vec(),
-            },
+            Self::Borrowed(stream) => T::from_stream_ref(stream),
             Self::Owned(stream) => stream,
         }
     }
-    pub fn borrow(&self) -> FloatStreamRef<'_> {
+}
+
+impl<'a, T> StreamCow<'a, T>
+where
+    T: StreamPayload + 'a,
+{
+    pub fn borrow<'short>(&'short self) -> T::Ref<'short>
+    where
+        'a: 'short,
+    {
         match self {
-            Self::Borrowed(stream) => stream.clone(),
-            Self::Owned(stream) => FloatStreamRef {
-                name: &stream.name,
-                tags: &stream.tags,
-                samples: &stream.samples,
-            },
+            Self::Borrowed(stream) => T::reborrow_ref(stream),
+            Self::Owned(stream) => stream.as_stream_ref(),
         }
     }
 }
 
-impl<'de, 'a> Deserialize<'de> for FloatStreamCow<'a> {
+impl<'a, T> Serialize for StreamCow<'a, T>
+where
+    T: StreamPayload + 'a,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Borrowed(stream) => stream.serialize(serializer),
+            Self::Owned(stream) => stream.as_stream_ref().serialize(serializer),
+        }
+    }
+}
+
+impl<'de, 'a, T> Deserialize<'de> for StreamCow<'a, T>
+where
+    T: StreamPayload + Deserialize<'de> + 'a,
+{
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        FloatStream::deserialize(deserializer).map(Self::Owned)
+        T::deserialize(deserializer).map(Self::Owned)
     }
 }
 
-impl<'a> From<FloatStreamRef<'a>> for FloatStreamCow<'a> {
+impl<'a, T> From<T> for StreamCow<'a, T>
+where
+    T: StreamPayload + 'a,
+{
+    fn from(stream: T) -> Self {
+        Self::Owned(stream)
+    }
+}
+
+impl<'a> From<FloatStreamRef<'a>> for StreamCow<'a, FloatStream> {
     fn from(stream: FloatStreamRef<'a>) -> Self {
         Self::Borrowed(stream)
     }
 }
 
-impl<'a> From<FloatStream> for FloatStreamCow<'a> {
-    fn from(stream: FloatStream) -> Self {
-        Self::Owned(stream)
-    }
-}
+pub type FloatStreamCow<'a> = StreamCow<'a, FloatStream>;
 
 /// Stream of data between worker and main UI.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -257,57 +355,58 @@ pub struct ComplexStream {
 /// Used to avoid copies when e.g. sending directly from a RustRadio stream.
 ///
 /// Must serialize the same as `ComplexStream`.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct ComplexStreamRef<'a> {
     pub name: &'a str,
-    pub tags: Vec<rustradio::stream::Tag>,
+    pub tags: &'a [rustradio::stream::Tag],
     pub samples: &'a [rustradio::Complex],
 }
 
-/// Cow-like complex stream payload for `WorkerToMainRef`.
-///
-/// Use `Borrowed` for zero-copy serialization. Deserialization always produces
-/// `Owned`, since `ComplexStreamRef` contains borrowed slices.
-#[derive(Serialize)]
-#[serde(untagged)]
-pub enum ComplexStreamCow<'a> {
-    Borrowed(ComplexStreamRef<'a>),
-    Owned(ComplexStream),
-}
-
-impl<'a> ComplexStreamCow<'a> {
-    pub fn into_owned(self) -> ComplexStream {
-        match self {
-            Self::Borrowed(stream) => ComplexStream {
-                name: stream.name.to_owned(),
-                tags: stream.tags,
-                samples: stream.samples.to_vec(),
-            },
-            Self::Owned(stream) => stream,
+impl ComplexStreamRef<'_> {
+    fn to_owned(&self) -> ComplexStream {
+        ComplexStream {
+            name: self.name.to_string(),
+            tags: self.tags.to_vec(),
+            samples: self.samples.to_vec(),
         }
     }
 }
 
-impl<'de, 'a> Deserialize<'de> for ComplexStreamCow<'a> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+impl StreamPayload for ComplexStream {
+    type Ref<'a> = ComplexStreamRef<'a>;
+
+    fn as_stream_ref(&self) -> Self::Ref<'_> {
+        ComplexStreamRef {
+            name: &self.name,
+            tags: &self.tags,
+            samples: &self.samples,
+        }
+    }
+
+    fn reborrow_ref<'short, 'long>(stream: &'short Self::Ref<'long>) -> Self::Ref<'short>
     where
-        D: serde::Deserializer<'de>,
+        'long: 'short,
+        Self: 'long,
     {
-        ComplexStream::deserialize(deserializer).map(Self::Owned)
+        ComplexStreamRef {
+            name: stream.name,
+            tags: stream.tags,
+            samples: stream.samples,
+        }
+    }
+
+    fn from_stream_ref(stream: Self::Ref<'_>) -> Self {
+        stream.to_owned()
     }
 }
 
-impl<'a> From<ComplexStreamRef<'a>> for ComplexStreamCow<'a> {
+impl<'a> From<ComplexStreamRef<'a>> for StreamCow<'a, ComplexStream> {
     fn from(stream: ComplexStreamRef<'a>) -> Self {
         Self::Borrowed(stream)
     }
 }
 
-impl<'a> From<ComplexStream> for ComplexStreamCow<'a> {
-    fn from(stream: ComplexStream) -> Self {
-        Self::Owned(stream)
-    }
-}
+pub type ComplexStreamCow<'a> = StreamCow<'a, ComplexStream>;
 
 /// Stream of PDUs of floats for sending between worker and main UI.
 ///
@@ -445,6 +544,66 @@ mod tests {
         }
     }
 
+    fn reborrow_float_stream<'short, 'long>(
+        stream: &'short FloatStreamCow<'long>,
+    ) -> FloatStreamRef<'short>
+    where
+        'long: 'short,
+    {
+        stream.borrow()
+    }
+
+    struct TestCowStream {
+        value: u8,
+    }
+
+    #[derive(Clone)]
+    struct TestCowStreamRef<'a> {
+        value: &'a u8,
+    }
+
+    impl serde::Serialize for TestCowStream {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str("owned")
+        }
+    }
+
+    impl serde::Serialize for TestCowStreamRef<'_> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str("ref")
+        }
+    }
+
+    impl StreamPayload for TestCowStream {
+        type Ref<'a> = TestCowStreamRef<'a>;
+
+        fn as_stream_ref(&self) -> Self::Ref<'_> {
+            TestCowStreamRef { value: &self.value }
+        }
+
+        fn reborrow_ref<'short, 'long>(stream: &'short Self::Ref<'long>) -> Self::Ref<'short>
+        where
+            'long: 'short,
+            Self: 'long,
+        {
+            TestCowStreamRef {
+                value: stream.value,
+            }
+        }
+
+        fn from_stream_ref(stream: Self::Ref<'_>) -> Self {
+            TestCowStream {
+                value: *stream.value,
+            }
+        }
+    }
+
     #[test]
     fn application_specific_main_to_worker_serializes_between_owned_and_ref_payloads() {
         let expected = expected_app_message();
@@ -516,6 +675,30 @@ mod tests {
     }
 
     #[test]
+    fn stream_cow_owned_variant_serializes_through_ref_type() {
+        let json = serde_json::to_value(StreamCow::owned(TestCowStream { value: 7 })).unwrap();
+
+        assert_eq!(json, serde_json::json!("ref"));
+    }
+
+    #[test]
+    fn stream_cow_borrow_reborrows_borrowed_variant() {
+        let tags = Vec::new();
+        let samples = [1.0, 2.0];
+        let stream = FloatStreamCow::borrowed(FloatStreamRef {
+            name: "float stream",
+            tags: &tags,
+            samples: &samples,
+        });
+
+        let borrowed = reborrow_float_stream(&stream);
+
+        assert_eq!(borrowed.name, "float stream");
+        assert_eq!(borrowed.tags, tags.as_slice());
+        assert_eq!(borrowed.samples, samples.as_slice());
+    }
+
+    #[test]
     fn worker_to_main_ref_float_streams_serialize_like_owned_streams() {
         let expected = expected_float_stream();
         let samples = expected.samples.clone();
@@ -570,7 +753,7 @@ mod tests {
         let ref_json = serde_json::to_value(WorkerToMainRef::<AppEmpty>::ComplexStreams(vec![
             ComplexStreamCow::Borrowed(ComplexStreamRef {
                 name: &expected.name,
-                tags: Vec::new(),
+                tags: &expected.tags,
                 samples: &samples,
             }),
         ]))
