@@ -182,10 +182,10 @@ pub struct FloatStream {
 /// Used to avoid copies when e.g. sending directly from a RustRadio stream.
 ///
 /// Must serialize the same as `FloatStream`.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct FloatStreamRef<'a> {
     pub name: &'a str,
-    pub tags: Vec<rustradio::stream::Tag>,
+    pub tags: &'a [rustradio::stream::Tag],
     pub samples: &'a [rustradio::Float],
 }
 
@@ -205,7 +205,7 @@ impl<'a> FloatStreamCow<'a> {
         match self {
             Self::Borrowed(stream) => FloatStream {
                 name: stream.name.to_owned(),
-                tags: stream.tags,
+                tags: stream.tags.to_vec(),
                 samples: stream.samples.to_vec(),
             },
             Self::Owned(stream) => stream,
@@ -213,14 +213,10 @@ impl<'a> FloatStreamCow<'a> {
     }
     pub fn borrow(&self) -> FloatStreamRef<'_> {
         match self {
-            Self::Borrowed(stream) => FloatStreamRef {
-                name: stream.name,
-                tags: stream.tags.clone(),
-                samples: stream.samples,
-            },
+            Self::Borrowed(stream) => stream.clone(),
             Self::Owned(stream) => FloatStreamRef {
                 name: &stream.name,
-                tags: stream.tags.clone(),
+                tags: &stream.tags,
                 samples: &stream.samples,
             },
         }
@@ -531,7 +527,7 @@ mod tests {
         let ref_json = serde_json::to_value(WorkerToMainRef::<AppEmpty>::FloatStreams(vec![
             FloatStreamCow::Borrowed(FloatStreamRef {
                 name: &expected.name,
-                tags: Vec::new(),
+                tags: &expected.tags,
                 samples: &samples,
             }),
         ]))
