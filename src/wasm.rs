@@ -2,6 +2,7 @@
 //!
 //! It must fail gracefully when used in a web worker.
 use std::collections::BTreeMap;
+use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -61,19 +62,35 @@ impl Instant {
     }
 }
 
-// The stream in BufferState is not actually shared. Producing writes
-// Some-values to it, and consuming writes None.
+// The stream in BufferState is not actually shared. Producing initializes
+// values in it, and consuming marks the slots free by advancing rpos/used.
 //
 // This is not as performant as the circular buffer for non-WASM, but it does
 // work.
+//
+// Originally this used `Vec<Option<T>>`, but that uses twice the buffer space
+// and was marginally slower. (an AX.25 decode test went from ~60% CPU to ~55%).
+//
+// It should be possible to not copy to and from the readers and writers, but it
+// requires more careful lifetime and pointer handling.
+//
+// The main requirement making this complex is that the users of these buffers
+// need linear `&[T]` to work with, and a block needing to write two elements can
+// get stuck if we keep giving it just one elements of space.
+//
+// We can't do `VecDeque` because it doesn't give us a linear buffer.
+//
+// We can't "just" rotate the buffer when needed. Well, we can, but:
+// 1. We need to make sure there are no readers or writers outstanding, and
+// 2. every rotation means copying all the elements, which is what we wanted to
+//    avoid in the first place. Though to be fair, one less copy.
 #[derive(Debug)]
 struct BufferState<T> {
     rpos: usize,
     wpos: usize,
     used: usize,
-    // Option of values so that we don't have to create uninitialized unsafe
-    // values, or rely on Default.
-    stream: Vec<Option<T>>,
+    // Only the range described by rpos/used is initialized.
+    stream: Vec<MaybeUninit<T>>,
     tags: BTreeMap<TagPos, Vec<Tag>>,
 }
 impl<T> BufferState<T> {
@@ -92,7 +109,7 @@ impl<T> BufferState<T> {
             )));
         }
         let mut stream = Vec::with_capacity(size);
-        stream.resize_with(size, || None);
+        stream.resize_with(size, MaybeUninit::uninit);
         Ok(Self {
             rpos: 0,
             wpos: 0,
@@ -161,7 +178,6 @@ impl<T> Buffer<T> {
         let capacity = l.capacity();
         for i in 0..n {
             let pos = (l.rpos + i) % capacity;
-            l.stream[pos] = None;
             l.tags.remove(&pos);
         }
         l.rpos = (l.rpos + n) % capacity;
@@ -207,7 +223,7 @@ impl<T: Copy> Buffer<T> {
         let capacity = l.capacity();
         let wpos = l.wpos;
         for (i, sample) in samples.iter().copied().enumerate() {
-            l.stream[(wpos + i) % capacity] = Some(sample);
+            l.stream[(wpos + i) % capacity].write(sample);
         }
         for tag in tags {
             let pos = (tag.pos() + wpos) % capacity;
@@ -225,7 +241,12 @@ impl<T: Copy> Buffer<T> {
         let mut stream = Vec::with_capacity(used);
         for i in 0..used {
             let pos = (start + i) % capacity;
-            stream.push(s.stream[pos].expect("readable buffer position must be initialized"));
+            // SAFETY: BufferState maintains the invariant that exactly the
+            // slots in the read range described by rpos/used are initialized.
+            //
+            // This used to be an `Option` with `expect`, and it never
+            // triggered.
+            stream.push(unsafe { s.stream[pos].assume_init() });
         }
         let mut tags = Vec::with_capacity(s.tags.len());
         for (n, ts) in &s.tags {
