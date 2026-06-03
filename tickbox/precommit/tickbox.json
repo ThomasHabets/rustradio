@@ -4,7 +4,7 @@
 	"CARGO_TERM_COLOR": "always"
     },
     "parallel_regex": [
-            "^[2-6].*"
+            "^2.*"
     ],
-    "max_concurrency": 1
+    "max_concurrency": 4
 }
