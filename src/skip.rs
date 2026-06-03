@@ -4,7 +4,7 @@ use crate::{Result, Sample};
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
-/// Turn samples into text.
+/// Skip `skip` samples, passing the rest through as is.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
 pub struct Skip<T: Sample> {
