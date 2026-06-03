@@ -472,7 +472,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use crate::blocks::SignalSourceComplex;
+    use crate::blocks::{Head, SignalSourceComplex};
     use crate::fir::low_pass_complex;
     use crate::window::WindowType;
 
@@ -487,6 +487,7 @@ mod tests {
 
         // Create blocks.
         let (mut src, o) = SignalSourceComplex::new(samp_rate, signal, amplitude);
+        let (mut head, o) = Head::new(o, samp_rate as u64);
         let taps = low_pass_complex(samp_rate, cutoff, twidth, &WindowType::Hamming);
         let taps_len = taps.len();
         let (mut fft, out) = FftFilter::new(o, taps);
@@ -495,6 +496,7 @@ mod tests {
         let mut total = 0;
         loop {
             src.work()?;
+            head.work()?;
             // Filter the stream.
             fft.work()?;
             let out = out
@@ -516,11 +518,10 @@ mod tests {
                 (0.0..0.0002).contains(&m),
                 "Signal insufficiently suppressed. Got magnitude {m}"
             );
-            if total > samp_rate as usize {
+            if total >= samp_rate as usize {
                 break;
             }
         }
-
         Ok(())
     }
 
