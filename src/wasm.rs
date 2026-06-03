@@ -93,6 +93,10 @@ struct BufferState<T> {
     // Only the range described by rpos/used is initialized.
     stream: Vec<MaybeUninit<T>>,
     tags: BTreeMap<TagPos, Vec<Tag>>,
+
+    // Extra accounting to ensure that we never read uninitialized content.
+    #[cfg(debug_assertions)]
+    initialized: Vec<bool>,
 }
 impl<T> BufferState<T> {
     const _CHECK_NOT_ZERO: () = assert!(
@@ -117,6 +121,9 @@ impl<T> BufferState<T> {
             used: 0,
             stream,
             tags: BTreeMap::default(),
+
+            #[cfg(debug_assertions)]
+            initialized: vec![false; size],
         })
     }
     // Return write range, in samples.
@@ -150,11 +157,26 @@ impl<T> Drop for BufferState<T> {
         let capacity = self.stream.len();
         for i in 0..self.used {
             let pos = (self.rpos + i) % capacity;
+            #[cfg(debug_assertions)]
+            {
+                debug_assert!(self.initialized[pos]);
+                self.initialized[pos] = false;
+            }
             // SAFETY: BufferState maintains the invariant that exactly the
             // slots in the read range described by rpos/used are initialized.
             unsafe {
                 self.stream[pos].assume_init_drop();
             }
+        }
+        #[cfg(debug_assertions)]
+        {
+            // This is like 30% less time in debug build compared to a loop or
+            // .all/.any.
+            debug_assert_eq!(
+                self.initialized,
+                vec![false; self.size()],
+                "Left some elements undropped"
+            );
         }
     }
 }
@@ -194,6 +216,11 @@ impl<T> Buffer<T> {
         let capacity = l.capacity();
         for i in 0..n {
             let pos = (l.rpos + i) % capacity;
+            #[cfg(debug_assertions)]
+            {
+                debug_assert!(l.initialized[pos]);
+                l.initialized[pos] = false;
+            }
             // SAFETY: n <= used, so every consumed slot is in the initialized
             // read range described by rpos/used.
             //
@@ -247,7 +274,13 @@ impl<T: Copy> Buffer<T> {
         let capacity = l.capacity();
         let wpos = l.wpos;
         for (i, sample) in samples.iter().copied().enumerate() {
-            l.stream[(wpos + i) % capacity].write(sample);
+            let pos = (wpos + i) % capacity;
+            l.stream[pos].write(sample);
+            #[cfg(debug_assertions)]
+            {
+                debug_assert!(!l.initialized[pos]);
+                l.initialized[pos] = true;
+            }
         }
         for tag in tags {
             let pos = (tag.pos() + wpos) % capacity;
@@ -265,6 +298,10 @@ impl<T: Copy> Buffer<T> {
         let mut stream = Vec::with_capacity(used);
         for i in 0..used {
             let pos = (start + i) % capacity;
+            #[cfg(debug_assertions)]
+            {
+                debug_assert!(s.initialized[pos]);
+            }
             // SAFETY: BufferState maintains the invariant that exactly the
             // slots in the read range described by rpos/used are initialized.
             //
