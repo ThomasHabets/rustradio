@@ -63,7 +63,8 @@ impl Instant {
 }
 
 // The stream in BufferState is not actually shared. Producing initializes
-// values in it, and consuming marks the slots free by advancing rpos/used.
+// values in it, and consuming drops those values and marks the slots free by
+// advancing rpos/used.
 //
 // This is not as performant as the circular buffer for non-WASM, but it does
 // work.
@@ -143,6 +144,21 @@ impl<T> BufferState<T> {
         self.stream.len()
     }
 }
+
+impl<T> Drop for BufferState<T> {
+    fn drop(&mut self) {
+        let capacity = self.stream.len();
+        for i in 0..self.used {
+            let pos = (self.rpos + i) % capacity;
+            // SAFETY: BufferState maintains the invariant that exactly the
+            // slots in the read range described by rpos/used are initialized.
+            unsafe {
+                self.stream[pos].assume_init_drop();
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Buffer<T> {
     id: usize,
@@ -178,6 +194,14 @@ impl<T> Buffer<T> {
         let capacity = l.capacity();
         for i in 0..n {
             let pos = (l.rpos + i) % capacity;
+            // SAFETY: n <= used, so every consumed slot is in the initialized
+            // read range described by rpos/used.
+            //
+            // We don't actually expect `T` to be something that implements
+            // `Drop`, but just in case it does.
+            unsafe {
+                l.stream[pos].assume_init_drop();
+            }
             l.tags.remove(&pos);
         }
         l.rpos = (l.rpos + n) % capacity;
