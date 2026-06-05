@@ -2,6 +2,8 @@
 //!
 //! If using many taps, [`FftFilter`](crate::blocks::FftFilter) probably has
 //! better performance.
+//!
+//! TODO: Change taps to return error instead of assert?
 /*
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
@@ -113,9 +115,10 @@ impl<T> Fir<T>
 where
     T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    /// Create new Fir.
+    /// Create new FIR.
     #[must_use]
     pub fn new(taps: &[T]) -> Self {
+        assert!(!taps.is_empty());
         Self {
             taps: taps.iter().copied().rev().collect(),
         }
@@ -171,6 +174,7 @@ where
     /// The default is 1, meaning no decimation.
     #[must_use]
     pub fn deci(mut self, deci: usize) -> Self {
+        assert_ne!(deci, 0);
         self.deci = deci;
         self
     }
@@ -210,6 +214,7 @@ where
     }
     /// Create Fir block given taps.
     pub fn new(src: ReadStream<T>, taps: &[T]) -> (Self, ReadStream<T>) {
+        assert!(!taps.is_empty());
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -384,6 +389,8 @@ pub fn low_pass(
 /// Generate hilbert transformer filter.
 #[must_use]
 pub fn hilbert(window: &Window) -> Vec<Float> {
+    assert!(window.0.is_empty());
+    assert_ne!(window.0.len(), 1);
     let ntaps = window.0.len();
     let mid = (ntaps - 1) / 2;
     let mut gain = 0.0;
