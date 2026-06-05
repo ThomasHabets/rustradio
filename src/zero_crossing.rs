@@ -89,9 +89,14 @@ impl Block for ZeroCrossing {
         if o.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
+        if let Some(ref clock) = self.out_clock
+            && clock.free() == 0
+        {
+            return Ok(BlockRet::WaitForStream(clock, 1));
+        }
         let mut n = 0;
         let mut opos = 0;
-        let mut out_clock = match self.out_clock.as_mut().map(|x| x.write_buf()) {
+        let mut out_clock = match self.out_clock.as_ref().map(|x| x.write_buf()) {
             None => None,
             Some(Ok(x)) => Some(x),
             Some(Err(e)) => return Err(e),
