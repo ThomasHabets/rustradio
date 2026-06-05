@@ -88,7 +88,7 @@ where
                 };
                 let buf = buf?;
                 if buf.is_empty() {
-                    eprintln!("ReaderSource: Input closed");
+                    debug!("ReaderSource: input closed");
                     return Ok(BlockRet::EOF);
                 }
                 self.buf.extend(buf);

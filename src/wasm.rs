@@ -199,7 +199,6 @@ impl<T> Buffer<T> {
         self.id
     }
     pub(crate) fn is_empty(&self) -> bool {
-        eprintln!("BLEH: {:?}", self.state.lock().unwrap().used);
         self.state.lock().unwrap().used == 0
     }
     /// Available space to write, in bytes(?).

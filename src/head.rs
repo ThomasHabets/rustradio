@@ -18,7 +18,6 @@ pub struct Head<T: Sample> {
 impl<T: Sample + std::fmt::Debug> Block for Head<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
-            eprintln!("remaining: {}", self.remaining);
             if self.remaining == 0 {
                 return Ok(BlockRet::EOF);
             }
