@@ -45,7 +45,7 @@ where
         if o.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
-        let mut buffer = vec![0; o.len()];
+        let mut buffer = vec![0; o.len() * size];
         // TODO: this read blocks.
         let n = self.stream.read(&mut buffer[..])?;
         if n == 0 {
