@@ -79,21 +79,12 @@ impl AsyncGraph {
                         BlockRet::EOF => break,
                         BlockRet::WaitForStream(stream, need) => {
                             //debug!("{name} wait for stream");
-                            drop(ret);
                             let eof = stream.wait_async(need).await;
                             if b.eof() || eof {
                                 break;
                             }
                         }
-                        BlockRet::WaitForFunc(_) => {
-                            //debug!("{name} WaitForFunc");
-                            drop(ret);
-                            if b.eof() {
-                                break;
-                            }
-                        }
                         BlockRet::Pending => {
-                            drop(ret);
                             tokio::time::sleep(SLEEP_TIME).await;
                             //debug!("{name} Pending");
                         }

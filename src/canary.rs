@@ -53,7 +53,6 @@ mod tests {
         let ret = b.work()?;
         assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");
         drop(ib);
-        drop(ret);
         assert!(b.eof());
         assert!(!c.load(Ordering::Relaxed));
         drop(b);

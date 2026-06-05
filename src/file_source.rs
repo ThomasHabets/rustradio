@@ -162,7 +162,6 @@ mod tests {
         let (mut src, _) = FileSource::<Float>::new("/dev/zero")?;
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
-        drop(ret);
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::WaitForStream(_, 1)], "{ret:?}");
         Ok(())
@@ -183,7 +182,6 @@ mod tests {
         let (mut src, src_out) = FileSource::<Float>::new(&tmpfn)?;
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
-        drop(ret);
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::EOF], "{ret:?}");
 
@@ -207,7 +205,6 @@ mod tests {
         let (mut src, src_out) = FileSource::<Float>::new(&tmpfn)?;
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
-        drop(ret);
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::EOF], "{ret:?}");
 
@@ -236,15 +233,12 @@ mod tests {
 
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
-        drop(ret);
 
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
-        drop(ret);
 
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
-        drop(ret);
 
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::EOF], "{ret:?}");

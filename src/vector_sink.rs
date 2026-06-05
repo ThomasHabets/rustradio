@@ -158,10 +158,8 @@ mod tests {
         assert!(matches![r, BlockRet::EOF], "Got {r:?}");
         let r = sink.work()?;
         assert!(matches![r, BlockRet::WaitForStream(_, 1)], "Got {r:?}");
-        drop(r);
         let r = sink.work()?;
         assert!(matches![r, BlockRet::WaitForStream(_, 1)], "Got {r:?}");
-        drop(r);
         assert_eq!(sink.hook().data().samples(), &[0, 1, 2]);
         assert_eq!(
             sink.hook().data().tags(),

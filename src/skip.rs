@@ -58,7 +58,6 @@ mod tests {
             let (mut b, out) = Skip::new(src, skip);
             let ret = b.work()?;
             assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");
-            drop(ret);
             let (res, _) = out.read_buf()?;
             let got = res.slice().to_vec();
             let want = [1u8, 2, 3, 4, 5, 6];

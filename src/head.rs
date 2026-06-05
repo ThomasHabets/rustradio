@@ -62,7 +62,6 @@ mod tests {
             } else {
                 assert!(matches![ret, BlockRet::WaitForStream(_, 1)], "{ret:?}");
             }
-            drop(ret);
             let (res, _) = out.read_buf()?;
             let got = res.slice().to_vec();
             let want = [1u8, 2, 3, 4, 5, 6];

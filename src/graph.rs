@@ -125,7 +125,6 @@ impl GraphRunner for Graph {
                 self.cpu_times[n] += get_cpu_time() - st_cpu;
                 match ret {
                     BlockRet::Again => {
-                        drop(ret);
                         // Block did something.
                         //trace!("… {} was not starved", b.block_name());
                         done = false;
@@ -134,15 +133,8 @@ impl GraphRunner for Graph {
                     BlockRet::Pending => {
                         done = false;
                     }
-                    BlockRet::WaitForFunc(_) => {
-                        drop(ret);
-                        if b.eof() {
-                            eof[n] = true;
-                        }
-                    }
                     BlockRet::WaitForStream(stream, _need) => {
                         let closed = stream.closed();
-                        drop(ret);
                         if b.eof() || closed {
                             // TODO: This doesn't actually drop the block. Maybe
                             // self.blocks needs to contain `Option`s?

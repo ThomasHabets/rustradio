@@ -48,22 +48,8 @@ pub enum BlockRet<'a> {
     /// `work` again. And that activity on any stream won't help either way.
     ///
     /// Example: `RtlSdrSource` may not currently have any new data, but we
-    /// can't control when it does. But maybe this example would be better
-    /// served with `WaitForFunc`? That way at least a multithreaded graph
-    /// executor can sleep.
+    /// can't control when it does.
     Pending,
-
-    /// Block indicates that there's no point calling it until the provided
-    /// function has been run.
-    ///
-    /// The function is blocking, but should not block for "too long", since it
-    /// prevents checking for exit conditions like stream EOF and Ctrl-C.
-    ///
-    /// For a single threaded graph, it would stall all blocks, so it's not
-    /// called at all, and thus becomes equivalent to returning `Again`.
-    ///
-    /// Discouraged: Prefer `WaitForStream` when possible.
-    WaitForFunc(Box<dyn Fn() + 'a>),
 
     /// Signal that we're waiting for a stream. Either an input or output
     /// stream.
@@ -72,11 +58,6 @@ pub enum BlockRet<'a> {
     /// in the next invocation the other stream is the one preventing progress,
     /// then return that then. Don't worry about not being able to return a
     /// single status indicating both are being waited for.
-    ///
-    /// This is preferred over `WaitForFunc`, since graph executors know more
-    /// about the stream. E.g. if a block says that it's waiting for more data
-    /// on a stream, and the stream writer side goes away, then the waiting
-    /// block will never be satisfied, and is therefore also shut down.
     WaitForStream(&'a dyn StreamWait, usize),
 
     /// Block indicates that it will never produce more input.
@@ -96,7 +77,6 @@ impl std::fmt::Debug for BlockRet<'_> {
             match self {
                 BlockRet::Again => "Again".to_string(),
                 BlockRet::Pending => "Pending".to_string(),
-                BlockRet::WaitForFunc(_) => "WaitForFunc".to_string(),
                 BlockRet::WaitForStream(_, n) => format!("WaitForStream(_, {n})"),
                 BlockRet::EOF => "EOF".to_string(),
             }
@@ -173,10 +153,6 @@ mod tests {
     fn blockret_fmt() {
         assert_eq!(format!("{:?}", BlockRet::Again), "Again");
         assert_eq!(format!("{:?}", BlockRet::Pending), "Pending");
-        assert_eq!(
-            format!("{:?}", BlockRet::WaitForFunc(Box::new(|| {}))),
-            "WaitForFunc"
-        );
         assert_eq!(
             format!("{:?}", BlockRet::WaitForStream(&FakeWait {}, 1)),
             "WaitForStream(_, 1)"
