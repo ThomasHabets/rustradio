@@ -568,14 +568,14 @@ impl<T: Copy> Buffer<T> {
             let modded_n: usize = *n % s.capacity();
             if end < s.capacity() && start < s.capacity() {
                 // Start and end are both in first half.
-                if modded_n < start || modded_n > end {
+                if modded_n < start || modded_n >= end {
                     continue;
                 }
             } else {
                 // Start and end can't both be in the second half, and
                 // end has to be higher than start.
                 assert!(start < s.capacity());
-                if modded_n > (end % s.capacity()) && modded_n < start {
+                if modded_n >= (end % s.capacity()) && modded_n < start {
                     continue;
                 }
             }
