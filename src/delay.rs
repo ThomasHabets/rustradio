@@ -53,14 +53,14 @@ impl<T: Sample> Block for Delay<T> {
         {
             let o = self.dst.write_buf()?;
             if o.is_empty() {
-                return Ok(BlockRet::Again);
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
         }
         if self.current_delay > 0 {
             let mut o = self.dst.write_buf()?;
             let n = std::cmp::min(self.current_delay, o.len());
             if n == 0 {
-                return Ok(BlockRet::WaitForStream(&self.src, 1));
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
             o.slice()[..n].fill(T::default());
             o.produce(n, &[]);
@@ -80,9 +80,14 @@ impl<T: Sample> Block for Delay<T> {
         let mut o = self.dst.write_buf()?;
         let (input, tags) = self.src.read_buf()?;
         let n = std::cmp::min(input.len(), o.len());
-        o.fill_from_slice(input.slice());
+        if n == 0 {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
+        o.fill_from_slice(&input.slice()[..n]);
         o.produce(n, &tags);
         input.consume(n);
+
+        // TODO: loop, or be specific about which one we're waiting for.
         Ok(BlockRet::Again)
     }
 }
