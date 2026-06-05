@@ -54,10 +54,14 @@ where
         }
         let mut v = Vec::with_capacity(n / size + 1);
 
+        // Handle case of buffer containing just a partial T.
         let mut steal = 0;
         if !self.buf.is_empty() {
-            steal = size - self.buf.len();
+            steal = (size - self.buf.len()).min(n);
             self.buf.extend(&buffer[0..steal]);
+            if self.buf.len() < size {
+                return Ok(BlockRet::Pending);
+            }
             v.push(T::parse(&self.buf)?);
             self.buf.clear();
         }
