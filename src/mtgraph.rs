@@ -163,6 +163,9 @@ impl crate::graph::GraphRunner for MTGraph {
     fn generate_stats(&self) -> Option<String> {
         let elapsed = self.spent_time?.as_secs_f64();
         let elapsed_cpu = self.spent_cpu_time?.as_secs_f64();
+        if self.block_stats.is_empty() {
+            return Some("No blocks\n".to_string());
+        }
         let total = self
             .block_stats
             .values()
