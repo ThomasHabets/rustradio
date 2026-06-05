@@ -8,6 +8,7 @@ use crate::stream::{NCReadStream, ReadStream, Tag};
 use crate::{Result, Sample};
 
 type NCStorage<T> = Vec<(T, Vec<Tag>)>;
+
 /// `VectorSinkNoCopy`.
 ///
 /// This block is really only useful for unit tests. It takes what comes from
@@ -36,8 +37,11 @@ impl<T: Send + Sync> Block for VectorSinkNoCopy<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut s = self.storage.lock().unwrap();
         while let Some((val, tags)) = self.src.pop() {
-            if s.len() > self.max_size {
-                todo!();
+            if s.len() == self.max_size {
+                return Err(crate::Error::msg(format!(
+                    "VectorSinkNoCopy got more messages than it could handle ({})",
+                    self.max_size,
+                )));
             }
             s.push((val, tags));
         }
