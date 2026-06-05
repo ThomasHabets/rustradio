@@ -122,12 +122,20 @@ impl Block for SymbolSync {
         if o.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
-        // TODO: get rid of unwrap.
-        let mut out_clock = self.out_clock.as_mut().map(|x| x.write_buf().unwrap());
+        if let Some(ref clock) = self.out_clock
+            && clock.free() == 0
+        {
+            return Ok(BlockRet::WaitForStream(clock, 1));
+        }
+        let mut out_clock = match self.out_clock.as_ref().map(|x| x.write_buf()) {
+            None => None,
+            Some(Ok(x)) => Some(x),
+            Some(Err(e)) => return Err(e),
+        };
 
         let mut n = 0; // Samples consumed.
         let mut opos = 0; // Current output position.
-        let olen = o.len();
+        let olen = out_clock.as_ref().map_or(o.len(), |s| o.len().min(s.len()));
         let oslice = o.slice();
         for sample in input.iter() {
             n += 1;
