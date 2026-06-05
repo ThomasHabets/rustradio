@@ -24,9 +24,9 @@ use std::fmt::Write;
 
 use log::debug;
 
-use crate::{Result, Sample};
 use crate::block::{Block, BlockEOF, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
+use crate::{Result, Sample};
 
 /// Turn samples into text.
 ///

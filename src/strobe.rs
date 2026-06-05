@@ -6,7 +6,7 @@ use crate::stream::NCWriteStream;
 /// Message strobe.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct Strobe<T: Send + Clone> {
+pub struct Strobe<T: Send + Clone + Sync> {
     #[rustradio(out)]
     dst: NCWriteStream<T>,
     #[rustradio(default)]
@@ -16,7 +16,7 @@ pub struct Strobe<T: Send + Clone> {
     data: T,
 }
 
-impl<T: Send + Clone> Block for Strobe<T> {
+impl<T: Send + Sync + Clone> Block for Strobe<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let now = std::time::Instant::now();
         match self.last {
@@ -28,11 +28,11 @@ impl<T: Send + Clone> Block for Strobe<T> {
         }
         if self.dst.remaining() == 0 {
             log::warn!("Strobe: destination buffer overflow, dropping output");
-        } else {
-            // TODO: Add tags?
-            self.dst.push(self.data.clone(), &[]);
-            self.last = Some(now);
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
+        // TODO: Add tags?
+        self.dst.push(self.data.clone(), &[]);
+        self.last = Some(now);
         Ok(BlockRet::Pending)
     }
 }
