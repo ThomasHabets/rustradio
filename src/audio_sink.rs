@@ -147,7 +147,9 @@ impl AudioSink {
         AudioSinkBuilder::default()
     }
     fn new_opts(src: ReadStream<Float>, sample_rate: u64, dev: Option<&str>) -> Result<Self> {
-        let output = CpalOutput::new(sample_rate as u32, dev)?;
+        let sample_rate =
+            u32::try_from(sample_rate).map_err(|_| Error::msg("audio sample rate exceeds u32"))?;
+        let output = CpalOutput::new(sample_rate, dev)?;
         let (tx, rx) = std::sync::mpsc::channel();
         let cancel = CancellationToken::new();
         let c2 = cancel.clone();
