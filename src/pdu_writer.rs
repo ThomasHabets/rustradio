@@ -46,7 +46,7 @@ impl<T: Sample> Block for PduWriter<T> {
         };
         let name = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Time went backwards")
+            .map_err(|e| crate::Error::other(e, "getting system time"))?
             .as_micros()
             .to_string();
         let full = Path::new(&self.dir).join(name);
