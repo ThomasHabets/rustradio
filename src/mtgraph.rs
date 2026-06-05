@@ -90,6 +90,7 @@ impl crate::graph::GraphRunner for MTGraph {
                             Ok(v) => v,
                             Err(e) => {
                                 error!("Block work function for {name} failed: {e}");
+                                cancel_token.cancel();
                                 return Err(e);
                             }
                         };
