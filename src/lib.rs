@@ -663,20 +663,14 @@ pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
         in_s
     };
     let (nums, mul) = {
-        let last = match s.chars().last() {
-            None => return Err("empty string is not a frequency".into()),
-            Some(ch) => ch.to_lowercase().next().ok_or("Empty string")?,
+        let Some((last_idx, last)) = s.char_indices().next_back() else {
+            return Err("empty string is not a frequency".into());
         };
-        if s.len() > 1 {
-            let rest = &s[..(s.len() - 1)];
-            match last {
-                'k' => (rest, 1_000.0),
-                'm' => (rest, 1_000_000.0),
-                'g' => (rest, 1_000_000_000.0),
-                _ => (s, 1.0),
-            }
-        } else {
-            (s, 1.0)
+        match last.to_ascii_lowercase() {
+            'k' if last_idx > 0 => (&s[..last_idx], 1_000.0),
+            'm' if last_idx > 0 => (&s[..last_idx], 1_000_000.0),
+            'g' if last_idx > 0 => (&s[..last_idx], 1_000_000_000.0),
+            _ => (s, 1.0),
         }
     };
     Ok(nums.parse::<f64>().map_err(|e| {
