@@ -15,6 +15,9 @@ fn strip_fend(data: &[u8]) -> &[u8] {
         .iter()
         .position(|&b| b != KISS_FEND)
         .unwrap_or(data.len());
+    if start == data.len() {
+        return &[];
+    }
     let end = data
         .iter()
         .rposition(|&b| b != KISS_FEND)
