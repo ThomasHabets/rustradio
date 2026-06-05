@@ -183,6 +183,9 @@ impl GraphRunner for Graph {
     fn generate_stats(&self) -> Option<String> {
         let elapsed = self.spent_time?;
         let elapsed_cpu = self.spent_cpu_time?.as_secs_f64();
+        if self.blocks.is_empty() {
+            return Some("No blocks\n".to_string());
+        }
         let total = self
             .times
             .iter()
