@@ -513,7 +513,7 @@ impl<T> NCWriteStream<T> {
     #[must_use]
     pub fn remaining(&self) -> usize {
         let has = self.inner.lock.lock().unwrap().len();
-        self.inner.capacity - has
+        self.inner.capacity.saturating_sub(has)
     }
 }
 
