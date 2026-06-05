@@ -57,7 +57,7 @@ impl Block for SignalSourceComplex {
             *to = from;
         }
         o.produce(n, &[]);
-        Ok(BlockRet::Again)
+        Ok(BlockRet::WaitForStream(&self.dst, 1))
     }
 }
 
@@ -107,13 +107,13 @@ impl Block for SignalSourceFloat {
         let n = o.len();
         o.slice()
             .iter_mut()
-            .zip(self)
+            .zip(self.take(n))
             .map(|(to, from)| {
                 *to = from;
             })
             .for_each(drop);
         o.produce(n, &[]);
-        Ok(BlockRet::Again)
+        Ok(BlockRet::WaitForStream(&self.dst, 1))
     }
 }
 /* vim: textwidth=80
