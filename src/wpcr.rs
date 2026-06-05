@@ -64,8 +64,12 @@ impl Block for Midpointer {
             warn!("Midpointer got NaN");
         } else {
             let (mut a, mut b): (Vec<Float>, Vec<Float>) = v.iter().partition(|&t| *t > mean);
-            a.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            b.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            if a.is_empty() || b.is_empty() {
+                warn!("Midpointer got a burst without samples on both sides of mean");
+                return Ok(BlockRet::Again);
+            }
+            a.sort_by(|a, b| a.total_cmp(b));
+            b.sort_by(|a, b| a.total_cmp(b));
             let high = a[a.len() / 2];
             let low = b[b.len() / 2];
             let offset = low + (high - low) / 2.0;
@@ -223,7 +227,7 @@ fn find_best_bin(data: &[Complex]) -> Option<usize> {
         .take(data.len())
         .skip(skip)
         .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .unwrap()
+        .expect("can't happen: could not find a max bin")
         * 0.8;
 
     // Pick the first value that's above 80% of max and not still heading upwards.
