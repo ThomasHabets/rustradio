@@ -42,6 +42,9 @@ where
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;
         let size = T::size();
+        if o.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
         let mut buffer = vec![0; o.len()];
         // TODO: this read blocks.
         let n = self.stream.read(&mut buffer[..])?;
