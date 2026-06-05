@@ -41,7 +41,7 @@ impl<T: Sample> Block for VecToStream<T> {
         };
         let mut o = self.dst.write_buf()?;
         if n > o.len() {
-            return Ok(BlockRet::WaitForStream(&self.src, n));
+            return Ok(BlockRet::WaitForStream(&self.dst, n));
         }
         let (v, mut tags) = self
             .src
