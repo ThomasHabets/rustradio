@@ -115,7 +115,7 @@ where
         } else {
             vec![]
         };
-        if self.repeat.count() == 0 {
+        if self.pos == 0 && self.repeat.count() == 0 {
             tags.push(Tag::new(0, "VectorSource::first", TagValue::Bool(true)));
         }
         let mut os = self.dst.write_buf()?;
