@@ -400,9 +400,18 @@ impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
     fn id(&self) -> usize {
         self.id
     }
-    fn wait(&self, _need: usize) -> bool {
-        // TODO: actually wait.
-        self.closed()
+    fn wait(&self, need: usize) -> bool {
+        let capacity = self.inner.capacity;
+        let l = self
+            .inner
+            .cv
+            .wait_timeout_while(
+                self.inner.lock.lock().unwrap(),
+                std::time::Duration::from_millis(100),
+                |s| capacity.saturating_sub(s.len()) < need,
+            )
+            .unwrap();
+        capacity.saturating_sub(l.0.len()) < need && self.closed()
     }
     #[cfg(feature = "async")]
     async fn wait_async(&self, _need: usize) -> bool {
