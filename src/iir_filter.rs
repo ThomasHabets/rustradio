@@ -63,6 +63,7 @@ where
 {
     /// Create new IIR from the provided taps.
     pub fn new(taps: &[T]) -> Self {
+        assert!(!taps.is_empty());
         Self {
             taps: taps.to_vec(),
             buf: VecDeque::new(),
