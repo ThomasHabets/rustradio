@@ -115,12 +115,11 @@ impl<T: Sample> Block for VectorSink<T> {
         let mut storage = self.storage.lock().unwrap();
         let (i, tags) = self.src.read_buf()?;
         let ilen = i.len();
-        let n = std::cmp::min(ilen, self.max_size - storage.0.len());
-        // Maybe limit number of tags, too?
+        let n = self.max_size.saturating_sub(storage.0.len()).min(ilen);
         if n > 0 {
             storage.0.extend(&i.slice()[..n]);
             storage.1.extend(tags);
-            i.consume(ilen);
+            i.consume(n);
         }
         Ok(BlockRet::WaitForStream(&self.src, 1))
     }
