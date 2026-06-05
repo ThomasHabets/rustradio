@@ -29,6 +29,7 @@ impl CmaEqualizer {
         step_size: Float,
         src: ReadStream<Complex>,
     ) -> (Self, ReadStream<Complex>) {
+        assert_ne!(ntaps, 0);
         let mut taps = vec![Complex::default(); ntaps];
         taps[0] = Complex::new(1.0, 0.0);
         let (dst, dr) = crate::stream::new_stream();
