@@ -107,7 +107,11 @@ impl AsyncGraph {
         let mut errors = Vec::new();
         for task in tasks.into_iter() {
             match task.await {
-                Ok(name) => info!("Task exited with status {name:?}"),
+                Ok(Ok(name)) => info!("Task exited with status {name:?}"),
+                Ok(Err(e)) => {
+                    error!("Task failed: {e}!");
+                    errors.push(format!("Task failed: {e}"));
+                }
                 Err(e) => {
                     error!("Task failed: {e}!");
                     errors.push(format!("Task failed: {e}"));
