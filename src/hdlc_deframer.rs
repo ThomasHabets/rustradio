@@ -190,6 +190,10 @@ impl HdlcDeframer {
                         self.decoded += 1;
                         self.dst.push(bytes, tags);
                     } else {
+                        if bytes.len() < 2 {
+                            trace!("Packet too short for CRC: {}", bytes.len());
+                            return Ok(State::Synced((0, Vec::with_capacity(self.max_size))));
+                        }
                         let data = &bytes[..bytes.len() - 2];
                         let got_crc = u16::from_le_bytes(bytes[bytes.len() - 2..].try_into()?);
                         let (newdata, crc, fixed) = find_right_crc(data, got_crc, self.fix_bits);
@@ -222,6 +226,9 @@ impl HdlcDeframer {
 
 impl Block for HdlcDeframer {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        if self.dst.remaining() == 0 {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
         let (input, _tags) = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
