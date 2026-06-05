@@ -220,11 +220,16 @@ impl Block for AuDecode {
                 self.state = DecodeState::WaitingHeader(data_offset as usize);
             }
             DecodeState::WaitingHeader(data_offset) => {
-                let header_rest_len = data_offset - 8;
+                let header_rest_len = data_offset
+                    .checked_sub(8)
+                    .ok_or_else(|| Error::msg("AU data offset smaller than fixed header"))?;
                 if i.len() < header_rest_len {
                     return Ok(BlockRet::WaitForStream(&self.src, header_rest_len));
                 }
                 let head = i.iter().take(header_rest_len).copied().collect::<Vec<_>>();
+                if head.len() < 16 {
+                    return Err(Error::msg("AU header is too short"));
+                }
                 if Encoding::Pcm16 as u32 != u32::from_be_bytes(head[4..8].try_into().unwrap()) {
                     return Err(Error::msg("only PCM16 encoding supported"));
                 }
@@ -241,6 +246,7 @@ impl Block for AuDecode {
                         "AU block only supports one channel currently, got {channels}"
                     )));
                 }
+                i.consume(header_rest_len);
                 self.state = DecodeState::Data;
             }
             DecodeState::Data => {
