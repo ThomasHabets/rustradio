@@ -120,6 +120,9 @@ impl Block for AuEncode {
         let mut o = self.dst.write_buf()?;
         if let Some(h) = &self.header {
             let n = std::cmp::min(h.len(), o.len());
+            if n == 0 {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
             o.fill_from_slice(&h[..n]);
             o.produce(n, &[]);
             self.header.as_mut().unwrap().drain(0..n);
