@@ -90,6 +90,9 @@ pub struct KissDecode {
 impl Block for KissDecode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
+            if self.dst.remaining() == 0 {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
             let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
@@ -156,6 +159,9 @@ pub struct KissFrame {
 impl Block for KissFrame {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
+            if self.dst.remaining() == 0 {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
             let old_state = std::mem::replace(&mut self.state, FrameState::Unsynced);
             self.state = match old_state {
                 FrameState::Unsynced => {
@@ -234,6 +240,9 @@ pub struct KissEncode {
 impl Block for KissEncode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
+            if self.dst.remaining() == 0 {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
             let Some((x, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
