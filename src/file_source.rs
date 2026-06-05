@@ -110,6 +110,8 @@ where
                     self.repeat
                 );
                 if self.repeat.again() {
+                    // If the file is empty, then this will basically busyloop.
+                    // But who knows, the user may start writing to it later?
                     self.f.seek(std::io::SeekFrom::Start(0))?;
                     return Ok(BlockRet::Again);
                 }
