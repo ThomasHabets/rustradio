@@ -142,8 +142,7 @@ impl crate::graph::GraphRunner for MTGraph {
             debug!("Waiting for {name}");
             let j = th
                 .join()
-                .expect("joining thread")
-                .expect("block exit status");
+                .map_err(|e| crate::Error::msg(format!("thread {name} panicked: {e:?}")))??;
             debug!("Thread {name} finished with {j:?}");
             self.block_stats.insert((n, name), j);
         }
