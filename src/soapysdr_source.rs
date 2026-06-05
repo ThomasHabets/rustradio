@@ -378,6 +378,9 @@ impl Block for SoapySdrSource {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let timeout_us = 10_000;
         let mut o = self.dst.write_buf()?;
+        if o.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
         let n = match self.stream.read(&mut [&mut o.slice()], timeout_us) {
             Ok(x) => x,
             Err(e) => {
