@@ -53,8 +53,9 @@ impl Block for QuadratureDemod {
             if out.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let n = inp.len().min(out.len());
-            let n1 = n - 1;
+            let n1 = (inp.len() - 1).min(out.len());
+            let n = n1 + 1;
+            debug_assert!(n1 > 0, "{n} {n1} {} {}", inp.len(), out.len());
             let o = &mut out.slice()[..n1];
             let i = &inp.slice()[..n];
             if self.tmp.len() < n {
@@ -166,8 +167,45 @@ impl FastFM {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::blocks::VectorSource;
+    use crate::blocks::{SignalSourceComplex, VectorSource};
     use crate::tests::assert_almost_equal_float;
+
+    #[test]
+    fn fill_out() -> Result<()> {
+        // Fill the quad input stream.
+        let (mut src, prev);
+        {
+            (src, prev) = SignalSourceComplex::new(1200.0, 100.0, 1.0);
+            src.work()?;
+            let (o, _) = prev.read_buf()?;
+            assert_eq!(o.len(), 512_000);
+            drop(o);
+        }
+
+        // Run quad once.
+        // Get one less, because quad demod is a difference.
+        let (mut b, out) = QuadratureDemod::new(prev, 1.0);
+        b.work()?;
+        assert_eq!(out.read_buf()?.0.len(), 511_999);
+
+        // Fill the quad input stream again. One element is still there, so this
+        // adds 511999.
+        src.work()?;
+
+        // Run quad once more. Because floats are half the size, we get twice as
+        // many, and we can fit them all.
+        b.work()?;
+        assert_eq!(out.read_buf()?.0.len(), 2 * 511_999);
+
+        // Fill the quad input stream one more time.
+        src.work()?;
+
+        // Run quad one last time. This fills the output buffer.
+        b.work()?;
+        assert_eq!(out.read_buf()?.0.len(), 2 * 512_000);
+
+        Ok(())
+    }
 
     #[test]
     fn quad_nulls() -> Result<()> {
