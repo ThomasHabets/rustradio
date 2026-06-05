@@ -96,6 +96,12 @@ pub struct Window(pub Vec<Float>);
 ///
 /// <https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows>
 fn hamming(ntaps: usize, a0: Float) -> Window {
+    if ntaps == 0 {
+        return Window(vec![]);
+    }
+    if ntaps == 1 {
+        return Window(vec![1.0]);
+    }
     let a1 = 1.0 - a0;
     let m = (ntaps - 1) as Float;
     Window(
