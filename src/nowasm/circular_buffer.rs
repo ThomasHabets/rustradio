@@ -472,6 +472,9 @@ impl<T: Copy> Buffer<T> {
     pub(in crate::nowasm::circular_buffer) fn consume(&self, n: usize) {
         use std::ops::Bound::{Excluded, Included};
 
+        if n == 0 {
+            return;
+        }
         let mut s = self.state.lock.lock().unwrap();
         assert!(
             n <= s.used,
