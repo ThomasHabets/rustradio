@@ -59,6 +59,13 @@ where
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, tags) = self.src.read_buf()?;
+        if i.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
+        }
+        let l = i.len().min(self.dst.remaining());
+        if l == 0 {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
 
         let tags: HashMap<usize, Vec<Tag>> =
             tags.into_iter()
@@ -68,7 +75,7 @@ where
                     acc
                 });
 
-        i.iter().enumerate().for_each(|(n, s)| {
+        i.iter().take(l).enumerate().for_each(|(n, s)| {
             let ts = tags
                 .get(&(n as TagPos))
                 .map(|ts| {
@@ -80,7 +87,6 @@ where
                 .unwrap_or_default();
             self.dst.push(format!["{s:?} {ts}"], &[]);
         });
-        let l = i.slice().len();
         i.consume(l);
         Ok(BlockRet::WaitForStream(&self.src, 1))
     }
