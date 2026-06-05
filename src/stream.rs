@@ -345,6 +345,10 @@ struct NCInner<T> {
     // Waiting for read.
     #[cfg(feature = "async")]
     acvr: tokio::sync::Notify,
+
+    // Waiting for write.
+    #[cfg(feature = "async")]
+    acvw: tokio::sync::Notify,
 }
 
 /// A stream of noncopyable objects (e.g. Vec / PDUs).
@@ -414,9 +418,23 @@ impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
         capacity.saturating_sub(l.0.len()) < need && self.closed()
     }
     #[cfg(feature = "async")]
-    async fn wait_async(&self, _need: usize) -> bool {
-        // TODO: actually wait.
-        self.closed()
+    async fn wait_async(&self, need: usize) -> bool {
+        let capacity = self.inner.capacity;
+        if capacity.saturating_sub(self.inner.lock.lock().unwrap().len()) >= need {
+            return false;
+        }
+        loop {
+            let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
+            tokio::select! {
+                _ = sleep => break,
+                _ = self.inner.acvw.notified() => {
+                    if capacity.saturating_sub(self.inner.lock.lock().unwrap().len()) >= need {
+                        return false;
+                    }
+                },
+            }
+        }
+        capacity.saturating_sub(self.inner.lock.lock().unwrap().len()) < need && self.closed()
     }
     fn closed(&self) -> bool {
         Arc::strong_count(&self.inner) == 1
@@ -443,6 +461,10 @@ pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
         // Waiting for read.
         #[cfg(feature = "async")]
         acvr: tokio::sync::Notify::new(),
+
+        // Waiting for write.
+        #[cfg(feature = "async")]
+        acvw: tokio::sync::Notify::new(),
     });
     let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     (
@@ -468,6 +490,8 @@ impl<T> NCReadStream<T> {
             .pop_front()
             .map(|v| (v.val, v.tags));
         self.inner.cv.notify_all();
+        #[cfg(feature = "async")]
+        self.inner.acvw.notify_one();
         ret
     }
 
