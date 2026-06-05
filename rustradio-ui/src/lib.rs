@@ -147,6 +147,12 @@ pub enum WorkerToMainRef<'a, App: ApplicationSpecific = AppEmpty> {
     FloatStreams(Vec<FloatStreamCow<'a>>),
 
     ComplexStreams(Vec<ComplexStreamCow<'a>>),
+
+    /// Float PDU streams captured in the worker graph.
+    ///
+    /// TODO: this should only be the one packet per packet, right?
+    /// TODO: make this borrow.
+    FloatPduStreams(Vec<FloatPduStream>),
 }
 
 impl<App: ApplicationSpecific> TryInto<wasm_bindgen::JsValue> for WorkerToMain<App> {
