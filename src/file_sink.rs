@@ -100,6 +100,7 @@ impl<T: Sample> FileSink<T> {
                 Mode::Append => std::fs::File::options()
                     .read(false)
                     .append(true)
+                    .create(true)
                     .open(&filename),
             }
             .map_err(|e| Error::file_io(e, &filename))?,
@@ -235,6 +236,7 @@ impl<T> NoCopyFileSink<T> {
                 Mode::Append => std::fs::File::options()
                     .read(false)
                     .append(true)
+                    .create(true)
                     .open(&filename),
             }
             .map_err(|e| Error::file_io(e, &filename))?,
