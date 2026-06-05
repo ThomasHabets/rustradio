@@ -22,8 +22,9 @@ g.add(Box::new(sink));
 */
 use std::fmt::Write;
 
-use crate::{Result, Sample};
+use log::debug;
 
+use crate::{Result, Sample};
 use crate::block::{Block, BlockEOF, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
@@ -43,6 +44,7 @@ impl<T> ToText<T> {
     /// Create new `ToText` block.
     #[must_use]
     pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
+        debug!("ToText set up with zero inputs. This is probably not intentional");
         let (dst, dr) = crate::stream::new_stream();
         (Self { srcs, dst }, dr)
     }
@@ -56,6 +58,9 @@ impl<T> BlockEOF for ToText<T> {
 
 impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        if self.srcs.is_empty() {
+            return Ok(BlockRet::EOF);
+        }
         // TODO: This implementation locks and unlocks a lot, as it
         // aquires samples.  Ideally it should process
         // min(self.srcs...) samples, or until output buffer is full,
