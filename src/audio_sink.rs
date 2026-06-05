@@ -187,8 +187,10 @@ impl Drop for AudioSink {
         self.sender.take(); // Ends the stream to cpal.
         if let Some(handle) = self.audio_thread.take() {
             handle.thread().unpark();
-            if let Err(e) = handle.join().expect("audio stream thread failed") {
-                error!("Audio stream thread failed: {e}");
+            match handle.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => error!("Audio stream thread failed: {e}"),
+                Err(e) => error!("Audio stream thread panicked: {e:?}"),
             }
         }
     }
