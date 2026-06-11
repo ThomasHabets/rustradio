@@ -84,6 +84,10 @@ impl<T: Sample> Block for Delay<T> {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         o.fill_from_slice(&input.slice()[..n]);
+        let tags = tags
+            .into_iter()
+            .filter(|tag| tag.pos() < n)
+            .collect::<Vec<_>>();
         o.produce(n, &tags);
         input.consume(n);
 
