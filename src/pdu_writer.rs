@@ -44,14 +44,20 @@ impl<T: Sample> Block for PduWriter<T> {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
             Some((x, _tags)) => x,
         };
-        let name = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|e| crate::Error::other(e, "getting system time"))?
-            .as_micros()
-            .to_string();
+        let name = format!(
+            "{}-{}",
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_err(|e| crate::Error::other(e, "getting system time"))?
+                .as_micros(),
+            self.files_written
+        );
         let full = Path::new(&self.dir).join(name);
         debug!("Saving PDU to {full:?}");
-        let mut f = std::fs::File::create(full)?;
+        let mut f = std::fs::File::options()
+            .write(true)
+            .create_new(true)
+            .open(full)?;
         let mut v = Vec::with_capacity(T::size() * packet.len());
         for s in &packet {
             v.extend(&s.serialize());
