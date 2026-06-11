@@ -112,6 +112,7 @@ where
                 if self.repeat.again() {
                     // If the file is empty, then this will basically busyloop.
                     // But who knows, the user may start writing to it later?
+                    self.buf.clear();
                     self.f.seek(std::io::SeekFrom::Start(0))?;
                     return Ok(BlockRet::Again);
                 }
@@ -247,6 +248,22 @@ mod tests {
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14, -3.14, 1.0, 3.0, 3.14, -3.14];
         assert_eq!(res.slice(), correct);
+        Ok(())
+    }
+
+    #[test]
+    fn source_repeat_discards_partial_tail() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let tmpfn = tmpd.path().join("delme.bin");
+        std::fs::write(&tmpfn, [1, 0, 0, 0, 0xff])?;
+
+        let (mut src, src_out) = FileSource::<u32>::builder(&tmpfn)
+            .repeat(crate::Repeat::finite(2))
+            .build()?;
+        while !matches![src.work()?, BlockRet::EOF] {}
+
+        let (res, _) = src_out.read_buf()?;
+        assert_eq!(res.slice(), &[1, 1]);
         Ok(())
     }
 
