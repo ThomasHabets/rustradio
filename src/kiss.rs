@@ -78,6 +78,9 @@ fn unescape(data: &[u8]) -> Result<Vec<u8>> {
 
 /// Decode KISS frame.
 ///
+/// This means trimming away `FEND` from both sides, and unescaping `HDLC`
+/// bytes.
+///
 /// <https://en.wikipedia.org/wiki/KISS_(amateur_radio_protocol)>
 ///
 /// TODO: Tag with other KISS stuff like channel.
@@ -204,12 +207,13 @@ impl Block for KissFrame {
                             done = true;
                             break;
                         }
-                        if v.len() < MAX_LEN {
-                            v.push(sample);
+                        v.push(sample);
+                        if v.len() > MAX_LEN {
+                            break;
                         }
                     }
                     i.consume(n);
-                    if v.len() == MAX_LEN {
+                    if v.len() > MAX_LEN {
                         FrameState::Unsynced
                     } else if done {
                         // TODO: add tags.
@@ -403,6 +407,34 @@ mod tests {
         b.work()?;
         let (o, _) = prev.pop().unwrap();
         assert_eq!(o, &[0, 1, 2, 3]);
+        Ok(())
+    }
+
+    #[test]
+    fn frame_accepts_exact_max_len() -> Result<()> {
+        let mut data = vec![KISS_FEND];
+        data.extend(vec![1; MAX_LEN]);
+        data.push(KISS_FEND);
+        let (mut src, prev) = VectorSource::new(data);
+        src.work()?;
+        let (mut b, prev) = KissFrame::new(prev);
+        b.work()?;
+        let (o, _) = prev.pop().unwrap();
+        assert_eq!(o.len(), MAX_LEN);
+        assert!(prev.pop().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn frame_rejects_over_max_len() -> Result<()> {
+        let mut data = vec![KISS_FEND];
+        data.extend(vec![1; MAX_LEN + 1]);
+        data.push(KISS_FEND);
+        let (mut src, prev) = VectorSource::new(data);
+        src.work()?;
+        let (mut b, prev) = KissFrame::new(prev);
+        b.work()?;
+        assert!(prev.pop().is_none());
         Ok(())
     }
 }
