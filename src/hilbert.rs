@@ -99,6 +99,10 @@ impl Block for Hilbert {
             });
         }
 
+        let tags = tags
+            .into_iter()
+            .filter(|tag| tag.pos() < n)
+            .collect::<Vec<_>>();
         oo.produce(n, &tags);
 
         self.history[..self.ntaps].clone_from_slice(&iv[n..len]);
