@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream};
-use crate::{Complex, Float, Result};
+use crate::{Complex, Error, Float, Result};
 
 /// Run FFT on message.
 #[derive(rustradio_macros::Block)]
@@ -32,6 +32,13 @@ impl Block for Fft {
             let Some((msg, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
+            if msg.len() != self.fft.len() {
+                return Err(Error::msg(format!(
+                    "FFT expected {} samples, got {}",
+                    self.fft.len(),
+                    msg.len()
+                )));
+            }
             let out = self.process_one(&msg);
             self.dst.push(out, tags);
         }
@@ -62,6 +69,20 @@ mod tests {
         assert_eq!(tags, &[]);
 
         // Should be empty now.
+        assert!(out.pop().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_wrong_size() -> Result<()> {
+        let mut planner = rustfft::FftPlanner::new();
+        let fft = planner.plan_fft_forward(4);
+        let (root, r) = new_nocopy_stream();
+        let (mut f, out) = Fft::new(r, fft);
+        root.push(vec![Complex::default(); 3], &[]);
+
+        let err = f.work().unwrap_err();
+        assert!(err.to_string().contains("expected 4 samples"));
         assert!(out.pop().is_none());
         Ok(())
     }
