@@ -36,6 +36,10 @@ impl<T: Sample + std::fmt::Debug> Block for Head<T> {
             let len = usize::try_from(len)?;
 
             o.slice()[..len].copy_from_slice(&i.slice()[..len]);
+            let tags = tags
+                .into_iter()
+                .filter(|tag| tag.pos() < len)
+                .collect::<Vec<_>>();
             o.produce(len, &tags);
             i.consume(len);
         }
