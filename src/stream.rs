@@ -540,6 +540,8 @@ impl<T> NCWriteStream<T> {
             tags: tags.into(),
         });
         self.inner.cv.notify_all();
+        #[cfg(feature = "async")]
+        self.inner.acvr.notify_waiters();
     }
 
     /// Remaining capacity.
