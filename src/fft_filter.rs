@@ -59,6 +59,7 @@ pub mod rr_fftw {
         #[must_use]
         pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
             let mut taps_fft = taps.into();
+            assert!(!taps_fft.is_empty());
             let tap_len = taps_fft.len();
             let fft_size = calc_fft_size(taps_fft.len());
             // Create FFT planners.
@@ -142,6 +143,7 @@ pub mod rr_rustfft {
         #[must_use]
         pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
             let taps = taps.into();
+            assert!(!taps.is_empty());
             let fft_size = calc_fft_size(taps.len());
             let mut planner = rustfft::FftPlanner::new();
             let fft = planner.plan_fft_forward(fft_size);
@@ -425,6 +427,10 @@ impl<T: Engine> Block for FftFilterFloat<T> {
             for (i, samp) in outer_in.iter().take(n).enumerate() {
                 o[i] = Complex::new(*samp, 0.0);
             }
+            let tags = tags
+                .into_iter()
+                .filter(|tag| tag.pos() < n)
+                .collect::<Vec<_>>();
             inner_to.produce(n, &tags);
             outer_in.consume(n);
         }
@@ -443,6 +449,10 @@ impl<T: Engine> Block for FftFilterFloat<T> {
             for (i, samp) in inner_from.iter().take(n).enumerate() {
                 o[i] = samp.re;
             }
+            let tags = tags
+                .into_iter()
+                .filter(|tag| tag.pos() < n)
+                .collect::<Vec<_>>();
             inner_from.consume(n);
             outer_to.produce(n, &tags);
         }
