@@ -31,6 +31,8 @@ pub trait Filter<T: Sample>: Send {
     fn filter(&mut self, input: T) -> T;
 
     /// Fill filter history with the given value.
+    ///
+    /// Mainly meant for testing
     fn fill(&mut self, s: T);
 }
 
@@ -46,7 +48,7 @@ pub trait ClampedFilter<T: Sample + Clamp>: Filter<T> {
 /// Finite impulse response filter.
 ///
 /// An IIR filter is like a FIR but feeds back the output, meaning while
-/// intended to dampen, it never full loses its "history". Hence "infinite".
+/// intended to dampen, it never fully loses its "history". Hence "infinite".
 ///
 /// IIR filters are a bit more complicated than FIR filters, but can also be
 /// more efficient.
@@ -92,6 +94,7 @@ where
     }
 
     fn fill(&mut self, s: T) {
+        self.buf.clear();
         for _ in 0..(self.taps.len() - 1) {
             self.buf.push_back(s);
         }
@@ -188,6 +191,16 @@ mod tests {
         assert_eq!(f.filter(100.0), 200.0);
         assert_eq!(f.filter(100.0), 290.0);
         assert_eq!(f.filter(200.0), 481.0);
+        Ok(())
+    }
+
+    #[test]
+    fn fill_replaces_existing_history() -> Result<()> {
+        let mut f = IirFilter::new(&[1.0f32, 1.0, 1.0]);
+        f.fill(1.0);
+        assert_eq!(f.filter(2.0), 4.0);
+        f.fill(1.0);
+        assert_eq!(f.filter(2.0), 4.0);
         Ok(())
     }
 }
