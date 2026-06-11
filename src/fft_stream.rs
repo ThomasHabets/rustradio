@@ -146,7 +146,7 @@ mod tests {
         let (mut to_pdu, pdu_out) = StreamToPdu::new(fft_out, TAG_FRAME, 4, 1);
 
         assert!(matches!(fft.work()?, BlockRet::Again));
-        assert!(matches!(to_pdu.work()?, BlockRet::Again));
+        assert!(matches!(to_pdu.work()?, BlockRet::WaitForStream(_, 1)));
 
         let (first, tags) = pdu_out.pop().unwrap();
         assert_eq!(first, vec![Complex::default(); 4]);

@@ -48,6 +48,9 @@ pub struct StreamToPdu<T: Sample> {
     dst: NCWriteStream<Vec<T>>,
     tag: String,
     buf: Vec<T>,
+
+    // Count how many samples are left of the tail.
+    // `None` means that we are not currently inside the tail.
     endcounter: Option<usize>,
     max_size: usize,
     tail: usize,
@@ -77,7 +80,7 @@ impl<T: Sample> StreamToPdu<T> {
     }
 
     /// Burst has arrived. File it.
-    fn done(&mut self) {
+    fn file_burst(&mut self) {
         let mut delme = Vec::with_capacity(self.max_size);
         std::mem::swap(&mut delme, &mut self.buf);
         debug!(
@@ -106,7 +109,8 @@ fn get_tag_val_bool(tags: &HashMap<(TagPos, &str), &Tag>, pos: TagPos, key: &str
 
 impl<T: Sample> Block for StreamToPdu<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        if self.dst.remaining() == 0 {
+        let mut output_space = self.dst.remaining();
+        if output_space == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         let (input, tags) = self.src.read_buf()?;
@@ -124,23 +128,38 @@ impl<T: Sample> Block for StreamToPdu<T> {
 
         for (i, sample) in input.iter().enumerate() {
             //eprintln!("sample: {i} {sample:?}, {:?}", self.endcounter);
+
             if let Some(c) = self.endcounter {
+                // We are inside the tail.
                 self.buf.push(*sample);
                 self.endcounter = Some(c - 1);
                 if c == 1 {
-                    self.done();
+                    self.file_burst();
+                    output_space -= 1;
+                    if output_space == 0 {
+                        input.consume(i + 1);
+                        return Ok(BlockRet::WaitForStream(&self.dst, 1));
+                    }
                 }
             } else if let Some(tv) = get_tag_val_bool(&tags, i as TagPos, &self.tag) {
+                // We are currently on the start or end of the burst.
                 if tv {
                     // Start of burst, save first sample.
                     self.buf.push(*sample);
                 } else {
                     // End of burst.
+
+                    // TODO: if we have not seen the start of burst, discard.
                     if self.tail > 0 {
                         self.buf.push(*sample);
                     }
                     if self.tail <= 1 {
-                        self.done();
+                        self.file_burst();
+                        output_space -= 1;
+                        if output_space == 0 {
+                            input.consume(i + 1);
+                            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+                        }
                     } else {
                         self.endcounter = Some(self.tail - 1);
                     }
@@ -150,14 +169,17 @@ impl<T: Sample> Block for StreamToPdu<T> {
                 self.buf.push(*sample);
             }
             if self.buf.len() > self.max_size {
-                // Too long. Discard buffer and stop saving.
+                debug!(
+                    "StreamToPdu: Burst too lang (max {}). Discarding",
+                    self.max_size
+                );
                 self.buf.clear();
                 self.endcounter = None;
             }
         }
         let n = input.len();
         input.consume(n);
-        Ok(BlockRet::Again)
+        Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }
 
@@ -172,7 +194,6 @@ mod tests {
         let (mut src, src_out) = VectorSource::builder(vec![Complex::default(); 100]).build()?;
         let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, 0);
         assert!(matches![src.work()?, BlockRet::EOF]);
-        assert!(matches![b.work()?, BlockRet::Again]);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         assert!(out.pop().is_none());
         Ok(())
@@ -207,7 +228,6 @@ mod tests {
                 .build()?;
             let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, tail);
             assert!(matches![src.work()?, BlockRet::EOF]);
-            assert!(matches![b.work()?, BlockRet::Again]);
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
             let (burst, tags) = out.pop().unwrap();
             assert_eq!(burst, want);
@@ -230,7 +250,7 @@ mod tests {
                 .build()?;
             let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, tail);
             assert!(matches![src.work()?, BlockRet::EOF]);
-            assert!(matches![b.work()?, BlockRet::Again]);
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
             assert!(out.pop().is_none());
         }
         Ok(())
@@ -247,7 +267,6 @@ mod tests {
             .build()?;
         let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, 0);
         assert!(matches![src.work()?, BlockRet::EOF]);
-        assert!(matches![b.work()?, BlockRet::Again]);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         let (burst, tags) = out.pop().unwrap();
         assert_eq!(burst, &[4, 5, 6, 7]);
