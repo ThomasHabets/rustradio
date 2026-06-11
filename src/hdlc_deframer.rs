@@ -120,7 +120,12 @@ impl HdlcDeframer {
         self.keep_checksum = val;
     }
 
-    fn update_state(&mut self, bit: u8, stream_pos: u64) -> Result<State> {
+    fn update_state(
+        &mut self,
+        bit: u8,
+        stream_pos: u64,
+        output_space: &mut usize,
+    ) -> Result<State> {
         Ok(match &mut self.state {
             State::Unsynced(v) => {
                 let n = (*v >> 1) | (bit << 7);
@@ -189,6 +194,7 @@ impl HdlcDeframer {
                     if self.keep_checksum {
                         self.decoded += 1;
                         self.dst.push(bytes, tags);
+                        *output_space -= 1;
                     } else {
                         if bytes.len() < 2 {
                             trace!("Packet too short for CRC: {}", bytes.len());
@@ -213,6 +219,7 @@ impl HdlcDeframer {
                         self.decoded += 1;
                         debug!("HdlcDeframer: Correctly decoded packet: {data:?}");
                         self.dst.push(data.to_vec(), tags);
+                        *output_space -= 1;
                     }
                 }
 
@@ -226,22 +233,28 @@ impl HdlcDeframer {
 
 impl Block for HdlcDeframer {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        if self.dst.remaining() == 0 {
-            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        loop {
+            let mut output_space = self.dst.remaining();
+            if output_space == 0 {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
+            let (input, _tags) = self.src.read_buf()?;
+            if input.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            }
+            let mut to_consume = 0;
+            for bit in input.iter().copied() {
+                // This is a bit ugly in that it destructively creates the
+                // new state. The old state is moved from.
+                self.state = self.update_state(bit, self.stream_pos, &mut output_space)?;
+                self.stream_pos += 1;
+                to_consume += 1;
+                if output_space == 0 {
+                    break;
+                }
+            }
+            input.consume(to_consume);
         }
-        let (input, _tags) = self.src.read_buf()?;
-        if input.is_empty() {
-            return Ok(BlockRet::WaitForStream(&self.src, 1));
-        }
-        for bit in input.iter().copied() {
-            // This is a bit ugly in that it destructively creates the
-            // new state. The old state is moved from.
-            self.state = self.update_state(bit, self.stream_pos)?;
-            self.stream_pos += 1;
-        }
-        let n = input.len();
-        input.consume(n);
-        Ok(BlockRet::Again)
     }
 }
 
