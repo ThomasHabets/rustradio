@@ -273,6 +273,7 @@ where
         // Sanity check the generated output.
         assert!(out_n <= out.len());
 
+        tags.retain(|tag| tag.pos() < n);
         input.consume(n);
         if self.deci == 1 {
             out.produce(out_n, &tags);
