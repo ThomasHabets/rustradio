@@ -270,7 +270,11 @@ impl<T: Sample + Type> SigMFSourceBuilder<T> {
 pub struct SigMFSource<T: Sample> {
     file: std::fs::File,
     meta: SigMF,
+
+    // Position in file where the data starts, and its length. Fixed.
     range: (u64, u64),
+
+    // Number of bytes left to read.
     left: u64,
     repeat: Repeat,
     buf: Vec<u8>,
@@ -557,8 +561,13 @@ where
     T: Sample<Type = T> + std::fmt::Debug + Type,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        if self.left == 0 {
+        let sample_size = T::size();
+        if u64::try_from(self.buf.len())? + self.left < u64::try_from(sample_size)? {
             if self.repeat.again() {
+                // If the file is empty, then this will basically busyloop.
+                //
+                // But at least that's consistent with `FileSource`.
+                self.buf.clear();
                 self.file.seek(std::io::SeekFrom::Start(self.range.0))?;
                 self.left = self.range.1;
             } else {
@@ -569,7 +578,6 @@ where
         if o.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
-        let sample_size = T::size();
         let have = self.buf.len() / sample_size;
         let want = o.len();
         if have == 0 {
@@ -578,22 +586,46 @@ where
             assert_ne!(want_bytes, 0);
             let mut buffer = vec![0; want_bytes];
             let n = self.file.read(&mut buffer)?;
-            assert!(n <= left);
-            // Can't get EOF here.
-            assert_ne!(n, 0);
             self.left -= n as u64;
             self.buf.extend(&buffer[..n]);
         }
         let have = self.buf.len() / sample_size;
         let samples = std::cmp::min(have, want);
+        if samples == 0 {
+            return Ok(BlockRet::WaitForStream(
+                &self.dst,
+                sample_size - self.buf.len(),
+            ));
+        }
         o.fill_from_iter(
             self.buf
                 .chunks_exact(sample_size)
                 .take(samples)
                 .map(|d| T::parse(d).expect("failed to parse a sample")),
         );
+        // TODO: add tags just like FileSource.
         o.produce(samples, &[]);
         self.buf.drain(..(samples * sample_size));
         Ok(BlockRet::WaitForStream(&self.dst, 1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+
+    #[test]
+    fn source_partial_tail_makes_progress_to_eof() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let base = tmpd.path().join("partial");
+        let meta = serde_json::to_string(&SigMF::new("rf32_le".into()))?;
+        std::fs::write(base_append(&base, "-meta"), meta)?;
+        std::fs::write(base_append(&base, "-data"), [0xff])?;
+
+        let (mut src, out) = SigMFSource::<Float>::builder(base).build()?;
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        assert!(out.read_buf()?.0.is_empty());
+        Ok(())
     }
 }
