@@ -39,6 +39,7 @@ impl FftStream {
     /// Create a new `FftStream`.
     #[must_use]
     pub fn new(src: ReadStream<Complex>, size: usize) -> (Self, ReadStream<Complex>) {
+        assert_ne!(size, 0, "FFT size must be nonzero");
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
         let (dst, dr) = crate::stream::new_stream();
