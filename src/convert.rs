@@ -66,7 +66,7 @@ impl<T: Sample<Type = T>> Block for Parse<T> {
             // TODO: handle tags.
             let (i, _) = self.src.read_buf()?;
             if i.len() < T::size() {
-                return Ok(BlockRet::WaitForStream(&self.src, 1));
+                return Ok(BlockRet::WaitForStream(&self.src, T::size()));
             }
             let mut o = self.dst.write_buf()?;
             if o.is_empty() {
@@ -305,8 +305,23 @@ impl ComplexToFloat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block::BlockRet;
     use crate::blocks::VectorSinkNoCopy;
-    use crate::stream::{Tag, TagValue, new_nocopy_stream};
+    use crate::stream::{Tag, TagValue, new_nocopy_stream, new_stream};
+
+    #[test]
+    fn parse_waits_for_full_sample() -> Result<()> {
+        let (tx, rx) = new_stream();
+        {
+            let mut w = tx.write_buf()?;
+            w.slice()[0] = 1;
+            w.produce(1, &[]);
+        }
+        drop(tx);
+        let (mut p, _out) = Parse::<u32>::new(rx);
+        assert!(matches![p.work()?, BlockRet::WaitForStream(_, 4)]);
+        Ok(())
+    }
 
     #[test]
     fn ncmap_identity() -> Result<()> {
