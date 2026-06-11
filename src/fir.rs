@@ -297,7 +297,7 @@ where
 pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Vec<Complex>> {
     use rustfft::FftPlanner;
 
-    if taps != window.0.len() {
+    if taps == 0 || taps != window.0.len() {
         return None;
     }
 
@@ -306,6 +306,9 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Opti
     for (low, high) in bands {
         let a = (low * scale).floor() as usize;
         let b = (high * scale).ceil() as usize;
+        if a > taps || b > taps {
+            return None;
+        }
         for n in a..b {
             ideal[n] = Complex::new(1.0, 0.0);
             ideal[taps - n - 1] = Complex::new(1.0, 0.0);
@@ -615,5 +618,11 @@ mod tests {
                 Complex::new(0.002010403, 0.0),
             ],
         );
+    }
+
+    #[test]
+    fn multiband_rejects_invalid_ranges() {
+        assert!(multiband(&[(0.0, 1.0)], 0, &Window(vec![])).is_none());
+        assert!(multiband(&[(0.0, 3.0)], 8, &Window(vec![1.0; 8])).is_none());
     }
 }
