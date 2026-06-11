@@ -118,6 +118,13 @@ fn blackman(m: usize) -> Window {
     // Blackman's "not very serious proposal" magic value: 0.16.
     const A: Float = 0.16;
 
+    if m == 0 {
+        return Window(vec![]);
+    }
+    if m == 1 {
+        return Window(vec![1.0]);
+    }
+
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
@@ -156,6 +163,13 @@ fn blackman_harris(m: usize) -> Window {
     const A2: Float = 0.14128;
     const A3: Float = 0.01168;
 
+    if m == 0 {
+        return Window(vec![]);
+    }
+    if m == 1 {
+        return Window(vec![1.0]);
+    }
+
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
@@ -168,4 +182,20 @@ fn blackman_harris(m: usize) -> Window {
         b.push(A0 - A1 * t1.cos() + A2 * t2.cos() - A3 * t3.cos());
     }
     Window(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_tap_windows_are_unity() {
+        for window_type in [
+            WindowType::Blackman,
+            WindowType::BlackmanHarris,
+            WindowType::Hamming,
+        ] {
+            assert_eq!(window_type.make_window(1).0, vec![1.0]);
+        }
+    }
 }
