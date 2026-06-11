@@ -66,6 +66,7 @@ where
         if l == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
+        let wait_for_dst = l < i.len();
 
         let tags: HashMap<usize, Vec<Tag>> =
             tags.into_iter()
@@ -88,7 +89,11 @@ where
             self.dst.push(format!["{s:?} {ts}"], &[]);
         });
         i.consume(l);
-        Ok(BlockRet::WaitForStream(&self.src, 1))
+        if wait_for_dst {
+            Ok(BlockRet::WaitForStream(&self.dst, 1))
+        } else {
+            Ok(BlockRet::WaitForStream(&self.src, 1))
+        }
     }
 }
 
@@ -135,5 +140,25 @@ where
         let l = i.slice().len();
         i.consume(l);
         Ok(BlockRet::WaitForStream(&self.src, 1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::BlockRet;
+    use crate::stream::StreamWait;
+
+    #[test]
+    fn debug_filter_waits_for_output_when_output_fills() -> Result<()> {
+        let src = ReadStream::from_slice(&vec![0u8; 1_001]);
+        let (mut b, _out) = DebugFilter::new(src);
+        let dst_id = b.dst.id();
+        let ret = b.work()?;
+        let BlockRet::WaitForStream(stream, 1) = ret else {
+            panic!("unexpected return: {ret:?}");
+        };
+        assert_eq!(stream.id(), dst_id);
+        Ok(())
     }
 }
