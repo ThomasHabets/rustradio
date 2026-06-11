@@ -11,7 +11,11 @@ use crate::{Result, Sample};
 pub struct Delay<T: Sample> {
     delay: usize,
     current_delay: usize,
+
+    // Skip is the number of samples we're needlessly ahead. This can happen
+    // when the delay changes mid stream.
     skip: usize,
+
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -50,49 +54,53 @@ impl<T: Sample> Delay<T> {
 
 impl<T: Sample> Block for Delay<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        {
-            let o = self.dst.write_buf()?;
+        loop {
+            // Check if we need to catch up.
+            let (input, tags) = self.src.read_buf()?;
+            if self.skip > 0 {
+                let n = std::cmp::min(input.len(), self.skip);
+                if n == 0 {
+                    return Ok(BlockRet::WaitForStream(&self.src, 1));
+                }
+                input.consume(n);
+                debug!("Delay: skipped {n}");
+                self.skip -= n;
+                continue;
+            }
+
+            // Everything except catch-up requires output space.
+            let mut o = self.dst.write_buf()?;
             if o.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-        }
-        if self.current_delay > 0 {
-            let mut o = self.dst.write_buf()?;
-            let n = std::cmp::min(self.current_delay, o.len());
-            if n == 0 {
-                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+
+            // Check if we're still delaying, thus filling with default.
+            if self.current_delay > 0 {
+                let n = std::cmp::min(self.current_delay, o.len());
+                o.slice()[..n].fill(T::default());
+                o.produce(n, &[]);
+                self.current_delay -= n;
+                continue;
             }
-            o.slice()[..n].fill(T::default());
-            o.produce(n, &[]);
-            self.current_delay -= n;
-        }
-        {
-            let (input, _tags) = self.src.read_buf()?;
-            let a = input.len();
-            let n = std::cmp::min(a, self.skip);
-            if n == 0 && a == 0 {
+
+            // Neither skipping nor delaying. just plain copy.
+            if input.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
-            input.consume(n);
-            debug!("Delay: skipped {n}");
-            self.skip -= n;
-        }
-        let mut o = self.dst.write_buf()?;
-        let (input, tags) = self.src.read_buf()?;
-        let n = std::cmp::min(input.len(), o.len());
-        if n == 0 {
-            return Ok(BlockRet::WaitForStream(&self.dst, 1));
-        }
-        o.fill_from_slice(&input.slice()[..n]);
-        let tags = tags
-            .into_iter()
-            .filter(|tag| tag.pos() < n)
-            .collect::<Vec<_>>();
-        o.produce(n, &tags);
-        input.consume(n);
 
-        // TODO: loop, or be specific about which one we're waiting for.
-        Ok(BlockRet::Again)
+            let n = std::cmp::min(input.len(), o.len());
+            assert_ne!(
+                n, 0,
+                "can't happen: we already checked both input and output"
+            );
+            o.fill_from_slice(&input.slice()[..n]);
+            let tags = tags
+                .into_iter()
+                .filter(|tag| tag.pos() < n)
+                .collect::<Vec<_>>();
+            o.produce(n, &tags);
+            input.consume(n);
+        }
     }
 }
 
