@@ -91,6 +91,10 @@ impl Block for CmaEqualizer {
             os[i] = output_sample;
         }
 
+        let tags = tags
+            .into_iter()
+            .filter(|tag| tag.pos() < len)
+            .collect::<Vec<_>>();
         output.produce(len, &tags);
         input.consume(len);
 
