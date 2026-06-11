@@ -216,16 +216,27 @@ where
     F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        // TODO: handle tags.
-        loop {
-            let Some((x, tags)) = self.src.pop() else {
+        let mut output_space = self.dst.remaining();
+        while output_space > 0 {
+            let Some((packet, tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            // eprintln!("{tags:?}");
-            for (packet, new_tags) in (self.map)(x, tags) {
+
+            // Because we don't know how many packets will be generated, we err
+            // on the side of overflowing.
+            //
+            // We only have three options:
+            // 1. Buffer here.
+            // 2. Buffer in the destination (chosen).
+            // 3. Discard the generated packets and hope that the mapper is
+            //    idempotent, generating them again later.
+            let fanout = (self.map)(packet, tags);
+            output_space = output_space.saturating_sub(fanout.len());
+            for (packet, new_tags) in fanout {
                 self.dst.push(packet, new_tags);
             }
         }
+        Ok(BlockRet::WaitForStream(&self.dst, 1))
     }
 }
 
@@ -360,6 +371,26 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn ncmap_doesnt_drop_when_dst_full() -> Result<()> {
+        let (tx, rx) = new_nocopy_stream();
+        let (mut m, out) = NCMap::new(rx, "nctest", |packet: Vec<u8>, tags| {
+            (0..=1000u32)
+                .map(|n| ((n, packet.clone()), tags.clone()))
+                .collect()
+        });
+        tx.push(vec![7], &[]);
+        assert!(matches![m.work()?, BlockRet::WaitForStream(_, 1)]);
+        assert_eq!(out.pop().unwrap().0, (0, vec![7]));
+        assert!(matches![m.work()?, BlockRet::WaitForStream(_, 1)]);
+        for n in 1..=1000u32 {
+            assert_eq!(out.pop().unwrap().0, (n, vec![7]));
+        }
+        assert!(out.pop().is_none());
+        Ok(())
+    }
+
     #[test]
     fn ncmap_double() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
