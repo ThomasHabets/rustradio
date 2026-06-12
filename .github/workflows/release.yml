@@ -25,6 +25,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Cargo install
+        run: cargo install --locked tickbox
+
       - name: Verify package
         run: cargo publish --dry-run --locked
 
