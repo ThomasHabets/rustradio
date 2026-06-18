@@ -22,7 +22,7 @@ pub const TAG_END: &str = "PduToStream::end";
 ///
 /// Empty PDUs are silently discarded.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new)]
+#[rustradio(crate, noeof, new)]
 pub struct PduToStream<T: Sample> {
     #[rustradio(in)]
     src: NCReadStream<Vec<T>>,
@@ -38,6 +38,12 @@ pub struct PduToStream<T: Sample> {
     tags: Vec<Tag>,
     #[rustradio(default)]
     pdu_len: u64,
+}
+
+impl<T: Sample> crate::block::BlockEOF for PduToStream<T> {
+    fn eof(&mut self) -> bool {
+        self.buf.is_empty() && self.src.eof()
+    }
 }
 
 impl<T: Sample> Block for PduToStream<T> {
