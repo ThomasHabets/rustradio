@@ -11,6 +11,9 @@ pub struct WriterSink<T: Sample> {
     writer: Box<dyn Write + Send>,
     #[rustradio(in)]
     src: ReadStream<T>,
+
+    #[rustradio(default)]
+    buf: Vec<u8>,
 }
 
 impl<T: Sample> WriterSink<T> {
@@ -18,6 +21,7 @@ impl<T: Sample> WriterSink<T> {
         Self {
             writer: Box::new(writer),
             src,
+            buf: Vec::new(),
         }
     }
 }
@@ -27,17 +31,25 @@ where
     T: Sample<Type = T> + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        // TODO: make nonblock.
         loop {
+            if !self.buf.is_empty() {
+                let rc = self.writer.write(&self.buf)?;
+                self.buf.drain(..rc);
+                if !self.buf.is_empty() {
+                    return Ok(BlockRet::Pending);
+                }
+                continue;
+            }
+
             let (i, _) = self.src.read_buf()?;
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
-            // TODO: very inefficient.
-            let b = i.slice()[0].serialize();
-            let rc = self.writer.write(&b)?;
-            assert_eq!(rc, b.len(), "TODO: handle short writes");
-            i.consume(1);
+            for s in i.iter().map(|x| x.serialize()) {
+                self.buf.extend(s);
+            }
+            let n = i.len();
+            i.consume(n);
         }
     }
 }
