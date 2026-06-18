@@ -849,7 +849,7 @@ pub mod tests {
             "\nleft: {left:?}\nright: {right:?}",
         );
         for i in 0..left.len() {
-            let dist = left[i] - right[i];
+            let dist = (left[i] - right[i]).abs();
             if dist > 0.001 {
                 assert_eq!(left[i], right[i], "\nleft: {left:?}\nright: {right:?}");
             }
