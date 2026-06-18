@@ -115,6 +115,12 @@ impl<T: Sample> Block for VectorSink<T> {
         let mut storage = self.storage.lock().unwrap();
         let (i, tags) = self.src.read_buf()?;
         let ilen = i.len();
+        if storage.0.len() == self.max_size && ilen > 0 {
+            return Err(crate::Error::msg(format!(
+                "VectorSinkgot more data than it could handle ({})",
+                self.max_size,
+            )));
+        }
         let n = self.max_size.saturating_sub(storage.0.len()).min(ilen);
         if n > 0 {
             storage.0.extend(&i.slice()[..n]);
@@ -158,8 +164,8 @@ mod tests {
         assert!(matches![r, BlockRet::EOF], "Got {r:?}");
         let r = sink.work()?;
         assert!(matches![r, BlockRet::WaitForStream(_, 1)], "Got {r:?}");
-        let r = sink.work()?;
-        assert!(matches![r, BlockRet::WaitForStream(_, 1)], "Got {r:?}");
+        let r = sink.work();
+        assert!(r.is_err(), "Got {r:?}");
         assert_eq!(sink.hook().data().samples(), &[0, 1, 2]);
         assert_eq!(
             sink.hook().data().tags(),
