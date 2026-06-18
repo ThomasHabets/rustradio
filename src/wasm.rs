@@ -2,7 +2,6 @@
 //!
 //! It must fail gracefully when used in a web worker.
 use std::collections::BTreeMap;
-use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -91,14 +90,15 @@ struct BufferState<T> {
     wpos: usize,
     used: usize,
     // Only the range described by rpos/used is initialized.
-    stream: Vec<MaybeUninit<T>>,
+    stream: Vec<T>,
     tags: BTreeMap<TagPos, Vec<Tag>>,
 
     // Extra accounting to ensure that we never read uninitialized content.
     #[cfg(debug_assertions)]
     initialized: Vec<bool>,
 }
-impl<T> BufferState<T> {
+
+impl<T: Default> BufferState<T> {
     const _CHECK_NOT_ZERO: () = assert!(
         std::mem::size_of::<T>() != 0,
         "Zero sized stream members are not supported"
@@ -113,8 +113,7 @@ impl<T> BufferState<T> {
                 "Buffer size ({byte_size}) must be multiple of element size ({member_size})"
             )));
         }
-        let mut stream = Vec::with_capacity(size);
-        stream.resize_with(size, MaybeUninit::uninit);
+        let stream = std::iter::repeat_with(T::default).take(size).collect();
         Ok(Self {
             rpos: 0,
             wpos: 0,
@@ -126,6 +125,9 @@ impl<T> BufferState<T> {
             initialized: vec![false; size],
         })
     }
+}
+
+impl<T> BufferState<T> {
     // Return write range, in samples.
     #[must_use]
     fn write_range(&self) -> (usize, usize) {
@@ -152,41 +154,12 @@ impl<T> BufferState<T> {
     }
 }
 
-impl<T> Drop for BufferState<T> {
-    fn drop(&mut self) {
-        let capacity = self.stream.len();
-        for i in 0..self.used {
-            let pos = (self.rpos + i) % capacity;
-            #[cfg(debug_assertions)]
-            {
-                debug_assert!(self.initialized[pos]);
-                self.initialized[pos] = false;
-            }
-            // SAFETY: BufferState maintains the invariant that exactly the
-            // slots in the read range described by rpos/used are initialized.
-            unsafe {
-                self.stream[pos].assume_init_drop();
-            }
-        }
-        #[cfg(debug_assertions)]
-        {
-            // This is like 30% less time in debug build compared to a loop or
-            // .all/.any.
-            debug_assert_eq!(
-                self.initialized,
-                vec![false; self.size()],
-                "Left some elements undropped"
-            );
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Buffer<T> {
     id: usize,
     state: Mutex<BufferState<T>>,
 }
-impl<T> Buffer<T> {
+impl<T: Default> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
@@ -220,14 +193,6 @@ impl<T> Buffer<T> {
                 debug_assert!(l.initialized[pos]);
                 l.initialized[pos] = false;
             }
-            // SAFETY: n <= used, so every consumed slot is in the initialized
-            // read range described by rpos/used.
-            //
-            // We don't actually expect `T` to be something that implements
-            // `Drop`, but just in case it does.
-            unsafe {
-                l.stream[pos].assume_init_drop();
-            }
             l.tags.remove(&pos);
         }
         l.rpos = (l.rpos + n) % capacity;
@@ -254,8 +219,15 @@ impl<T> Buffer<T> {
         // TODO
         1
     }
+    pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
+        let l = self.state.lock().unwrap();
+        let (start, end) = l.write_range();
+        drop(l);
+        Ok(BufferWriter::new(self, end - start))
+    }
 }
 
+// Produce and creating a read buf inherently requires copying.
 impl<T: Copy> Buffer<T> {
     pub fn produce(&self, samples: &[T], tags: &[Tag]) {
         if samples.is_empty() {
@@ -274,7 +246,7 @@ impl<T: Copy> Buffer<T> {
         let wpos = l.wpos;
         for (i, sample) in samples.iter().copied().enumerate() {
             let pos = (wpos + i) % capacity;
-            l.stream[pos].write(sample);
+            l.stream[pos] = sample;
             #[cfg(debug_assertions)]
             {
                 debug_assert!(!l.initialized[pos]);
@@ -301,12 +273,7 @@ impl<T: Copy> Buffer<T> {
             {
                 debug_assert!(s.initialized[pos]);
             }
-            // SAFETY: BufferState maintains the invariant that exactly the
-            // slots in the read range described by rpos/used are initialized.
-            //
-            // This used to be an `Option` with `expect`, and it never
-            // triggered.
-            stream.push(unsafe { s.stream[pos].assume_init() });
+            stream.push(s.stream[pos]);
         }
         let mut tags = Vec::with_capacity(s.tags.len());
         for (n, ts) in &s.tags {
@@ -321,12 +288,6 @@ impl<T: Copy> Buffer<T> {
         drop(s);
         tags.sort_by_key(Tag::pos);
         Ok((BufferReader::new(self, stream), tags))
-    }
-    pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
-        let l = self.state.lock().unwrap();
-        let (start, end) = l.write_range();
-        drop(l);
-        Ok(BufferWriter::new(self, end - start))
     }
 }
 
@@ -387,6 +348,35 @@ impl<T> BufferWriter<T> {
             stream: Vec::new(),
         }
     }
+    /// Shortcut to save typing for the common operation of copying
+    /// from an iterator.
+    pub fn fill_from_slice(&mut self, src: impl Into<Vec<T>>) {
+        let src = src.into();
+        assert!(
+            src.len() <= self.len,
+            "trying to write {} samples into a {} sample buffer",
+            src.len(),
+            self.len
+        );
+        self.stream = src;
+    }
+    /// Shortcut to save typing for the common operation of copying
+    /// from an iterator.
+    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
+        self.stream = src.into_iter().take(self.len).collect();
+    }
+
+    /// len convenience function.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// is_empty convenience function.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<T: Default> BufferWriter<T> {
@@ -396,28 +386,18 @@ impl<T: Default> BufferWriter<T> {
         if self.stream.len() < self.len {
             self.stream.resize_with(self.len, T::default);
         }
+        debug_assert_eq!(
+            self.stream.len(),
+            self.len(),
+            "Why would the stream len ever be larger than len?"
+        );
         self.stream.as_mut_slice()
     }
 }
+
+// Produce on a Writer needs Copy because the parent buffer will copy from here
+// into the main buffer.
 impl<T: Copy> BufferWriter<T> {
-    /// Shortcut to save typing for the common operation of copying
-    /// from an iterator.
-    pub fn fill_from_slice(&mut self, src: &[T]) {
-        assert!(
-            src.len() <= self.len,
-            "trying to write {} samples into a {} sample buffer",
-            src.len(),
-            self.len
-        );
-        self.stream = src.to_vec();
-    }
-
-    /// Shortcut to save typing for the common operation of copying
-    /// from an iterator.
-    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
-        self.stream = src.into_iter().take(self.len).collect();
-    }
-
     /// Having written into the write buffer, now tell the buffer
     /// we're done. Also here are the tags, with positions relative to
     /// start of buffer.
@@ -441,19 +421,8 @@ impl<T: Copy> BufferWriter<T> {
         );
         self.parent.produce(&self.stream[..n], tags);
     }
-
-    /// len convenience function.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    /// is_empty convenience function.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
 }
+
 pub mod export {
     pub(crate) use super::Instant;
     pub(crate) use super::get_cpu_time;

@@ -177,7 +177,7 @@ pub struct ReadStream<T> {
     circ: Arc<crate::sys::Buffer<T>>,
 }
 
-impl<T: Copy> ReadStream<T> {
+impl<T: Default + Copy> ReadStream<T> {
     /// Create a new stream with initial data in it.
     #[cfg(test)]
     #[must_use]
@@ -210,7 +210,8 @@ impl<T: Copy> ReadStream<T> {
         }
         Arc::clone(&self.circ).read_buf()
     }
-
+}
+impl<T: Copy> ReadStream<T> {
     /// Return true if the needed number of samples will *never* arrive.
     #[must_use]
     pub fn wait_for_read(&self, need: usize) -> bool {
