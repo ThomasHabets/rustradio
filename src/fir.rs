@@ -393,7 +393,7 @@ pub fn low_pass(
 /// Generate hilbert transformer filter.
 #[must_use]
 pub fn hilbert(window: &Window) -> Vec<Float> {
-    assert!(window.0.is_empty());
+    assert!(!window.0.is_empty());
     assert_ne!(window.0.len(), 1);
     let ntaps = window.0.len();
     let mid = (ntaps - 1) / 2;
