@@ -4,7 +4,7 @@
  */
 use crate::{Error, Result, Sample};
 
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockEOF, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 
 fn gcd(mut a: usize, mut b: usize) -> usize {
@@ -96,11 +96,13 @@ impl<T: Sample> RationalResamplerBuilderBoth<T> {
 /// This can be used to easily convert from any sample rate to any other. Just
 /// set decimation to the current rate, and interpolation to the new rate.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, noeof)]
 pub struct RationalResampler<T: Sample> {
     deci: i64,
     interp: i64,
     counter: i64,
+    #[rustradio(default)]
+    pending: Option<T>,
 
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -140,6 +142,7 @@ impl<T: Sample> RationalResampler<T> {
                 interp: i64::try_from(interp)?,
                 deci: i64::try_from(deci)?,
                 counter: 0,
+                pending: None,
                 src,
                 dst,
             },
@@ -151,16 +154,30 @@ impl<T: Sample> RationalResampler<T> {
 impl<T: Sample> Block for RationalResampler<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: retain tags.
-        let (i, _tags) = self.src.read_buf()?;
-        if i.is_empty() {
-            return Ok(BlockRet::WaitForStream(&self.src, 1));
-        }
-
         let mut o = self.dst.write_buf()?;
         if o.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         let mut opos = 0;
+        if let Some(s) = self.pending {
+            while self.counter > 0 {
+                o.slice()[opos] = s;
+                self.counter -= self.deci;
+                opos += 1;
+                if opos == o.len() {
+                    o.produce(opos, &[]);
+                    return Ok(BlockRet::WaitForStream(&self.dst, 1));
+                }
+            }
+            self.pending = None;
+        }
+
+        let (i, _tags) = self.src.read_buf()?;
+        if i.is_empty() {
+            o.produce(opos, &[]);
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
+        }
+
         let mut taken = 0;
         let mut out_full = false;
         'outer: for s in i.iter() {
@@ -172,6 +189,9 @@ impl<T: Sample> Block for RationalResampler<T> {
                 opos += 1;
                 if opos == o.len() {
                     out_full = true;
+                    if self.counter > 0 {
+                        self.pending = Some(*s);
+                    }
                     break 'outer;
                 }
             }
@@ -186,11 +206,18 @@ impl<T: Sample> Block for RationalResampler<T> {
     }
 }
 
+impl<T: Sample> BlockEOF for RationalResampler<T> {
+    fn eof(&mut self) -> bool {
+        self.pending.is_none() && self.src.eof()
+    }
+}
+
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::blocks::VectorSource;
+    use crate::stream::DEFAULT_STREAM_SIZE;
     use crate::tests::assert_almost_equal_complex;
     use crate::{Complex, Float};
 
@@ -246,6 +273,29 @@ mod tests {
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = os.read_buf()?;
         assert_eq!(res.slice(), &[0, 5, 10, 15, 20, 25, 30, 35, 40, 46]);
+        Ok(())
+    }
+
+    #[test]
+    fn interpolation_survives_full_output_buffer() -> Result<()> {
+        let output_capacity = DEFAULT_STREAM_SIZE / std::mem::size_of::<u32>();
+        assert_eq!(output_capacity % 3, 1);
+        let boundary_sample = u32::try_from(output_capacity / 3)?;
+        let input: Vec<u32> = (0..=boundary_sample).collect();
+
+        let (mut src, src_out) = VectorSource::new(input);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        let (mut b, os) = RationalResampler::new(src_out, 3, 1)?;
+
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        let (first, _) = os.read_buf()?;
+        assert_eq!(first.len(), output_capacity);
+        assert_eq!(first.slice()[output_capacity - 1], boundary_sample);
+        first.consume(output_capacity);
+
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        let (second, _) = os.read_buf()?;
+        assert_eq!(second.slice(), &[boundary_sample, boundary_sample]);
         Ok(())
     }
 
