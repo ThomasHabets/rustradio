@@ -332,6 +332,7 @@ impl<T: Engine> Block for FftFilter<T> {
             // Output.
             // TODO: needless copy?
             o.fill_from_slice(&self.buf[..self.nsamples]);
+            let tags: Vec<_> = tags.into_iter().filter(|t| t.pos() < add).collect();
             o.produce(self.nsamples, &tags);
 
             // Stash tail.
