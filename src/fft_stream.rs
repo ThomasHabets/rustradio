@@ -151,11 +151,11 @@ mod tests {
 
         let (first, tags) = pdu_out.pop().unwrap();
         assert_eq!(first, vec![Complex::default(); 4]);
-        assert_eq!(tags, &[]);
+        assert_eq!(tags, &[Tag::new(0, "FftStream::size", TagValue::U64(4)),]);
 
         let (second, tags) = pdu_out.pop().unwrap();
         assert_eq!(second, vec![Complex::default(); 4]);
-        assert_eq!(tags, &[]);
+        assert_eq!(tags, &[Tag::new(0, "FftStream::size", TagValue::U64(4)),]);
         assert!(pdu_out.pop().is_none());
         Ok(())
     }

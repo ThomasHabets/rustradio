@@ -11,16 +11,16 @@ use crate::{Result, Sample};
 enum State<T: Sample> {
     #[default]
     Unsync,
-    Packet(Vec<T>),
-    Tail(Vec<T>, usize),
+    Packet(Vec<T>, Vec<Tag>),
+    Tail(Vec<T>, Vec<Tag>, usize),
 }
 
 impl<T: Sample> State<T> {
     fn len(&self) -> usize {
         match self {
             State::Unsync => 0,
-            State::Packet(p) => p.len(),
-            State::Tail(p, _) => p.len(),
+            State::Packet(p, _) => p.len(),
+            State::Tail(p, _, _) => p.len(),
         }
     }
 }
@@ -29,8 +29,10 @@ impl<T: Sample> std::fmt::Debug for State<T> {
     fn fmt(&self, w: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             State::Unsync => write!(w, "Unsync"),
-            State::Packet(p) => write!(w, "Packet {}", p.len()),
-            State::Tail(p, tail) => write!(w, "Tail {} {tail}", p.len()),
+            State::Packet(p, tags) => write!(w, "Packet len={} tags={}", p.len(), tags.len()),
+            State::Tail(p, tags, tail) => {
+                write!(w, "Tail len={} tail={tail} tags={}", p.len(), tags.len())
+            }
         }
     }
 }
@@ -106,7 +108,7 @@ impl<T: Sample> StreamToPdu<T> {
     }
 
     /// Burst has arrived. File it.
-    fn file_burst(&mut self, v: impl Into<Vec<T>>) {
+    fn file_burst(&mut self, v: impl Into<Vec<T>>, tags: Vec<Tag>) {
         let v = v.into();
         if v.len() > self.max_size {
             return;
@@ -117,7 +119,7 @@ impl<T: Sample> StreamToPdu<T> {
             v.len() * T::size()
         );
         // TODO: record stream pos.
-        self.dst.push(v, &[]);
+        self.dst.push(v, tags);
         self.state = State::Unsync;
     }
 }
@@ -152,6 +154,16 @@ fn get_tag_val_bool(tags: &HashMap<(TagPos, &str), Vec<&Tag>>, pos: TagPos, key:
     }
 }
 
+fn tags_pos_adjust(pos: usize, intags: Option<&Vec<Tag>>) -> Vec<Tag> {
+    intags
+        .map(|v| {
+            v.iter()
+                .map(|e| Tag::new(pos, e.key(), e.val().clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 impl<T: Sample> Block for StreamToPdu<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let output_space = self.dst.remaining();
@@ -172,66 +184,84 @@ impl<T: Sample> Block for StreamToPdu<T> {
             }
             tags
         };
+        let other_tags = {
+            let mut tags: HashMap<usize, Vec<Tag>> = HashMap::new();
+            for e in &intags {
+                if e.key() != self.tag {
+                    tags.entry(e.pos()).or_default().push(e.clone());
+                }
+            }
+            tags
+        };
         trace!("StreamToPdu: tags: {tags:?}");
 
         for (i, sample) in input.iter().enumerate() {
             let tagvalue = get_tag_val_bool(&tags, i as TagPos, &self.tag);
 
-            //eprintln!("State: {:?} & {tagvalue:?}", self.state);
+            eprintln!("State: {:?} & {tagvalue:?}", self.state);
             self.state = match (&mut self.state, tagvalue) {
                 (State::Unsync, BurstTag::None | BurstTag::End) => State::Unsync,
-                (State::Unsync, BurstTag::Start) => State::Packet(vec![*sample]),
+                (State::Unsync, BurstTag::Start) => State::Packet(
+                    vec![*sample],
+                    tags_pos_adjust(0, other_tags.get(&(i as TagPos))),
+                ),
                 (State::Unsync, BurstTag::Both) => {
                     if self.tail > 0 {
-                        State::Tail(vec![*sample], self.tail - 1)
+                        State::Tail(
+                            vec![*sample],
+                            tags_pos_adjust(0, other_tags.get(&(i as TagPos))),
+                            self.tail - 1,
+                        )
                     } else {
-                        self.file_burst(vec![]);
+                        // TODO: is this needed?
+                        self.file_burst(vec![], vec![]);
                         State::Unsync
                     }
                 }
-                (State::Packet(p), BurstTag::Start) => {
-                    // Should we reset the burst? Make sure it's consistent with
+                (State::Packet(p, tags), BurstTag::Start | BurstTag::None) => {
+                    // Should we reset the burst on Start? Make sure it's consistent with
                     // Packet/Both and Tail/Start/Both.
                     let mut p = std::mem::take(p);
+                    let mut tags = std::mem::take(tags);
+                    tags.extend(tags_pos_adjust(p.len(), other_tags.get(&(i as TagPos))));
                     p.push(*sample);
-                    State::Packet(p)
-                }
-                (State::Packet(p), BurstTag::None) => {
-                    let mut p = std::mem::take(p);
-                    p.push(*sample);
-                    State::Packet(p)
+                    State::Packet(p, tags)
                 }
 
                 // Should we reset the burst on `Both`? Make sure it's consistent with
                 // Packet/Start and Tail/Start/Both.
-                (State::Packet(p), BurstTag::Both | BurstTag::End) => {
+                (State::Packet(p, tags), BurstTag::Both | BurstTag::End) => {
                     let mut tail = self.tail;
                     let mut p = std::mem::take(p);
+                    let mut tags = std::mem::take(tags);
                     if tail > 0 {
+                        tags.extend(tags_pos_adjust(p.len(), other_tags.get(&(i as TagPos))));
                         p.push(*sample);
                         tail -= 1;
                     }
                     if tail > 0 {
-                        State::Tail(p, tail)
+                        State::Tail(p, tags, tail)
                     } else {
-                        self.file_burst(p);
+                        self.file_burst(p, tags);
                         State::Unsync
                     }
                 }
 
-                // Ignore tags while in tail.
-                (State::Tail(p, tail), _) => {
+                // Ignore burst tags while in tail. (see sync with above)
+                (State::Tail(p, tags, tail), _) => {
                     //let mut p = std::mem::take(p);
                     if *tail > 0 {
+                        tags.extend(tags_pos_adjust(p.len(), other_tags.get(&(i as TagPos))));
                         p.push(*sample);
                         *tail -= 1;
                     }
                     if *tail == 0 {
                         let p = std::mem::take(p);
-                        self.file_burst(p);
+                        let tags = std::mem::take(tags);
+                        self.file_burst(p, tags);
                         State::Unsync
                     } else {
-                        State::Tail(std::mem::take(p), *tail)
+                        State::Tail(std::mem::take(p), std::mem::take(tags), *tail)
                     }
                 }
             };
@@ -296,7 +326,18 @@ mod tests {
             for w in want.into_iter() {
                 let (burst, tags) = out.pop().unwrap();
                 assert_eq!(burst, w);
-                assert_eq!(tags, &[]);
+                let mut want_tags: Vec<Tag> = Vec::new();
+                if start == 0 && !burst.is_empty() {
+                    want_tags.extend([
+                        Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                        Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                        Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
+                    ]);
+                }
+                if start <= 4 && (end + tail) > 4 {
+                    want_tags.push(Tag::new(4 - start, "test", TagValue::Bool(true)));
+                }
+                assert_eq!(tags, want_tags);
             }
             assert_eq!(out.pop(), None);
         }
@@ -347,7 +388,18 @@ mod tests {
             for w in want.into_iter() {
                 let (burst, tags) = out.pop().unwrap();
                 assert_eq!(burst, w);
-                assert_eq!(tags, &[]);
+                let mut want_tags: Vec<Tag> = Vec::new();
+                if start == 0 && !burst.is_empty() {
+                    want_tags.extend([
+                        Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                        Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                        Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
+                    ]);
+                }
+                if start <= 4 && (end + tail) > 4 {
+                    want_tags.push(Tag::new(4 - start, "test", TagValue::Bool(true)));
+                }
+                assert_eq!(tags, tags);
             }
             assert_eq!(out.pop(), None);
         }
@@ -388,14 +440,14 @@ mod tests {
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         let (burst, tags) = out.pop().unwrap();
         assert_eq!(burst, &[4, 5, 6, 7, 8]);
-        assert_eq!(tags, &[]);
+        assert_eq!(tags, vec![Tag::new(1, "test", TagValue::Bool(true))]);
         assert!(out.pop().is_none());
         Ok(())
     }
 
     #[test]
     fn tags_in_tail() -> Result<()> {
-        for (tags, want) in [
+        for (tags, want, want_extra_tags) in [
             // No tags in tail.
             (
                 vec![
@@ -404,6 +456,7 @@ mod tests {
                     Tag::new(4, "burst", TagValue::Bool(false)),
                 ],
                 vec![2, 3, 4, 5, 6, 7, 8],
+                vec![],
             ),
             // Start in same as end.
             (
@@ -414,6 +467,7 @@ mod tests {
                     Tag::new(4, "burst", TagValue::Bool(true)),
                 ],
                 vec![2, 3, 4, 5, 6, 7, 8],
+                vec![],
             ),
             // Start tag in tail.
             (
@@ -424,6 +478,7 @@ mod tests {
                     Tag::new(5, "burst", TagValue::Bool(true)),
                 ],
                 vec![2, 3, 4, 5, 6, 7, 8],
+                vec![],
             ),
             // End tag in tail.
             (
@@ -434,6 +489,7 @@ mod tests {
                     Tag::new(5, "burst", TagValue::Bool(false)),
                 ],
                 vec![2, 3, 4, 5, 6, 7, 8],
+                vec![],
             ),
             // Both tag in tail.
             (
@@ -445,6 +501,18 @@ mod tests {
                     Tag::new(5, "burst", TagValue::Bool(true)),
                 ],
                 vec![2, 3, 4, 5, 6, 7, 8],
+                vec![],
+            ),
+            // Unrelated tag in end tail.
+            (
+                vec![
+                    Tag::new(1, "burst", TagValue::Bool(true)),
+                    Tag::new(2, "test", TagValue::Bool(true)),
+                    Tag::new(4, "burst", TagValue::Bool(false)),
+                    Tag::new(4, "unrelated", TagValue::Bool(true)),
+                ],
+                vec![2, 3, 4, 5, 6, 7, 8],
+                vec![Tag::new(3, "unrelated", TagValue::Bool(true))],
             ),
             // Unrelated tag in tail.
             (
@@ -455,6 +523,7 @@ mod tests {
                     Tag::new(5, "unrelated", TagValue::Bool(true)),
                 ],
                 vec![2, 3, 4, 5, 6, 7, 8],
+                vec![Tag::new(4, "unrelated", TagValue::Bool(true))],
             ),
         ] {
             eprintln!("\n-=-=-=-=-=-=-=");
@@ -467,7 +536,9 @@ mod tests {
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
             let (burst, tags) = out.pop().unwrap();
             assert_eq!(burst, want);
-            assert_eq!(tags, &[]);
+            let mut want_tags = vec![Tag::new(1, "test", TagValue::Bool(true))];
+            want_tags.extend(want_extra_tags);
+            assert_eq!(tags, want_tags);
             assert!(out.pop().is_none());
         }
         Ok(())
@@ -487,7 +558,7 @@ mod tests {
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         let (burst, tags) = out.pop().unwrap();
         assert_eq!(burst, &[4, 5, 6, 7]);
-        assert_eq!(tags, &[]);
+        assert_eq!(tags, vec![Tag::new(1, "test", TagValue::Bool(true))]);
         assert!(out.pop().is_none());
         Ok(())
     }
