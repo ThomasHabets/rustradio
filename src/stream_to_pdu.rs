@@ -218,7 +218,9 @@ impl<T: Sample> Block for StreamToPdu<T> {
                         State::Unsync
                     }
                 }
-                (State::Tail(p, tail), BurstTag::None) => {
+
+                // Ignore tags while in tail.
+                (State::Tail(p, tail), _) => {
                     //let mut p = std::mem::take(p);
                     if *tail > 0 {
                         p.push(*sample);
@@ -232,11 +234,6 @@ impl<T: Sample> Block for StreamToPdu<T> {
                         State::Tail(std::mem::take(p), *tail)
                     }
                 }
-
-                // Ignore tags while in tail.
-                (state @ State::Tail(_, _), BurstTag::Start) => std::mem::take(state),
-                (state @ State::Tail(_, _), BurstTag::End) => std::mem::take(state),
-                (state @ State::Tail(_, _), BurstTag::Both) => std::mem::take(state),
             };
             if self.state.len() > self.max_size {
                 self.state = State::Unsync;
@@ -393,6 +390,86 @@ mod tests {
         assert_eq!(burst, &[4, 5, 6, 7, 8]);
         assert_eq!(tags, &[]);
         assert!(out.pop().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn tags_in_tail() -> Result<()> {
+        for (tags, want) in [
+            // No tags in tail.
+            (
+                vec![
+                    Tag::new(1, "burst", TagValue::Bool(true)),
+                    Tag::new(2, "test", TagValue::Bool(true)),
+                    Tag::new(4, "burst", TagValue::Bool(false)),
+                ],
+                vec![2, 3, 4, 5, 6, 7, 8],
+            ),
+            // Start in same as end.
+            (
+                vec![
+                    Tag::new(1, "burst", TagValue::Bool(true)),
+                    Tag::new(2, "test", TagValue::Bool(true)),
+                    Tag::new(4, "burst", TagValue::Bool(false)),
+                    Tag::new(4, "burst", TagValue::Bool(true)),
+                ],
+                vec![2, 3, 4, 5, 6, 7, 8],
+            ),
+            // Start tag in tail.
+            (
+                vec![
+                    Tag::new(1, "burst", TagValue::Bool(true)),
+                    Tag::new(2, "test", TagValue::Bool(true)),
+                    Tag::new(4, "burst", TagValue::Bool(false)),
+                    Tag::new(5, "burst", TagValue::Bool(true)),
+                ],
+                vec![2, 3, 4, 5, 6, 7, 8],
+            ),
+            // End tag in tail.
+            (
+                vec![
+                    Tag::new(1, "burst", TagValue::Bool(true)),
+                    Tag::new(2, "test", TagValue::Bool(true)),
+                    Tag::new(4, "burst", TagValue::Bool(false)),
+                    Tag::new(5, "burst", TagValue::Bool(false)),
+                ],
+                vec![2, 3, 4, 5, 6, 7, 8],
+            ),
+            // Both tag in tail.
+            (
+                vec![
+                    Tag::new(1, "burst", TagValue::Bool(true)),
+                    Tag::new(2, "test", TagValue::Bool(true)),
+                    Tag::new(4, "burst", TagValue::Bool(false)),
+                    Tag::new(5, "burst", TagValue::Bool(false)),
+                    Tag::new(5, "burst", TagValue::Bool(true)),
+                ],
+                vec![2, 3, 4, 5, 6, 7, 8],
+            ),
+            // Unrelated tag in tail.
+            (
+                vec![
+                    Tag::new(1, "burst", TagValue::Bool(true)),
+                    Tag::new(2, "test", TagValue::Bool(true)),
+                    Tag::new(4, "burst", TagValue::Bool(false)),
+                    Tag::new(5, "unrelated", TagValue::Bool(true)),
+                ],
+                vec![2, 3, 4, 5, 6, 7, 8],
+            ),
+        ] {
+            eprintln!("\n-=-=-=-=-=-=-=");
+            eprintln!("Testing: {tags:?}");
+            let (mut src, src_out) = VectorSource::builder(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+                .tags(&tags)
+                .build()?;
+            let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, 4);
+            assert!(matches![src.work()?, BlockRet::EOF]);
+            assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+            let (burst, tags) = out.pop().unwrap();
+            assert_eq!(burst, want);
+            assert_eq!(tags, &[]);
+            assert!(out.pop().is_none());
+        }
         Ok(())
     }
 
