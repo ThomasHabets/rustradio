@@ -679,7 +679,7 @@ pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
 }
 
 /// A trait all sample types must implement.
-pub trait Sample: Copy + Default + Send + Sync + 'static {
+pub trait Sample: std::fmt::Debug + Copy + Default + Send + Sync + 'static {
     /// The type of the sample.
     type Type;
 
