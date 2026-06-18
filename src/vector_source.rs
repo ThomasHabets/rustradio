@@ -1,4 +1,6 @@
 //! Generate values from a fixed vector.
+//!
+//! TODO: add `VectorSource::length` too.
 use crate::{Error, Result, Sample};
 
 use crate::Repeat;

@@ -11,7 +11,7 @@ use crate::Result;
 use log::trace;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{ReadStream, WriteStream};
+use crate::stream::{ReadStream, Tag, WriteStream};
 use crate::{Complex, Float};
 
 /// FFT engine.
@@ -211,6 +211,7 @@ pub mod rr_rustfft {
 #[rustradio(crate)]
 pub struct FftFilter<T: Engine> {
     buf: Vec<Complex>,
+    tags: Vec<Tag>,
     nsamples: usize,
     fft_size: usize,
     tail: Vec<Complex>,
@@ -269,6 +270,7 @@ impl<T: Engine> FftFilter<T> {
                 tail: vec![Complex::default(); engine.tap_len()],
                 engine,
                 buf: Vec::with_capacity(fft_size),
+                tags: Vec::new(),
                 nsamples,
             },
             dr,
@@ -303,6 +305,7 @@ impl<T: Engine> Block for FftFilter<T> {
             // Read so that self.buf contains exactly self.nsamples samples.
             let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
             self.buf.extend(input.iter().take(add).copied());
+            self.tags.extend(tags.into_iter().filter(|t| t.pos() < add));
             input.consume(add);
             if self.buf.len() < self.nsamples {
                 /*
@@ -332,8 +335,7 @@ impl<T: Engine> Block for FftFilter<T> {
             // Output.
             // TODO: needless copy?
             o.fill_from_slice(&self.buf[..self.nsamples]);
-            let tags: Vec<_> = tags.into_iter().filter(|t| t.pos() < add).collect();
-            o.produce(self.nsamples, &tags);
+            o.produce(self.nsamples, &self.tags);
 
             // Stash tail.
             for i in 0..self.tail.len() {
@@ -342,6 +344,7 @@ impl<T: Engine> Block for FftFilter<T> {
 
             // Clear buffer. Per above performance comment.
             self.buf.clear();
+            self.tags.clear();
         }
     }
 }
@@ -483,8 +486,9 @@ impl<T: Engine> Block for FftFilterFloat<T> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use crate::blocks::{Head, SignalSourceComplex};
+    use crate::blocks::{Head, SignalSourceComplex, VectorSource};
     use crate::fir::low_pass_complex;
+    use crate::stream::TagValue;
     use crate::window::WindowType;
 
     #[test]
@@ -510,9 +514,8 @@ mod tests {
             head.work()?;
             // Filter the stream.
             fft.work()?;
+            let (out, tags) = out.read_buf()?;
             let out = out
-                .read_buf()?
-                .0
                 .iter()
                 .skip(taps_len) // I get garbage in the beginning.
                 .copied()
@@ -529,10 +532,36 @@ mod tests {
                 (0.0..0.0002).contains(&m),
                 "Signal insufficiently suppressed. Got magnitude {m}"
             );
+            assert_eq!(tags, &[]);
             if total >= samp_rate as usize {
                 break;
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn tag_propagation() -> Result<()> {
+        // Create blocks.
+        let (mut src, o) = VectorSource::builder(vec![Complex::default(); 1024])
+            .repeat(crate::Repeat::finite(2))
+            .build()?;
+        let (mut fft, out) = FftFilter::new(o, [Complex::default()]);
+        src.work()?;
+        src.work()?;
+        fft.work()?;
+        let (out, tags) = out.read_buf()?;
+        assert_eq!(
+            tags,
+            &[
+                Tag::new(0, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(0, "VectorSource::repeat", TagValue::U64(0)),
+                Tag::new(0, "VectorSource::first", TagValue::Bool(true)),
+                Tag::new(1024, "VectorSource::start", TagValue::Bool(true)),
+                Tag::new(1024, "VectorSource::repeat", TagValue::U64(1)),
+            ]
+        );
+        assert_eq!(out.len(), 2048);
         Ok(())
     }
 
