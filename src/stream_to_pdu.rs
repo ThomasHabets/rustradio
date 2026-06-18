@@ -399,7 +399,7 @@ mod tests {
                 if start <= 4 && (end + tail) > 4 {
                     want_tags.push(Tag::new(4 - start, "test", TagValue::Bool(true)));
                 }
-                assert_eq!(tags, tags);
+                assert_eq!(tags, want_tags);
             }
             assert_eq!(out.pop(), None);
         }
