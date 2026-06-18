@@ -43,6 +43,11 @@ impl FftStream {
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
         let (dst, dr) = crate::stream::new_stream();
+        assert!(
+            size < dst.free(),
+            "FFT size ({size}) must be smaller than stream size ({})",
+            dst.free()
+        );
         (
             Self {
                 size,
