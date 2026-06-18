@@ -51,7 +51,6 @@ pub use crate::tcp_source::TcpSource;
 pub use crate::tee::Tee;
 pub use crate::to_text::ToText;
 pub use crate::vco::Vco;
-pub use crate::vec_to_stream::VecToStream;
 pub use crate::vector_sink::{VectorSink, VectorSinkNoCopy};
 pub use crate::vector_source::VectorSource;
 pub use crate::wpcr::{Midpointer, Wpcr};

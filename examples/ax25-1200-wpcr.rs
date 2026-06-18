@@ -125,7 +125,7 @@ fn main() -> Result<()> {
         // Symbol sync.
         Midpointer::new(prev),
         Wpcr::builder(prev).samp_rate(opt.sample_rate).build(),
-        VecToStream::new(prev),
+        PduToStream::new(prev),
         BinarySlicer::new(prev),
         // Delay xor, aka NRZI decode.
         NrziDecode::new(prev),

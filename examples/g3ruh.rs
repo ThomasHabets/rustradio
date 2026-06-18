@@ -216,7 +216,7 @@ fn receiver_wpcr(
         StreamToPdu::new(prev, "burst".to_string(), samp_rate_2 as usize, 11000),
         Midpointer::new(prev),
         Wpcr::builder(prev).samp_rate(samp_rate_2).build(),
-        VecToStream::new(prev),
+        PduToStream::new(prev),
     ])
 }
 

@@ -127,7 +127,7 @@ fn main() -> Result<()> {
         // Symbol sync.
         Wpcr::builder(prev).samp_rate(samp_rate).build(),
         // Turn Vec<Float> into Float.
-        VecToStream::new(prev),
+        PduToStream::new(prev),
         // Turn floats into bits.
         BinarySlicer::new(prev),
         // NRZI decode.
