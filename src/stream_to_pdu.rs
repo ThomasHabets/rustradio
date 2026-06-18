@@ -190,7 +190,8 @@ impl<T: Sample> Block for StreamToPdu<T> {
                     }
                 }
                 (State::Packet(p), BurstTag::Start) => {
-                    // Should we reset the burst? Make sure it's consistent with Packet/Both.
+                    // Should we reset the burst? Make sure it's consistent with
+                    // Packet/Both and Tail/Start/Both.
                     let mut p = std::mem::take(p);
                     p.push(*sample);
                     State::Packet(p)
@@ -201,11 +202,9 @@ impl<T: Sample> Block for StreamToPdu<T> {
                     State::Packet(p)
                 }
 
-                // Should we reset the burst? Make sure it's consistent with
-                // Packet/Start.
-                (State::Packet(p), BurstTag::Both) => State::Tail(std::mem::take(p), self.tail),
-
-                (State::Packet(p), BurstTag::End) => {
+                // Should we reset the burst on `Both`? Make sure it's consistent with
+                // Packet/Start and Tail/Start/Both.
+                (State::Packet(p), BurstTag::Both | BurstTag::End) => {
                     let mut tail = self.tail;
                     let mut p = std::mem::take(p);
                     if tail > 0 {
@@ -233,6 +232,8 @@ impl<T: Sample> Block for StreamToPdu<T> {
                         State::Tail(std::mem::take(p), *tail)
                     }
                 }
+
+                // Ignore tags while in tail.
                 (state @ State::Tail(_, _), BurstTag::Start) => std::mem::take(state),
                 (state @ State::Tail(_, _), BurstTag::End) => std::mem::take(state),
                 (state @ State::Tail(_, _), BurstTag::Both) => std::mem::take(state),
@@ -372,6 +373,26 @@ mod tests {
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
             assert!(out.pop().is_none());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn it_ends_with_both() -> Result<()> {
+        let (mut src, src_out) = VectorSource::builder(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+            .tags(&[
+                Tag::new(3, "burst", TagValue::Bool(true)),
+                Tag::new(4, "test", TagValue::Bool(true)),
+                Tag::new(7, "burst", TagValue::Bool(true)),
+                Tag::new(7, "burst", TagValue::Bool(false)),
+            ])
+            .build()?;
+        let (mut b, out) = StreamToPdu::new(src_out, "burst", 10, 1);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
+        let (burst, tags) = out.pop().unwrap();
+        assert_eq!(burst, &[4, 5, 6, 7, 8]);
+        assert_eq!(tags, &[]);
+        assert!(out.pop().is_none());
         Ok(())
     }
 
