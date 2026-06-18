@@ -34,6 +34,11 @@ where
         loop {
             if !self.buf.is_empty() {
                 let rc = self.writer.write(&self.buf)?;
+                if rc == 0 {
+                    return Err(
+                        std::io::Error::new(std::io::ErrorKind::WriteZero, "WriterSink").into(),
+                    );
+                }
                 self.buf.drain(..rc);
                 if !self.buf.is_empty() {
                     return Ok(BlockRet::Pending);
