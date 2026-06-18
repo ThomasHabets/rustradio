@@ -123,8 +123,13 @@ impl<T: Sample> Block for VectorSink<T> {
         }
         let n = self.max_size.saturating_sub(storage.0.len()).min(ilen);
         if n > 0 {
+            let previous = storage.0.len();
             storage.0.extend(&i.slice()[..n]);
-            storage.1.extend(tags);
+            storage.1.extend(
+                tags.iter()
+                    .filter(|t| t.pos() < n)
+                    .map(|t| Tag::new(t.pos() - previous, t.key(), t.val().clone())),
+            );
             i.consume(n);
         }
         Ok(BlockRet::WaitForStream(&self.src, 1))
