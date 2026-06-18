@@ -268,6 +268,10 @@ impl<T: Sample> Block for StreamToPdu<T> {
             if self.state.len() > self.max_size {
                 self.state = State::Unsync;
             }
+            if self.dst.remaining() == 0 {
+                input.consume(i + 1);
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
         }
         let n = input.len();
         input.consume(n);
