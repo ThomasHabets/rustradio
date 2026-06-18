@@ -516,8 +516,16 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the write buffer.
     pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
+        #[cfg(debug_assertions)]
+        {
+            for t in tags {
+                assert!(
+                    t.pos() < n,
+                    "block producing tags with indexes out of range. tag={t:?}, limit={n}"
+                );
+            }
+        }
         if n == 0 {
-            debug_assert!(tags.is_empty());
             if !tags.is_empty() {
                 error!("produce() called on a stream with 0 entries, but non-empty tags: {tags:?}");
             }
