@@ -198,7 +198,7 @@ impl<T: Sample> Block for StreamToPdu<T> {
         for (i, sample) in input.iter().enumerate() {
             let tagvalue = get_tag_val_bool(&tags, i as TagPos, &self.tag);
 
-            eprintln!("State: {:?} & {tagvalue:?}", self.state);
+            // eprintln!("State: {:?} & {tagvalue:?}", self.state);
             self.state = match (&mut self.state, tagvalue) {
                 (State::Unsync, BurstTag::None | BurstTag::End) => State::Unsync,
                 (State::Unsync, BurstTag::Start) => State::Packet(
