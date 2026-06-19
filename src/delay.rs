@@ -42,7 +42,7 @@ impl<T: Sample> Delay<T> {
     /// Change the delay.
     pub fn set_delay(&mut self, delay: usize) {
         if delay > self.delay {
-            self.current_delay = delay - self.delay;
+            self.current_delay += delay - self.delay;
         } else {
             let cdskip = std::cmp::min(self.current_delay, delay);
             self.current_delay -= cdskip;
@@ -129,6 +129,18 @@ mod tests {
         delay.work()?;
         let (res, _) = o.read_buf()?;
         assert_eq!(res.slice(), vec![0.0f32, 1.0, 2.0, 3.0]);
+        Ok(())
+    }
+
+    #[test]
+    fn delay_increase_before_work_extends_remaining_delay() -> Result<()> {
+        let s = ReadStream::from_slice(&[1u32, 2]);
+        let (mut delay, o) = Delay::new(s, 1);
+
+        delay.set_delay(2);
+        delay.work()?;
+        let (res, _) = o.read_buf()?;
+        assert_eq!(res.slice(), &[0, 0, 1, 2]);
         Ok(())
     }
 
