@@ -12,7 +12,6 @@ use crate::{Complex, Float, Result};
 #[rustradio(crate)]
 pub struct CmaEqualizer {
     taps: Vec<Complex>,
-    coeffs: Vec<Complex>,
     desired_modulus: Float,
     step_size: Float,
     #[rustradio(in)]
@@ -36,7 +35,6 @@ impl CmaEqualizer {
         (
             Self {
                 taps,
-                coeffs: vec![Complex::default(); ntaps],
                 desired_modulus,
                 step_size,
                 src,
@@ -58,37 +56,31 @@ impl Block for CmaEqualizer {
         }
 
         let os = output.slice();
-        if os.len() < self.taps.len() {
-            return Ok(BlockRet::WaitForStream(&self.dst, self.taps.len()));
+        if os.is_empty() {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
 
-        let len = std::cmp::min(is.len(), os.len());
-        let len = std::cmp::min(self.taps.len(), len);
+        let len = std::cmp::min(is.len() - self.taps.len() + 1, os.len());
 
         // Process samples using CMA.
         for i in 0..len {
-            let sample = is[i];
+            let window = &is[i..i + self.taps.len()];
+
+            // Generate the output sample.
+            let output_sample: Complex = self.taps.iter().zip(window).map(|(&t, &s)| t * s).sum();
+            os[i] = output_sample;
 
             // Compute the error signal (e = |y|^2 - R)
             let error = {
-                let magnitude = sample.norm_sqr();
+                let magnitude = output_sample.norm_sqr();
                 // TODO: should this clip to 1.0 for real and imag?
-                magnitude - self.desired_modulus
+                self.desired_modulus - magnitude
             };
 
             // Update coefficients using the CMA rule.
-            for (tap, coeff) in self.taps.iter_mut().zip(self.coeffs.iter()) {
-                *tap += self.step_size * error * coeff.conj() * sample;
+            for (tap, &sample) in self.taps.iter_mut().zip(window) {
+                *tap += self.step_size * error * output_sample * sample.conj();
             }
-
-            // Generate the output sample.
-            let output_sample: Complex = self
-                .taps
-                .iter()
-                .zip(input.iter())
-                .map(|(t, &s)| t * s)
-                .sum();
-            os[i] = output_sample;
         }
 
         let tags = tags
@@ -99,5 +91,25 @@ impl Block for CmaEqualizer {
         input.consume(len);
 
         Ok(BlockRet::Again)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+
+    #[test]
+    fn output_window_slides() -> Result<()> {
+        let input = [
+            Complex::new(1.0, 0.0),
+            Complex::new(2.0, 0.0),
+            Complex::new(3.0, 0.0),
+        ];
+        let (mut b, out) = CmaEqualizer::new(2, 1.0, 0.0, ReadStream::from_slice(&input));
+
+        assert!(matches![b.work()?, BlockRet::Again]);
+        assert_eq!(out.read_buf()?.0.slice(), &input[..2]);
+        Ok(())
     }
 }
