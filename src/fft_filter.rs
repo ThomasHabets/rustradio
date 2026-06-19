@@ -304,8 +304,13 @@ impl<T: Engine> Block for FftFilter<T> {
             let (input, tags) = self.src.read_buf()?;
             // Read so that self.buf contains exactly self.nsamples samples.
             let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
+            let tag_offset = self.buf.len();
             self.buf.extend(input.iter().take(add).copied());
-            self.tags.extend(tags.into_iter().filter(|t| t.pos() < add));
+            self.tags.extend(
+                tags.into_iter()
+                    .filter(|t| t.pos() < add)
+                    .map(|t| Tag::new(t.pos() + tag_offset, t.key(), t.val().clone())),
+            );
             input.consume(add);
             if self.buf.len() < self.nsamples {
                 /*
