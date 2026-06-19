@@ -90,7 +90,7 @@ impl SymbolSync {
                 last_sign: false,
                 stream_pos: 0.0,
                 last_sym_boundary_pos: 0.0,
-                next_sym_middle: 0.0,
+                next_sym_middle: sps / 2.0,
                 out_clock: None,
             },
             dr,
@@ -218,3 +218,26 @@ impl Block for SymbolSync {
 }
 /* vim: textwidth=80
  */
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+    use crate::iir_filter::IirFilter;
+
+    #[test]
+    fn starts_at_middle_of_first_symbol() -> Result<()> {
+        let src = ReadStream::from_slice(&[0.0; 10]);
+        let (mut b, out) = SymbolSync::new(
+            src,
+            4.0,
+            1.0,
+            Box::new(TedZeroCrossing::new()),
+            Box::new(IirFilter::new(&[1.0])),
+        );
+
+        assert!(matches![b.work()?, BlockRet::Again]);
+        assert_eq!(out.read_buf()?.0.len(), 2);
+        Ok(())
+    }
+}
