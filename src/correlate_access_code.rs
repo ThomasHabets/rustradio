@@ -22,6 +22,7 @@ impl CorrelateAccessCode {
     /// Create new correlate access block.
     #[must_use]
     pub fn new(src: ReadStream<u8>, code: Vec<u8>, allowed_diffs: usize) -> (Self, ReadStream<u8>) {
+        assert!(!code.is_empty(), "access code must be nonempty");
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -72,6 +73,7 @@ impl CorrelateAccessCodeTag {
         tag: S,
         allowed_diffs: usize,
     ) -> (Self, ReadStream<u8>) {
+        assert!(!code.is_empty(), "access code must be nonempty");
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -110,5 +112,22 @@ impl CorrelateAccessCodeTag {
             ));
         }
         (a, tags)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "access code must be nonempty")]
+    fn rejects_empty_code() {
+        let _ = CorrelateAccessCode::new(ReadStream::from_slice(&[]), vec![], 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "access code must be nonempty")]
+    fn tagged_rejects_empty_code() {
+        let _ = CorrelateAccessCodeTag::new(ReadStream::from_slice(&[]), vec![], "sync", 0);
     }
 }
