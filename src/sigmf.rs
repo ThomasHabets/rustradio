@@ -592,6 +592,8 @@ where
         let have = self.buf.len() / sample_size;
         let samples = std::cmp::min(have, want);
         if samples == 0 {
+            // Because we already checked if output buffer is full, this has to
+            // be because of a short read.
             return Ok(BlockRet::Pending);
         }
         o.fill_from_iter(
