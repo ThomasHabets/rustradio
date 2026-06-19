@@ -44,7 +44,9 @@ impl<T> ToText<T> {
     /// Create new `ToText` block.
     #[must_use]
     pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
-        debug!("ToText set up with zero inputs. This is probably not intentional");
+        if srcs.is_empty() {
+            debug!("ToText set up with zero inputs. This is probably not intentional");
+        }
         let (dst, dr) = crate::stream::new_stream();
         (Self { srcs, dst }, dr)
     }
