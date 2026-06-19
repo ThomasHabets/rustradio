@@ -226,8 +226,7 @@ fn find_best_bin(data: &[Complex]) -> Option<usize> {
         .iter()
         .take(data.len())
         .skip(skip)
-        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .expect("can't happen: could not find a max bin")
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?
         * 0.8;
 
     // Pick the first value that's above 80% of max and not still heading upwards.
