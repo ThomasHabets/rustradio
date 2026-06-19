@@ -592,10 +592,7 @@ where
         let have = self.buf.len() / sample_size;
         let samples = std::cmp::min(have, want);
         if samples == 0 {
-            return Ok(BlockRet::WaitForStream(
-                &self.dst,
-                sample_size - self.buf.len(),
-            ));
+            return Ok(BlockRet::Pending);
         }
         o.fill_from_iter(
             self.buf
@@ -625,6 +622,27 @@ mod tests {
 
         let (mut src, out) = SigMFSource::<Float>::builder(base).build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
+        assert!(out.read_buf()?.0.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn source_short_read_without_full_sample_is_pending() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let path = tmpd.path().join("short-data");
+        std::fs::write(&path, [0xff])?;
+        let (dst, out) = crate::stream::new_stream();
+        let mut src = SigMFSource::<Float> {
+            file: std::fs::File::open(path)?,
+            meta: SigMF::new("rf32_le".into()),
+            range: (0, 4),
+            left: 4,
+            repeat: Repeat::finite(1),
+            buf: vec![],
+            dst,
+        };
+
+        assert!(matches!(src.work()?, BlockRet::Pending));
         assert!(out.read_buf()?.0.is_empty());
         Ok(())
     }
