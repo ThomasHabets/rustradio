@@ -454,6 +454,9 @@ impl<T: Engine> Block for FftFilterFloat<T> {
             let (inner_from, tags) = self.inner_out.read_buf()?;
             let mut outer_to = self.dst.write_buf()?;
             let n = std::cmp::min(inner_from.len(), outer_to.len());
+            if n == 0 && !inner_from.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
             let o = outer_to.slice();
             for (i, samp) in inner_from.iter().take(n).enumerate() {
                 o[i] = samp.re;
