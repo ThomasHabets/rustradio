@@ -17,30 +17,31 @@ pub struct RtlSdrDecode {
 
 impl Block for RtlSdrDecode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        // TODO: handle tags.
-        let (input, _tags) = self.src.read_buf()?;
-        let isamples = input.len() & !1;
-        if isamples == 0 {
-            return Ok(BlockRet::WaitForStream(&self.src, 2));
-        }
-        let mut out = self.dst.write_buf()?;
-        if out.is_empty() {
-            return Ok(BlockRet::WaitForStream(&self.dst, 1));
-        }
-        let isamples = std::cmp::min(isamples, out.len() * 2);
-        let osamples = isamples / 2;
-        assert_ne!(osamples, 0);
+        loop {
+            // TODO: handle tags.
+            let (input, _tags) = self.src.read_buf()?;
+            let isamples = input.len() & !1;
+            if isamples == 0 {
+                return Ok(BlockRet::WaitForStream(&self.src, 2));
+            }
+            let mut out = self.dst.write_buf()?;
+            if out.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
+            let isamples = std::cmp::min(isamples, out.len() * 2);
+            let osamples = isamples / 2;
+            assert_ne!(osamples, 0);
 
-        out.fill_from_iter(
-            input
-                .slice()
-                .chunks_exact(2)
-                .map(|e| (Float::from(e[0]), Float::from(e[1])))
-                .map(|(a, b)| Complex::new((a - 127.0) * 0.008, (b - 127.0) * 0.008)),
-        );
-        input.consume(isamples);
-        out.produce(osamples, &[]);
-        Ok(BlockRet::Again)
+            out.fill_from_iter(
+                input
+                    .slice()
+                    .chunks_exact(2)
+                    .map(|e| (Float::from(e[0]), Float::from(e[1])))
+                    .map(|(a, b)| Complex::new((a - 127.0) * 0.008, (b - 127.0) * 0.008)),
+            );
+            input.consume(isamples);
+            out.produce(osamples, &[]);
+        }
     }
 }
 
@@ -67,7 +68,7 @@ mod tests {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0, 13]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
-        assert!(matches![dec.work()?, BlockRet::Again]);
+        assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = dec_out.read_buf()?;
         // Probably this should compare close to, but not equal.
         assert_eq!(
@@ -95,7 +96,7 @@ mod tests {
         let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
-        assert!(matches![dec.work()?, BlockRet::Again]);
+        assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 2);
         Ok(())
@@ -109,7 +110,7 @@ mod tests {
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
         for n in 0..4 {
             eprintln!("loop iter: {n}");
-            assert!(matches![dec.work()?, BlockRet::Again]);
+            assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
             let (res, _) = dec_out.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE / 8);
             res.consume(crate::stream::DEFAULT_STREAM_SIZE / 8);
