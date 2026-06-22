@@ -158,6 +158,30 @@ mod tests {
     }
 
     #[test]
+    fn delay_reduced_twice_accumulates_pending_skip() -> Result<()> {
+        let cap = crate::stream::DEFAULT_STREAM_SIZE / std::mem::size_of::<u32>();
+        let input = (0..cap as u32).collect::<Vec<_>>();
+        let s = ReadStream::from_slice(&input);
+        let (mut delay, o) = Delay::new(s, cap + 10);
+
+        delay.work()?;
+        {
+            let (res, _) = o.read_buf()?;
+            let len = res.len();
+            assert_eq!(len, cap);
+            assert!(res.iter().all(|v| *v == 0));
+            res.consume(len);
+        }
+
+        delay.set_delay(cap - 1);
+        delay.set_delay(cap - 2);
+        delay.work()?;
+        let (res, _) = o.read_buf()?;
+        assert_eq!(res.slice(), &input[2..]);
+        Ok(())
+    }
+
+    #[test]
     fn delay_change() -> Result<()> {
         let s = ReadStream::from_slice(&[1u32, 2]);
         let (mut delay, o) = Delay::new(s, 1);
