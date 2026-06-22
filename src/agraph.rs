@@ -69,6 +69,7 @@ impl AsyncGraph {
                         Ok(v) => v,
                         Err(e) => {
                             error!("Block work function failed: {e}");
+                            cancel_token.cancel();
                             return Err(e);
                         }
                     };
