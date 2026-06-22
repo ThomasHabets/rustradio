@@ -203,21 +203,21 @@ impl<T> Buffer<T> {
     }
     pub fn wait_for_write(&self, _need: usize) -> usize {
         // TODO
-        1
+        self.free()
     }
     pub fn wait_for_read(&self, _need: usize) -> usize {
         // TODO
-        1
+        self.state.lock().unwrap().used
     }
     #[cfg(feature = "async")]
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
         // TODO
-        1
+        self.wait_for_write(_need)
     }
     #[cfg(feature = "async")]
     pub async fn wait_for_read_async(&self, _need: usize) -> usize {
         // TODO
-        1
+        self.wait_for_read(_need)
     }
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
         let l = self.state.lock().unwrap();
