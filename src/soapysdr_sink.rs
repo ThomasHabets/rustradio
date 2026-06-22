@@ -165,7 +165,7 @@ impl Block for SoapySdrSink {
             Ok(x) => x,
             Err(e) => {
                 if e.code == soapysdr::ErrorCode::Timeout {
-                    return Ok(BlockRet::Again);
+                    return Ok(BlockRet::Pending);
                 }
                 return Err(e.into());
             }
