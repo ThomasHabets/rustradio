@@ -40,30 +40,31 @@ impl<T: Send + Sync + 'static> Drop for PduWriter<T> {
 
 impl<T: Sample> Block for PduWriter<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let packet = match self.src.pop() {
-            None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
-            Some((x, _tags)) => x,
-        };
-        let name = format!(
-            "{}-{}",
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map_err(|e| crate::Error::other(e, "getting system time"))?
-                .as_micros(),
-            self.files_written
-        );
-        let full = Path::new(&self.dir).join(name);
-        debug!("Saving PDU to {full:?}");
-        let mut f = std::fs::File::options()
-            .write(true)
-            .create_new(true)
-            .open(full)?;
-        let mut v = Vec::with_capacity(T::size() * packet.len());
-        for s in &packet {
-            v.extend(&s.serialize());
+        loop {
+            let packet = match self.src.pop() {
+                None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
+                Some((x, _tags)) => x,
+            };
+            let name = format!(
+                "{}-{}",
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .map_err(|e| crate::Error::other(e, "getting system time"))?
+                    .as_micros(),
+                self.files_written
+            );
+            let full = Path::new(&self.dir).join(name);
+            debug!("Saving PDU to {full:?}");
+            let mut f = std::fs::File::options()
+                .write(true)
+                .create_new(true)
+                .open(full)?;
+            let mut v = Vec::with_capacity(T::size() * packet.len());
+            for s in &packet {
+                v.extend(&s.serialize());
+            }
+            f.write_all(&v)?;
+            self.files_written += 1;
         }
-        f.write_all(&v)?;
-        self.files_written += 1;
-        Ok(BlockRet::Again)
     }
 }
