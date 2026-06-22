@@ -44,9 +44,10 @@ impl<T: Sample> Delay<T> {
         if delay > self.delay {
             self.current_delay += delay - self.delay;
         } else {
-            let cdskip = std::cmp::min(self.current_delay, delay);
+            let reduce = self.delay - delay;
+            let cdskip = std::cmp::min(self.current_delay, reduce);
             self.current_delay -= cdskip;
-            self.skip = (self.delay - delay) - cdskip;
+            self.skip += reduce - cdskip;
         }
         self.delay = delay;
     }
@@ -147,7 +148,7 @@ mod tests {
     #[test]
     fn delay_decrease_before_work_reduces_remaining_delay() -> Result<()> {
         let s = ReadStream::from_slice(&[1u32, 2]);
-        let (mut delay, o) = Delay::new(s, 2);
+        let (mut delay, o) = Delay::new(s, 3);
 
         delay.set_delay(1);
         delay.work()?;
