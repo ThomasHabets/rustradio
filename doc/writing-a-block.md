@@ -10,7 +10,7 @@ converting from `Complex` to the real part can be done using:
 
 ```
     MapBuilder::new(prev_stream, |x| x.re)
-        .name("ComplexToReal".to_owned())
+        .name("ComplexToReal")
         .build()
 ```
 
@@ -78,7 +78,7 @@ For general blocks, the core of a block is its `work()` function.
 ```
 impl Block for MyBlock {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let (input_buffer, input_tags) = self.src.read_buf();
+        let (input_buffer, input_tags) = self.src.read_buf()?;
         let mut output_stream = self.dst.write_buf()?;
         let output_slice = output_stream.slice();
         let max_output_samples = output_slice.len();
@@ -87,7 +87,7 @@ impl Block for MyBlock {
         output_slice[..out_len].copy_from_slice(&mydata);
 
         input_buffer.consume(input_used);
-        output_stream.produce(mydata.len());
+        output_stream.produce(mydata.len(), &[…output_tags…]);
         if need_more_input {
             Ok(BlockRet::WaitForStream(&self.src, how_much_more))
         } else if need_more_output_space {
