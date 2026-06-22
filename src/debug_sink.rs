@@ -20,23 +20,24 @@ where
     T: std::fmt::Debug + Default + Send + Sync + 'static,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let Some((v, _tags)) = self.src.pop() else {
-            return Ok(BlockRet::WaitForStream(&self.src, 1));
-        };
+        loop {
+            let Some((v, _tags)) = self.src.pop() else {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            };
 
-        // TODO: print tags.
-        /*
-        let tags: HashMap<usize, Vec<Tag>> =
-                    tags.into_iter()
-                        .map(|t| (t.pos(), t))
-                        .fold(HashMap::new(), |mut acc, (pos, tag)| {
-                            acc.entry(pos).or_default().push(tag);
-                            acc
-                        });
-                 */
+            // TODO: print tags.
+            /*
+            let tags: HashMap<usize, Vec<Tag>> =
+                        tags.into_iter()
+                            .map(|t| (t.pos(), t))
+                            .fold(HashMap::new(), |mut acc, (pos, tag)| {
+                                acc.entry(pos).or_default().push(tag);
+                                acc
+                            });
+                     */
 
-        println!("debug: {v:?}");
-        Ok(BlockRet::Again)
+            println!("debug: {v:?}");
+        }
     }
 }
 
