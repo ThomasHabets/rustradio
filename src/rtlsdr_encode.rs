@@ -26,29 +26,30 @@ fn encode_sample(sample: Float) -> u8 {
 
 impl Block for RtlSdrEncode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        // TODO: handle tags.
-        let (input, _tags) = self.src.read_buf()?;
-        if input.is_empty() {
-            return Ok(BlockRet::WaitForStream(&self.src, 1));
-        }
-        let mut out = self.dst.write_buf()?;
-        if out.len() < 2 {
-            return Ok(BlockRet::WaitForStream(&self.dst, 2));
-        }
-        let isamples = std::cmp::min(input.len(), out.len() / 2);
-        let osamples = isamples * 2;
-        assert_ne!(isamples, 0);
+        loop {
+            // TODO: handle tags.
+            let (input, _tags) = self.src.read_buf()?;
+            if input.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            }
+            let mut out = self.dst.write_buf()?;
+            if out.len() < 2 {
+                return Ok(BlockRet::WaitForStream(&self.dst, 2));
+            }
+            let isamples = std::cmp::min(input.len(), out.len() / 2);
+            let osamples = isamples * 2;
+            assert_ne!(isamples, 0);
 
-        out.fill_from_iter(
-            input
-                .slice()
-                .iter()
-                .take(isamples)
-                .flat_map(|sample| [encode_sample(sample.re), encode_sample(sample.im)]),
-        );
-        input.consume(isamples);
-        out.produce(osamples, &[]);
-        Ok(BlockRet::Again)
+            out.fill_from_iter(
+                input
+                    .slice()
+                    .iter()
+                    .take(isamples)
+                    .flat_map(|sample| [encode_sample(sample.re), encode_sample(sample.im)]),
+            );
+            input.consume(isamples);
+            out.produce(osamples, &[]);
+        }
     }
 }
 
@@ -78,7 +79,7 @@ mod tests {
         ]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut enc, enc_out) = RtlSdrEncode::new(src_out);
-        assert!(matches![enc.work()?, BlockRet::Again]);
+        assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = enc_out.read_buf()?;
         assert_eq!(res.slice(), &[0, 10, 20, 10, 0, 13]);
         Ok(())
@@ -89,7 +90,7 @@ mod tests {
         let (mut src, src_out) = VectorSource::new(vec![Complex::new(-10.0, 10.0)]);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut enc, enc_out) = RtlSdrEncode::new(src_out);
-        assert!(matches![enc.work()?, BlockRet::Again]);
+        assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = enc_out.read_buf()?;
         assert_eq!(res.slice(), &[0, 255]);
         Ok(())
