@@ -390,6 +390,9 @@ impl Block for SoapySdrSource {
                 return Err(e.into());
             }
         };
+        if n == 0 {
+            return Ok(BlockRet::Pending);
+        }
         if n > 0 {
             if match self.last_time_tag {
                 None => true,
