@@ -170,6 +170,9 @@ impl Block for SoapySdrSink {
                 return Err(e.into());
             }
         };
+        if n == 0 {
+            return Ok(BlockRet::Pending);
+        }
         i.consume(n);
         if ilen == n {
             Ok(BlockRet::WaitForStream(&self.src, 1))
