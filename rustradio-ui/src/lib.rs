@@ -161,6 +161,13 @@ impl<T> std::convert::AsRef<[T]> for SharedVec<T> {
     }
 }
 
+impl<T> std::ops::Index<usize> for SharedVec<T> {
+    type Output = T;
+    fn index(&self, i: usize) -> &Self::Output {
+        &self.as_ref()[i]
+    }
+}
+
 impl<T> Drop for SharedVec<T> {
     fn drop(&mut self) {
         if let Err(e) = (self.post)(self.ptr.id) {
