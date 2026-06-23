@@ -1,5 +1,173 @@
 #![doc = include_str!("../README.md")]
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
+
+use rustradio::stream::Tag;
+use rustradio::{Complex, Float};
+
+thread_local! {
+    static PENDING_SHARED_BUFFERS_U8: RefCell<HashMap<usize, Vec<u8>>> = RefCell::new(HashMap::new());
+    static PENDING_SHARED_BUFFERS_FLOAT: RefCell<HashMap<usize, Vec<Float>>> = RefCell::new(HashMap::new());
+    static PENDING_SHARED_BUFFERS_COMPLEX: RefCell<HashMap<usize, Vec<Complex>>> = RefCell::new(HashMap::new());
+    static NEXT_SHARED_BUFFER_ID: Cell<usize> = const { Cell::new(1) };
+}
+
+/// When a shared vec is sent to a different worker, it has to remain living in
+/// the original worker / main UI. So when creating a `SharedVec` we insert it
+/// into a buffer, and never look at it again.
+///
+/// When the other worker sends back a message saying it's done with the shared
+/// vec, we remove it and thus drop it.
+///
+/// This "registry" is strongly typed, so every type of `SharedVec` needs a
+/// registry implementation.
+pub trait SharedVecRegistry: Sized {
+    /// Move ownership of this Vec into the registry.
+    ///
+    /// It must stay there until the remote worker is done with it.
+    fn registry_insert(v: Vec<Self>) -> usize;
+
+    /// Remove the `Vec`. This drops it, and any further access by *any* thread
+    /// is Bad.
+    ///
+    /// This removal is generally triggered by the `SharedVec` destructor in the
+    /// remote worker, so it should be safe.
+    fn registry_remove(id: usize);
+}
+
+macro_rules! impl_shared_vec_registry {
+    ($ty:ty, $registry:ident) => {
+        impl SharedVecRegistry for $ty {
+            fn registry_insert(v: Vec<Self>) -> usize {
+                let id = NEXT_SHARED_BUFFER_ID.with(|slot: &Cell<usize>| {
+                    let id: usize = slot.get();
+                    slot.set(id.wrapping_add(1));
+                    id
+                });
+                if let Some(_) = $registry.with(|slot| slot.borrow_mut().insert(id, v)) {
+                    // This can't happen unless we wrap an usize.
+                    log::error!("SharedVecRegistry double-registered {id}");
+                }
+                id
+            }
+            fn registry_remove(id: usize) {
+                if $registry.with(|slot| {
+                    slot.borrow_mut().remove(&id)
+                }).is_none() {
+                    panic!("SharedVecRegistry tried to double-free id {id}. This probably means memory corrucption has already happened.");
+                }
+            }
+        }
+    };
+}
+
+impl_shared_vec_registry!(u8, PENDING_SHARED_BUFFERS_U8);
+impl_shared_vec_registry!(Float, PENDING_SHARED_BUFFERS_FLOAT);
+impl_shared_vec_registry!(Complex, PENDING_SHARED_BUFFERS_COMPLEX);
+
+/// This is the struct sent over the serialization layer for shared buffer data.
+///
+/// When received, a SharedVecPtr MUST reassembled into a `SharedVec` after
+/// reception, or the memory will leak.
+///
+/// We can't trigger the drop from `SharedVecPtr`, because that would make it
+/// trigger in the sending worker, and we don't want that (it'd be sent to the
+/// wrong worker, which has no ability to drop it from the registry).
+///
+/// We could have the drop message trigger only on `SharedVecPtr` created by
+/// deserialization, not by `new()`, but that would probably be too surprising.
+/// Also it would misfire if the sender (for some reason) were to serialize and
+/// deserialize locally).
+///
+/// There is no `Ref` version of `SharedVecPtr`, because it's expected that the
+/// non-sample part of the message has minimal overhead from an extra copy. This
+/// assumption should be verified.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SharedVecPtr<T> {
+    // ID is the tracker used for holding the vector alive. When the receiver
+    // of a shared vec is done with it, it sends this ID back to free it.
+    id: usize,
+
+    // This is the data's location in memory, and its size in number of
+    // elements.
+    ptr: usize,
+    len: usize,
+
+    // Tags are expected to be much smaller than the samples, so we send them
+    // unshared for now.
+    tags: Vec<Tag>,
+
+    dummy: std::marker::PhantomData<T>,
+}
+
+impl<T: SharedVecRegistry> SharedVecPtr<T> {
+    #[must_use]
+    pub fn new(v: impl Into<Vec<T>>, tags: impl Into<Vec<Tag>>) -> Self {
+        let v = v.into();
+        let ptr = v.as_ptr() as usize;
+        let len = v.len();
+        let id = T::registry_insert(v);
+        Self {
+            id,
+            ptr,
+            len,
+            tags: tags.into(),
+            dummy: std::marker::PhantomData,
+        }
+    }
+}
+
+/// A `SharedVec` is used on the receiver side of a message, reading the data.
+///
+/// When dropped, it calls a user provided function that should tell the
+/// original worker to drop the underlying `Vec` it's holding in its registry.
+///
+/// The callback can't be avoided because the messages and way of sending the
+/// messages are different depending on if this is `WorkerToMain` or
+/// `MainToWorker`.
+// TODO: though this is serialized with the type name, so maybe we can actually
+// serialize something that works for either one.
+#[derive(Debug)]
+pub struct SharedVec<T> {
+    ptr: SharedVecPtr<T>,
+    post: fn(usize) -> rustradio::Result<()>,
+}
+
+impl<T> SharedVec<T> {
+    /// Create a usable reader of a shared vector.
+    ///
+    /// When `SharedVec` is dropped, the `post` callback is called. That
+    /// callback should send a message to the owner of the underlying `Vec` so
+    /// telling it that the `Vec` can be dropped.
+    #[must_use]
+    pub fn new(ptr: SharedVecPtr<T>, post: fn(usize) -> rustradio::Result<()>) -> Self {
+        Self { ptr, post }
+    }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.ptr.len
+    }
+}
+
+impl<T> std::convert::AsRef<[T]> for SharedVec<T> {
+    fn as_ref(&self) -> &[T] {
+        unsafe { std::slice::from_raw_parts(self.ptr.ptr as *const T, self.ptr.len) }
+    }
+}
+
+impl<T> Drop for SharedVec<T> {
+    fn drop(&mut self) {
+        if let Err(e) = (self.post)(self.ptr.id) {
+            log::error!("SharedVec failed to unregister. Likely memory leak resulting: {e}");
+        }
+    }
+}
 
 /// Application specific extensions to MainToWorker and WorkerToMain.
 pub trait ApplicationSpecific {
@@ -26,6 +194,15 @@ pub enum MainToWorker<App: ApplicationSpecific> {
 
     /// Raw DATA_STREAM protocol bytes received from the selected input source.
     DataStream(Vec<u8>),
+
+    /// u8 vectors held in a shared buffer.
+    ///
+    /// This is useful for sending RTL-SDR raw bytes from the main UI thread
+    /// (which gets it from WebUSB) to the worker thread.
+    SharedByte(String, Vec<SharedVecPtr<u8>>),
+
+    /// Tell the remote end that we are done with this shared buffer.
+    DiscardSharedVec(usize),
 
     /// Send a ping with a `performance.now()` timestamp.
     /// The timestamp will be reflected in the Pong.
@@ -82,6 +259,15 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
 
     /// Raw DATA_STREAM protocol bytes to send to the selected input source.
     DataStream(Vec<u8>),
+
+    /// Float vectors held in a shared buffer.
+    ///
+    /// This is used for streams as well as for fixed block sized things like
+    /// spectrums and waterfalls.
+    SharedFloat(String, Vec<SharedVecPtr<Float>>),
+
+    /// Complex vectors held in a shared buffer.
+    SharedComplex(String, Vec<SharedVecPtr<Complex>>),
 
     /// At the end of execution, provide the result as a string.
     End(App::End),
@@ -788,5 +974,26 @@ mod tests {
             }
             _ => panic!("expected WorkerToMainRef::ComplexStreams"),
         }
+    }
+
+    #[test]
+    fn shared_vec_lifetime() {
+        assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
+        let buf: Vec<u8> = Vec::new();
+        let shared_vec_ptr = SharedVecPtr::new(buf, vec![]);
+        assert_eq!(
+            PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
+            1
+        );
+        let shared_vec = SharedVec::new(shared_vec_ptr, |id| {
+            u8::registry_remove(id);
+            Ok(())
+        });
+        assert_eq!(
+            PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
+            1
+        );
+        drop(shared_vec);
+        assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
     }
 }
