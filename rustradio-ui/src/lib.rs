@@ -7,12 +7,27 @@ use serde::{Deserialize, Serialize};
 use rustradio::stream::Tag;
 use rustradio::{Complex, Float};
 
+// TODO: with embedded type this only allows 2^24 buffers. But JS can't
+// serialize u64 unambiguously.
+pub type BufferId = u32;
+
 thread_local! {
-    static PENDING_SHARED_BUFFERS_U8: RefCell<HashMap<usize, Vec<u8>>> = RefCell::new(HashMap::new());
-    static PENDING_SHARED_BUFFERS_FLOAT: RefCell<HashMap<usize, Vec<Float>>> = RefCell::new(HashMap::new());
-    static PENDING_SHARED_BUFFERS_COMPLEX: RefCell<HashMap<usize, Vec<Complex>>> = RefCell::new(HashMap::new());
-    static NEXT_SHARED_BUFFER_ID: Cell<usize> = const { Cell::new(1) };
+    static PENDING_SHARED_BUFFERS_U8: RefCell<HashMap<BufferId, Vec<u8>>> = RefCell::new(HashMap::new());
+    static PENDING_SHARED_BUFFERS_FLOAT: RefCell<HashMap<BufferId, Vec<Float>>> = RefCell::new(HashMap::new());
+    static PENDING_SHARED_BUFFERS_COMPLEX: RefCell<HashMap<BufferId, Vec<Complex>>> = RefCell::new(HashMap::new());
+    static NEXT_SHARED_BUFFER_ID: Cell<BufferId> = const { Cell::new(1) };
 }
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SharedVecType {
+    Byte = 1,
+    Float = 2,
+    Complex = 3,
+}
+const TYPE_BITS: BufferId = 8;
+const TYPE_SHIFT: BufferId = BufferId::BITS as BufferId - TYPE_BITS;
+const COUNTER_MASK: BufferId = ((1 as BufferId) << TYPE_SHIFT) - 1;
 
 /// When a shared vec is sent to a different worker, it has to remain living in
 /// the original worker / main UI. So when creating a `SharedVec` we insert it
@@ -27,24 +42,25 @@ pub trait SharedVecRegistry: Sized {
     /// Move ownership of this Vec into the registry.
     ///
     /// It must stay there until the remote worker is done with it.
-    fn registry_insert(v: Vec<Self>) -> usize;
+    fn registry_insert(v: Vec<Self>) -> BufferId;
 
     /// Remove the `Vec`. This drops it, and any further access by *any* thread
     /// is Bad.
     ///
     /// This removal is generally triggered by the `SharedVec` destructor in the
     /// remote worker, so it should be safe.
-    fn registry_remove(id: usize);
+    fn registry_remove(id: BufferId);
 }
 
 macro_rules! impl_shared_vec_registry {
-    ($ty:ty, $registry:ident) => {
+    ($ty:ty, $num:expr, $registry:ident) => {
         impl SharedVecRegistry for $ty {
-            fn registry_insert(v: Vec<Self>) -> usize {
-                let id = NEXT_SHARED_BUFFER_ID.with(|slot: &Cell<usize>| {
-                    let id: usize = slot.get();
+            fn registry_insert(v: Vec<Self>) -> BufferId {
+                let id = NEXT_SHARED_BUFFER_ID.with(|slot: &Cell<BufferId>| {
+                    let id: BufferId= slot.get();
                     slot.set(id.wrapping_add(1));
-                    id
+                    assert_ne!(id & COUNTER_MASK, 0, "56 bit buffer counter wrapped");
+                    id | ($num as BufferId) << TYPE_SHIFT
                 });
                 if let Some(_) = $registry.with(|slot| slot.borrow_mut().insert(id, v)) {
                     // This can't happen unless we wrap an usize.
@@ -52,7 +68,7 @@ macro_rules! impl_shared_vec_registry {
                 }
                 id
             }
-            fn registry_remove(id: usize) {
+            fn registry_remove(id: BufferId) {
                 if $registry.with(|slot| {
                     slot.borrow_mut().remove(&id)
                 }).is_none() {
@@ -63,9 +79,22 @@ macro_rules! impl_shared_vec_registry {
     };
 }
 
-impl_shared_vec_registry!(u8, PENDING_SHARED_BUFFERS_U8);
-impl_shared_vec_registry!(Float, PENDING_SHARED_BUFFERS_FLOAT);
-impl_shared_vec_registry!(Complex, PENDING_SHARED_BUFFERS_COMPLEX);
+impl_shared_vec_registry!(u8, SharedVecType::Byte, PENDING_SHARED_BUFFERS_U8);
+impl_shared_vec_registry!(Float, SharedVecType::Float, PENDING_SHARED_BUFFERS_FLOAT);
+impl_shared_vec_registry!(
+    Complex,
+    SharedVecType::Complex,
+    PENDING_SHARED_BUFFERS_COMPLEX
+);
+
+pub fn discard_shared_vec(id: BufferId) {
+    match (id >> TYPE_SHIFT) as u8 {
+        1 => u8::registry_remove(id),
+        2 => Float::registry_remove(id),
+        3 => Complex::registry_remove(id),
+        _ => panic!("Invalid id {id:x}"),
+    }
+}
 
 /// This is the struct sent over the serialization layer for shared buffer data.
 ///
@@ -88,7 +117,7 @@ impl_shared_vec_registry!(Complex, PENDING_SHARED_BUFFERS_COMPLEX);
 pub struct SharedVecPtr<T> {
     // ID is the tracker used for holding the vector alive. When the receiver
     // of a shared vec is done with it, it sends this ID back to free it.
-    id: usize,
+    id: BufferId,
 
     // This is the data's location in memory, and its size in number of
     // elements.
@@ -132,7 +161,7 @@ impl<T: SharedVecRegistry> SharedVecPtr<T> {
 #[derive(Debug)]
 pub struct SharedVec<T> {
     ptr: SharedVecPtr<T>,
-    post: fn(usize) -> rustradio::Result<()>,
+    post: fn(BufferId) -> rustradio::Result<()>,
 }
 
 impl<T> SharedVec<T> {
@@ -142,7 +171,7 @@ impl<T> SharedVec<T> {
     /// callback should send a message to the owner of the underlying `Vec` so
     /// telling it that the `Vec` can be dropped.
     #[must_use]
-    pub fn new(ptr: SharedVecPtr<T>, post: fn(usize) -> rustradio::Result<()>) -> Self {
+    pub fn new(ptr: SharedVecPtr<T>, post: fn(BufferId) -> rustradio::Result<()>) -> Self {
         Self { ptr, post }
     }
     #[must_use]
@@ -170,7 +199,8 @@ impl<T> std::ops::Index<usize> for SharedVec<T> {
 
 impl<T> Drop for SharedVec<T> {
     fn drop(&mut self) {
-        if let Err(e) = (self.post)(self.ptr.id) {
+        let id = std::mem::take(&mut self.ptr.id);
+        if let Err(e) = (self.post)(id) {
             log::error!("SharedVec failed to unregister. Likely memory leak resulting: {e}");
         }
     }
@@ -209,7 +239,7 @@ pub enum MainToWorker<App: ApplicationSpecific> {
     SharedByte(String, Vec<SharedVecPtr<u8>>),
 
     /// Tell the remote end that we are done with this shared buffer.
-    DiscardSharedVec(usize),
+    DiscardSharedVec(BufferId),
 
     /// Send a ping with a `performance.now()` timestamp.
     /// The timestamp will be reflected in the Pong.
@@ -268,7 +298,7 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
     DataStream(Vec<u8>),
 
     /// Tell the remote end that we are done with this shared buffer.
-    DiscardSharedVec(usize),
+    DiscardSharedVec(BufferId),
 
     /// Float vectors held in a shared buffer.
     ///
