@@ -267,6 +267,9 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
     /// Raw DATA_STREAM protocol bytes to send to the selected input source.
     DataStream(Vec<u8>),
 
+    /// Tell the remote end that we are done with this shared buffer.
+    DiscardSharedVec(usize),
+
     /// Float vectors held in a shared buffer.
     ///
     /// This is used for streams as well as for fixed block sized things like
