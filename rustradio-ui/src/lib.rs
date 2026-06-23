@@ -293,11 +293,6 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
     /// Complex streams captured in the worker graph.
     /// TODO: This should be one receiver, multiple streams.
     ComplexStreams(Vec<ComplexStream>),
-
-    /// Float PDU streams captured in the worker graph.
-    ///
-    /// TODO: this should only be the one packet per packet, right?
-    FloatPduStreams(Vec<FloatPduStream>),
 }
 
 /// Borrowed version of WorkerToMain. Must serialize the same.
@@ -343,12 +338,6 @@ pub enum WorkerToMainRef<'a, App: ApplicationSpecific = AppEmpty> {
     FloatStreams(Vec<FloatStreamCow<'a>>),
 
     ComplexStreams(Vec<ComplexStreamCow<'a>>),
-
-    /// Float PDU streams captured in the worker graph.
-    ///
-    /// TODO: this should only be the one packet per packet, right?
-    /// TODO: make this borrow.
-    FloatPduStreams(Vec<FloatPduStream>),
 }
 
 impl<App: ApplicationSpecific> TryInto<wasm_bindgen::JsValue> for WorkerToMain<App> {
@@ -609,19 +598,6 @@ impl<'a> From<ComplexStreamRef<'a>> for StreamCow<'a, ComplexStream> {
 }
 
 pub type ComplexStreamCow<'a> = StreamCow<'a, ComplexStream>;
-
-/// Stream of PDUs of floats for sending between worker and main UI.
-///
-/// This is used by the frequency and waterfall sinks.
-///
-/// There's currently no borrow version of `FloatPduStream`, since PDUs are
-/// generally passed by value anyway. If a need comes up, it can be added.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
-pub struct FloatPduStream {
-    pub name: String,
-    pub sample_rate: rustradio::Float,
-    pub samples: Vec<rustradio::Float>,
-}
 
 /// No application specific messages required.
 #[derive(Debug, Serialize, Deserialize)]
