@@ -7,15 +7,17 @@ use serde::{Deserialize, Serialize};
 use rustradio::stream::Tag;
 use rustradio::{Complex, Float};
 
-// TODO: with embedded type this only allows 2^24 buffers. But JS can't
-// serialize u64 unambiguously.
-pub type BufferId = u32;
+/// Buffer ID needs to encode which buffer type it is, and than 64bit. But JS
+/// can't encode u64 so we need to split it manually.
+///
+/// An initial test encoded as string, but that was incredibly slow.
+pub type BufferId = (u8, u32, u32);
 
 thread_local! {
-    static PENDING_SHARED_BUFFERS_U8: RefCell<HashMap<BufferId, Vec<u8>>> = RefCell::new(HashMap::new());
-    static PENDING_SHARED_BUFFERS_FLOAT: RefCell<HashMap<BufferId, Vec<Float>>> = RefCell::new(HashMap::new());
-    static PENDING_SHARED_BUFFERS_COMPLEX: RefCell<HashMap<BufferId, Vec<Complex>>> = RefCell::new(HashMap::new());
-    static NEXT_SHARED_BUFFER_ID: Cell<BufferId> = const { Cell::new(1) };
+    static PENDING_SHARED_BUFFERS_U8: RefCell<HashMap<u64, Vec<u8>>> = RefCell::new(HashMap::new());
+    static PENDING_SHARED_BUFFERS_FLOAT: RefCell<HashMap<u64, Vec<Float>>> = RefCell::new(HashMap::new());
+    static PENDING_SHARED_BUFFERS_COMPLEX: RefCell<HashMap<u64, Vec<Complex>>> = RefCell::new(HashMap::new());
+    static NEXT_SHARED_BUFFER_ID: Cell<u64> = const { Cell::new(1) };
 }
 
 #[repr(u8)]
@@ -25,9 +27,6 @@ pub enum SharedVecType {
     Float = 2,
     Complex = 3,
 }
-const TYPE_BITS: BufferId = 8;
-const TYPE_SHIFT: BufferId = BufferId::BITS as BufferId - TYPE_BITS;
-const COUNTER_MASK: BufferId = ((1 as BufferId) << TYPE_SHIFT) - 1;
 
 /// When a shared vec is sent to a different worker, it has to remain living in
 /// the original worker / main UI. So when creating a `SharedVec` we insert it
@@ -56,23 +55,28 @@ macro_rules! impl_shared_vec_registry {
     ($ty:ty, $num:expr, $registry:ident) => {
         impl SharedVecRegistry for $ty {
             fn registry_insert(v: Vec<Self>) -> BufferId {
-                let id = NEXT_SHARED_BUFFER_ID.with(|slot: &Cell<BufferId>| {
-                    let id: BufferId= slot.get();
-                    slot.set(id.wrapping_add(1));
-                    assert_ne!(id & COUNTER_MASK, 0, "56 bit buffer counter wrapped");
-                    id | ($num as BufferId) << TYPE_SHIFT
+                let id = NEXT_SHARED_BUFFER_ID.with(|slot: &Cell<u64>| {
+                    let n= slot.get();
+                    slot.set(n.wrapping_add(1));
+                    eprintln!("Set next to {n}");
+                    assert_ne!(n, 0, "64 bit buffer counter wrapped");
+                    ($num as u8, (n >> 32) as u32, n as u32)
                 });
-                if let Some(_) = $registry.with(|slot| slot.borrow_mut().insert(id, v)) {
+                let n = ((id.1 as u64) << 32) + (id.2 as u64);
+                eprintln!("{id:?} {n}");
+                if let Some(_) = $registry.with(|slot| slot.borrow_mut().insert(n, v)) {
                     // This can't happen unless we wrap an usize.
-                    log::error!("SharedVecRegistry double-registered {id}");
+                    log::error!("SharedVecRegistry double-registered {n} {id:?}");
                 }
                 id
             }
             fn registry_remove(id: BufferId) {
+                assert_eq!(id.0, $num as u8);
+                let n = ((id.1 as u64) << 32) + (id.2 as u64);
                 if $registry.with(|slot| {
-                    slot.borrow_mut().remove(&id)
+                    slot.borrow_mut().remove(&n)
                 }).is_none() {
-                    panic!("SharedVecRegistry tried to double-free id {id}. This probably means memory corrucption has already happened.");
+                    panic!("SharedVecRegistry tried to double-free id {id:?}. This probably means memory corrucption has already happened.");
                 }
             }
         }
@@ -88,11 +92,11 @@ impl_shared_vec_registry!(
 );
 
 pub fn discard_shared_vec(id: BufferId) {
-    match (id >> TYPE_SHIFT) as u8 {
+    match id.0 {
         1 => u8::registry_remove(id),
         2 => Float::registry_remove(id),
         3 => Complex::registry_remove(id),
-        _ => panic!("Invalid id {id:x}"),
+        _ => panic!("Invalid id {id:?}"),
     }
 }
 
@@ -995,21 +999,47 @@ mod tests {
     #[test]
     fn shared_vec_lifetime() {
         assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
-        let buf: Vec<u8> = Vec::new();
-        let shared_vec_ptr = SharedVecPtr::new(buf, vec![]);
-        assert_eq!(
-            PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
-            1
-        );
-        let shared_vec = SharedVec::new(shared_vec_ptr, |id| {
-            u8::registry_remove(id);
-            Ok(())
-        });
-        assert_eq!(
-            PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
-            1
-        );
-        drop(shared_vec);
-        assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
+        {
+            let buf: Vec<u8> = Vec::new();
+            let shared_vec_ptr = SharedVecPtr::new(buf, vec![]);
+            assert_eq!(
+                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
+                1
+            );
+            let shared_vec = SharedVec::new(shared_vec_ptr, |id| {
+                u8::registry_remove(id);
+                Ok(())
+            });
+            assert_eq!(
+                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
+                1
+            );
+            PENDING_SHARED_BUFFERS_U8.with(|slot| {
+                assert_eq!(*slot.borrow(), [(1, vec![])].into_iter().collect());
+            });
+            drop(shared_vec);
+            assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
+        }
+        {
+            let buf: Vec<u8> = Vec::new();
+            let shared_vec_ptr = SharedVecPtr::new(buf, vec![]);
+            assert_eq!(
+                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
+                1
+            );
+            let shared_vec = SharedVec::new(shared_vec_ptr, |id| {
+                u8::registry_remove(id);
+                Ok(())
+            });
+            assert_eq!(
+                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
+                1
+            );
+            PENDING_SHARED_BUFFERS_U8.with(|slot| {
+                assert_eq!(*slot.borrow(), [(2, vec![])].into_iter().collect());
+            });
+            drop(shared_vec);
+            assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
+        }
     }
 }
