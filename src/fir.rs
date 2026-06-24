@@ -117,7 +117,8 @@ where
 {
     /// Create new FIR.
     #[must_use]
-    pub fn new(taps: &[T]) -> Self {
+    pub fn new(taps: impl AsRef<[T]>) -> Self {
+        let taps = taps.as_ref();
         assert!(!taps.is_empty());
         Self {
             taps: taps.iter().copied().rev().collect(),
@@ -213,7 +214,8 @@ where
         }
     }
     /// Create Fir block given taps.
-    pub fn new(src: ReadStream<T>, taps: &[T]) -> (Self, ReadStream<T>) {
+    pub fn new(src: ReadStream<T>, taps: impl AsRef<[T]>) -> (Self, ReadStream<T>) {
+        let taps = taps.as_ref();
         assert!(!taps.is_empty());
         let (dst, dr) = crate::stream::new_stream();
         (
