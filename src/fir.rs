@@ -207,9 +207,9 @@ where
     T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create new `FirFilterBuilder`, with the supplied taps.
-    pub fn builder(taps: &[T]) -> FirFilterBuilder<T> {
+    pub fn builder(taps: impl Into<Vec<T>>) -> FirFilterBuilder<T> {
         FirFilterBuilder {
-            taps: taps.to_vec(),
+            taps: taps.into(),
             deci: 1,
         }
     }
@@ -444,7 +444,7 @@ mod tests {
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilter::builder(&taps).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out);
             if deci <= 2 * input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
@@ -493,7 +493,7 @@ mod tests {
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilter::builder(&taps).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out);
             if deci <= input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
@@ -530,7 +530,7 @@ mod tests {
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilter::builder(&taps).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out);
             if deci < input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
