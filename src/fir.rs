@@ -8,12 +8,44 @@
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
+use log::error;
 use std::borrow::Borrow;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
 use crate::{Complex, Float, Result, Sample};
+
+#[doc(hidden)]
+pub trait FrequencyTranslate {
+    /// Per-block translation state.
+    ///
+    /// Most sample types do not support translation and use `()`. Complex FIRs
+    /// use a rotator that advances once per output sample.
+    type Translator: Send;
+
+    /// Return the no-op translator for blocks that do not translate frequency.
+    fn no_translation() -> Self::Translator;
+
+    /// Configure frequency translation before the FIR is built.
+    ///
+    /// Implementations may modify `taps` to fold fixed per-tap phase terms into
+    /// the filter, then return any state needed to finish translation while
+    /// samples are produced.
+    fn new_translator(
+        taps: &mut [Self],
+        samp_rate: Float,
+        freq: Float,
+        deci: usize,
+    ) -> Self::Translator
+    where
+        Self: Sized;
+
+    /// Apply the continuing part of frequency translation to produced samples.
+    fn translate_output(out: &mut [Self], translator: &mut Self::Translator)
+    where
+        Self: Sized;
+}
 
 /// Finite impulse response filter.
 pub struct Fir<T> {
@@ -166,11 +198,13 @@ where
 pub struct FirFilterBuilder<T> {
     taps: Vec<T>,
     deci: usize,
+    // Optional `(sample_rate, frequency)` requested by `translate()`.
+    translate: Option<(Float, Float)>,
 }
 
 impl<T> FirFilterBuilder<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + FrequencyTranslate,
 {
     /// Set the decimation to the given value.
     ///
@@ -185,8 +219,17 @@ where
     /// Build a `FirFilter` with the provided settings.
     #[must_use]
     pub fn build(self, src: ReadStream<T>) -> (FirFilter<T>, ReadStream<T>) {
-        let (mut block, stream) = FirFilter::new(src, &self.taps);
-        block.deci = self.deci;
+        let FirFilterBuilder {
+            mut taps,
+            deci,
+            translate,
+        } = self;
+        let translator = translate.map_or_else(T::no_translation, |(samp_rate, freq)| {
+            T::new_translator(&mut taps, samp_rate, freq, deci)
+        });
+        let (mut block, stream) = FirFilter::new(src, &taps);
+        block.deci = deci;
+        block.translator = translator;
         (block, stream)
     }
 }
@@ -194,10 +237,12 @@ where
 /// Finite impulse response filter block.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FirFilter<T: Sample> {
+pub struct FirFilter<T: Sample + FrequencyTranslate> {
     fir: Fir<T>,
     ntaps: usize,
     deci: usize,
+    // Per-block rotator state for fused frequency translation.
+    translator: T::Translator,
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
@@ -206,13 +251,14 @@ pub struct FirFilter<T: Sample> {
 
 impl<T> FirFilter<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + FrequencyTranslate,
 {
     /// Create new `FirFilterBuilder`, with the supplied taps.
     pub fn builder(taps: impl Into<Vec<T>>) -> FirFilterBuilder<T> {
         FirFilterBuilder {
             taps: taps.into(),
             deci: 1,
+            translate: None,
         }
     }
     /// Create Fir block given taps.
@@ -226,6 +272,7 @@ where
                 dst,
                 ntaps: taps.len(),
                 deci: 1,
+                translator: T::no_translation(),
                 fir: Fir::new(taps),
             },
             dr,
@@ -233,9 +280,109 @@ where
     }
 }
 
+macro_rules! impl_no_frequency_translate {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl FrequencyTranslate for $ty {
+                type Translator = ();
+                fn no_translation() -> Self::Translator {}
+
+                fn new_translator(
+                    _taps: &mut [Self],
+                    _samp_rate: Float,
+                    _freq: Float,
+                    _deci: usize,
+                ) -> Self::Translator {
+                    error!("FirFilter asked to translate on non-Complex");
+                }
+
+                fn translate_output(_out: &mut [Self], _translator: &mut Self::Translator) {}
+            }
+        )*
+    };
+}
+
+// Enable FftFilter on these types, even though only `Complex` actually supports
+// frequency translation. This is type restricted in the builder, so it should
+// not be possible to actually instantiate a translator anyway.
+impl_no_frequency_translate!(f32, f64, u8, u32, i32);
+
+#[doc(hidden)]
+pub struct ComplexFrequencyTranslator {
+    /// Current complex oscillator value for the next output sample.
+    phase: Complex,
+    /// Per-output oscillator step, including decimation.
+    step: Complex,
+}
+
+impl FrequencyTranslate for Complex {
+    type Translator = Option<ComplexFrequencyTranslator>;
+
+    fn no_translation() -> Self::Translator {
+        None
+    }
+
+    fn new_translator(
+        taps: &mut [Self],
+        samp_rate: Float,
+        freq: Float,
+        deci: usize,
+    ) -> Self::Translator {
+        assert_ne!(samp_rate, 0.0);
+        assert_ne!(deci, 0);
+        if freq == 0.0 {
+            return None;
+        }
+        let input_step = 2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate);
+        let tap_step = Complex::new(input_step.cos() as Float, input_step.sin() as Float);
+        let mut phase = Complex::new(1.0, 0.0);
+        // Pre-rotate taps by their relative delay so filtering plus one output
+        // rotation matches explicitly mixing each input sample by `-freq`.
+        for tap in &mut *taps {
+            *tap *= phase;
+            phase *= tap_step;
+        }
+
+        // The first produced FIR output is aligned with the newest sample in
+        // the first input window; after that, outputs advance by `deci` inputs.
+        let first_output_phase = -input_step * (taps.len() - 1) as f64;
+        let output_step = -input_step * deci as f64;
+        Some(ComplexFrequencyTranslator {
+            phase: Complex::new(
+                first_output_phase.cos() as Float,
+                first_output_phase.sin() as Float,
+            ),
+            step: Complex::new(output_step.cos() as Float, output_step.sin() as Float),
+        })
+    }
+
+    fn translate_output(out: &mut [Self], translator: &mut Self::Translator) {
+        // TODO: do we need to reset this periodically, to get around rounding
+        // errors?
+        if let Some(translator) = translator {
+            for sample in out {
+                *sample *= translator.phase;
+                translator.phase *= translator.step;
+            }
+        }
+    }
+}
+
+impl FirFilterBuilder<Complex> {
+    /// Mix by `-freq` Hz while filtering.
+    ///
+    /// A tone at `freq` Hz is translated to DC. The implementation folds the
+    /// input mixer into the FIR taps and keeps one rotator per output sample.
+    #[must_use]
+    pub fn translate(mut self, samp_rate: Float, freq: Float) -> Self {
+        self.translate = Some((samp_rate, freq));
+        self
+    }
+}
+
 impl<T> Block for FirFilter<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + FrequencyTranslate,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let (input, mut tags) = self.src.read_buf()?;
@@ -273,6 +420,10 @@ where
         let out_n = n / self.deci;
         self.fir
             .filter_n_inplace(&input.slice()[..need], self.deci, &mut out.slice()[..out_n]);
+
+        // Frequency translate. This is an empty function call if translation is
+        // zero.
+        T::translate_output(&mut out.slice()[..out_n], &mut self.translator);
 
         // Sanity check the generated output.
         assert!(out_n <= out.len());
@@ -478,6 +629,106 @@ mod tests {
                     .collect::<Vec<_>>(),
             );
         }
+        Ok(())
+    }
+
+    // Compare frequency translation against manual mixing and filtering.
+    #[test]
+    fn translate_matches_mixed_input() -> Result<()> {
+        let input: Vec<_> = (0..32)
+            .map(|i| Complex::new(i as Float, (i as Float) * 0.25))
+            .collect();
+        let taps = vec![
+            Complex::new(0.5, -0.1),
+            Complex::new(1.0, 0.2),
+            Complex::new(-0.25, 0.05),
+            Complex::new(0.125, -0.3),
+        ];
+        let samp_rate = 8.0;
+        let freq = 2.0;
+        let deci = 3;
+        let phase_step = -2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate);
+        let rot = Complex::new(phase_step.cos() as Float, phase_step.sin() as Float);
+        let mut phase = Complex::new(1.0, 0.0);
+        let mixed_input = input
+            .iter()
+            .map(|&sample| {
+                let out = sample * phase;
+                phase *= rot;
+                out
+            })
+            .collect::<Vec<_>>();
+
+        let (mut src_a, src_a_out) = VectorSource::new(input.clone());
+        assert!(matches![src_a.work()?, BlockRet::EOF]);
+        let (mut translated, translated_out) = FirFilter::builder(taps.clone())
+            .deci(deci)
+            .translate(samp_rate, freq)
+            .build(src_a_out);
+        assert!(matches![translated.work()?, BlockRet::Again]);
+        assert!(matches![translated.work()?, BlockRet::WaitForStream(_, _)]);
+
+        let (mut src_b, src_b_out) = VectorSource::new(mixed_input);
+        assert!(matches![src_b.work()?, BlockRet::EOF]);
+        let (mut manual, manual_out) = FirFilter::builder(taps).deci(deci).build(src_b_out);
+        assert!(matches![manual.work()?, BlockRet::Again]);
+        assert!(matches![manual.work()?, BlockRet::WaitForStream(_, _)]);
+
+        let (translated_res, _) = translated_out.read_buf()?;
+        let (manual_res, _) = manual_out.read_buf()?;
+        assert_almost_equal_complex(translated_res.slice(), manual_res.slice());
+        Ok(())
+    }
+
+    fn tone(len: usize, samp_rate: Float, freq: Float) -> Vec<Complex> {
+        let step = 2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate);
+        (0..len)
+            .map(|i| {
+                let phase = step * i as f64;
+                Complex::new(phase.cos() as Float, phase.sin() as Float)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn translated_offset_tone_passes_low_pass() -> Result<()> {
+        let samp_rate = 1024.0;
+        let freq = 60.0;
+        let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming);
+        let input = tone(4096, samp_rate, freq);
+
+        let (mut src, src_out) = VectorSource::new(input);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        let (mut filter, out) = FirFilter::builder(taps)
+            .translate(samp_rate, freq)
+            .build(src_out);
+        assert!(matches![filter.work()?, BlockRet::Again]);
+        assert!(matches![filter.work()?, BlockRet::WaitForStream(_, _)]);
+
+        let (res, _) = out.read_buf()?;
+        let mean = res.iter().map(|sample| sample.norm()).sum::<Float>() / res.len() as Float;
+        assert!(mean > 0.95, "translated tone mean magnitude: {mean}");
+        Ok(())
+    }
+
+    #[test]
+    fn translated_dc_is_rejected_by_low_pass() -> Result<()> {
+        let samp_rate = 1024.0;
+        let freq = 60.0;
+        let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming);
+        let input = vec![Complex::new(1.0, 0.0); 4096];
+
+        let (mut src, src_out) = VectorSource::new(input);
+        assert!(matches![src.work()?, BlockRet::EOF]);
+        let (mut filter, out) = FirFilter::builder(taps)
+            .translate(samp_rate, freq)
+            .build(src_out);
+        assert!(matches![filter.work()?, BlockRet::Again]);
+        assert!(matches![filter.work()?, BlockRet::WaitForStream(_, _)]);
+
+        let (res, _) = out.read_buf()?;
+        let mean = res.iter().map(|sample| sample.norm()).sum::<Float>() / res.len() as Float;
+        assert!(mean < 0.01, "translated DC mean magnitude: {mean}");
         Ok(())
     }
 
