@@ -21,7 +21,7 @@ num-complex = { version = "0.4.6", features = ["serde"] }
 #
 # The only time to enable path=".." is during development. I'm not sure this is
 # a long term plan.
-rustradio = { version = "0.16.9", features = ["wasm"] }
+rustradio = { version = "0.17.0", features = ["wasm"] }
 # rustradio = { version = "0.16.9", path = "..", features = ["wasm"] }
 
 serde = { version = "1.0.228", features = ["derive"] }
