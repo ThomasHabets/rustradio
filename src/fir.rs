@@ -8,6 +8,8 @@
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
  */
+use std::borrow::Borrow;
+
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
@@ -337,7 +339,7 @@ pub fn low_pass_complex(
     samp_rate: Float,
     cutoff: Float,
     twidth: Float,
-    window_type: &WindowType,
+    window_type: impl Borrow<WindowType>,
 ) -> Vec<Complex> {
     low_pass(samp_rate, cutoff, twidth, window_type)
         .into_iter()
@@ -360,8 +362,10 @@ pub fn low_pass(
     samp_rate: Float,
     cutoff: Float,
     twidth: Float,
-    window_type: &WindowType,
+    window_type: impl Borrow<WindowType>,
 ) -> Vec<Float> {
+    let window_type = window_type.borrow();
+
     let pi = std::f64::consts::PI as Float;
     let ntaps = compute_ntaps(samp_rate, twidth, window_type);
     let window = window_type.make_window(ntaps);
@@ -588,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_filter_generator() {
-        let taps = low_pass_complex(10000.0, 1000.0, 1000.0, &WindowType::Hamming);
+        let taps = low_pass_complex(10000.0, 1000.0, 1000.0, WindowType::Hamming);
         assert_eq!(taps.len(), 25);
         assert_almost_equal_complex(
             &taps,

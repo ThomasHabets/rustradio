@@ -387,7 +387,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 samp_rate,
                 100_000.0,
                 1000.0,
-                &rustradio::window::WindowType::Hamming,
+                rustradio::window::WindowType::Hamming,
             )
         ),
         RationalResampler::builder()
@@ -401,7 +401,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 samp_rate_2,
                 44_100.0,
                 500.0,
-                &rustradio::window::WindowType::Hamming,
+                rustradio::window::WindowType::Hamming,
             )
         ),
         RationalResampler::builder()

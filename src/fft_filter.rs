@@ -192,7 +192,7 @@ pub mod rr_rustfft {
 /// // Create taps for a 100kHz low pass filter with 1kHz transition
 /// // width.
 /// let samp_rate: Float = 1_000_000.0;
-/// let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, &rustradio::window::WindowType::Hamming);
+/// let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, rustradio::window::WindowType::Hamming);
 ///
 /// // Set up dummy source and sink.
 /// let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0));
@@ -511,7 +511,7 @@ mod tests {
         // Create blocks.
         let (mut src, o) = SignalSourceComplex::new(samp_rate, signal, amplitude);
         let (mut head, o) = Head::new(o, samp_rate as u64);
-        let taps = low_pass_complex(samp_rate, cutoff, twidth, &WindowType::Hamming);
+        let taps = low_pass_complex(samp_rate, cutoff, twidth, WindowType::Hamming);
         let taps_len = taps.len();
         let (mut fft, out) = FftFilter::new(o, taps);
 
