@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use rustradio::{Complex, Float};
 
 pub mod shared_vec;
-pub use shared_vec::{SharedVec, SharedVecPtr};
+pub use shared_vec::SharedVecPtr;
 
 /// Application specific extensions to MainToWorker and WorkerToMain.
 pub trait ApplicationSpecific {
@@ -184,7 +184,21 @@ where
     }
 }
 
+/// A received shared memory vector, plus its tags.
+#[derive(Debug, PartialEq)]
+pub struct TaggedVec<T> {
+    pub data: Vec<T>,
+    pub tags: Vec<rustradio::stream::Tag>,
+}
+
+impl<T: Send> From<SharedVecPtr<T>> for TaggedVec<T> {
+    fn from(rhs: SharedVecPtr<T>) -> Self {
+        rhs.into_vec()
+    }
+}
+
 /// Stream of floats going between worker and UI thread.
+// TODO: remove this now? If not, then at least make it use TaggedVec?
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, PartialOrd)]
 pub struct FloatStream {
     pub name: String,
