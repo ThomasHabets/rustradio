@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use rustradio::{Complex, Float};
 
 pub mod shared_vec;
-pub use shared_vec::{BufferId, SharedVec, SharedVecPtr, discard_shared_vec};
+pub use shared_vec::{SharedVec, SharedVecPtr};
 
 /// Application specific extensions to MainToWorker and WorkerToMain.
 pub trait ApplicationSpecific {
@@ -37,9 +37,6 @@ pub enum MainToWorker<App: ApplicationSpecific> {
     /// This is useful for sending RTL-SDR raw bytes from the main UI thread
     /// (which gets it from WebUSB) to the worker thread.
     SharedByte(String, Vec<SharedVecPtr<u8>>),
-
-    /// Tell the remote end that we are done with this shared buffer.
-    DiscardSharedVec(BufferId),
 
     /// Send a ping with a `performance.now()` timestamp.
     /// The timestamp will be reflected in the Pong.
@@ -96,9 +93,6 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
 
     /// Raw DATA_STREAM protocol bytes to send to the selected input source.
     DataStream(Vec<u8>),
-
-    /// Tell the remote end that we are done with this shared buffer.
-    DiscardSharedVec(BufferId),
 
     /// Float vectors held in a shared buffer.
     ///
@@ -443,7 +437,6 @@ impl ApplicationSpecific for AppEmpty {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared_vec::SharedVecRegistry;
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     struct TestAppMessage {
@@ -790,54 +783,6 @@ mod tests {
                 }
             }
             _ => panic!("expected WorkerToMainRef::ComplexStreams"),
-        }
-    }
-
-    #[test]
-    fn shared_vec_lifetime() {
-        use crate::shared_vec::PENDING_SHARED_BUFFERS_U8;
-        assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
-        {
-            let buf: Vec<u8> = Vec::new();
-            let shared_vec_ptr = SharedVecPtr::new(buf, vec![]);
-            assert_eq!(
-                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
-                1
-            );
-            let shared_vec = SharedVec::new(shared_vec_ptr, |id| {
-                u8::registry_remove(id);
-                Ok(())
-            });
-            assert_eq!(
-                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
-                1
-            );
-            PENDING_SHARED_BUFFERS_U8.with(|slot| {
-                assert_eq!(*slot.borrow(), [(1, vec![])].into_iter().collect());
-            });
-            drop(shared_vec);
-            assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
-        }
-        {
-            let buf: Vec<u8> = Vec::new();
-            let shared_vec_ptr = SharedVecPtr::new(buf, vec![]);
-            assert_eq!(
-                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
-                1
-            );
-            let shared_vec = SharedVec::new(shared_vec_ptr, |id| {
-                u8::registry_remove(id);
-                Ok(())
-            });
-            assert_eq!(
-                PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().len()),
-                1
-            );
-            PENDING_SHARED_BUFFERS_U8.with(|slot| {
-                assert_eq!(*slot.borrow(), [(2, vec![])].into_iter().collect());
-            });
-            drop(shared_vec);
-            assert!(PENDING_SHARED_BUFFERS_U8.with(|slot| slot.borrow().is_empty()));
         }
     }
 }
