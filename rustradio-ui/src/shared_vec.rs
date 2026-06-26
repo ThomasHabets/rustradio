@@ -76,7 +76,9 @@ impl<T: Send> SharedVecPtr<T> {
 
 impl<T> Drop for SharedVecPtr<T> {
     fn drop(&mut self) {
-        error!("Dropped SharedVecPtr without converting it to an owned vec");
+        if self.ptr != RANDOM_SENTINEL {
+            error!("Dropped SharedVecPtr without converting it to an owned vec");
+        }
         debug_assert!(
             self.ptr == RANDOM_SENTINEL,
             "Dropped SharedVecPtr without converting it to an owned vec"
