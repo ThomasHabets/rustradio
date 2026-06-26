@@ -1,3 +1,4 @@
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use rustradio::stream::Tag;
@@ -34,6 +35,7 @@ pub struct SharedVecPtr<T> {
 }
 
 impl<T: Send> SharedVecPtr<T> {
+    /// Create a new shared vec that
     #[must_use]
     pub fn new(v: impl Into<Vec<T>>, tags: impl Into<Vec<Tag>>) -> Self {
         let v = v.into();
@@ -54,17 +56,27 @@ impl<T: Send> SharedVecPtr<T> {
         assert_ne!(self.ptr, 0);
         assert_ne!(self.ptr, RANDOM_SENTINEL);
         let data = unsafe { Vec::from_raw_parts(self.ptr as *mut T, self.len, self.cap) };
-        self.ptr = RANDOM_SENTINEL;
-        TaggedVec {
+        let ret = TaggedVec {
             data,
             tags: std::mem::take(&mut self.tags),
+        };
+        self.forget();
+        ret
+    }
+    /// Forget this pointer.
+    pub fn forget(mut self) {
+        if self.ptr == RANDOM_SENTINEL {
+            error!("Called SharedVecPtr::forget() on an already forgotten pointer");
+            return;
         }
+        assert_ne!(self.ptr, 0);
+        self.ptr = RANDOM_SENTINEL;
     }
 }
 
 impl<T> Drop for SharedVecPtr<T> {
     fn drop(&mut self) {
-        log::error!("Dropped SharedVecPtr without converting it to an owned vec");
+        error!("Dropped SharedVecPtr without converting it to an owned vec");
         debug_assert!(
             self.ptr == RANDOM_SENTINEL,
             "Dropped SharedVecPtr without converting it to an owned vec"
