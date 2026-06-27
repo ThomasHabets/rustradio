@@ -29,6 +29,7 @@ pub struct Hilbert {
     history: Vec<Float>,
     filter: Fir<Float>,
     ntaps: usize,
+    threaded: bool,
 }
 
 impl Hilbert {
@@ -50,9 +51,17 @@ impl Hilbert {
                 dst,
                 history: vec![0.0; ntaps],
                 filter: Fir::new(&taps),
+                threaded: false,
             },
             dr,
         )
+    }
+    /// Turn on or off Rayon multithreading.
+    ///
+    /// Initial benchmarks seem to indicate that this does not help. Maybe with
+    /// bigger than default stream buffers for more concurrency.
+    pub fn threaded(&mut self, onoff: bool) {
+        self.threaded = onoff;
     }
 }
 
@@ -91,9 +100,14 @@ impl Block for Hilbert {
         iv.extend(&self.history);
         iv.extend(i.iter().take(inout).copied());
 
-        {
+        if self.threaded {
             use rayon::prelude::*;
             o.par_iter_mut().take(n).enumerate().for_each(|(i, val)| {
+                let t = &iv[i..(i + self.ntaps)];
+                *val = Complex::new(iv[i + self.ntaps / 2], self.filter.filter_float(t));
+            });
+        } else {
+            o.iter_mut().take(n).enumerate().for_each(|(i, val)| {
                 let t = &iv[i..(i + self.ntaps)];
                 *val = Complex::new(iv[i + self.ntaps / 2], self.filter.filter_float(t));
             });
