@@ -35,7 +35,9 @@ impl Block for RtlSdrDecode {
             out.fill_from_iter(
                 input
                     .slice()
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|e| (Float::from(e[0]), Float::from(e[1])))
                     .map(|(a, b)| Complex::new((a - 127.0) * 0.008, (b - 127.0) * 0.008)),
             );

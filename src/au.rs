@@ -267,7 +267,9 @@ impl Block for AuDecode {
                     .take(n)
                     .copied()
                     .collect::<Vec<u8>>()
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|chunk| {
                         let bytes = [chunk[0], chunk[1]];
                         Float::from(i16::from_be_bytes(bytes)) / 32767.0
