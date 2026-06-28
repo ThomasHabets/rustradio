@@ -1,6 +1,6 @@
 [package]
 name = "rustradio-ui"
-version = "0.1.14"
+version = "0.1.15"
 edition = "2024"
 license = "MIT"
 authors = ["Thomas Habets <thomas@habets.se>"]
