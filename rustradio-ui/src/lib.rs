@@ -1,10 +1,7 @@
 #![doc = include_str!("../README.md")]
 use serde::{Deserialize, Serialize};
 
-use rustradio::{Complex, Float};
-
-pub mod shared_vec;
-pub use shared_vec::SharedVecPtr;
+use rustradio::{Complex, Float, stream::Tag};
 
 /// Application specific extensions to MainToWorker and WorkerToMain.
 pub trait ApplicationSpecific {
@@ -15,28 +12,46 @@ pub trait ApplicationSpecific {
     type End: Serialize;
 }
 
+#[derive(Debug)]
+pub struct BootstrapMpsc<App1: ApplicationSpecific, App2: ApplicationSpecific> {
+    pub rx: async_channel::Receiver<MainToWorker<App1>>,
+    pub tx: async_channel::Sender<WorkerToMain<App2>>,
+}
+
+impl<App1: ApplicationSpecific, App2: ApplicationSpecific> BootstrapMpsc<App1, App2> {
+    // TODO: make this pub(crate).
+    pub fn from_ptr(ptr: usize) -> Self {
+        let boot = unsafe { Box::from_raw(ptr as *mut Self) };
+        *boot
+    }
+}
+
 /// Messages going from main (UI) thread to worker.
+///
+/// These can be sent as worker messages (a bunch of copies and serde), or
+/// directly on an MPSC.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(bound(
     serialize = "App::App: Serialize, App::Start: Serialize",
     deserialize = "App::App: Deserialize<'de>, App::Start: Deserialize<'de>",
 ))]
+#[non_exhaustive]
 pub enum MainToWorker<App: ApplicationSpecific> {
+    /// A boxed pointer to BootstrapMpsc.
+    ///
+    /// Applications should not use this directly.
+    BootstrapMpsc(usize),
+
     /// Start the graph with the relevant startup parameters.
     Start(App::Start),
 
     /// Application specific stuff.
     ApplicationSpecific(App::App),
 
-    /// Raw DATA_STREAM protocol bytes received from the selected input source.
-    DataStream(Vec<u8>),
-
-    /// u8 vectors held in a shared buffer.
-    ///
     /// This is useful for sending RTL-SDR raw bytes from the main UI thread
     /// (which gets it from WebUSB) to the worker thread.
-    SharedByte(String, Vec<SharedVecPtr<u8>>),
+    Bytes(String, Vec<TaggedVec<u8>>),
 
     /// Send a ping with a `performance.now()` timestamp.
     /// The timestamp will be reflected in the Pong.
@@ -91,64 +106,11 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
     /// Original ping timestamp is returned.
     Pong(f64),
 
-    /// Raw DATA_STREAM protocol bytes to send to the selected input source.
-    DataStream(Vec<u8>),
-
-    /// Float vectors held in a shared buffer.
-    ///
     /// This is used for streams as well as for fixed block sized things like
     /// spectrums and waterfalls.
-    SharedFloat(String, Vec<SharedVecPtr<Float>>),
+    Floats(String, Vec<TaggedVec<Float>>),
 
-    /// Complex vectors held in a shared buffer.
-    SharedComplex(String, Vec<SharedVecPtr<Complex>>),
-
-    /// At the end of execution, provide the result as a string.
-    End(App::End),
-
-    /// A worker log line to be emitted through the main thread logger.
-    LogLine { level: log::Level, line: String },
-
-    /// Float streams captured in the worker graph.
-    ///
-    /// TODO: This should be one receiver, multiple streams.
-    FloatStreams(Vec<FloatStream>),
-
-    /// Complex streams captured in the worker graph.
-    /// TODO: This should be one receiver, multiple streams.
-    ComplexStreams(Vec<ComplexStream>),
-}
-
-/// Borrowed version of WorkerToMain. Must serialize the same.
-///
-/// This is mainly for avoiding a copy while serializing. Some variants can also
-/// be deserialized, but stream reference payloads deserialize as owned streams
-/// because their slice fields cannot be borrowed from every serde input.
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-#[serde(bound(
-    serialize = "App::App: Serialize, App::Ready: Serialize, App::End: Serialize",
-    deserialize = "App::App: Deserialize<'de>, App::Ready: Deserialize<'de>, App::End: Deserialize<'de>",
-))]
-pub enum WorkerToMainRef<'a, App: ApplicationSpecific = AppEmpty> {
-    /// Worker notifying the main UI thread that the rustradio graph has
-    /// successfully started.
-    Ready(App::Ready),
-
-    /// Application specific messages.
-    ApplicationSpecific(App::App),
-
-    /// Send a ping with a `performance.now()` timestamp.
-    /// The timestamp will be reflected in the Pong.
-    Ping(f64),
-
-    /// Reply to a ping from the main thread.
-    ///
-    /// Original ping timestamp is returned.
-    Pong(f64),
-
-    /// Raw DATA_STREAM protocol bytes to send to the selected input source.
-    DataStream(&'a [u8]),
+    Complexes(String, Vec<TaggedVec<Complex>>),
 
     /// At the end of execution, provide the result as a string.
     End(App::End),
@@ -156,12 +118,8 @@ pub enum WorkerToMainRef<'a, App: ApplicationSpecific = AppEmpty> {
     /// A worker log line to be emitted through the main thread logger.
     LogLine {
         level: log::Level,
-        line: &'a str,
+        line: String,
     },
-
-    FloatStreams(Vec<FloatStreamCow<'a>>),
-
-    ComplexStreams(Vec<ComplexStreamCow<'a>>),
 }
 
 impl<App: ApplicationSpecific> TryInto<wasm_bindgen::JsValue> for WorkerToMain<App> {
@@ -184,17 +142,11 @@ where
     }
 }
 
-/// A received shared memory vector, plus its tags.
-#[derive(Debug, PartialEq)]
+/// Data and tags. Used to send from worker to the UI for display.
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TaggedVec<T> {
     pub data: Vec<T>,
-    pub tags: Vec<rustradio::stream::Tag>,
-}
-
-impl<T: Send> From<SharedVecPtr<T>> for TaggedVec<T> {
-    fn from(rhs: SharedVecPtr<T>) -> Self {
-        rhs.into_vec()
-    }
+    pub tags: Vec<Tag>,
 }
 
 /// Stream of floats going between worker and UI thread.
@@ -508,13 +460,6 @@ mod tests {
         }
     }
 
-    fn assert_worker_to_main_app_message(msg: WorkerToMain<TestApp>, expected: &TestAppMessage) {
-        match msg {
-            WorkerToMain::ApplicationSpecific(app) => assert_eq!(app, *expected),
-            other => panic!("expected WorkerToMain::ApplicationSpecific, got {other:?}"),
-        }
-    }
-
     fn assert_main_to_worker_ref_app_message(
         msg: MainToWorker<TestAppRef<'_>>,
         expected: &TestAppMessage,
@@ -525,38 +470,6 @@ mod tests {
                 assert_eq!(app.payload, expected.payload);
             }
             other => panic!("expected MainToWorker::ApplicationSpecific, got {other:?}"),
-        }
-    }
-
-    fn assert_worker_to_main_ref_app_message(
-        msg: WorkerToMainRef<'_, TestAppRef<'_>>,
-        expected: &TestAppMessage,
-    ) {
-        match msg {
-            WorkerToMainRef::ApplicationSpecific(app) => {
-                assert_eq!(app.name, expected.name);
-                assert_eq!(app.payload, expected.payload);
-            }
-            _ => panic!("expected WorkerToMainRef::ApplicationSpecific"),
-        }
-    }
-
-    fn expected_float_stream() -> FloatStream {
-        FloatStream {
-            name: "float stream".to_string(),
-            tags: Vec::new(),
-            samples: vec![1.25, -2.5, 3.75],
-        }
-    }
-
-    fn expected_complex_stream() -> ComplexStream {
-        ComplexStream {
-            name: "complex stream".to_string(),
-            tags: Vec::new(),
-            samples: vec![
-                rustradio::Complex::new(1.0, -2.0),
-                rustradio::Complex::new(-3.5, 4.25),
-            ],
         }
     }
 
@@ -643,28 +556,6 @@ mod tests {
     }
 
     #[test]
-    fn application_specific_worker_to_main_serializes_between_owned_and_ref_payloads() {
-        let expected = expected_app_message();
-
-        let owned_json = serde_json::to_value(WorkerToMain::<TestApp>::ApplicationSpecific(
-            expected.clone(),
-        ))
-        .unwrap();
-        let ref_json = serde_json::to_value(
-            WorkerToMainRef::<TestAppRef<'_>>::ApplicationSpecific(TestAppMessageRef {
-                name: "test app message",
-                payload: "test payload",
-            }),
-        )
-        .unwrap();
-
-        assert_eq!(owned_json, ref_json);
-
-        let decoded: WorkerToMain<TestApp> = serde_json::from_value(ref_json).unwrap();
-        assert_worker_to_main_app_message(decoded, &expected);
-    }
-
-    #[test]
     fn application_specific_main_to_worker_deserializes_from_json_into_ref_payload() {
         let expected = expected_app_message();
         let json = serde_json::to_string(&MainToWorker::<TestApp>::ApplicationSpecific(
@@ -675,19 +566,6 @@ mod tests {
         let decoded: MainToWorker<TestAppRef<'_>> = serde_json::from_str(&json).unwrap();
 
         assert_main_to_worker_ref_app_message(decoded, &expected);
-    }
-
-    #[test]
-    fn application_specific_worker_to_main_deserializes_from_json_into_ref_payload() {
-        let expected = expected_app_message();
-        let json = serde_json::to_string(&WorkerToMain::<TestApp>::ApplicationSpecific(
-            expected.clone(),
-        ))
-        .unwrap();
-
-        let decoded: WorkerToMainRef<'_, TestAppRef<'_>> = serde_json::from_str(&json).unwrap();
-
-        assert_worker_to_main_ref_app_message(decoded, &expected);
     }
 
     #[test]
@@ -712,91 +590,5 @@ mod tests {
         assert_eq!(borrowed.name, "float stream");
         assert_eq!(borrowed.tags, tags.as_slice());
         assert_eq!(borrowed.samples, samples.as_slice());
-    }
-
-    #[test]
-    fn worker_to_main_ref_float_streams_serialize_like_owned_streams() {
-        let expected = expected_float_stream();
-        let samples = expected.samples.clone();
-
-        let owned_json = serde_json::to_value(WorkerToMain::<AppEmpty>::FloatStreams(vec![
-            expected.clone(),
-        ]))
-        .unwrap();
-        let ref_json = serde_json::to_value(WorkerToMainRef::<AppEmpty>::FloatStreams(vec![
-            FloatStreamCow::Borrowed(FloatStreamRef {
-                name: &expected.name,
-                tags: &expected.tags,
-                samples: &samples,
-            }),
-        ]))
-        .unwrap();
-
-        assert_eq!(owned_json, ref_json);
-    }
-
-    #[test]
-    fn worker_to_main_ref_float_streams_deserialize_as_owned_streams() {
-        let expected = expected_float_stream();
-        let json = serde_json::to_string(&WorkerToMain::<AppEmpty>::FloatStreams(vec![
-            expected.clone(),
-        ]))
-        .unwrap();
-
-        let decoded: WorkerToMainRef<'_, AppEmpty> = serde_json::from_str(&json).unwrap();
-
-        match decoded {
-            WorkerToMainRef::FloatStreams(mut streams) => {
-                assert_eq!(streams.len(), 1);
-                match streams.remove(0) {
-                    FloatStreamCow::Owned(stream) => assert_eq!(stream, expected),
-                    FloatStreamCow::Borrowed(_) => panic!("expected owned float stream"),
-                }
-            }
-            _ => panic!("expected WorkerToMainRef::FloatStreams"),
-        }
-    }
-
-    #[test]
-    fn worker_to_main_ref_complex_streams_serialize_like_owned_streams() {
-        let expected = expected_complex_stream();
-        let samples = expected.samples.clone();
-
-        let owned_json = serde_json::to_value(WorkerToMain::<AppEmpty>::ComplexStreams(vec![
-            expected.clone(),
-        ]))
-        .unwrap();
-        let ref_json = serde_json::to_value(WorkerToMainRef::<AppEmpty>::ComplexStreams(vec![
-            ComplexStreamCow::Borrowed(ComplexStreamRef {
-                name: &expected.name,
-                tags: &expected.tags,
-                samples: &samples,
-            }),
-        ]))
-        .unwrap();
-
-        assert_eq!(owned_json, ref_json);
-    }
-
-    #[test]
-    fn worker_to_main_ref_complex_streams_deserialize_as_owned_streams() {
-        let expected = expected_complex_stream();
-        let json = serde_json::to_string(&WorkerToMain::<AppEmpty>::ComplexStreams(vec![
-            expected.clone(),
-        ]))
-        .unwrap();
-
-        let decoded: WorkerToMainRef<'_, AppEmpty> = serde_json::from_str(&json).unwrap();
-
-        match decoded {
-            WorkerToMainRef::ComplexStreams(mut streams) => {
-                assert_eq!(streams.len(), 1);
-                match streams.remove(0) {
-                    ComplexStreamCow::Owned(stream) => assert_eq!(stream, expected),
-                    ComplexStreamCow::Borrowed(_) => panic!("expected owned complex stream"),
-                }
-            }
-            _ => panic!("expected WorkerToMainRef::ComplexStreams"),
-        }
     }
 }
