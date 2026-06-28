@@ -11,7 +11,10 @@ keywords = ["SDR", "radio"]
 
 [dependencies]
 async-channel = { version = "2.5.0", default-features = false }
-log = { version = "0.4.30", features = ["serde"] }
+log = { version = "0.4.30", features = [
+        "serde",
+        "std", # For boxed logger.
+] }
 num-complex = { version = "0.4.6", features = ["serde"] }
 rustradio = { version = "0.17.0", features = ["wasm"] }
 rustradio_macros = "0.17.0"
@@ -19,7 +22,12 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.122"
 wasm-bindgen-futures = "0.4.50"
-web-sys = { version = "0.3.102", features = ["DedicatedWorkerGlobalScope"] }
+web-sys = { version = "0.3.102", features = [
+        "DedicatedWorkerGlobalScope",
+        "Document",  # Any DOM ops.
+        "console", # console logging.
+        "HtmlCanvasElement", # Various visualizations.
+] }
 
 [dev-dependencies]
 serde_json = "1.0.150"
