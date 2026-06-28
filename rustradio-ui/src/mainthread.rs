@@ -155,6 +155,6 @@ where
         .clone()
     })
 }
-pub fn worker() -> Worker {
+fn worker() -> Worker {
     WORKER.with(|cell| cell.get().unwrap().clone())
 }
