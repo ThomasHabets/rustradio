@@ -10,7 +10,6 @@ pub mod browser_audio;
 
 pub mod dom_logger;
 pub mod mainthread;
-mod start_worker;
 pub mod worker;
 
 /// Application specific extensions to MainToWorker and WorkerToMain.

@@ -11,6 +11,8 @@ use web_sys::{MessageEvent, Worker};
 use crate::ApplicationSpecific;
 use crate::{MainToWorker, WorkerToMain};
 
+mod worker_startup;
+
 thread_local! {
     static WORKER: OnceCell<Worker> = const { OnceCell::new() };
     static WORKER_TX: RefCell<Option<Box<dyn Any>>> = const { RefCell::new(None)} ;
@@ -79,10 +81,10 @@ where
                     let worker_msg = worker_msg;
                     if !bootstrapped {
                         // Cloning a worker handle is cheap.
-                        bootstrapped = crate::start_worker::msg(handler_worker.clone(), &e);
+                        bootstrapped = worker_startup::msg(handler_worker.clone(), &e);
 
                         if bootstrapped {
-                            info!("Bootstrap done");
+                            info!("Worker bootstrap done");
                             let (wtx, mrx): (
                                 Sender<WorkerToMain<AppWorker>>,
                                 Receiver<WorkerToMain<AppWorker>>,
