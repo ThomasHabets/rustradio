@@ -7,6 +7,7 @@ use rustradio::{Complex, Float, stream::Tag};
 pub mod browser_audio;
 
 pub mod dom_logger;
+pub mod start_worker;
 pub mod worker;
 
 /// Application specific extensions to MainToWorker and WorkerToMain.

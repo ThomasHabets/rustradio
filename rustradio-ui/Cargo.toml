@@ -27,6 +27,8 @@ web-sys = { version = "0.3.102", features = [
         "Document",  # Any DOM ops.
         "console", # console logging.
         "HtmlCanvasElement", # Various visualizations.
+        "MessageEvent", # lower level worker startup.
+        "Worker",
 ] }
 
 [dev-dependencies]
