@@ -242,6 +242,7 @@ fn sum_product_float_wasm(input: &[Float], taps: &[Float]) -> Float {
 
 // This ended up not being faster. Leaving it here for now.
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[allow(unused)]
 fn sum_product_complex_wasm(input: &[Complex], taps: &[Complex]) -> Complex {
     use core::arch::wasm32::*;
 
