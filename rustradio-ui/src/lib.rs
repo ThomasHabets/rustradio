@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use rustradio::{Complex, Float, stream::Tag};
 
+#[cfg(feature = "audio")]
+pub mod browser_audio;
+
 /// Application specific extensions to MainToWorker and WorkerToMain.
 ///
 /// When not applicable, set a type to [`AppEmpty`].
