@@ -116,6 +116,9 @@ pub enum WorkerToMain<App: ApplicationSpecific = AppEmpty> {
 
     Complexes(String, Vec<TaggedVec<Complex>>),
 
+    /// Worker requests some more data on the named stream.
+    RequestData(String, usize),
+
     /// At the end of execution, provide the result as a string.
     End(App::End),
 
