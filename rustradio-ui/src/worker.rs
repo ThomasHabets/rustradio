@@ -18,6 +18,7 @@ thread_local! {
 pub mod complex_sink;
 pub mod float_pdu_sink;
 pub mod float_sink;
+pub mod source;
 
 pub use complex_sink::ComplexSink;
 pub use float_pdu_sink::FloatPduSink;
@@ -85,5 +86,20 @@ where
             error!("Failed to send message: {e:?}");
         }
     });
+    Ok(())
+}
+
+/// Ask the main UI thread for another source chunk.
+pub(crate) fn request_receiver_data<App>(
+    receiver: &str,
+    _pos: u64,
+    size: u64,
+) -> rustradio::Result<()>
+where
+    App: ApplicationSpecific + 'static,
+{
+    let size = usize::try_from(size)
+        .map_err(|_| rustradio::Error::msg("source request size does not fit usize"))?;
+    send_message_sync(WorkerToMain::<App>::RequestData(receiver.to_string(), size))?;
     Ok(())
 }
