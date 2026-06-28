@@ -76,7 +76,7 @@ fn worker_bootstrap_error(e: &MessageEvent) -> Option<String> {
 
 /// Call this with early messages until it returns `true`. After that, regular
 /// messages can be sent.
-pub fn msg(worker: Worker, e: &MessageEvent) -> bool {
+pub(crate) fn msg(worker: Worker, e: &MessageEvent) -> bool {
     if is_worker_bootstrap_ready(e) {
         info!("Main: Worker bootstrap ready");
         if let Err(e) = post_worker_init(worker) {

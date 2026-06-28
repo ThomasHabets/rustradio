@@ -1,4 +1,6 @@
 #![doc = include_str!("../README.md")]
+use std::fmt::Debug;
+
 use serde::{Deserialize, Serialize};
 
 use rustradio::{Complex, Float, stream::Tag};
@@ -7,18 +9,19 @@ use rustradio::{Complex, Float, stream::Tag};
 pub mod browser_audio;
 
 pub mod dom_logger;
-pub mod start_worker;
+pub mod mainthread;
+mod start_worker;
 pub mod worker;
 
 /// Application specific extensions to MainToWorker and WorkerToMain.
 ///
 /// When not applicable, set a type to [`AppEmpty`].
-pub trait ApplicationSpecific: Send + 'static {
+pub trait ApplicationSpecific: Debug + Send + 'static {
     // Can't default. https://github.com/rust-lang/rust/issues/29661
-    type App: Serialize;
-    type Start: Serialize;
-    type Ready: Serialize;
-    type End: Serialize;
+    type App: Serialize + Debug + for<'de> Deserialize<'de>;
+    type Start: Serialize + Debug + for<'de> Deserialize<'de>;
+    type Ready: Serialize + Debug + for<'de> Deserialize<'de>;
+    type End: Serialize + Debug + for<'de> Deserialize<'de>;
 }
 
 /// Bootstrap MPSC message. Should not be used directly by applications, and
