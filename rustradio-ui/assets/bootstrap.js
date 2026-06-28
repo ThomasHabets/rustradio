@@ -1,6 +1,9 @@
 // Minimal necessary code to start a worker sharing RAM with the main UI thread.
 export async function bootstrap({pkgName, wasmMemoryConfig, workerThreadStackSize}) {
-  import init, { start, initThreadPool } from `./${pkgName}.js`;
+  const wasmPkg = await import(`./${pkgName}.js`);
+  const init = wasmPkg.default;
+  const { start, initThreadPool } = wasmPkg;
+
   Error.stackTraceLimit = Infinity;
   const wasmUrl = new URL(`${pkgName}_bg.wasm`, import.meta.url);
   
