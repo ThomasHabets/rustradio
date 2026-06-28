@@ -2319,10 +2319,12 @@ dependencies = [
  "log",
  "num-complex",
  "rustradio 0.17.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustradio_macros 0.17.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 

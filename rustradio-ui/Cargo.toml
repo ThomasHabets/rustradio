@@ -13,22 +13,13 @@ keywords = ["SDR", "radio"]
 async-channel = { version = "2.5.0", default-features = false }
 log = { version = "0.4.30", features = ["serde"] }
 num-complex = { version = "0.4.6", features = ["serde"] }
-
-# Depending on path=".." causes feature unification, which breaks, in two ways.
-# 1. Rustradio native examples are unable to reference `MTGraph`.
-# 2. js-sys goes crazy when built in non-wasm mode.
-#
-# So we just depend on the crates.io version, avoiding feature unification.
-#
-# The only time to enable path=".." is during development. I'm not sure this is
-# a long term plan.
 rustradio = { version = "0.17.0", features = ["wasm"] }
-# rustradio = { version = "0.16.9", path = "..", features = ["wasm"] }
-
+rustradio_macros = "0.17.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.122"
-web-sys = { version = "0.3.102" }
+wasm-bindgen-futures = "0.4.50"
+web-sys = { version = "0.3.102", features = ["DedicatedWorkerGlobalScope"] }
 
 [dev-dependencies]
 serde_json = "1.0.150"
