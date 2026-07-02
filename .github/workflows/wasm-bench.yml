@@ -22,4 +22,4 @@ jobs:
     - name: Install wasm-pack
       run: cargo install wasm-pack --locked
     - name: Run benchmark
-      run: cd rustradio-ui && wasm-pack test --release  --headless --chrome .   -- 
+      run: cd rustradio-ui && wasm-pack test --release  --headless --chrome .   -- --bench
