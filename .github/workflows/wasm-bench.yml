@@ -15,5 +15,11 @@ jobs:
     name: Run WASM benchmark
     steps:
     - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+    - name: Install wasm-pack
+      run: cargo install wasm-pack --locked
     - name: Run benchmark
       run: cd rustradio-ui && wasm-pack test --release  --headless --chrome .   -- 
