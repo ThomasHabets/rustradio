@@ -7,7 +7,7 @@ use crate::{Result, Sample};
 
 /// Delay stream. Good for syncing up streams.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate)]
+#[rustradio(crate, noeof)]
 pub struct Delay<T: Sample> {
     delay: usize,
     current_delay: usize,
@@ -50,6 +50,12 @@ impl<T: Sample> Delay<T> {
             self.skip += reduce - cdskip;
         }
         self.delay = delay;
+    }
+}
+
+impl<T: Sample> crate::block::BlockEOF for Delay<T> {
+    fn eof(&mut self) -> bool {
+        self.current_delay == 0 && self.src.eof()
     }
 }
 
@@ -178,6 +184,25 @@ mod tests {
         delay.work()?;
         let (res, _) = o.read_buf()?;
         assert_eq!(res.slice(), &input[2..]);
+        Ok(())
+    }
+
+    #[test]
+    fn eof_waits_for_pending_delay() -> Result<()> {
+        let cap = crate::stream::DEFAULT_STREAM_SIZE / std::mem::size_of::<u32>();
+        let s = ReadStream::<u32>::from_slice(&[]);
+        let (mut delay, o) = Delay::new(s, cap + 1);
+
+        assert!(!crate::block::BlockEOF::eof(&mut delay));
+        assert!(matches![delay.work()?, BlockRet::WaitForStream(_, 1)]);
+        assert!(!crate::block::BlockEOF::eof(&mut delay));
+
+        let (res, _) = o.read_buf()?;
+        assert_eq!(res.len(), cap);
+        res.consume(cap);
+
+        assert!(matches![delay.work()?, BlockRet::WaitForStream(_, 1)]);
+        assert!(crate::block::BlockEOF::eof(&mut delay));
         Ok(())
     }
 
