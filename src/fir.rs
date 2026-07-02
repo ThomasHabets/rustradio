@@ -563,7 +563,7 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Opti
     for (low, high) in bands {
         let a = (low * scale).floor() as usize;
         let b = (high * scale).ceil() as usize;
-        if a > taps || b > taps {
+        if a > b || a > taps || b > taps {
             return None;
         }
         for n in a..b {
@@ -983,5 +983,6 @@ mod tests {
     fn multiband_rejects_invalid_ranges() {
         assert!(multiband(&[(0.0, 1.0)], 0, &Window(vec![])).is_none());
         assert!(multiband(&[(0.0, 3.0)], 8, &Window(vec![1.0; 8])).is_none());
+        assert!(multiband(&[(0.5, 0.25)], 8, &Window(vec![1.0; 8])).is_none());
     }
 }
