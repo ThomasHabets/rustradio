@@ -63,7 +63,7 @@ fn sum_product_avx(vec1: &[f32], vec2: &[f32]) -> f32 {
     // be checked by the macro above.
     unsafe {
         use core::arch::x86_64::*;
-        assert_eq!(vec1.len(), vec2.len());
+        assert!(vec2.len() >= vec1.len());
         let len = vec1.len() - vec1.len() % 8;
 
         // AVX.
