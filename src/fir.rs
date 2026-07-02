@@ -112,7 +112,7 @@ impl Fir<Float> {
     #[must_use]
     pub fn filter_float(&self, input: &[Float]) -> Float {
         #[cfg(all(target_arch = "wasm32", target_feature = "simd128",))]
-        return sum_product_float_wasm(&self.taps, input);
+        return sum_product_float_wasm(input, &self.taps);
         // AVX is faster, when available.
         #[cfg(all(
             target_feature = "avx",
