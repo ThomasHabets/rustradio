@@ -1,0 +1,19 @@
+name: Run WASM benchmark for UI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  wasm-bench:
+    runs-on: ubuntu-latest
+    name: Run WASM benchmark
+    steps:
+    - uses: actions/checkout@v6
+    - name: Run benchmark
+      run: cd rustradio-ui && wasm-pack test --release  --headless --chrome .   -- 

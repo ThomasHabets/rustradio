@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+find_chrome() {
+    if [[ -n "${CHROME:-}" ]]; then
+        printf '%s\n' "$CHROME"
+        return
+    fi
+
+    for binary in google-chrome google-chrome-stable chromium chromium-browser; do
+        if command -v "$binary" >/dev/null 2>&1; then
+            command -v "$binary"
+            return
+        fi
+    done
+
+    echo "Could not find Chrome. Set CHROME=/path/to/chrome." >&2
+    exit 1
+}
+
+chrome_for_testing_platform() {
+    case "$(uname -s):$(uname -m)" in
+        Linux:x86_64) echo "linux64" ;;
+        Darwin:arm64) echo "mac-arm64" ;;
+        Darwin:x86_64) echo "mac-x64" ;;
+        *)
+            echo "Unsupported platform for ChromeDriver: $(uname -s) $(uname -m)" >&2
+            exit 1
+            ;;
+    esac
+}
+
+install_chromedriver() {
+    local version="$1"
+    local destination="$2"
+    local tmpd
+
+    tmpd="$(mktemp -d)"
+    if ! curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/$version/$platform/chromedriver-$platform.zip" -o "$tmpd/chromedriver.zip"; then
+        rm -rf "$tmpd"
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$destination")"
+    unzip -q "$tmpd/chromedriver.zip" -d "$tmpd"
+    install -m 0755 "$tmpd/chromedriver-$platform/chromedriver" "$destination"
+    rm -rf "$tmpd"
+}
+
+chrome="$(find_chrome)"
+chrome_version="$("$chrome" --version | sed -E 's/.* ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+if [[ ! "$chrome_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Could not parse Chrome version from: $("$chrome" --version)" >&2
+    exit 1
+fi
+
+platform="$(chrome_for_testing_platform)"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/ruwasm/chromedriver"
+driver="$cache_root/$chrome_version/$platform/chromedriver"
+
+if [[ ! -x "$driver" ]]; then
+    if ! install_chromedriver "$chrome_version" "$driver"; then
+        chrome_major="${chrome_version%%.*}"
+        driver_version="$(curl -fsSL "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_$chrome_major")"
+        driver="$cache_root/$driver_version/$platform/chromedriver"
+        [[ -x "$driver" ]] || install_chromedriver "$driver_version" "$driver"
+    fi
+fi
+
+exec "$driver" "$@"
