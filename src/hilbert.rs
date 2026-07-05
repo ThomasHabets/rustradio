@@ -41,7 +41,10 @@ impl Hilbert {
         window_type: &WindowType,
     ) -> (Self, ReadStream<Complex>) {
         // TODO: take window function.
-        assert!(ntaps & 1 == 1, "hilbert filter len must be odd");
+        assert!(
+            ntaps > 1 && ntaps & 1 == 1,
+            "hilbert filter len must be odd and greater than 1"
+        );
         let taps = crate::fir::hilbert(&window_type.make_window(ntaps));
         let (dst, dr) = crate::stream::new_stream();
         (
