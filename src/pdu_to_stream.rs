@@ -62,6 +62,17 @@ impl<T: Sample> Block for PduToStream<T> {
                     continue;
                 }
                 self.pdu_len = pdu.len() as u64;
+                #[cfg(debug_assertions)]
+                {
+                    for tag in &tags {
+                        assert!(
+                            tag.pos() < pdu.len(),
+                            "Tag pos {} must be less that PDU len {}",
+                            tag.pos(),
+                            pdu.len()
+                        );
+                    }
+                }
                 self.tags = tags
                     .into_iter()
                     .filter(|tag| tag.pos() < pdu.len())
