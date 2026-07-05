@@ -11,6 +11,8 @@ use web_sys::{MessageEvent, Worker};
 use crate::ApplicationSpecific;
 use crate::{MainToWorker, WorkerToMain};
 
+pub mod constellation_sink;
+pub mod spectrum_sink;
 pub mod time_sink;
 mod worker_startup;
 
