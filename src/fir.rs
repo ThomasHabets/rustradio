@@ -433,7 +433,7 @@ impl FrequencyTranslate for Complex {
         freq: Float,
         deci: usize,
     ) -> Self::Translator {
-        assert_ne!(samp_rate, 0.0);
+        assert!(samp_rate > 0.0);
         assert_ne!(deci, 0);
         if freq == 0.0 {
             return None;
