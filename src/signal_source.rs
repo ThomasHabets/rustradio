@@ -22,7 +22,7 @@ impl SignalSourceComplex {
     /// Create new `SignalSourceComplex` block.
     #[must_use]
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> (Self, ReadStream<Complex>) {
-        assert_ne!(samp_rate, 0.0);
+        assert!(samp_rate > 0.0);
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -81,7 +81,7 @@ impl SignalSourceFloat {
     /// Create new `SignalSourceFloat` block.
     #[must_use]
     pub fn new(samp_rate: Float, freq: Float, amplitude: Float) -> (Self, ReadStream<Float>) {
-        assert_ne!(samp_rate, 0.0);
+        assert!(samp_rate > 0.0);
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
