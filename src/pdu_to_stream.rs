@@ -62,8 +62,11 @@ impl<T: Sample> Block for PduToStream<T> {
                     continue;
                 }
                 self.pdu_len = pdu.len() as u64;
+                self.tags = tags
+                    .into_iter()
+                    .filter(|tag| tag.pos() < pdu.len())
+                    .collect();
                 self.buf = pdu;
-                self.tags = tags;
                 self.tags
                     .push(Tag::new(0, TAG_START, TagValue::U64(self.pdu_len)));
             }
