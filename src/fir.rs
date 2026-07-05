@@ -620,6 +620,9 @@ pub fn low_pass(
     twidth: Float,
     window_type: impl Borrow<WindowType>,
 ) -> Vec<Float> {
+    assert!(samp_rate > 0.0);
+    assert!(cutoff > 0.0);
+    assert!(twidth > 0.0);
     let window_type = window_type.borrow();
 
     let pi = std::f64::consts::PI as Float;
