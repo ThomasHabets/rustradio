@@ -179,6 +179,7 @@ where
     /// Call `filter()` multiple times, across an input range.
     #[must_use]
     pub fn filter_n(&self, input: &[T], deci: usize) -> Vec<T> {
+        assert_ne!(deci, 0);
         assert!(input.len() >= self.taps.len());
         let n = input.len() - self.taps.len();
         (0..=n)
@@ -189,6 +190,7 @@ where
 
     /// Like `filter_n`, but avoids a copy when there's a destination in mind.
     pub fn filter_n_inplace(&self, input: &[T], deci: usize, out: &mut [T]) {
+        assert_ne!(deci, 0);
         out.iter_mut()
             .enumerate()
             .for_each(|(i, o)| *o = self.filter(&input[(i * deci)..]));
