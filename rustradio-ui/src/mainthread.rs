@@ -11,6 +11,7 @@ use web_sys::{MessageEvent, Worker};
 use crate::ApplicationSpecific;
 use crate::{MainToWorker, WorkerToMain};
 
+pub mod time_sink;
 mod worker_startup;
 
 thread_local! {
