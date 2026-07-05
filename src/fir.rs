@@ -179,6 +179,7 @@ where
     /// Call `filter()` multiple times, across an input range.
     #[must_use]
     pub fn filter_n(&self, input: &[T], deci: usize) -> Vec<T> {
+        assert!(input.len() >= self.taps.len());
         let n = input.len() - self.taps.len();
         (0..=n)
             .step_by(deci)
