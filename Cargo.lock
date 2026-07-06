@@ -463,6 +463,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2228,6 +2238,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "136ba5e46b0edd188e277916fed8f5a7f6810622ec49e03831244f79c7cdfb3e"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "rtlsdr-fm"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "log",
+ "rustradio-ui",
+ "serde",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

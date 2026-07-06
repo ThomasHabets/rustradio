@@ -117,7 +117,9 @@ where
                         match e.data().try_into() {
                             Ok(msg) => {
                                 match &msg {
-                                    WorkerToMain::LogLine { .. } => {}
+                                    WorkerToMain::LogLine { level, line } => {
+                                        log::log!(*level, "[worker] {line}");
+                                    }
                                     _other => warn!("Main thread received posted {msg:?}"),
                                 }
                                 if let Err(e) = worker_msg(msg).await {

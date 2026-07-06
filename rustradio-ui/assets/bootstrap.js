@@ -33,8 +33,13 @@ export async function bootstrap({pkgName, wasmMemoryConfig, workerThreadStackSiz
     globalThis.__ruwasmModule = module;
     await init({ module_or_path: module, memory });
     console.log("About to init thread pool");
-    await initThreadPool(navigator.hardwareConcurrency);
-    console.log("Thread pool inited");
+    try {
+      await initThreadPool(navigator.hardwareConcurrency);
+      console.log("Thread pool inited");
+    } catch (e) {
+      console.log(`Failed to init thread pool (that's fine, as long as you don't use threads like rayon): ${e}`);
+    }
+    console.log("Starting up main UI");
     await start();
   } else {
     globalThis.addEventListener("message", async function onInit(event) {

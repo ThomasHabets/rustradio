@@ -2,6 +2,7 @@
 name = "rtlsdr-fm"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 console_error_panic_hook = "0.1.7"
