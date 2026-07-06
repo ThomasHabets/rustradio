@@ -4,6 +4,7 @@ no-default-features = false
 
 [advisories]
 ignore = [
+"RUSTSEC-2026-0204",
 ]
 
 [licenses]

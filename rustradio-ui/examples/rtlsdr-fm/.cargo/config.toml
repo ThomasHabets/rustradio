@@ -1,0 +1,21 @@
+[env]
+CHROMEDRIVER = { value = "tools/chromedriver", force = true }
+
+[unstable]
+build-std = ["panic_abort", "std"]
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+    #"-g",
+    # memory64 not supported by rustc, but supported by chrome
+    "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals,+simd128,+relaxed-simd,+sign-ext,+nontrapping-fptoint,+reference-types,+multivalue,+tail-call",
+    "-C", "link-arg=--shared-memory",
+    "-C", "link-arg=--import-memory",
+    "-C", "link-arg=--max-memory=1073741824",
+    "-C", "link-arg=--export=__heap_base",
+    "-C", "link-arg=--export=__wasm_init_tls",
+    "-C", "link-arg=--export=__tls_base",
+    "-C", "link-arg=--export=__tls_size",
+    "-C", "link-arg=--export=__tls_align",
+    "--cfg=web_sys_unstable_apis",
+]
