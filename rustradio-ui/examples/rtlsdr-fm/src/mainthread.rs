@@ -8,8 +8,11 @@ use rustradio_ui::{AppEmpty, TaggedVec};
 
 use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
 
+// HTML DOM IDs.
+pub(crate) const ID_LOG_OUTPUT: &str = "log-output";
 const ID_START: &str = "button-start";
 const ID_WATERFALL: &str = "waterfall";
+
 pub(crate) const SAMPLE_RATE: u32 = 250_000;
 const FREQUENCY: u32 = 100_000_000;
 

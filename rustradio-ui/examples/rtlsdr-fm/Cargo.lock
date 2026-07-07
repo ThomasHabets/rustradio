@@ -540,7 +540,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio"
-version = "0.17.3"
+version = "0.18.0"
 dependencies = [
  "async-channel",
  "async-trait",
@@ -551,7 +551,7 @@ dependencies = [
  "num-complex",
  "rayon",
  "rustfft",
- "rustradio_macros 0.17.3",
+ "rustradio_macros 0.18.0",
  "serde",
  "serde_json",
  "sha2",
@@ -564,13 +564,14 @@ dependencies = [
 
 [[package]]
 name = "rustradio-ui"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "async-channel",
+ "js-sys",
  "log",
  "num-complex",
  "rustradio",
- "rustradio_macros 0.17.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustradio_macros 0.17.3",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",
@@ -581,6 +582,8 @@ dependencies = [
 [[package]]
 name = "rustradio_macros"
 version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62a043196c1e8f270d54d25afbdb7e02942f00ad3499946963fdd9418cab4501"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -590,22 +593,11 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros"
-version = "0.17.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62a043196c1e8f270d54d25afbdb7e02942f00ad3499946963fdd9418cab4501"
+version = "0.18.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "rustradio_macros_code 0.17.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn",
-]
-
-[[package]]
-name = "rustradio_macros_code"
-version = "0.17.3"
-dependencies = [
- "proc-macro2",
- "quote",
+ "rustradio_macros_code 0.18.0",
  "syn",
 ]
 
@@ -614,6 +606,15 @@ name = "rustradio_macros_code"
 version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b3c467237f2a7dd0d08a7e839bb7667439524ebe27bd475556218de33cbd657"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "rustradio_macros_code"
+version = "0.18.0"
 dependencies = [
  "proc-macro2",
  "quote",

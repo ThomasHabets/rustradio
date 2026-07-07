@@ -10,7 +10,7 @@ async-channel = { version = "2.5.0", default-features = false }
 console_error_panic_hook = "0.1.7"
 log = "0.4.33"
 rtlsdr-pure = "0.1.6"
-rustradio = { version = "0.17.3", features = ["wasm", "fast-math", "simd"] }
+rustradio = { version = "0.18.0", features = ["wasm", "fast-math", "simd"] }
 rustradio-ui = { path = "../..", features = ["audio"] }
 #rustradio-ui = { version = "0.1.18", features = ["audio"] }
 serde = "1.0.228"

@@ -33,6 +33,10 @@ where
     MAIN_UI_TX.with(|slot| *slot.borrow_mut() = Some(Box::new(tx)));
 }
 
+/// Set up the worker. This consists of setting up the slow message passing
+/// `onmessage` handler, ready to receive the channel for the fast mpsc channel.
+///
+/// It should be called early in the worker's setup.
 pub async fn setup<App1, App2, Ready>(ready: Ready) -> Result<(), JsValue>
 where
     Ready: Fn(Receiver<MainToWorker<App1>>) + 'static,

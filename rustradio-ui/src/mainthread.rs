@@ -21,6 +21,7 @@ thread_local! {
     static WORKER_TX: RefCell<Option<Box<dyn Any>>> = const { RefCell::new(None)} ;
 }
 
+/// Post a message using the slower message passing method.
 pub fn post_message<T: Serialize + ?Sized>(msg: &T) -> rustradio::Result<()> {
     let msg: JsValue = serde_wasm_bindgen::to_value(msg)
         .map_err(|e| rustradio::Error::msg(format!("JS error serializing: {e:?}")))?;
@@ -74,10 +75,17 @@ where
     Ok(())
 }
 
+/// Get HTML button by ID.
 pub fn get_button(id: &str) -> Result<web_sys::HtmlButtonElement, JsValue> {
     Ok(get_element(id)?.dyn_into()?)
 }
 
+/// Get HTML input element by ID.
+pub fn get_input(id: &str) -> Result<web_sys::HtmlInputElement, JsValue> {
+    Ok(get_element(id)?.dyn_into()?)
+}
+
+/// Get HTML element by ID.
 pub fn get_element(id: &str) -> Result<web_sys::Element, JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
     let document = window
@@ -88,6 +96,10 @@ pub fn get_element(id: &str) -> Result<web_sys::Element, JsValue> {
         .ok_or_else(|| JsValue::from_str(&format!("can't find element with id {id}")))
 }
 
+/// Start the worker.
+///
+/// This should be called by the main UI thread. Likely it should be called in
+/// the setup function. It only starts the worker, not the rustradio graph.
 pub fn start_worker<AppMain, AppWorker, F, Ret>(worker_msg: F) -> Worker
 where
     for<'de> AppWorker: crate::ApplicationSpecific + serde::Deserialize<'de>,
@@ -190,6 +202,7 @@ where
         .clone()
     })
 }
+
 fn worker() -> Worker {
     WORKER.with(|cell| cell.get().unwrap().clone())
 }

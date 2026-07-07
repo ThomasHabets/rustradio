@@ -4,8 +4,6 @@ use wasm_bindgen::prelude::*;
 mod mainthread;
 mod worker;
 
-const ID_LOG_OUTPUT: &str = "log-output";
-
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) enum MyWorkerToMain {}
 
@@ -28,7 +26,7 @@ pub async fn start() -> Result<(), JsValue> {
         worker::setup().await
     } else {
         rustradio_ui::dom_logger::init_logging::<MyWorkerToMain>(
-            ID_LOG_OUTPUT,
+            mainthread::ID_LOG_OUTPUT,
             log::LevelFilter::Info,
         )
         .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
