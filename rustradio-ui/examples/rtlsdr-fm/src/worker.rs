@@ -18,6 +18,7 @@ pub(crate) const STREAM_SPECTRUM: &str = "spectrum";
 const AUDIO_SAMPLE_RATE: usize = 44_100;
 const SOURCE_CHANNEL_SIZE: usize = 10;
 const SPECTRUM_SIZE: usize = 2048;
+const DECI: u32 = crate::mainthread::SAMPLE_RATE / 50_000;
 
 thread_local! {
 static SOURCE: OnceCell<Sender<source::Msg<u8>>> = const { OnceCell::new() };
@@ -31,8 +32,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
     let mut g = rustradio::wasm::wasm_graph::WasmGraph::default();
     let (src, prev, src_tx) = source::WasmSource::<MyWorkerToMain, _>::new(RCV_SOURCE_ID);
 
-    let samp_rate = 250_000.0f32;
-    let deci = 5;
+    let samp_rate = crate::mainthread::SAMPLE_RATE as f32;
     let filter1 = rustradio::fir::low_pass_complex(
         samp_rate,
         10_000.0,
@@ -45,7 +45,6 @@ async fn run_graph() -> Result<(), rustradio::Error> {
         prev,
         (src, prev),
         RtlSdrDecode::new(prev),
-        FirFilter::builder(filter1).deci(deci).build(prev),
         {
             let mut dropcount = 0;
             let (tee, a, prev) = Tee::new(prev);
@@ -74,9 +73,10 @@ async fn run_graph() -> Result<(), rustradio::Error> {
             )));
             (tee, a)
         },
+        FirFilter::builder(filter1).deci(DECI as usize).build(prev),
         QuadratureDemod::new(prev, 1.0),
         RationalResampler::builder()
-            .deci((samp_rate as usize) / deci)
+            .deci((samp_rate as usize) / (DECI as usize))
             .interp(AUDIO_SAMPLE_RATE)
             .build(prev)?,
     ];

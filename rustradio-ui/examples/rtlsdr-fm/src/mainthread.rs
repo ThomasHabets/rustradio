@@ -10,6 +10,8 @@ use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
 
 const ID_START: &str = "button-start";
 const ID_WATERFALL: &str = "waterfall";
+pub(crate) const SAMPLE_RATE: u32 = 250_000;
+const FREQUENCY: u32 = 100_000_000;
 
 thread_local! {
     static WATERFALL_SINK: OnceCell<spectrum_sink::WaterfallSink> = const { OnceCell::new() };
@@ -57,9 +59,9 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
 }
 
 async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> {
-    let sample_rate: u32 = 250_000;
+    let sample_rate: u32 = SAMPLE_RATE;
     let gain_mode = rtlsdr_pure::GainMode::Auto;
-    let freq = 100_000_000;
+    let freq = FREQUENCY;
     info!(
         "RTLSDR manufacturer: {}",
         sdr.manufacturer().unwrap_or("<unknown>")
@@ -153,7 +155,7 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
             spectrum_sink::WaterfallSinkOptions {
                 title: "Waterfall".into(),
                 subtitle: "FFT power history".into(),
-                sample_rate: 250_000.0,
+                sample_rate: SAMPLE_RATE as f32,
                 ..Default::default()
             },
         )?;
