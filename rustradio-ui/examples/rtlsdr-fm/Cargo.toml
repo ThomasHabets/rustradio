@@ -22,3 +22,8 @@ crate-type = ["cdylib"]
 
 [patch.crates-io]
 rustradio = { path = "../../.." }
+
+[package.metadata.wasm-pack.profile.profiling]
+# wasm-bindgen, called by wasm-pack, needs to be told to keep debug info in
+# profiling profile.
+wasm-opt = ["-O", "-g"]

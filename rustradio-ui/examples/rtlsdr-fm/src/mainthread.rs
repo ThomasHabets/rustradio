@@ -1,13 +1,34 @@
 use log::{info, trace, warn};
+use std::cell::OnceCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
-use rustradio_ui::mainthread::{get_button, send_message, send_message_sync};
+use rustradio_ui::mainthread::{get_button, send_message, send_message_sync, spectrum_sink};
 use rustradio_ui::{AppEmpty, TaggedVec};
 
 use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
 
 const ID_START: &str = "button-start";
+const ID_WATERFALL: &str = "waterfall";
+
+thread_local! {
+    static WATERFALL_SINK: OnceCell<spectrum_sink::WaterfallSink> = const { OnceCell::new() };
+}
+
+/// Borrow the application-owned waterfall sink handle from main-thread
+/// callbacks.
+fn with_waterfall_sink<T>(
+    f: impl FnOnce(&spectrum_sink::WaterfallSink) -> rustradio::Result<T>,
+) -> rustradio::Result<T> {
+    WATERFALL_SINK.with(|slot| {
+        let Some(sink) = slot.get() else {
+            return Err(rustradio::Error::msg(
+                "waterfall sink has not been initialized",
+            ));
+        };
+        f(sink)
+    })
+}
 
 async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
     match msg {
@@ -17,11 +38,18 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
             let btn = get_button(ID_START)?;
             btn.set_disabled(false);
         }
-        WorkerToMain::Floats(_name, streams) => {
-            assert_eq!(streams.len(), 1);
-            trace!("Got audio samples {}", streams[0].data.len());
-            rustradio_ui::browser_audio::enqueue(streams[0].data.iter().copied())?;
-        }
+        WorkerToMain::Floats(name, streams) => match name.as_str() {
+            crate::worker::STREAM_AUDIO => {
+                assert_eq!(streams.len(), 1);
+                trace!("Got audio samples {}", streams[0].data.len());
+                rustradio_ui::browser_audio::enqueue(streams[0].data.iter().copied())?;
+            }
+            crate::worker::STREAM_SPECTRUM => {
+                trace!("Got spectrum size {}", streams[0].data.len());
+                with_waterfall_sink(|sink| sink.update(&streams))?;
+            }
+            _ => {}
+        },
         WorkerToMain::RequestData(_, _) => {}
         ref _other => info!("Got worker msg: {msg:?}"),
     }
@@ -31,7 +59,7 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
 async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> {
     let sample_rate: u32 = 250_000;
     let gain_mode = rtlsdr_pure::GainMode::Auto;
-    let freq = 144_800_000;
+    let freq = 100_000_000;
     info!(
         "RTLSDR manufacturer: {}",
         sdr.manufacturer().unwrap_or("<unknown>")
@@ -118,6 +146,18 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
         let btn = get_button(ID_START)?;
         btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
         handler.forget();
+    }
+    {
+        let water = spectrum_sink::WaterfallSink::mount_by_id(
+            ID_WATERFALL,
+            spectrum_sink::WaterfallSinkOptions {
+                title: "Waterfall".into(),
+                subtitle: "FFT power history".into(),
+                sample_rate: 250_000.0,
+                ..Default::default()
+            },
+        )?;
+        let _ = WATERFALL_SINK.with(|slot| slot.set(water));
     }
     rustradio_ui::mainthread::start_worker::<MyMainToWorker, MyWorkerToMain, _, _>(worker_msg);
     Ok(())

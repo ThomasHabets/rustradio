@@ -1,0 +1,8 @@
+.rr-waterfall-sink-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(280px, 32vh, 380px);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}

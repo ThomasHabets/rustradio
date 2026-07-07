@@ -13,8 +13,11 @@ use rustradio_ui::{AppEmpty, TaggedVec};
 use crate::{MainToWorker, MyWorkerToMain, WorkerToMain};
 
 pub(crate) const RCV_SOURCE_ID: &str = "rtl-sdr";
+pub(crate) const STREAM_AUDIO: &str = "audio";
+pub(crate) const STREAM_SPECTRUM: &str = "spectrum";
 const AUDIO_SAMPLE_RATE: usize = 44_100;
 const SOURCE_CHANNEL_SIZE: usize = 10;
+const SPECTRUM_SIZE: usize = 2048;
 
 thread_local! {
 static SOURCE: OnceCell<Sender<source::Msg<u8>>> = const { OnceCell::new() };
@@ -23,7 +26,7 @@ static GRAPH_POKE: OnceCell<Sender<()>> = const { OnceCell::new() };
 
 async fn run_graph() -> Result<(), rustradio::Error> {
     use rustradio::blocks::*;
-    use rustradio_ui::worker::FloatSink;
+    use rustradio_ui::worker::{FloatPduSink, FloatSink};
 
     let mut g = rustradio::wasm::wasm_graph::WasmGraph::default();
     let (src, prev, src_tx) = source::WasmSource::<MyWorkerToMain, _>::new(RCV_SOURCE_ID);
@@ -43,6 +46,34 @@ async fn run_graph() -> Result<(), rustradio::Error> {
         (src, prev),
         RtlSdrDecode::new(prev),
         FirFilter::builder(filter1).deci(deci).build(prev),
+        {
+            let mut dropcount = 0;
+            let (tee, a, prev) = Tee::new(prev);
+            let prev = blockchain![
+                g,
+                prev,
+                FftStream::new(prev, SPECTRUM_SIZE),
+                Map::keep_tags(prev, "fft_power_db", |bin| {
+                    let power = (bin.norm_sqr() / SPECTRUM_SIZE as f32).max(1.0e-20);
+                    10.0 * power.log10()
+                }),
+                StreamToPdu::new(prev, rustradio::fft_stream::TAG_FRAME, SPECTRUM_SIZE, 1),
+                NCMap::new(prev, "downsample", move |i, tags| {
+                    dropcount += 1;
+                    if dropcount == 10 {
+                        dropcount = 0;
+                        vec![(i, tags)]
+                    } else {
+                        vec![]
+                    }
+                }),
+            ];
+            g.add(Box::new(FloatPduSink::<MyWorkerToMain>::new(
+                prev,
+                STREAM_SPECTRUM,
+            )));
+            (tee, a)
+        },
         QuadratureDemod::new(prev, 1.0),
         RationalResampler::builder()
             .deci((samp_rate as usize) / deci)
@@ -51,7 +82,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
     ];
     g.add(Box::new(FloatSink::<MyWorkerToMain>::new(
         prev,
-        "audio".into(),
+        STREAM_AUDIO,
     )));
     info!("Running graph…");
     let (tx, rx) = async_channel::bounded(SOURCE_CHANNEL_SIZE);
