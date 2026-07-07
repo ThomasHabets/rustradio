@@ -68,7 +68,7 @@ impl WasmGraph {
                 return Ok(());
             }
             if need_more {
-                //info!("Graph: About to wait for more somethings");
+                trace!("Graph: About to wait for more somethings");
                 if let Err(e) = rx.recv().await {
                     info!("Graph: recv error: {e:?}");
                     // This can only happen if the sender crashed. If the worker
@@ -76,6 +76,7 @@ impl WasmGraph {
                     // connected to nothing.
                     return Err(crate::Error::msg("recv()"));
                 }
+                trace!("Graph: Got woken up");
             }
         }
     }

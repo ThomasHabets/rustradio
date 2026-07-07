@@ -96,13 +96,16 @@ impl<App: ApplicationSpecific> Log for DomConsoleLogger<App> {
     fn flush(&self) {}
 }
 
-pub fn init_logging<App>(element_id: impl Into<String>) -> Result<(), log::SetLoggerError>
+pub fn init_logging<App>(
+    element_id: impl Into<String>,
+    level: LevelFilter,
+) -> Result<(), log::SetLoggerError>
 where
     App: ApplicationSpecific + 'static,
 {
     let logger = Box::new(DomConsoleLogger {
         // Make consistent, and configurable.
-        level: LevelFilter::Info,
+        level,
         // TODO: make the ID configurable.
         element_id: element_id.into(),
         log_lines: std::sync::Mutex::new(VecDeque::new()),
@@ -111,7 +114,7 @@ where
 
     log::set_boxed_logger(logger)?;
     // Make consistent, and configurable.
-    log::set_max_level(LevelFilter::Info);
+    log::set_max_level(level);
     console_log("Test of console log fallback");
     Ok(())
 }

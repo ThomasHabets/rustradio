@@ -1,8 +1,9 @@
-use log::info;
+use log::{info, trace, warn};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
-use rustradio_ui::AppEmpty;
-use rustradio_ui::mainthread::{get_button, send_message_sync};
+use rustradio_ui::mainthread::{get_button, send_message, send_message_sync};
+use rustradio_ui::{AppEmpty, TaggedVec};
 
 use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
 
@@ -16,13 +17,99 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
             let btn = get_button(ID_START)?;
             btn.set_disabled(false);
         }
+        WorkerToMain::Floats(_name, streams) => {
+            assert_eq!(streams.len(), 1);
+            trace!("Got audio samples {}", streams[0].data.len());
+            rustradio_ui::browser_audio::enqueue(streams[0].data.iter().copied())?;
+        }
+        WorkerToMain::RequestData(_, _) => {}
         ref _other => info!("Got worker msg: {msg:?}"),
     }
     Ok(())
 }
 
+async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> {
+    let sample_rate: u32 = 250_000;
+    let gain_mode = rtlsdr_pure::GainMode::Auto;
+    let freq = 144_800_000;
+    info!(
+        "RTLSDR manufacturer: {}",
+        sdr.manufacturer().unwrap_or("<unknown>")
+    );
+    info!("RTLSDR product: {}", sdr.product().unwrap_or("<unknown>"));
+    info!("RTLSDR tuner: {:?}", sdr.tuner_kind());
+    let actual_rate = sdr.set_sample_rate(sample_rate).await?;
+    info!("sample rate: {actual_rate} Hz");
+
+    if sdr.tuner_kind().is_supported() {
+        sdr.set_tuner_gain(gain_mode).await?;
+        info!("RTLSDR tuner gain: {gain_mode:?}");
+        sdr.set_center_frequency(freq).await?;
+        info!("center frequency: {freq} Hz");
+    } else {
+        info!("center frequency: skipped for unsupported tuner");
+    }
+    sdr.reset_buffer().await?;
+
+    let read_len = 16384usize; // 33ms.
+    info!("Running the rtlsdr loop");
+    //let mut deadline = js_performance_now() + 1000.0f64; // One second. Basically infin    ite time.
+    loop {
+        /*
+        let now = js_performance_now();
+        if now > deadline {
+            warn!(
+                "Slow to read from RTLSDR! Missed it by {} ms",
+                now - deadline
+            );
+        }
+        */
+        let bytes = sdr.read_bytes(read_len).await?;
+        /*
+        deadline =
+            js_performance_now() + 1_000.0f64 * ((bytes.len() / 2) as f64) / f64::from(actual_rate);
+        */
+        assert!(bytes.len().is_multiple_of(2));
+        //log::trace!("Read {} bytes from rtlsdr", bytes.len());
+        send_message(MainToWorker::Bytes(
+            crate::worker::RCV_SOURCE_ID.into(),
+            vec![TaggedVec {
+                data: bytes,
+                tags: vec![],
+            }],
+        ))
+        .await
+        .map_err(|_| JsValue::from_str("failed to send to worker"))?;
+    }
+}
+
 fn handle_start() -> Result<(), JsValue> {
-    Ok(send_message_sync(MainToWorker::Start(AppEmpty {}))?)
+    let btn = get_button(ID_START)?;
+    btn.set_disabled(true);
+    rustradio_ui::browser_audio::set_volume(0.2);
+    spawn_local(async move {
+        // Get the RTLSDR.
+        let sdr = match rtlsdr_pure::open_first().await {
+            Err(e) => {
+                warn!("Failed to open RTLSDR: {e}");
+                return;
+            }
+            Ok(sdr) => {
+                info!(
+                    "opened {:04x}:{:04x} {}",
+                    sdr.vendor_id(),
+                    sdr.product_id(),
+                    sdr.known_name().unwrap_or("RTL-SDR")
+                );
+                sdr
+            }
+        };
+        if let Err(e) = run_rtlsdr_source(sdr).await {
+            warn!("RTL SDR source failed: {e:?}");
+        }
+    });
+    send_message_sync(MainToWorker::Start(AppEmpty {}))?;
+    Ok(())
 }
 
 pub(crate) async fn setup() -> Result<(), JsValue> {

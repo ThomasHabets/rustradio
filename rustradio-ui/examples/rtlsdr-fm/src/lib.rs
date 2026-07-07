@@ -27,8 +27,11 @@ pub async fn start() -> Result<(), JsValue> {
         info!("Worker: Starting");
         worker::setup().await
     } else {
-        rustradio_ui::dom_logger::init_logging::<MyWorkerToMain>(ID_LOG_OUTPUT)
-            .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
+        rustradio_ui::dom_logger::init_logging::<MyWorkerToMain>(
+            ID_LOG_OUTPUT,
+            log::LevelFilter::Info,
+        )
+        .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
         info!("Main UI: Starting");
         mainthread::setup().await
     }

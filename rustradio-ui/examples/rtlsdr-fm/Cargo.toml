@@ -1,3 +1,4 @@
+[workspace]
 [package]
 name = "rtlsdr-fm"
 version = "0.1.0"
@@ -8,12 +9,16 @@ license = "MIT"
 async-channel = { version = "2.5.0", default-features = false }
 console_error_panic_hook = "0.1.7"
 log = "0.4.33"
+rtlsdr-pure = "0.1.6"
 rustradio = { version = "0.17.3", features = ["wasm", "fast-math", "simd"] }
 rustradio-ui = { path = "../..", features = ["audio"] }
 serde = "1.0.228"
-wasm-bindgen = "0.2.126"
-wasm-bindgen-futures = "0.4.76"
-web-sys = "0.3.103"
+wasm-bindgen = "0.2.125"
+wasm-bindgen-futures = "0.4.75"
+web-sys = "0.3.102"
 
 [lib]
 crate-type = ["cdylib"]
+
+[patch.crates-io]
+rustradio = { path = "../../.." }
