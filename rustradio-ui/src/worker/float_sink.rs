@@ -15,6 +15,7 @@ use crate::WorkerToMain;
 #[derive(rustradio_macros::Block)]
 #[rustradio(new)]
 pub struct FloatSink<App> {
+    #[rustradio(into)]
     name: String,
     #[rustradio(in)]
     src: ReadStream<Float>,

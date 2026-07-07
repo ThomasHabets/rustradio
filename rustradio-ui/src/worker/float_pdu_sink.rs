@@ -17,6 +17,7 @@ const DEBUG_KEEP_1_IN_N: usize = 1;
 #[rustradio(new)]
 pub struct FloatPduSink<App> {
     /// Name of the stream, for the main thread to multiplex on.
+    #[rustradio(into)]
     name: String,
     #[rustradio(in)]
     src: NCReadStream<Vec<Float>>,
