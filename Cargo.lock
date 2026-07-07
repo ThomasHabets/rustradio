@@ -2307,6 +2307,7 @@ name = "rustradio"
 version = "0.17.2"
 dependencies = [
  "anyhow",
+ "async-channel",
  "async-trait",
  "chrono",
  "clap",

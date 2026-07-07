@@ -10,6 +10,8 @@ use wasm_bindgen::prelude::*;
 use crate::stream::{Tag, TagPos};
 use crate::{Error, Result};
 
+pub mod wasm_graph;
+
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = console)]
