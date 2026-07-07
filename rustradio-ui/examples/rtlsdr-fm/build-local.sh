@@ -16,7 +16,7 @@ cp \
         "$WEBD/wasm-mod.js" \
         "$TMPD/$PREFIX/"
 cp "$UI_ASSETS/bootstrap.js" "$TMPD/$PREFIX/rustradio-ui-bootstrap.js"
-cat "$UI_ASSETS/rustradio.css" > "$TMPD/$PREFIX/style.css"
+cat "$UI_ASSETS/rustradio.css" "$WEBD/style.css" > "$TMPD/$PREFIX/style.css"
 
 sed -i "s/GIT_VERSION_NOT_SET/$GIT/g" "$TMPD/$PREFIX/index.html"
 (

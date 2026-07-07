@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 use rustradio_ui::mainthread::{
-    get_button, get_input, send_message, send_message_sync, spectrum_sink,
+    get_button, get_input, send_message, send_message_sync, spectrum_sink, time_sink,
 };
 use rustradio_ui::{AppEmpty, TaggedVec};
 
@@ -15,11 +15,13 @@ pub(crate) const ID_LOG_OUTPUT: &str = "log-output";
 const ID_START: &str = "button-start";
 const ID_FREQUENCY: &str = "input-frequency";
 const ID_WATERFALL: &str = "waterfall";
+const ID_WAVEFORM: &str = "audio-waveform";
 
 pub(crate) const SAMPLE_RATE: u32 = 250_000;
 
 thread_local! {
     static WATERFALL_SINK: OnceCell<spectrum_sink::WaterfallSink> = const { OnceCell::new() };
+    static WAVEFORM_SINK: OnceCell<time_sink::TimeSink> = const { OnceCell::new() };
 }
 
 /// Borrow the application-owned waterfall sink handle from main-thread
@@ -28,6 +30,21 @@ fn with_waterfall_sink<T>(
     f: impl FnOnce(&spectrum_sink::WaterfallSink) -> rustradio::Result<T>,
 ) -> rustradio::Result<T> {
     WATERFALL_SINK.with(|slot| {
+        let Some(sink) = slot.get() else {
+            return Err(rustradio::Error::msg(
+                "waterfall sink has not been initialized",
+            ));
+        };
+        f(sink)
+    })
+}
+
+/// Borrow the application-owned waterfall sink handle from main-thread
+/// callbacks.
+fn with_waveform_sink<T>(
+    f: impl FnOnce(&time_sink::TimeSink) -> rustradio::Result<T>,
+) -> rustradio::Result<T> {
+    WAVEFORM_SINK.with(|slot| {
         let Some(sink) = slot.get() else {
             return Err(rustradio::Error::msg(
                 "waterfall sink has not been initialized",
@@ -50,6 +67,7 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
                 assert_eq!(streams.len(), 1);
                 trace!("Got audio samples {}", streams[0].data.len());
                 rustradio_ui::browser_audio::enqueue(streams[0].data.iter().copied())?;
+                with_waveform_sink(|sink| sink.update(streams))?;
             }
             crate::worker::STREAM_SPECTRUM => {
                 trace!("Got spectrum size {}", streams[0].data.len());
@@ -170,6 +188,19 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
             },
         )?;
         let _ = WATERFALL_SINK.with(|slot| slot.set(water));
+    }
+    {
+        let wave = time_sink::TimeSink::mount_by_id(
+            ID_WAVEFORM,
+            time_sink::TimeSinkOptions {
+                title: "Audio".into(),
+                subtitle: "Audio waveform".into(),
+                sample_rate: crate::worker::AUDIO_SAMPLE_RATE as f64,
+                max_points: 3 * crate::worker::AUDIO_SAMPLE_RATE,
+                ..Default::default()
+            },
+        )?;
+        let _ = WAVEFORM_SINK.with(|slot| slot.set(wave));
     }
     rustradio_ui::mainthread::start_worker::<MyMainToWorker, MyWorkerToMain, _, _>(worker_msg);
     Ok(())

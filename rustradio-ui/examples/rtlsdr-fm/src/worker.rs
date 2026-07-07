@@ -15,7 +15,7 @@ use crate::{MainToWorker, MyWorkerToMain, WorkerToMain};
 pub(crate) const RCV_SOURCE_ID: &str = "rtl-sdr";
 pub(crate) const STREAM_AUDIO: &str = "audio";
 pub(crate) const STREAM_SPECTRUM: &str = "spectrum";
-const AUDIO_SAMPLE_RATE: usize = 44_100;
+pub(crate) const AUDIO_SAMPLE_RATE: usize = 44_100;
 const SOURCE_CHANNEL_SIZE: usize = 10;
 const SPECTRUM_SIZE: usize = 2048;
 const DECI: u32 = crate::mainthread::SAMPLE_RATE / 50_000;

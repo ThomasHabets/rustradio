@@ -27,6 +27,23 @@
 .rr-panel-body {
   padding: 1rem;
 }
+
+/*
+ * Time sink
+ */
+
+.rr-time-sink-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(200px, 20vh, 470px);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+/*
+ * Waterfall sink
+ */
 .rr-waterfall-sink-layout {
   color: #222;
   display: grid;
