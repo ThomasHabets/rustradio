@@ -1,6 +1,5 @@
 [workspace]
-members = ["rustradio-ui","rustradio_macros", "rustradio_macros_code",
-"rustradio-ui/examples/*"]
+members = ["rustradio-ui","rustradio_macros", "rustradio_macros_code" ]
 
 [package]
 name = "rustradio"

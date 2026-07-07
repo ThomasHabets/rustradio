@@ -5,16 +5,63 @@ use log::{error, info};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
+use rustradio::blockchain;
+use rustradio::graph::GraphRunner;
 use rustradio_ui::worker::{send_message, source};
 use rustradio_ui::{AppEmpty, TaggedVec};
 
-use crate::{MainToWorker, WorkerToMain};
+use crate::{MainToWorker, MyWorkerToMain, WorkerToMain};
+
+const RCV_SOURCE_ID: &str = "rcv";
+const AUDIO_SAMPLE_RATE: usize = 44_100;
+const SOURCE_CHANNEL_SIZE: usize = 10;
 
 thread_local! {
 static SOURCE: OnceCell<Sender<source::Msg<u8>>> = const { OnceCell::new() };
+static GRAPH_POKE: OnceCell<Sender<()>> = const { OnceCell::new() };
 }
 
-async fn run_graph() -> Result<(), JsValue> {
+async fn run_graph() -> Result<(), rustradio::Error> {
+    use rustradio::blocks::*;
+    use rustradio_ui::worker::FloatSink;
+
+    let mut g = rustradio::wasm::wasm_graph::WasmGraph::default();
+    let (src, prev, src_tx) = source::WasmSource::<MyWorkerToMain, _>::new(RCV_SOURCE_ID);
+
+    let samp_rate = 250_000.0f32;
+    let deci = 5;
+    let filter1 = rustradio::fir::low_pass_complex(
+        samp_rate,
+        10_000.0,
+        15_000.0,
+        rustradio::window::WindowType::Hamming,
+    );
+
+    let prev = blockchain![
+        g,
+        prev,
+        (src, prev),
+        RtlSdrDecode::new(prev),
+        FirFilter::builder(filter1).deci(deci).build(prev),
+        QuadratureDemod::new(prev, 1.0),
+        RationalResampler::builder()
+            .deci((samp_rate as usize) / deci)
+            .interp(AUDIO_SAMPLE_RATE)
+            .build(prev)?,
+    ];
+    g.add(Box::new(FloatSink::<MyWorkerToMain>::new(
+        prev,
+        "audio".into(),
+    )));
+    info!("Running graph…");
+    let (tx, rx) = async_channel::bounded(SOURCE_CHANNEL_SIZE);
+    SOURCE.with(|slot| {
+        slot.get_or_init(move || src_tx);
+    });
+    GRAPH_POKE.with(|slot| {
+        slot.get_or_init(move || tx);
+    });
+    g.run_async(rx).await?;
     Ok(())
 }
 

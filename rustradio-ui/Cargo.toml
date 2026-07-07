@@ -16,8 +16,8 @@ log = { version = "0.4.30", features = [
         "std", # For boxed logger.
 ] }
 num-complex = { version = "0.4.6", features = ["serde"] }
-rustradio = { version = "0.17.0", features = ["wasm"] }
-rustradio_macros = "0.17.0"
+rustradio = { version = "0.17.3", features = ["wasm"] }
+rustradio_macros = "0.17.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.122"
