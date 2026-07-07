@@ -60,6 +60,20 @@ where
     }
 }
 
+/// Send a message to the main UI thread via the fast mpsc channel, from sync
+/// code.
+pub fn send_message_sync<App>(msg: MainToWorker<App>) -> rustradio::Result<()>
+where
+    App: ApplicationSpecific + 'static,
+{
+    spawn_local(async move {
+        if let Err(e) = send_message(msg).await {
+            error!("Failed to send message: {e:?}");
+        }
+    });
+    Ok(())
+}
+
 pub fn get_button(id: &str) -> Result<web_sys::HtmlButtonElement, JsValue> {
     Ok(get_element(id)?.dyn_into()?)
 }

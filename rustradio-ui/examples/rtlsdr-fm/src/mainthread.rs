@@ -1,9 +1,10 @@
 use log::info;
 use wasm_bindgen::prelude::*;
 
-use rustradio_ui::mainthread::get_button;
+use rustradio_ui::AppEmpty;
+use rustradio_ui::mainthread::{get_button, send_message_sync};
 
-use crate::{MyMainToWorker, MyWorkerToMain, WorkerToMain};
+use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
 
 const ID_START: &str = "button-start";
 
@@ -21,9 +22,7 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
 }
 
 fn handle_start() -> Result<(), JsValue> {
-    info!("Starting graph");
-    //let mut g = rustradio_ui::wasm_graph
-    Ok(())
+    Ok(send_message_sync(MainToWorker::Start(AppEmpty {}))?)
 }
 
 pub(crate) async fn setup() -> Result<(), JsValue> {
