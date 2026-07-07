@@ -2,6 +2,7 @@
 //! concept, but it needs to be properly reviewed.
 use std::borrow::Borrow;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
@@ -621,7 +622,8 @@ fn draw_waterfall_row(
     let bin_width = (plot_width / len.max(1) as f64).max(1.0);
     for i in 0..len {
         let value = frame[(i + half) % len];
-        ctx.set_fill_style_str(waterfall_color(value, min_db, max_db));
+        #[allow(deprecated)]
+        ctx.set_fill_style(&waterfall_color(value, min_db, max_db));
         ctx.fill_rect(
             plot_left + i as f64 * plot_width / len as f64,
             y,
@@ -789,19 +791,30 @@ fn axis_tick_fraction(index: usize) -> f64 {
     }
 }
 
+thread_local! {
+    static COLOR_CACHE: RefCell<HashMap<String, JsValue>> = RefCell::new(HashMap::new());
+}
+
 /// Map a power value to the waterfall palette.
-fn waterfall_color(value: f32, min_db: f32, max_db: f32) -> &'static str {
+fn waterfall_color(value: f32, min_db: f32, max_db: f32) -> JsValue {
     const COLORS: [&str; 16] = [
         "#00165f", "#002a86", "#0040ad", "#0059c8", "#0074d0", "#008fc2", "#00a9aa", "#17bd8b",
         "#4cc869", "#84ce4b", "#bfd13d", "#e8ca39", "#f5ae32", "#f58a2d", "#ee632f", "#ebebeb",
     ];
-    if !value.is_finite() {
-        return COLORS[0];
-    }
-    let range = (max_db - min_db).max(f32::EPSILON);
-    let t = ((value - min_db) / range).clamp(0.0, 1.0);
-    let idx = (t * (COLORS.len() - 1) as f32).round() as usize;
-    COLORS[idx]
+    let s = if !value.is_finite() {
+        COLORS[0]
+    } else {
+        let range = (max_db - min_db).max(f32::EPSILON);
+        let t = ((value - min_db) / range).clamp(0.0, 1.0);
+        let idx = (t * (COLORS.len() - 1) as f32).round() as usize;
+        COLORS[idx]
+    };
+    COLOR_CACHE.with(|slot| {
+        slot.borrow_mut()
+            .entry(s.to_owned())
+            .or_insert_with(|| JsValue::from_str(s))
+            .clone()
+    })
 }
 
 /// Format a frequency value for the axis.
