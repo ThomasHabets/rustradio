@@ -23,17 +23,17 @@ fn dom_result<T>(result: Result<T, JsValue>, context: &str) -> rustradio::Result
 }
 
 const TIME_SINK_HTML: &str = r#"
-<div class="panel-header rr-time-sink-header">
+<div class="rr-panel-header rr-time-sink-header">
   <div>
-    <h2 class="panel-title" data-role="title"></h2>
-    <p class="panel-kicker" data-role="subtitle"></p>
+    <h2 class="rr-panel-title" data-role="title"></h2>
+    <p class="rr-panel-kicker" data-role="subtitle"></p>
   </div>
   <div class="rr-time-sink-controls" aria-label="Time sink controls">
-    <label class="control-field">
+    <label class="rr-time-sink-control-field">
       <span>Y min</span>
       <input data-role="y-min" type="number" step="any" value="-1">
     </label>
-    <label class="control-field">
+    <label class="rr-time-sink-control-field">
       <span>Y max</span>
       <input data-role="y-max" type="number" step="any" value="1">
     </label>
@@ -44,7 +44,7 @@ const TIME_SINK_HTML: &str = r#"
     <button data-role="pause" type="button">Pause</button>
   </div>
 </div>
-<div class="panel-body">
+<div class="rr-panel-body">
   <canvas class="rr-time-sink-canvas" data-role="canvas"></canvas>
 </div>
 "#;

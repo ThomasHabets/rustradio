@@ -12,13 +12,13 @@ use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement};
 use crate::TaggedVec;
 
 const CONSTELLATION_SINK_HTML: &str = r#"
-<div class="panel-header">
+<div class="rr-panel-header">
   <div>
-    <h3 class="panel-title" data-role="title"></h3>
-    <p class="panel-kicker" data-role="subtitle"></p>
+    <h3 class="rr-panel-title" data-role="title"></h3>
+    <p class="rr-panel-kicker" data-role="subtitle"></p>
   </div>
 </div>
-<div class="panel-body">
+<div class="rr-panel-body">
   <canvas class="rr-constellation-sink-canvas" data-role="canvas"></canvas>
 </div>
 "#;

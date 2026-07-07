@@ -1,3 +1,67 @@
+.rr-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.rr-panel-header {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 1rem 0.85rem;
+  background: var(--surface-strong);
+}
+.rr-panel-title {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+.rr-panel-kicker {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+.rr-panel-body {
+  padding: 1rem;
+}
+.rr-waterfall-sink-layout {
+  color: #222;
+  display: grid;
+  font: 12px sans-serif;
+  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-rows: auto 18px 18px;
+  column-gap: 8px;
+  row-gap: 4px;
+  align-items: stretch;
+}
+
+.rr-waterfall-sink-y-label {
+  color: #222;
+  display: flex;
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+.rr-waterfall-sink-y-label-text {
+  transform: rotate(-90deg);
+  white-space: nowrap;
+}
+
+.rr-waterfall-sink-plot {
+  background: #fff;
+  color: #e7e7e7;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  position: relative;
+}
+
 .rr-waterfall-sink-canvas {
   display: block;
   width: 100%;
@@ -5,4 +69,104 @@
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: var(--surface-muted);
+}
+
+.rr-waterfall-sink-grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid currentColor;
+  pointer-events: none;
+}
+
+.rr-waterfall-sink-grid-0 {
+  left: 0;
+}
+
+.rr-waterfall-sink-grid-1 {
+  left: 25%;
+}
+
+.rr-waterfall-sink-grid-2 {
+  left: 50%;
+}
+
+.rr-waterfall-sink-grid-3 {
+  left: 75%;
+}
+
+.rr-waterfall-sink-grid-4 {
+  left: 100%;
+}
+
+.rr-waterfall-sink-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #222;
+  pointer-events: none;
+}
+
+.rr-waterfall-sink-status-hidden {
+  display: none;
+}
+
+.rr-waterfall-sink-x-ticks {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  min-width: 0;
+  height: 18px;
+}
+
+.rr-waterfall-sink-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.rr-waterfall-sink-tick-0 {
+  left: 0;
+}
+
+.rr-waterfall-sink-tick-1 {
+  left: 25%;
+}
+
+.rr-waterfall-sink-tick-2 {
+  left: 50%;
+}
+
+.rr-waterfall-sink-tick-3 {
+  left: 75%;
+}
+
+.rr-waterfall-sink-tick-4 {
+  left: 100%;
+}
+
+.rr-waterfall-sink-x-label {
+  grid-column: 2;
+  grid-row: 3;
+  text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .rr-waterfall-sink-layout,
+  .rr-waterfall-sink-y-label,
+  .rr-waterfall-sink-status {
+    color: #ddd;
+  }
+
+  .rr-waterfall-sink-plot {
+    background: #0b0b0b;
+    color: #242424;
+  }
+
+  .rr-waterfall-sink-status {
+    background: #0b0b0b;
+  }
 }

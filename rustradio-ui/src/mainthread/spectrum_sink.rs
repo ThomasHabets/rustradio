@@ -13,26 +13,47 @@ use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement, Image
 use crate::TaggedVec;
 
 const SPECTRUM_SINK_HTML: &str = r#"
-<div class="panel-header">
+<div class="rr-panel-header">
   <div>
-    <h3 class="panel-title" data-role="title"></h3>
-    <p class="panel-kicker" data-role="subtitle"></p>
+    <h3 class="rr-panel-title" data-role="title"></h3>
+    <p class="rr-panel-kicker" data-role="subtitle"></p>
   </div>
 </div>
-<div class="panel-body">
+<div class="rr-panel-body">
   <canvas class="rr-spectrum-sink-canvas" data-role="canvas"></canvas>
 </div>
 "#;
 
 const WATERFALL_SINK_HTML: &str = r#"
-<div class="panel-header">
+<div class="rr-panel-header">
   <div>
-    <h3 class="panel-title" data-role="title"></h3>
-    <p class="panel-kicker" data-role="subtitle"></p>
+    <h3 class="rr-panel-title" data-role="title"></h3>
+    <p class="rr-panel-kicker" data-role="subtitle"></p>
   </div>
 </div>
-<div class="panel-body">
-  <canvas class="rr-waterfall-sink-canvas" data-role="canvas"></canvas>
+<div class="rr-panel-body">
+  <div class="rr-waterfall-sink-layout" data-role="waterfall-layout">
+    <div class="rr-waterfall-sink-y-label" data-role="waterfall-y-label">
+      <span class="rr-waterfall-sink-y-label-text">Time</span>
+    </div>
+    <div class="rr-waterfall-sink-plot" data-role="waterfall-plot">
+      <canvas class="rr-waterfall-sink-canvas" data-role="canvas"></canvas>
+      <div class="rr-waterfall-sink-grid rr-waterfall-sink-grid-0" data-role="waterfall-grid-0"></div>
+      <div class="rr-waterfall-sink-grid rr-waterfall-sink-grid-1" data-role="waterfall-grid-1"></div>
+      <div class="rr-waterfall-sink-grid rr-waterfall-sink-grid-2" data-role="waterfall-grid-2"></div>
+      <div class="rr-waterfall-sink-grid rr-waterfall-sink-grid-3" data-role="waterfall-grid-3"></div>
+      <div class="rr-waterfall-sink-grid rr-waterfall-sink-grid-4" data-role="waterfall-grid-4"></div>
+      <div class="rr-waterfall-sink-status" data-role="waterfall-status">Waiting for waterfall data...</div>
+    </div>
+    <div class="rr-waterfall-sink-x-ticks" data-role="waterfall-x-ticks">
+      <span class="rr-waterfall-sink-tick rr-waterfall-sink-tick-0" data-role="waterfall-tick-0"></span>
+      <span class="rr-waterfall-sink-tick rr-waterfall-sink-tick-1" data-role="waterfall-tick-1"></span>
+      <span class="rr-waterfall-sink-tick rr-waterfall-sink-tick-2" data-role="waterfall-tick-2"></span>
+      <span class="rr-waterfall-sink-tick rr-waterfall-sink-tick-3" data-role="waterfall-tick-3"></span>
+      <span class="rr-waterfall-sink-tick rr-waterfall-sink-tick-4" data-role="waterfall-tick-4"></span>
+    </div>
+    <div class="rr-waterfall-sink-x-label" data-role="waterfall-x-label">Frequency (Hz)</div>
+  </div>
 </div>
 "#;
 
@@ -275,6 +296,8 @@ impl WaterfallSink {
             .ok_or(JsValue::from_str("no 2d context"))?
             .dyn_into::<CanvasRenderingContext2d>()?;
         let (bitmap_canvas, bitmap_ctx) = create_canvas_2d()?;
+        let status = role::<Element>(root, "waterfall-status")?;
+        let tick_labels = waterfall_role_elements(root, "waterfall-tick")?;
 
         let sink = Self {
             inner: Rc::new(RefCell::new(WaterfallInner {
@@ -282,6 +305,8 @@ impl WaterfallSink {
                 ctx,
                 bitmap_canvas,
                 bitmap_ctx,
+                status,
+                tick_labels,
                 history: VecDeque::new(),
                 sample_rate: sanitize_sample_rate(options.sample_rate),
                 max_frames: options.max_frames.max(1),
@@ -421,6 +446,8 @@ struct WaterfallInner {
     ctx: CanvasRenderingContext2d,
     bitmap_canvas: HtmlCanvasElement,
     bitmap_ctx: CanvasRenderingContext2d,
+    status: Element,
+    tick_labels: Vec<Element>,
     history: VecDeque<Vec<f32>>,
     sample_rate: f32,
     max_frames: usize,
@@ -455,31 +482,18 @@ impl WaterfallInner {
         }
     }
 
-    /// Draw the full canvas, including axes and retained waterfall rows.
+    /// Draw only the waterfall pixels; axes and labels are regular DOM.
     fn draw(&mut self) -> Result<(), JsValue> {
         let (width, height) = resize_canvas_to_display_size(&self.canvas)?;
-        let theme = CanvasTheme::current()?;
+        self.update_axis_html(self.history.is_empty())?;
 
-        self.ctx.set_fill_style_str(theme.bg);
-        self.ctx.fill_rect(0.0, 0.0, width, height);
-        self.ctx.set_stroke_style_str(theme.axis);
-        self.ctx
-            .stroke_rect(0.5, 0.5, (width - 1.0).max(0.0), (height - 1.0).max(0.0));
-
+        self.ctx.clear_rect(0.0, 0.0, width, height);
         if self.history.is_empty() {
-            self.ctx.set_fill_style_str(theme.text);
-            self.ctx.set_font("12px sans-serif");
-            self.ctx
-                .fill_text("Waiting for waterfall data...", 12.0, 20.0)?;
             return Ok(());
         }
 
-        let plot_left = AXIS_MARGIN_LEFT.min((width - 1.0).max(0.0));
-        let plot_top = AXIS_MARGIN_TOP.min((height - 1.0).max(0.0));
-        let plot_width = (width - AXIS_MARGIN_LEFT - AXIS_MARGIN_RIGHT).max(1.0);
-        let plot_height = (height - AXIS_MARGIN_TOP - AXIS_MARGIN_BOTTOM).max(1.0);
-        let bitmap_width = plot_width.round().max(1.0) as u32;
-        let bitmap_height = self.max_frames.min(plot_height.round().max(1.0) as usize);
+        let bitmap_width = width.round().max(1.0) as u32;
+        let bitmap_height = self.max_frames.min(height.round().max(1.0) as usize);
 
         self.update_waterfall_bitmap(bitmap_width, bitmap_height.max(1) as u32)?;
         self.ctx.set_image_smoothing_enabled(false);
@@ -490,21 +504,28 @@ impl WaterfallInner {
                 0.0,
                 f64::from(self.bitmap_width),
                 f64::from(self.bitmap_height),
-                plot_left,
-                plot_top,
-                plot_width,
-                plot_height,
+                0.0,
+                0.0,
+                width,
+                height,
             )?;
-        draw_waterfall_axes(
-            &self.ctx,
-            &theme,
-            plot_left,
-            plot_top,
-            plot_width,
-            plot_height,
-            self.sample_rate,
-        )?;
 
+        Ok(())
+    }
+
+    /// Update waterfall tick labels and status visibility outside the canvas.
+    fn update_axis_html(&self, show_status: bool) -> Result<(), JsValue> {
+        let status_class = if show_status {
+            "rr-waterfall-sink-status"
+        } else {
+            "rr-waterfall-sink-status rr-waterfall-sink-status-hidden"
+        };
+        self.status.set_attribute("class", status_class)?;
+        for (i, tick) in self.tick_labels.iter().enumerate() {
+            let t = axis_tick_fraction(i);
+            let freq = (t - 0.5) * f64::from(self.sample_rate);
+            tick.set_text_content(Some(&format_hz(freq)));
+        }
         Ok(())
     }
 
@@ -671,6 +692,13 @@ fn role<T: JsCast>(root: &Element, role: &str) -> Result<T, JsValue> {
         })
 }
 
+/// Find the fixed waterfall tick/grid elements by their numbered roles.
+fn waterfall_role_elements(root: &Element, prefix: &str) -> Result<Vec<Element>, JsValue> {
+    (0..AXIS_TICK_COUNT)
+        .map(|i| role::<Element>(root, &format!("{prefix}-{i}")))
+        .collect()
+}
+
 /// Create a canvas and its 2D context for retained bitmap rendering.
 fn create_canvas_2d() -> Result<(HtmlCanvasElement, CanvasRenderingContext2d), JsValue> {
     let window = web_sys::window().ok_or(JsValue::from_str("no window"))?;
@@ -833,71 +861,6 @@ fn draw_spectrum_axes(
     ctx.set_text_align("center");
     ctx.set_text_baseline("top");
     ctx.fill_text("Power (dB)", 0.0, 0.0)?;
-    ctx.restore();
-
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-/// Draw waterfall plot axes, grid lines, and labels.
-fn draw_waterfall_axes(
-    ctx: &CanvasRenderingContext2d,
-    theme: &CanvasTheme,
-    plot_left: f64,
-    plot_top: f64,
-    plot_width: f64,
-    plot_height: f64,
-    sample_rate: f32,
-) -> Result<(), JsValue> {
-    let plot_right = plot_left + plot_width;
-    let plot_bottom = plot_top + plot_height;
-
-    ctx.set_stroke_style_str(theme.grid);
-    ctx.set_line_width(1.0);
-    for i in 0..AXIS_TICK_COUNT {
-        let t = axis_tick_fraction(i);
-        let x = plot_left + t * plot_width;
-        ctx.begin_path();
-        ctx.move_to(x, plot_top);
-        ctx.line_to(x, plot_bottom);
-        ctx.stroke();
-    }
-
-    ctx.set_stroke_style_str(theme.axis);
-    ctx.begin_path();
-    ctx.move_to(plot_left, plot_top);
-    ctx.line_to(plot_left, plot_bottom);
-    ctx.line_to(plot_right, plot_bottom);
-    ctx.stroke();
-
-    ctx.set_fill_style_str(theme.text);
-    ctx.set_font("12px sans-serif");
-    ctx.set_text_align("center");
-    ctx.set_text_baseline("top");
-    for i in 0..AXIS_TICK_COUNT {
-        let t = axis_tick_fraction(i);
-        let freq = (t - 0.5) * f64::from(sample_rate);
-        ctx.fill_text(
-            &format_hz(freq),
-            plot_left + t * plot_width,
-            plot_bottom + 6.0,
-        )?;
-    }
-
-    ctx.set_text_align("center");
-    ctx.set_text_baseline("top");
-    ctx.fill_text(
-        "Frequency (Hz)",
-        plot_left + plot_width / 2.0,
-        plot_bottom + 20.0,
-    )?;
-
-    ctx.save();
-    ctx.translate(plot_left - 40.0, plot_top + plot_height / 2.0)?;
-    ctx.rotate(-std::f64::consts::FRAC_PI_2)?;
-    ctx.set_text_align("center");
-    ctx.set_text_baseline("top");
-    ctx.fill_text("Time", 0.0, 0.0)?;
     ctx.restore();
 
     Ok(())
