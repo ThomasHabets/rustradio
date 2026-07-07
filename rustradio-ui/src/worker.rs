@@ -1,14 +1,15 @@
 use std::any::Any;
 use std::cell::RefCell;
 
-use async_channel::Sender;
-use log::error;
+use async_channel::{Receiver, Sender};
+use log::{error, info};
 use serde::Serialize;
-use wasm_bindgen::prelude::JsCast;
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::DedicatedWorkerGlobalScope;
+use web_sys::js_sys;
 
-use crate::{ApplicationSpecific, WorkerToMain};
+use crate::{ApplicationSpecific, BootstrapMpsc, MainToWorker, WorkerToMain};
 
 thread_local! {
     // TODO: This should be global for all worker threads.
@@ -30,6 +31,35 @@ where
     App: ApplicationSpecific + 'static,
 {
     MAIN_UI_TX.with(|slot| *slot.borrow_mut() = Some(Box::new(tx)));
+}
+
+pub async fn setup<App1, App2, Ready>(ready: Ready) -> Result<(), JsValue>
+where
+    Ready: Fn(Receiver<MainToWorker<App1>>) + 'static,
+    App1: ApplicationSpecific,
+    App2: ApplicationSpecific,
+{
+    let global = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>()?;
+    let onmessage = Closure::<dyn FnMut(web_sys::MessageEvent) -> Result<(), JsValue>>::new(
+        move |event: web_sys::MessageEvent| {
+            let msg = event.data().try_into()?;
+            match msg {
+                MainToWorker::<App1>::BootstrapMpsc(b) => {
+                    info!("Received main channel endpoints");
+                    let BootstrapMpsc { tx, rx } = BootstrapMpsc::<App1, App2>::from_ptr(b);
+                    set_main_ui_tx(tx);
+                    ready(rx);
+                }
+                other => {
+                    error!("Got unexpected posted message: {other:?}");
+                }
+            }
+            Ok(())
+        },
+    );
+    global.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+    onmessage.forget();
+    Ok(())
 }
 
 /// Post a message to the main UI thread using the slower worker message method.

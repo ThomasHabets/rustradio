@@ -2244,6 +2244,7 @@ dependencies = [
 name = "rtlsdr-fm"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "console_error_panic_hook",
  "log",
  "rustradio-ui",

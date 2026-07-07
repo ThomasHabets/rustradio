@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+async-channel = { version = "2.5.0", default-features = false }
 console_error_panic_hook = "0.1.7"
 log = "0.4.33"
 rustradio-ui = { path = "../..", features = ["audio"] }

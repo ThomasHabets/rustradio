@@ -60,6 +60,20 @@ where
     }
 }
 
+pub fn get_button(id: &str) -> Result<web_sys::HtmlButtonElement, JsValue> {
+    Ok(get_element(id)?.dyn_into()?)
+}
+
+pub fn get_element(id: &str) -> Result<web_sys::Element, JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let document = window
+        .document()
+        .ok_or_else(|| JsValue::from_str("no document"))?;
+    document
+        .get_element_by_id(id)
+        .ok_or_else(|| JsValue::from_str(&format!("can't find element with id {id}")))
+}
+
 pub fn start_worker<AppMain, AppWorker, F, Ret>(worker_msg: F) -> Worker
 where
     for<'de> AppWorker: crate::ApplicationSpecific + serde::Deserialize<'de>,

@@ -167,7 +167,7 @@ pub struct TaggedVec<T> {
 
 /// No application specific messages required.
 #[derive(Debug, Serialize, Deserialize)]
-pub enum AppEmpty {}
+pub struct AppEmpty {}
 
 impl ApplicationSpecific for AppEmpty {
     type App = AppEmpty;
