@@ -14,7 +14,7 @@ pub fn add_const<T>(
     src: ReadStream<T>,
     val: T,
 ) -> (
-    crate::convert::Map<T, T, impl for<'a> Fn(T, &'a [Tag]) -> (T, Cow<'a, [Tag]>)>,
+    crate::convert::Map<T, T, impl for<'a> FnMut(T, &'a [Tag]) -> (T, Cow<'a, [Tag]>)>,
     ReadStream<T>,
 )
 where

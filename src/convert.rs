@@ -20,7 +20,7 @@ use crate::{Complex, Float, Result, Sample};
     custom_name,
     sync_tag,
     new,
-    bound = "In: Sample, F: Fn(In, &[Tag]) + Send"
+    bound = "In: Sample, F: FnMut(In, &[Tag]) + Send"
 )]
 pub struct Inspect<In, F> {
     #[rustradio(into)]
@@ -35,7 +35,7 @@ pub struct Inspect<In, F> {
 impl<In, F> Inspect<In, F>
 where
     In: Sample,
-    F: Fn(In, &[Tag]) + Send,
+    F: FnMut(In, &[Tag]) + Send,
 {
     fn process_sync_tags<'a>(&mut self, s: In, tags: &'a [Tag]) -> (In, Cow<'a, [Tag]>) {
         (self.f)(s, tags);
@@ -116,7 +116,7 @@ impl<T: Sample<Type = T>> Block for Parse<T> {
     sync_tag,
     new,
     bound = "In: Sample, Out: Sample",
-    bound = "F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send"
+    bound = "F: for<'a> FnMut(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send"
 )]
 pub struct Map<In, Out, F> {
     #[rustradio(into)]
@@ -138,16 +138,16 @@ impl Map<(), (), ()> {
     pub fn keep_tags<In, Out, Name, F2>(
         src: ReadStream<In>,
         name: Name,
-        f: F2,
+        mut f: F2,
     ) -> (
-        Map<In, Out, impl for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>)>,
+        Map<In, Out, impl for<'a> FnMut(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>)>,
         ReadStream<Out>,
     )
     where
         In: Sample,
         Out: Sample,
         Name: Into<String>,
-        F2: Fn(In) -> Out + Send,
+        F2: FnMut(In) -> Out + Send,
     {
         Map::new(src, name, move |s, tags| (f(s), Cow::Borrowed(tags)))
     }
@@ -157,7 +157,7 @@ impl<In, Out, F> Map<In, Out, F>
 where
     In: Sample,
     Out: Sample,
-    F: for<'a> Fn(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send,
+    F: for<'a> FnMut(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send,
 {
     fn process_sync_tags<'a>(&mut self, s: In, tags: &'a [Tag]) -> (Out, Cow<'a, [Tag]>) {
         (self.map)(s, tags)
@@ -197,7 +197,7 @@ impl<In, Out, F> Map<In, Out, F> {
     new,
     bound = "In: Send + Sync",
     bound = "Out: Send + Sync",
-    bound = "F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send"
+    bound = "F: FnMut(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send"
 )]
 pub struct NCMap<In, Out, F> {
     #[rustradio(into)]
@@ -213,7 +213,7 @@ impl<In, Out, F> Block for NCMap<In, Out, F>
 where
     In: Send + Sync,
     Out: Send + Sync,
-    F: Fn(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
+    F: FnMut(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut output_space = self.dst.remaining();
