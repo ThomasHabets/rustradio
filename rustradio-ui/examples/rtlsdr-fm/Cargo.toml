@@ -11,8 +11,8 @@ console_error_panic_hook = "0.1.7"
 log = "0.4.33"
 rtlsdr-pure = "0.1.6"
 rustradio = { version = "0.18.0", features = ["wasm", "fast-math", "simd"] }
-rustradio-ui = { path = "../..", features = ["audio"] }
-#rustradio-ui = { version = "0.1.18", features = ["audio"] }
+#rustradio-ui = { path = "../..", features = ["audio"] }
+rustradio-ui = { version = "0.1.20", features = ["audio"] }
 serde = "1.0.228"
 wasm-bindgen = "0.2.125"
 wasm-bindgen-futures = "0.4.75"
@@ -23,6 +23,7 @@ crate-type = ["cdylib"]
 
 [patch.crates-io]
 rustradio = { path = "../../.." }
+rustradio-ui = { path = "../.." }
 
 [package.metadata.wasm-pack.profile.profiling]
 # wasm-bindgen, called by wasm-pack, needs to be told to keep debug info in
