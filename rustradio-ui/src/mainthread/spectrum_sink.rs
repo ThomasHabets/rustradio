@@ -2,13 +2,13 @@
 //! concept, but it needs to be properly reviewed.
 use std::borrow::Borrow;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use js_sys::Uint8ClampedArray;
 use rustradio::Float;
 use wasm_bindgen::prelude::*;
-use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement};
+use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement, ImageData};
 
 use crate::TaggedVec;
 
@@ -256,6 +256,8 @@ impl WaterfallSink {
     pub fn clear(&self) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
         inner.history.clear();
+        inner.bitmap_needs_rebuild = true;
+        inner.pending_rows = 0;
         dom_result(inner.draw(), "clearing waterfall sink")
     }
 
@@ -272,16 +274,23 @@ impl WaterfallSink {
             .get_context("2d")?
             .ok_or(JsValue::from_str("no 2d context"))?
             .dyn_into::<CanvasRenderingContext2d>()?;
+        let (bitmap_canvas, bitmap_ctx) = create_canvas_2d()?;
 
         let sink = Self {
             inner: Rc::new(RefCell::new(WaterfallInner {
                 canvas,
                 ctx,
+                bitmap_canvas,
+                bitmap_ctx,
                 history: VecDeque::new(),
                 sample_rate: sanitize_sample_rate(options.sample_rate),
                 max_frames: options.max_frames.max(1),
                 min_db: options.min_db,
                 max_db: options.max_db,
+                bitmap_width: 0,
+                bitmap_height: 0,
+                bitmap_needs_rebuild: true,
+                pending_rows: 0,
                 callbacks: Vec::new(),
             })),
         };
@@ -410,11 +419,17 @@ impl SpectrumInner {
 struct WaterfallInner {
     canvas: HtmlCanvasElement,
     ctx: CanvasRenderingContext2d,
+    bitmap_canvas: HtmlCanvasElement,
+    bitmap_ctx: CanvasRenderingContext2d,
     history: VecDeque<Vec<f32>>,
     sample_rate: f32,
     max_frames: usize,
     min_db: f32,
     max_db: f32,
+    bitmap_width: u32,
+    bitmap_height: u32,
+    bitmap_needs_rebuild: bool,
+    pending_rows: usize,
     callbacks: Vec<Closure<dyn FnMut(Event)>>,
 }
 
@@ -432,6 +447,7 @@ impl WaterfallInner {
         for frame in frames {
             if !frame.data.is_empty() {
                 self.history.push_back(frame.data.clone());
+                self.pending_rows = self.pending_rows.saturating_add(1);
                 while self.history.len() > self.max_frames {
                     self.history.pop_front();
                 }
@@ -462,8 +478,23 @@ impl WaterfallInner {
         let plot_top = AXIS_MARGIN_TOP.min((height - 1.0).max(0.0));
         let plot_width = (width - AXIS_MARGIN_LEFT - AXIS_MARGIN_RIGHT).max(1.0);
         let plot_height = (height - AXIS_MARGIN_TOP - AXIS_MARGIN_BOTTOM).max(1.0);
-        let row_height = (plot_height / self.max_frames as f64).max(1.0);
+        let bitmap_width = plot_width.round().max(1.0) as u32;
+        let bitmap_height = self.max_frames.min(plot_height.round().max(1.0) as usize);
 
+        self.update_waterfall_bitmap(bitmap_width, bitmap_height.max(1) as u32)?;
+        self.ctx.set_image_smoothing_enabled(false);
+        self.ctx
+            .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                &self.bitmap_canvas,
+                0.0,
+                0.0,
+                f64::from(self.bitmap_width),
+                f64::from(self.bitmap_height),
+                plot_left,
+                plot_top,
+                plot_width,
+                plot_height,
+            )?;
         draw_waterfall_axes(
             &self.ctx,
             &theme,
@@ -474,23 +505,96 @@ impl WaterfallInner {
             self.sample_rate,
         )?;
 
-        let visible_rows = (plot_height / row_height).floor().max(1.0) as usize;
-        let first_row = self.history.len().saturating_sub(visible_rows);
-        for (row_idx, frame) in self.history.iter().skip(first_row).enumerate() {
-            let y = plot_top + plot_height
-                - (self.history.len() - first_row - row_idx) as f64 * row_height;
-            draw_waterfall_row(
-                &self.ctx,
+        Ok(())
+    }
+
+    /// Update the retained waterfall bitmap. The steady-state path scrolls
+    /// existing rows and uploads only the newly appended rows.
+    fn update_waterfall_bitmap(&mut self, width: u32, height: u32) -> Result<(), JsValue> {
+        if self.bitmap_width != width || self.bitmap_height != height {
+            self.bitmap_canvas.set_width(width);
+            self.bitmap_canvas.set_height(height);
+            self.bitmap_width = width;
+            self.bitmap_height = height;
+            self.bitmap_needs_rebuild = true;
+        }
+
+        if self.bitmap_needs_rebuild || self.pending_rows >= height as usize {
+            self.rebuild_waterfall_bitmap()?;
+            return Ok(());
+        }
+
+        let rows = self
+            .pending_rows
+            .min(self.history.len())
+            .min(height as usize);
+        if rows == 0 {
+            return Ok(());
+        }
+
+        let keep_rows = height as usize - rows;
+        if keep_rows > 0 {
+            self.bitmap_ctx
+                .draw_image_with_html_canvas_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
+                    &self.bitmap_canvas,
+                    0.0,
+                    rows as f64,
+                    f64::from(width),
+                    keep_rows as f64,
+                    0.0,
+                    0.0,
+                    f64::from(width),
+                    keep_rows as f64,
+                )?;
+        }
+
+        let first = self.history.len() - rows;
+        let mut pixels = vec![0; width as usize * rows * 4];
+        for (row, frame) in self.history.iter().skip(first).enumerate() {
+            let start = row * width as usize * 4;
+            write_waterfall_pixels(
                 frame,
-                plot_left,
-                y,
-                plot_width,
-                row_height,
+                &mut pixels[start..start + width as usize * 4],
+                width,
                 self.min_db,
                 self.max_db,
             );
         }
+        put_bitmap_pixels(
+            &self.bitmap_ctx,
+            pixels,
+            width,
+            rows as u32,
+            0.0,
+            (height as usize - rows) as f64,
+        )?;
+        self.pending_rows = 0;
+        Ok(())
+    }
 
+    /// Rebuild the whole retained waterfall bitmap after resize or large
+    /// batches that replace the entire visible history.
+    fn rebuild_waterfall_bitmap(&mut self) -> Result<(), JsValue> {
+        let width = self.bitmap_width;
+        let height = self.bitmap_height;
+        let mut pixels = vec![0; width as usize * height as usize * 4];
+        let visible_rows = self.history.len().min(height as usize);
+        let first = self.history.len().saturating_sub(visible_rows);
+        let top = height as usize - visible_rows;
+        for (row, frame) in self.history.iter().skip(first).enumerate() {
+            let y = top + row;
+            let start = y * width as usize * 4;
+            write_waterfall_pixels(
+                frame,
+                &mut pixels[start..start + width as usize * 4],
+                width,
+                self.min_db,
+                self.max_db,
+            );
+        }
+        put_bitmap_pixels(&self.bitmap_ctx, pixels, width, height, 0.0, 0.0)?;
+        self.pending_rows = 0;
+        self.bitmap_needs_rebuild = false;
         Ok(())
     }
 }
@@ -567,6 +671,22 @@ fn role<T: JsCast>(root: &Element, role: &str) -> Result<T, JsValue> {
         })
 }
 
+/// Create a canvas and its 2D context for retained bitmap rendering.
+fn create_canvas_2d() -> Result<(HtmlCanvasElement, CanvasRenderingContext2d), JsValue> {
+    let window = web_sys::window().ok_or(JsValue::from_str("no window"))?;
+    let document = window
+        .document()
+        .ok_or_else(|| JsValue::from_str("no document"))?;
+    let canvas = document
+        .create_element("canvas")?
+        .dyn_into::<HtmlCanvasElement>()?;
+    let ctx = canvas
+        .get_context("2d")?
+        .ok_or(JsValue::from_str("no 2d context"))?
+        .dyn_into::<CanvasRenderingContext2d>()?;
+    Ok((canvas, ctx))
+}
+
 /// Match the backing canvas resolution to CSS size and device pixel ratio.
 fn resize_canvas_to_display_size(canvas: &HtmlCanvasElement) -> Result<(f64, f64), JsValue> {
     let window = web_sys::window().ok_or(JsValue::from_str("no window"))?;
@@ -602,35 +722,36 @@ fn data_range(values: &[f32]) -> Option<(f32, f32)> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-/// Draw one waterfall row from one FFT power frame.
-fn draw_waterfall_row(
-    ctx: &CanvasRenderingContext2d,
-    frame: &[f32],
-    plot_left: f64,
-    y: f64,
-    plot_width: f64,
-    row_height: f64,
-    min_db: f32,
-    max_db: f32,
-) {
+/// Convert one FFT power frame into one RGBA waterfall bitmap row.
+fn write_waterfall_pixels(frame: &[f32], pixels: &mut [u8], width: u32, min_db: f32, max_db: f32) {
     if frame.is_empty() {
         return;
     }
     let len = frame.len();
     let half = len / 2;
-    let bin_width = (plot_width / len.max(1) as f64).max(1.0);
-    for i in 0..len {
+    for x in 0..width as usize {
+        let i = x * len / width as usize;
         let value = frame[(i + half) % len];
-        #[allow(deprecated)]
-        ctx.set_fill_style(&waterfall_color(value, min_db, max_db));
-        ctx.fill_rect(
-            plot_left + i as f64 * plot_width / len as f64,
-            y,
-            bin_width,
-            row_height,
-        );
+        let rgba = waterfall_rgba(value, min_db, max_db);
+        let offset = x * 4;
+        pixels[offset..offset + 4].copy_from_slice(&rgba);
     }
+}
+
+/// Upload RGBA waterfall pixels to a canvas.
+fn put_bitmap_pixels(
+    ctx: &CanvasRenderingContext2d,
+    pixels: Vec<u8>,
+    width: u32,
+    height: u32,
+    x: f64,
+    y: f64,
+) -> Result<(), JsValue> {
+    let data = Uint8ClampedArray::new_with_length(pixels.len() as u32);
+    data.copy_from(&pixels);
+    let image = ImageData::new_with_js_u8_clamped_array_and_sh(&data, width, height)?;
+    // With unstable API this function takes i32, not f64.
+    ctx.put_image_data(&image, x as _, y as _)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -791,30 +912,34 @@ fn axis_tick_fraction(index: usize) -> f64 {
     }
 }
 
-thread_local! {
-    static COLOR_CACHE: RefCell<HashMap<String, JsValue>> = RefCell::new(HashMap::new());
-}
-
-/// Map a power value to the waterfall palette.
-fn waterfall_color(value: f32, min_db: f32, max_db: f32) -> JsValue {
-    const COLORS: [&str; 16] = [
-        "#00165f", "#002a86", "#0040ad", "#0059c8", "#0074d0", "#008fc2", "#00a9aa", "#17bd8b",
-        "#4cc869", "#84ce4b", "#bfd13d", "#e8ca39", "#f5ae32", "#f58a2d", "#ee632f", "#ebebeb",
+/// Map a power value to the waterfall RGBA palette.
+fn waterfall_rgba(value: f32, min_db: f32, max_db: f32) -> [u8; 4] {
+    const COLORS: [[u8; 4]; 16] = [
+        [0x00, 0x16, 0x5f, 0xff],
+        [0x00, 0x2a, 0x86, 0xff],
+        [0x00, 0x40, 0xad, 0xff],
+        [0x00, 0x59, 0xc8, 0xff],
+        [0x00, 0x74, 0xd0, 0xff],
+        [0x00, 0x8f, 0xc2, 0xff],
+        [0x00, 0xa9, 0xaa, 0xff],
+        [0x17, 0xbd, 0x8b, 0xff],
+        [0x4c, 0xc8, 0x69, 0xff],
+        [0x84, 0xce, 0x4b, 0xff],
+        [0xbf, 0xd1, 0x3d, 0xff],
+        [0xe8, 0xca, 0x39, 0xff],
+        [0xf5, 0xae, 0x32, 0xff],
+        [0xf5, 0x8a, 0x2d, 0xff],
+        [0xee, 0x63, 0x2f, 0xff],
+        [0xeb, 0xeb, 0xeb, 0xff],
     ];
-    let s = if !value.is_finite() {
+    if !value.is_finite() {
         COLORS[0]
     } else {
         let range = (max_db - min_db).max(f32::EPSILON);
         let t = ((value - min_db) / range).clamp(0.0, 1.0);
         let idx = (t * (COLORS.len() - 1) as f32).round() as usize;
         COLORS[idx]
-    };
-    COLOR_CACHE.with(|slot| {
-        slot.borrow_mut()
-            .entry(s.to_owned())
-            .or_insert_with(|| JsValue::from_str(s))
-            .clone()
-    })
+    }
 }
 
 /// Format a frequency value for the axis.

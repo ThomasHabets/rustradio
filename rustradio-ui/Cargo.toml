@@ -11,6 +11,7 @@ keywords = ["SDR", "radio"]
 
 [dependencies]
 async-channel = { version = "2.5.0", default-features = false }
+js-sys = "0.3.102"
 log = { version = "0.4.30", features = [
         "serde",
         "std", # For boxed logger.
@@ -22,7 +23,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.122"
 wasm-bindgen-futures = "0.4.50"
-web-sys = { version = "0.3.102", features = [
+web-sys = { version = "=0.3.102", features = [
         "DedicatedWorkerGlobalScope",
         "Document",  # Any DOM ops.
         "console", # console logging.
@@ -33,6 +34,7 @@ web-sys = { version = "0.3.102", features = [
         "WorkerOptions",
         "HtmlButtonElement",
         "HtmlInputElement",
+        "ImageData",
         "CanvasRenderingContext2d",
         "MediaQueryList", # check if dark mode.
 ] }
