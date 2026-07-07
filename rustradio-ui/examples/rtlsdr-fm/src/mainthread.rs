@@ -3,7 +3,9 @@ use std::cell::OnceCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
-use rustradio_ui::mainthread::{get_button, send_message, send_message_sync, spectrum_sink};
+use rustradio_ui::mainthread::{
+    get_button, get_input, send_message, send_message_sync, spectrum_sink,
+};
 use rustradio_ui::{AppEmpty, TaggedVec};
 
 use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
@@ -11,10 +13,10 @@ use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
 // HTML DOM IDs.
 pub(crate) const ID_LOG_OUTPUT: &str = "log-output";
 const ID_START: &str = "button-start";
+const ID_FREQUENCY: &str = "input-frequency";
 const ID_WATERFALL: &str = "waterfall";
 
 pub(crate) const SAMPLE_RATE: u32 = 250_000;
-const FREQUENCY: u32 = 100_000_000;
 
 thread_local! {
     static WATERFALL_SINK: OnceCell<spectrum_sink::WaterfallSink> = const { OnceCell::new() };
@@ -40,8 +42,8 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
         WorkerToMain::LogLine { .. } => {}
         WorkerToMain::Ready(_) => {
             info!("Worker says it's ready");
-            let btn = get_button(ID_START)?;
-            btn.set_disabled(false);
+            get_button(ID_START)?.set_disabled(false);
+            get_input(ID_FREQUENCY)?.set_disabled(false);
         }
         WorkerToMain::Floats(name, streams) => match name.as_str() {
             crate::worker::STREAM_AUDIO => {
@@ -64,7 +66,12 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
 async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> {
     let sample_rate: u32 = SAMPLE_RATE;
     let gain_mode = rtlsdr_pure::GainMode::Auto;
-    let freq = FREQUENCY;
+    let freq = get_input(ID_FREQUENCY)?
+        .value()
+        .parse::<f64>()
+        .map_err(|e| JsValue::from_str(&format!("{e:?}")))?
+        * 1e6;
+    let freq = freq as u32;
     info!(
         "RTLSDR manufacturer: {}",
         sdr.manufacturer().unwrap_or("<unknown>")
@@ -117,8 +124,8 @@ async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> 
 }
 
 fn handle_start() -> Result<(), JsValue> {
-    let btn = get_button(ID_START)?;
-    btn.set_disabled(true);
+    get_button(ID_START)?.set_disabled(true);
+    get_input(ID_FREQUENCY)?.set_disabled(true);
     rustradio_ui::browser_audio::set_volume(0.2);
     spawn_local(async move {
         // Get the RTLSDR.
