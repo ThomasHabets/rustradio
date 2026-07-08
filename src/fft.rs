@@ -16,6 +16,15 @@ pub struct Fft {
 }
 
 impl Fft {
+    /// Create an FFT block from the size of the FFT.
+    pub fn from_fft_size(
+        prev: NCReadStream<Vec<Complex>>,
+        size: usize,
+    ) -> (Self, NCReadStream<Vec<Complex>>) {
+        let mut planner = rustfft::FftPlanner::new();
+        let fft = planner.plan_fft_forward(size);
+        Self::new(prev, fft)
+    }
     fn process_one(&mut self, input: &[Complex]) -> Vec<Complex> {
         let mut out = input.to_vec();
         self.fft.process(&mut out);

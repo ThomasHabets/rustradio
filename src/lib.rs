@@ -184,6 +184,7 @@ pub mod sigmf;
 pub mod signal_source;
 pub mod single_pole_iir_filter;
 pub mod skip;
+pub mod stream_chunks;
 pub mod stream_to_pdu;
 pub mod strobe;
 pub mod symbol_sync;
