@@ -20,6 +20,8 @@ pub(crate) const ID_LOG_OUTPUT: &str = "log-output";
 const ID_START: &str = "button-start";
 const ID_FREQUENCY: &str = "input-frequency";
 const ID_TUNE: &str = "button-tune";
+const ID_GAIN: &str = "input-gain";
+const ID_GAIN_APPLY: &str = "button-gain";
 const ID_VOLUME: &str = "input-volume";
 
 // Visuals.
@@ -72,6 +74,7 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
             info!("Worker says it's ready");
             get_button(ID_START)?.set_disabled(false);
             get_input(ID_FREQUENCY)?.set_disabled(false);
+            get_input(ID_GAIN)?.set_disabled(false);
         }
         WorkerToMain::Floats(name, streams) => match name.as_str() {
             crate::worker::STREAM_AUDIO => {
@@ -100,15 +103,17 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
 #[derive(Debug)]
 enum SdrOp {
     Tune(u32),
+    Gain(rtlsdr_pure::GainMode),
 }
 
 async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> {
     let (ops_tx, ops_rx) = async_channel::bounded(10); // TODO: magic value.
     let _ = SDR_OPS.with(|slot| slot.set(ops_tx));
     get_button(ID_TUNE)?.set_disabled(false);
+    get_button(ID_GAIN_APPLY)?.set_disabled(false);
 
     let sample_rate: u32 = SAMPLE_RATE;
-    let gain_mode = rtlsdr_pure::GainMode::Auto;
+    let gain_mode = parse_gain_mode()?;
     let freq = get_input(ID_FREQUENCY)?
         .value()
         .parse::<f64>()
@@ -152,6 +157,10 @@ async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> 
                 info!("Setting frequency to {freq}");
                 sdr.set_center_frequency(freq).await?;
             }
+            Ok(SdrOp::Gain(gain)) => {
+                info!("Setting RTLSDR tuner gain to {gain:?}");
+                sdr.set_tuner_gain(gain).await?;
+            }
             Err(_e) => {}
         }
         let bytes = sdr.read_bytes(read_len).await?;
@@ -183,6 +192,40 @@ fn handle_tune() -> Result<(), JsValue> {
         SDR_OPS
             .with(|slot| slot.get().unwrap().clone())
             .send(SdrOp::Tune(freq as u32))
+            .await
+            .map_err(|e| JsValue::from_str(&format!("{e:?}")))
+    });
+    Ok(())
+}
+
+fn parse_gain_mode() -> Result<rtlsdr_pure::GainMode, JsValue> {
+    let gain = get_input(ID_GAIN)?.value();
+    let gain = gain.trim();
+    if gain.eq_ignore_ascii_case("auto") {
+        return Ok(rtlsdr_pure::GainMode::Auto);
+    }
+
+    let gain_db = gain
+        .parse::<f64>()
+        .map_err(|e| JsValue::from_str(&format!("invalid gain {gain:?}: {e}")))?;
+    if !gain_db.is_finite() {
+        return Err(JsValue::from_str("gain must be finite"));
+    }
+
+    let gain_tenths_db = (gain_db * 10.0).round() as i32;
+    if !(-100..=500).contains(&gain_tenths_db) {
+        return Err(JsValue::from_str("gain must be auto or -10.0..50.0 dB"));
+    }
+
+    Ok(rtlsdr_pure::GainMode::ManualTenthsDb(gain_tenths_db))
+}
+
+fn handle_gain() -> Result<(), JsValue> {
+    let gain = parse_gain_mode()?;
+    spawn(async move {
+        SDR_OPS
+            .with(|slot| slot.get().unwrap().clone())
+            .send(SdrOp::Gain(gain))
             .await
             .map_err(|e| JsValue::from_str(&format!("{e:?}")))
     });
@@ -229,6 +272,13 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
     {
         let handler = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(handle_tune);
         let btn = get_button(ID_TUNE)?;
+        btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
+        handler.forget();
+    }
+    // Gain button.
+    {
+        let handler = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(handle_gain);
+        let btn = get_button(ID_GAIN_APPLY)?;
         btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
         handler.forget();
     }
