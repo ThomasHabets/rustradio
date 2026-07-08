@@ -105,6 +105,7 @@ enum SdrOp {
 async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> {
     let (ops_tx, ops_rx) = async_channel::bounded(10); // TODO: magic value.
     let _ = SDR_OPS.with(|slot| slot.set(ops_tx));
+    get_button(ID_TUNE)?.set_disabled(false);
 
     let sample_rate: u32 = SAMPLE_RATE;
     let gain_mode = rtlsdr_pure::GainMode::Auto;
@@ -190,7 +191,6 @@ fn handle_tune() -> Result<(), JsValue> {
 
 fn handle_start() -> Result<(), JsValue> {
     get_button(ID_START)?.set_disabled(true);
-    get_button(ID_TUNE)?.set_disabled(false);
     rustradio_ui::browser_audio::set_volume(1.0);
     spawn_local(async move {
         // Get the RTLSDR.
