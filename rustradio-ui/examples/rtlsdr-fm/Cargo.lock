@@ -180,7 +180,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -535,12 +535,12 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "rustradio"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "async-channel",
  "async-trait",
@@ -551,7 +551,7 @@ dependencies = [
  "num-complex",
  "rayon",
  "rustfft",
- "rustradio_macros 0.18.0",
+ "rustradio_macros 0.18.1",
  "serde",
  "serde_json",
  "sha2",
@@ -564,14 +564,14 @@ dependencies = [
 
 [[package]]
 name = "rustradio-ui"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "async-channel",
  "js-sys",
  "log",
  "num-complex",
  "rustradio",
- "rustradio_macros 0.17.3",
+ "rustradio_macros 0.18.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",
@@ -581,31 +581,29 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros"
-version = "0.17.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62a043196c1e8f270d54d25afbdb7e02942f00ad3499946963fdd9418cab4501"
+version = "0.18.1"
 dependencies = [
  "proc-macro2",
  "quote",
- "rustradio_macros_code 0.17.3",
+ "rustradio_macros_code 0.18.1",
  "syn",
 ]
 
 [[package]]
 name = "rustradio_macros"
-version = "0.18.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustradio_macros_code 0.18.0",
- "syn",
-]
-
-[[package]]
-name = "rustradio_macros_code"
-version = "0.17.3"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b3c467237f2a7dd0d08a7e839bb7667439524ebe27bd475556218de33cbd657"
+checksum = "e00e28fa89e2a9033628931dabf5c79734190a0a7a8f9cffe971f992666dcc24"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rustradio_macros_code 0.18.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn",
+]
+
+[[package]]
+name = "rustradio_macros_code"
+version = "0.18.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -614,7 +612,9 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros_code"
-version = "0.18.0"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b04f4737a2e346ff86873cea7100382db22a921109e3958b54d1f0175ae31be"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -736,7 +736,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -853,12 +853,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "windows-link"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
-
-[[package]]
 name = "windows-sys"
 version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -874,15 +868,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.61.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
-dependencies = [
- "windows-link",
 ]
 
 [[package]]
