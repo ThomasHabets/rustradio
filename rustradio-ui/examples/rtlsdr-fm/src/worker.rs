@@ -61,7 +61,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
                         vec![]
                     }
                 }),
-                Fft::from_fft_size(prev, SPECTRUM_SIZE),
+                Fft::from_fft_size(prev, SPECTRUM_SIZE)?,
                 NCMap::new(prev, "fft_power_db", |v, tags| {
                     vec![(
                         v.iter()

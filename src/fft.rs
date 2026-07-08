@@ -20,10 +20,13 @@ impl Fft {
     pub fn from_fft_size(
         prev: NCReadStream<Vec<Complex>>,
         size: usize,
-    ) -> (Self, NCReadStream<Vec<Complex>>) {
+    ) -> Result<(Self, NCReadStream<Vec<Complex>>)> {
+        if size == 0 {
+            return Err(Error::msg("FFT called with size 0"));
+        }
         let mut planner = rustfft::FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
-        Self::new(prev, fft)
+        Ok(Self::new(prev, fft))
     }
     fn process_one(&mut self, mut v: Vec<Complex>) -> Vec<Complex> {
         self.fft.process(&mut v);
