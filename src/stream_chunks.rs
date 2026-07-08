@@ -1,7 +1,7 @@
 //! Stream to PDU with fixed size.
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCWriteStream, ReadStream};
-use crate::{Result, Sample};
+use crate::{Error, Result, Sample};
 
 /// Stream to PDU block.
 #[derive(rustradio_macros::Block)]
@@ -16,6 +16,9 @@ pub struct StreamChunks<T: Sample> {
 
 impl<T: Sample> Block for StreamChunks<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        if self.size == 0 {
+            return Err(Error::msg("StreamChunks has size 0"));
+        }
         loop {
             let output_space = self.dst.remaining();
             if output_space == 0 {
