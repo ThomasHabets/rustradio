@@ -8,7 +8,7 @@ use wasm_bindgen_futures::spawn_local;
 use rustradio::blockchain;
 use rustradio::graph::GraphRunner;
 use rustradio_ui::worker::{send_message, source};
-use rustradio_ui::{AppEmpty, TaggedVec, spawn};
+use rustradio_ui::{spawn, AppEmpty, TaggedVec};
 
 use crate::{MainToWorker, MyWorkerToMain, WorkerToMain};
 
@@ -35,8 +35,8 @@ async fn run_graph() -> Result<(), rustradio::Error> {
     let samp_rate = crate::mainthread::SAMPLE_RATE as f32;
     let filter1 = rustradio::fir::low_pass_complex(
         samp_rate,
-        10_000.0,
-        15_000.0,
+        90_000.0,
+        30_000.0,
         rustradio::window::WindowType::Hamming,
     );
 
@@ -51,20 +51,27 @@ async fn run_graph() -> Result<(), rustradio::Error> {
             let prev = blockchain![
                 g,
                 prev,
-                FftStream::new(prev, SPECTRUM_SIZE),
-                Map::keep_tags(prev, "fft_power_db", |bin| {
-                    let power = (bin.norm_sqr() / SPECTRUM_SIZE as f32).max(1.0e-20);
-                    10.0 * power.log10()
-                }),
-                StreamToPdu::new(prev, rustradio::fft_stream::TAG_FRAME, SPECTRUM_SIZE, 1),
+                StreamChunks::new(prev, SPECTRUM_SIZE),
                 NCMap::new(prev, "downsample", move |i, tags| {
                     dropcount += 1;
-                    if dropcount == 10 {
+                    if dropcount == 15 {
                         dropcount = 0;
                         vec![(i, tags)]
                     } else {
                         vec![]
                     }
+                }),
+                Fft::from_fft_size(prev, SPECTRUM_SIZE),
+                NCMap::new(prev, "fft_power_db", |v, tags| {
+                    vec![(
+                        v.iter()
+                            .map(|bin| {
+                                let power = (bin.norm_sqr() / SPECTRUM_SIZE as f32).max(1.0e-20);
+                                10.0 * power.log10()
+                            })
+                            .collect(),
+                        tags,
+                    )]
                 }),
             ];
             g.add(Box::new(FloatPduSink::<MyWorkerToMain>::new(

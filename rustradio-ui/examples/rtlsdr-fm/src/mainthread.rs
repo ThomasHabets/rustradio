@@ -1,9 +1,10 @@
-use log::{info, trace, warn};
-use std::cell::OnceCell;
+use std::cell::{Cell, OnceCell};
 
 use async_channel::Sender;
+use log::{info, trace, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
+use web_sys::Event;
 
 use rustradio_ui::mainthread::{
     get_button, get_input, send_message, send_message_sync, spectrum_sink, time_sink,
@@ -19,7 +20,7 @@ pub(crate) const ID_LOG_OUTPUT: &str = "log-output";
 const ID_START: &str = "button-start";
 const ID_FREQUENCY: &str = "input-frequency";
 const ID_TUNE: &str = "button-tune";
-//const ID_VOLUME: &str = "input-volume";
+const ID_VOLUME: &str = "input-volume";
 
 // Visuals.
 const ID_WATERFALL: &str = "waterfall";
@@ -31,6 +32,7 @@ thread_local! {
     static SDR_OPS: OnceCell<Sender<SdrOp>> = const {OnceCell::new() };
     static WATERFALL_SINK: OnceCell<spectrum_sink::WaterfallSink> = const { OnceCell::new() };
     static WAVEFORM_SINK: OnceCell<time_sink::TimeSink> = const { OnceCell::new() };
+    static VOLUME: Cell<f32> = const {Cell::new(0.0)};
 }
 
 /// Borrow the application-owned waterfall sink handle from main-thread
@@ -75,7 +77,12 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
             crate::worker::STREAM_AUDIO => {
                 assert_eq!(streams.len(), 1);
                 trace!("Got audio samples {}", streams[0].data.len());
-                rustradio_ui::browser_audio::enqueue(streams[0].data.iter().copied())?;
+                let vol = VOLUME.with(|slot| slot.get());
+                let scaled = TaggedVec {
+                    data: streams[0].data.iter().copied().map(|s| s * vol).collect(),
+                    tags: streams[0].tags.clone(),
+                };
+                rustradio_ui::browser_audio::enqueue(scaled.data.iter().copied())?;
                 with_waveform_sink(|sink| sink.update(streams))?;
             }
             crate::worker::STREAM_SPECTRUM => {
@@ -144,7 +151,7 @@ async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> 
                 info!("Setting frequency to {freq}");
                 sdr.set_center_frequency(freq).await?;
             }
-            Err(e) => {}
+            Err(_e) => {}
         }
         let bytes = sdr.read_bytes(read_len).await?;
         /*
@@ -223,6 +230,21 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
         let handler = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(handle_tune);
         let btn = get_button(ID_TUNE)?;
         btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
+        handler.forget();
+    }
+    // Volume.
+    {
+        let input = get_input(ID_VOLUME)?;
+        let handler = Closure::<dyn FnMut(Event) -> Result<(), JsValue>>::new(move |_event| {
+            let volume = get_input(ID_VOLUME)?
+                .value()
+                .parse::<f32>()
+                .unwrap_or(0.25)
+                .clamp(0.0, 1.0);
+            VOLUME.with(|slot| slot.set(volume));
+            Ok(())
+        });
+        input.add_event_listener_with_callback("input", handler.as_ref().unchecked_ref())?;
         handler.forget();
     }
 
