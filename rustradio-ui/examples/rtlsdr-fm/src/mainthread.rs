@@ -199,24 +199,36 @@ fn handle_tune() -> Result<(), JsValue> {
 }
 
 fn parse_gain_mode() -> Result<rtlsdr_pure::GainMode, JsValue> {
-    let gain = get_input(ID_GAIN)?.value();
+    let input = get_input(ID_GAIN)?;
+    let gain = input.value();
     let gain = gain.trim();
     if gain.eq_ignore_ascii_case("auto") {
+        input.set_custom_validity("");
         return Ok(rtlsdr_pure::GainMode::Auto);
     }
 
-    let gain_db = gain
-        .parse::<f64>()
-        .map_err(|e| JsValue::from_str(&format!("invalid gain {gain:?}: {e}")))?;
+    let gain_db = gain.parse::<f64>().map_err(|e| {
+        let msg = format!("Gain must be auto or a number in dB: {e}");
+        input.set_custom_validity(&msg);
+        let _ = input.report_validity();
+        JsValue::from_str(&msg)
+    })?;
     if !gain_db.is_finite() {
-        return Err(JsValue::from_str("gain must be finite"));
+        let msg = "Gain must be a finite number";
+        input.set_custom_validity(msg);
+        let _ = input.report_validity();
+        return Err(JsValue::from_str(msg));
     }
 
     let gain_tenths_db = (gain_db * 10.0).round() as i32;
     if !(-100..=500).contains(&gain_tenths_db) {
-        return Err(JsValue::from_str("gain must be auto or -10.0..50.0 dB"));
+        let msg = "Gain must be auto or -10.0..50.0 dB";
+        input.set_custom_validity(msg);
+        let _ = input.report_validity();
+        return Err(JsValue::from_str(msg));
     }
 
+    input.set_custom_validity("");
     Ok(rtlsdr_pure::GainMode::ManualTenthsDb(gain_tenths_db))
 }
 
