@@ -191,6 +191,7 @@ impl TimeSink {
     pub fn set_paused(&self, paused: bool) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
         inner.paused = paused;
+        inner.sync_inputs = true;
         let result = if inner.paused {
             inner.sync_controls()
         } else {
@@ -253,6 +254,7 @@ impl TimeSink {
         let button = inner.borrow().pause_button.clone();
         install_button_handler(&inner, &button, |inner| {
             inner.paused = !inner.paused;
+            inner.sync_inputs = true;
             if inner.paused {
                 inner.sync_controls()
             } else {
@@ -323,6 +325,8 @@ struct Inner {
     series: Vec<GraphSeries>,
     y_min: f32,
     y_max: f32,
+
+    // Controls.
     auto_scale: bool,
     paused: bool,
     sample_rate: f64,
@@ -516,11 +520,13 @@ impl Inner {
 
     /// Mirror internal pause/autoscale/Y-range state into generated controls.
     fn sync_controls(&mut self) -> Result<(), JsValue> {
-        if self.sync_inputs {
-            self.y_min_input.set_value(&format!("{}", self.y_min));
-            self.y_max_input.set_value(&format!("{}", self.y_max));
-            self.sync_inputs = false;
+        if !self.sync_inputs {
+            return Ok(());
         }
+        self.sync_inputs = false;
+
+        self.y_min_input.set_value(&format!("{}", self.y_min));
+        self.y_max_input.set_value(&format!("{}", self.y_max));
 
         self.pause_button
             .set_text_content(Some(if self.paused { "Resume" } else { "Pause" }));
