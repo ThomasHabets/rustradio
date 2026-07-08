@@ -7,11 +7,19 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-        <section id="waterfall">Loading…</section>
-        <section id="audio-waveform">Loading…</section>
-        <label for="input-frequency">Frequency (MHz)</input>
-        <input id="input-frequency" disabled value="100.0" />
-        <button id="button-start" disabled>Start</button>
+  <!-- Visualizations -->
+  <section id="waterfall">Loading…</section>
+  <section id="audio-waveform">Loading…</section>
+  <button id="button-start" disabled>Start</button>
+
+  <!-- Controls -->
+  <label for="input-frequency">Frequency (MHz)</input>
+  <input id="input-frequency" disabled value="100.0" />
+  <button id="button-tune" disabled>Tune</button>
+  <label for="input-volume">Audio volume</label>
+  <input id="input-volume" type="range" min="0" max="1" step="0.01" value="0.00">
+
+  <!-- Log -->
   <pre id="log-output">Awaiting logs…</pre>
   <script type="module" src="wasm-mod.js"></script>
 </body>

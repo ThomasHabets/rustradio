@@ -1,25 +1,34 @@
 use log::{info, trace, warn};
 use std::cell::OnceCell;
+
+use async_channel::Sender;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 use rustradio_ui::mainthread::{
     get_button, get_input, send_message, send_message_sync, spectrum_sink, time_sink,
 };
-use rustradio_ui::{AppEmpty, TaggedVec};
+use rustradio_ui::{spawn, AppEmpty, TaggedVec};
 
 use crate::{MainToWorker, MyMainToWorker, MyWorkerToMain, WorkerToMain};
 
 // HTML DOM IDs.
 pub(crate) const ID_LOG_OUTPUT: &str = "log-output";
+
+// Controls.
 const ID_START: &str = "button-start";
 const ID_FREQUENCY: &str = "input-frequency";
+const ID_TUNE: &str = "button-tune";
+//const ID_VOLUME: &str = "input-volume";
+
+// Visuals.
 const ID_WATERFALL: &str = "waterfall";
 const ID_WAVEFORM: &str = "audio-waveform";
 
 pub(crate) const SAMPLE_RATE: u32 = 250_000;
 
 thread_local! {
+    static SDR_OPS: OnceCell<Sender<SdrOp>> = const {OnceCell::new() };
     static WATERFALL_SINK: OnceCell<spectrum_sink::WaterfallSink> = const { OnceCell::new() };
     static WAVEFORM_SINK: OnceCell<time_sink::TimeSink> = const { OnceCell::new() };
 }
@@ -81,7 +90,15 @@ async fn worker_msg(msg: WorkerToMain) -> Result<(), JsValue> {
     Ok(())
 }
 
+#[derive(Debug)]
+enum SdrOp {
+    Tune(u32),
+}
+
 async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> {
+    let (ops_tx, ops_rx) = async_channel::bounded(10); // TODO: magic value.
+    let _ = SDR_OPS.with(|slot| slot.set(ops_tx));
+
     let sample_rate: u32 = SAMPLE_RATE;
     let gain_mode = rtlsdr_pure::GainMode::Auto;
     let freq = get_input(ID_FREQUENCY)?
@@ -122,6 +139,13 @@ async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> 
             );
         }
         */
+        match ops_rx.try_recv() {
+            Ok(SdrOp::Tune(freq)) => {
+                info!("Setting frequency to {freq}");
+                sdr.set_center_frequency(freq).await?;
+            }
+            Err(e) => {}
+        }
         let bytes = sdr.read_bytes(read_len).await?;
         /*
         deadline =
@@ -141,10 +165,26 @@ async fn run_rtlsdr_source(mut sdr: rtlsdr_pure::RtlSdr) -> Result<(), JsValue> 
     }
 }
 
+fn handle_tune() -> Result<(), JsValue> {
+    let freq = get_input(ID_FREQUENCY)?
+        .value()
+        .parse::<f64>()
+        .map_err(|e| JsValue::from_str(&format!("{e:?}")))?
+        * 1e6;
+    spawn(async move {
+        SDR_OPS
+            .with(|slot| slot.get().unwrap().clone())
+            .send(SdrOp::Tune(freq as u32))
+            .await
+            .map_err(|e| JsValue::from_str(&format!("{e:?}")))
+    });
+    Ok(())
+}
+
 fn handle_start() -> Result<(), JsValue> {
     get_button(ID_START)?.set_disabled(true);
-    get_input(ID_FREQUENCY)?.set_disabled(true);
-    rustradio_ui::browser_audio::set_volume(0.2);
+    get_button(ID_TUNE)?.set_disabled(false);
+    rustradio_ui::browser_audio::set_volume(1.0);
     spawn_local(async move {
         // Get the RTLSDR.
         let sdr = match rtlsdr_pure::open_first().await {
@@ -171,12 +211,22 @@ fn handle_start() -> Result<(), JsValue> {
 }
 
 pub(crate) async fn setup() -> Result<(), JsValue> {
+    // Start button.
     {
         let handler = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(handle_start);
         let btn = get_button(ID_START)?;
         btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
         handler.forget();
     }
+    // Tune button.
+    {
+        let handler = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(handle_tune);
+        let btn = get_button(ID_TUNE)?;
+        btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
+        handler.forget();
+    }
+
+    // Waterfall.
     {
         let water = spectrum_sink::WaterfallSink::mount_by_id(
             ID_WATERFALL,
@@ -189,6 +239,8 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
         )?;
         let _ = WATERFALL_SINK.with(|slot| slot.set(water));
     }
+
+    // Audio waveform.
     {
         let wave = time_sink::TimeSink::mount_by_id(
             ID_WAVEFORM,

@@ -8,7 +8,7 @@ use wasm_bindgen_futures::spawn_local;
 use rustradio::blockchain;
 use rustradio::graph::GraphRunner;
 use rustradio_ui::worker::{send_message, source};
-use rustradio_ui::{AppEmpty, TaggedVec};
+use rustradio_ui::{AppEmpty, TaggedVec, spawn};
 
 use crate::{MainToWorker, MyWorkerToMain, WorkerToMain};
 
@@ -94,17 +94,6 @@ async fn run_graph() -> Result<(), rustradio::Error> {
     });
     g.run_async(rx).await?;
     Ok(())
-}
-
-fn spawn<F>(f: F)
-where
-    F: std::future::Future<Output = Result<(), JsValue>> + 'static,
-{
-    spawn_local(async {
-        if let Err(e) = f.await {
-            error!("{e:?}");
-        }
-    });
 }
 
 async fn worker_msg(msg: MainToWorker) -> Result<(), JsValue> {

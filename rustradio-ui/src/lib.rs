@@ -1,7 +1,10 @@
 #![doc = include_str!("../README.md")]
 use std::fmt::Debug;
 
+use log::error;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::JsValue;
+use wasm_bindgen_futures::spawn_local;
 
 use rustradio::{Complex, Float, stream::Tag};
 
@@ -174,4 +177,16 @@ impl ApplicationSpecific for AppEmpty {
     type Start = AppEmpty;
     type Ready = AppEmpty;
     type End = AppEmpty;
+}
+
+/// Like `spawn_local`, but logs errors.
+pub fn spawn<F>(f: F)
+where
+    F: std::future::Future<Output = Result<(), JsValue>> + 'static,
+{
+    spawn_local(async {
+        if let Err(e) = f.await {
+            error!("{e:?}");
+        }
+    });
 }
