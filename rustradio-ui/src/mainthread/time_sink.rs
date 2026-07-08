@@ -67,6 +67,9 @@ pub struct TimeSinkOptions {
     pub y_label: String,
     pub sample_rate: f64,
     pub max_points: usize,
+
+    /// Fixed range is the opposite of auto scale.
+    pub fixed_range: Option<(f32, f32)>,
 }
 
 impl Default for TimeSinkOptions {
@@ -79,6 +82,7 @@ impl Default for TimeSinkOptions {
             y_label: "Amplitude".into(),
             sample_rate: 1.0,
             max_points: DEFAULT_MAX_GRAPH_POINTS,
+            fixed_range: None,
         }
     }
 }
@@ -129,6 +133,8 @@ impl TimeSink {
             .ok_or(JsValue::from_str("no 2d context"))?
             .dyn_into::<CanvasRenderingContext2d>()?;
 
+        let (y_min, y_max) = options.fixed_range.unwrap_or((-1.0, 1.0));
+
         let inner = Rc::new(RefCell::new(Inner {
             canvas,
             ctx,
@@ -140,9 +146,9 @@ impl TimeSink {
             y_auto_button: role::<HtmlButtonElement>(root, "y-auto")?,
             pause_button: role::<HtmlButtonElement>(root, "pause")?,
             series: Vec::new(),
-            y_min: -1.0,
-            y_max: 1.0,
-            auto_scale: true,
+            y_min,
+            y_max,
+            auto_scale: options.fixed_range.is_none(),
             paused: false,
             sample_rate: options.sample_rate,
             max_points: options.max_points.max(1),

@@ -271,6 +271,7 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
                 subtitle: "Audio waveform".into(),
                 sample_rate: crate::worker::AUDIO_SAMPLE_RATE as f64,
                 max_points: 3 * crate::worker::AUDIO_SAMPLE_RATE,
+                fixed_range: Some((-1.0, 1.0)),
                 ..Default::default()
             },
         )?;
