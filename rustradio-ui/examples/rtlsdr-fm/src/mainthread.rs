@@ -4,7 +4,7 @@ use async_channel::Sender;
 use log::{info, trace, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::Event;
+use web_sys::{Event, js_sys};
 
 use rustradio_ui::mainthread::{
     get_button, get_input, send_message, send_message_sync, spectrum_sink, time_sink,
@@ -232,6 +232,23 @@ fn handle_gain() -> Result<(), JsValue> {
     Ok(())
 }
 
+fn handle_enter_button(
+    event: Event,
+    button_id: &str,
+    action: fn() -> Result<(), JsValue>,
+) -> Result<(), JsValue> {
+    let key = js_sys::Reflect::get(event.as_ref(), &JsValue::from_str("key"))?.as_string();
+    if key.as_deref() != Some("Enter") {
+        return Ok(());
+    }
+
+    event.prevent_default();
+    if get_button(button_id)?.disabled() {
+        return Ok(());
+    }
+    action()
+}
+
 fn handle_start() -> Result<(), JsValue> {
     get_button(ID_START)?.set_disabled(true);
     rustradio_ui::browser_audio::set_volume(1.0);
@@ -275,11 +292,29 @@ pub(crate) async fn setup() -> Result<(), JsValue> {
         btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
         handler.forget();
     }
+    // Tune input.
+    {
+        let handler = Closure::<dyn FnMut(Event) -> Result<(), JsValue>>::new(move |event| {
+            handle_enter_button(event, ID_TUNE, handle_tune)
+        });
+        let input = get_input(ID_FREQUENCY)?;
+        input.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref())?;
+        handler.forget();
+    }
     // Gain button.
     {
         let handler = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(handle_gain);
         let btn = get_button(ID_GAIN_APPLY)?;
         btn.add_event_listener_with_callback("click", handler.as_ref().unchecked_ref())?;
+        handler.forget();
+    }
+    // Gain input.
+    {
+        let handler = Closure::<dyn FnMut(Event) -> Result<(), JsValue>>::new(move |event| {
+            handle_enter_button(event, ID_GAIN_APPLY, handle_gain)
+        });
+        let input = get_input(ID_GAIN)?;
+        input.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref())?;
         handler.forget();
     }
     // Volume.
