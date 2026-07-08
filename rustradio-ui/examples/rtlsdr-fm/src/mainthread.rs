@@ -58,7 +58,7 @@ fn with_waveform_sink<T>(
     WAVEFORM_SINK.with(|slot| {
         let Some(sink) = slot.get() else {
             return Err(rustradio::Error::msg(
-                "waterfall sink has not been initialized",
+                "waveform sink has not been initialized",
             ));
         };
         f(sink)
