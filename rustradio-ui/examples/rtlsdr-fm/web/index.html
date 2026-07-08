@@ -3,27 +3,50 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RustRadio WASM AX.25 decoder</title>
+  <title>RustRadio RTL-SDR FM Receiver</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Visualizations -->
-  <section id="waterfall">Loading…</section>
-  <section id="audio-waveform">Loading…</section>
-  <button id="button-start" disabled>Start</button>
+  <main class="rr-rtlsdr-app">
+    <header class="rr-rtlsdr-header">
+      <div class="rr-rtlsdr-title-group">
+        <p class="rr-rtlsdr-eyebrow">RustRadio WASM</p>
+        <h1>RTL-SDR FM</h1>
+      </div>
+      <button id="button-start" class="rr-rtlsdr-start" disabled>Start</button>
+    </header>
 
-  <!-- Controls -->
-  <label for="input-frequency">Frequency (MHz)</label>
-  <input id="input-frequency" disabled value="100.0" />
-  <button id="button-tune" disabled>Tune</button>
-  <label for="input-gain">Gain (dB or auto)</label>
-  <input id="input-gain" disabled value="auto" />
-  <button id="button-gain" disabled>Set gain</button>
-  <label for="input-volume">Audio volume</label>
-  <input id="input-volume" type="range" min="0" max="1" step="0.01" value="0.00">
+    <section class="rr-rtlsdr-controls" aria-label="SDR controls">
+      <label class="rr-rtlsdr-field" for="input-frequency">
+        <span>Frequency (MHz)</span>
+        <span class="rr-rtlsdr-input-row">
+          <input id="input-frequency" disabled value="100.0" />
+          <button id="button-tune" disabled>Tune</button>
+        </span>
+      </label>
+      <label class="rr-rtlsdr-field" for="input-gain">
+        <span>Gain (dB or auto)</span>
+        <span class="rr-rtlsdr-input-row">
+          <input id="input-gain" disabled value="auto" />
+          <button id="button-gain" disabled>Set gain</button>
+        </span>
+      </label>
+      <label class="rr-rtlsdr-field rr-rtlsdr-volume" for="input-volume">
+        <span>Audio volume</span>
+        <input id="input-volume" type="range" min="0" max="1" step="0.01" value="0.00">
+      </label>
+    </section>
 
-  <!-- Log -->
-  <pre id="log-output">Awaiting logs…</pre>
+    <section class="rr-rtlsdr-visuals" aria-label="Receiver display">
+      <section id="waterfall" class="rr-rtlsdr-waterfall">Loading...</section>
+      <section id="audio-waveform" class="rr-rtlsdr-waveform">Loading...</section>
+    </section>
+
+    <section class="rr-rtlsdr-log-panel" aria-label="Receiver log">
+      <h2>Log</h2>
+      <pre id="log-output">Awaiting logs...</pre>
+    </section>
+  </main>
   <script type="module" src="wasm-mod.js"></script>
 </body>
 </html>
