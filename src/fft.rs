@@ -25,10 +25,9 @@ impl Fft {
         let fft = planner.plan_fft_forward(size);
         Self::new(prev, fft)
     }
-    fn process_one(&mut self, input: &[Complex]) -> Vec<Complex> {
-        let mut out = input.to_vec();
-        self.fft.process(&mut out);
-        out
+    fn process_one(&mut self, mut v: Vec<Complex>) -> Vec<Complex> {
+        self.fft.process(&mut v);
+        v
     }
 }
 
@@ -48,7 +47,7 @@ impl Block for Fft {
                     msg.len()
                 )));
             }
-            let out = self.process_one(&msg);
+            let out = self.process_one(msg);
             self.dst.push(out, tags);
         }
     }
