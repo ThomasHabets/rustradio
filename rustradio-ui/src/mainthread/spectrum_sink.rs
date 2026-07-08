@@ -11,6 +11,10 @@ use wasm_bindgen::prelude::*;
 use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement, ImageData};
 
 use crate::TaggedVec;
+use crate::mainthread::CLASS_SINK;
+
+const CLASS_SPECTRUM_SINK: &str = "rr-spectrum-sink-section";
+const CLASS_WATERFALL_SINK: &str = "rr-waterfall-sink-section";
 
 const SPECTRUM_SINK_HTML: &str = r#"
 <div class="rr-panel-header">
@@ -180,6 +184,7 @@ impl SpectrumSink {
     /// errors until the public API boundary.
     fn mount_dom(root: &Element, options: &SpectrumSinkOptions) -> Result<Self, JsValue> {
         root.set_inner_html(SPECTRUM_SINK_HTML);
+        root.class_list().add_2(CLASS_SINK, CLASS_SPECTRUM_SINK)?;
 
         role::<Element>(root, "title")?.set_text_content(Some(&options.title));
         role::<Element>(root, "subtitle")?.set_text_content(Some(&options.subtitle));
@@ -286,6 +291,7 @@ impl WaterfallSink {
     /// errors until the public API boundary.
     fn mount_dom(root: &Element, options: &WaterfallSinkOptions) -> Result<Self, JsValue> {
         root.set_inner_html(WATERFALL_SINK_HTML);
+        root.class_list().add_2(CLASS_SINK, CLASS_WATERFALL_SINK)?;
 
         role::<Element>(root, "title")?.set_text_content(Some(&options.title));
         role::<Element>(root, "subtitle")?.set_text_content(Some(&options.subtitle));

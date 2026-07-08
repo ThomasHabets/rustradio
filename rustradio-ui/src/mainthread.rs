@@ -16,6 +16,8 @@ pub mod spectrum_sink;
 pub mod time_sink;
 mod worker_startup;
 
+pub(crate) const CLASS_SINK: &str = "rr-sink-section";
+
 thread_local! {
     static WORKER: OnceCell<Worker> = const { OnceCell::new() };
     static WORKER_TX: RefCell<Option<Box<dyn Any>>> = const { RefCell::new(None)} ;

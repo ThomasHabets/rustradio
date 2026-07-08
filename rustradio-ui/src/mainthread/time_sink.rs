@@ -12,6 +12,9 @@ use web_sys::{
 };
 
 use crate::TaggedVec;
+use crate::mainthread::CLASS_SINK;
+
+const CLASS_TIME_SINK: &str = "rr-time-sink-section";
 
 /// Convert browser/DOM failures into the crate-level error type exposed by the
 /// time sink API.
@@ -115,6 +118,7 @@ impl TimeSink {
     /// errors until the public API boundary.
     fn mount_dom(root: &Element, options: TimeSinkOptions) -> Result<Self, JsValue> {
         root.set_inner_html(TIME_SINK_HTML);
+        root.class_list().add_2(CLASS_SINK, CLASS_TIME_SINK)?;
 
         role::<Element>(root, "title")?.set_text_content(Some(&options.title));
         role::<Element>(root, "subtitle")?.set_text_content(Some(&options.subtitle));

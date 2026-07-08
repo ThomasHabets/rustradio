@@ -10,6 +10,9 @@ use wasm_bindgen::prelude::*;
 use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement};
 
 use crate::TaggedVec;
+use crate::mainthread::CLASS_SINK;
+
+const CLASS_CONSTELLATION_SINK: &str = "rr-constellation-sink-section";
 
 const CONSTELLATION_SINK_HTML: &str = r#"
 <div class="rr-panel-header">
@@ -109,6 +112,8 @@ impl ConstellationSink {
     /// errors until the public API boundary.
     fn mount_dom(root: &Element, options: &ConstellationSinkOptions) -> Result<Self, JsValue> {
         root.set_inner_html(CONSTELLATION_SINK_HTML);
+        root.class_list()
+            .add_2(CLASS_SINK, CLASS_CONSTELLATION_SINK)?;
 
         role::<Element>(root, "title")?.set_text_content(Some(&options.title));
         role::<Element>(root, "subtitle")?.set_text_content(Some(&options.subtitle));
