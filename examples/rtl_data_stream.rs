@@ -110,7 +110,7 @@ where
             // Then check for input, since input can be slept on.
             let (input, _tags) = self.src.read_buf()?;
             if input.is_empty() {
-                return Ok(BlockRet::WaitForStream(&self.src, 2));
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
 
             // Window updates can currently not be waited for. TODO: is there a
