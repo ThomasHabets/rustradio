@@ -175,6 +175,7 @@ pub mod null_sink;
 pub mod pdu_average;
 pub mod pdu_to_stream;
 pub mod pdu_writer;
+pub mod pwm_decoder;
 pub mod quadrature_demod;
 pub mod rational_resampler;
 pub mod reader_source;
