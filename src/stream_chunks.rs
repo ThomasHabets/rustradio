@@ -28,7 +28,7 @@ impl<T: Sample> Block for StreamChunks<T> {
             {
                 let inlen = input.len();
                 if inlen < self.size {
-                    return Ok(BlockRet::WaitForStream(&self.src, self.size - inlen));
+                    return Ok(BlockRet::WaitForStream(&self.src, self.size));
                 }
             }
             self.dst.push(
@@ -74,7 +74,7 @@ mod tests {
         let (mut b, out) = StreamChunks::new(src_out, 10);
         assert!(matches![src.work()?, BlockRet::EOF]);
         let r = b.work()?;
-        assert!(matches![r, BlockRet::WaitForStream(_, 8)], "Was {r:?}");
+        assert!(matches![r, BlockRet::WaitForStream(_, 10)], "Was {r:?}");
         let mut n = 0;
         while let Some((v, tags)) = out.pop() {
             assert_eq!(v.len(), 10);
