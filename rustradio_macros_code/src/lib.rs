@@ -516,7 +516,7 @@ impl<'a> Parsed<'a> {
     }
     #[must_use]
     fn expand_sync_tags(&self) -> Option<TokenStream> {
-        if !matches![self.attrs.sync, SyncBlock::Value] {
+        if !matches!(self.attrs.sync, SyncBlock::Value) {
             return None;
         }
         let name = self.name;
