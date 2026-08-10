@@ -112,8 +112,15 @@ g.run()?;
   dependency at build time, and thus `librtlsdr.so` as a dependency at runtime.
 * `soapysdr`: Add dependency on `soapysdr`, for its various SDR support.
 * `tokio-unstable`: For async graphs, allow use of tokio unstable API,
+* `uhd`: GPL code only: Enable the shared `UhdDevice`, `UhdSource`, and
+  `UhdSink` blocks.
 * `volk`: Add dependency on the `volk` library, to speed up some inner loops.
 * `wasm`: Enable very experimental WASM support.
+
+"GPL code only" means that this triggers linking against GPL code. So if you
+distribute a binary with these features enabled, it causes your whole binary to
+fall under GPL. This is my understanding. I am not a lawyer. You are responsible
+for your own software supply chain.
 
 `tokio-unstable` allows tasks to be named, which helps when running
 `tokio-console`. But it does require the user to run `cargo build` with the env
@@ -218,6 +225,15 @@ pub mod soapysdr_sink;
 
 #[cfg(feature = "soapysdr")]
 pub mod soapysdr_source;
+
+#[cfg(feature = "uhd")]
+pub mod uhd_device;
+
+#[cfg(feature = "uhd")]
+pub mod uhd_sink;
+
+#[cfg(feature = "uhd")]
+pub mod uhd_source;
 
 pub mod block;
 pub mod blocks;

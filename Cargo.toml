@@ -44,6 +44,7 @@ volk = { version = "0.2", optional = true }
 web-sys = { version = "0.3.77", features = ["Performance", "Window"], optional = true }
 wasm-bindgen = { version = "0.2.100", optional = true }
 async-channel = { version = "2.5.0", default-features = false, optional=true }
+uhd = { version = "0.4.0", optional=true }
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]
@@ -84,6 +85,7 @@ simd = []
 soapysdr = ["dep:soapysdr"]
 tokio-unstable = ["tokio/tracing"]
 volk = ["dep:volk"]
+uhd = ["dep:uhd"]
 wasm = ["dep:web-sys", "dep:wasm-bindgen", "dep:async-channel"]
 
 [[example]]
@@ -125,6 +127,10 @@ required-features = ["pipewire"]
 [[example]]
 name = "airspy_am_decode"
 required-features = ["audio"]
+
+[[example]]
+name = "uhd_full_duplex"
+required-features = ["uhd"]
 # debug = true
 
 [profile.nodebug]

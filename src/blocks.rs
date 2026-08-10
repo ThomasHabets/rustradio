@@ -69,6 +69,13 @@ pub use crate::soapysdr_sink::SoapySdrSink;
 #[cfg(feature = "soapysdr")]
 pub use crate::soapysdr_source::SoapySdrSource;
 
+#[cfg(feature = "uhd")]
+pub use crate::uhd_device::UhdDevice;
+#[cfg(feature = "uhd")]
+pub use crate::uhd_sink::{UhdSink, UhdSinkBuilder};
+#[cfg(feature = "uhd")]
+pub use crate::uhd_source::{UhdSource, UhdSourceBuilder};
+
 #[cfg(feature = "audio")]
 pub use crate::audio_sink::AudioSink;
 
