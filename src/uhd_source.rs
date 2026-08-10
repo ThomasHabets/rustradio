@@ -161,7 +161,7 @@ impl UhdSourceBuilder {
 /// - `UhdSource::time_ns`
 /// - `UhdSource::burst` (`true` on burst start, `false` on burst end)
 /// - `UhdSource::error` (`bool`), `error_kind` and `error_message` when an
-///    error is present
+///   error is present
 ///
 /// Metadata for a non-timeout event carrying no samples is deferred to the next
 /// sample (i.e. an error can't be attached if there's no sample to attach it to
@@ -233,17 +233,20 @@ impl Block for UhdSource {
             let error = metadata.last_error();
 
             if samples == 0 {
-                if matches!(
-                    error.as_ref().map(uhd::ReceiveError::kind),
-                    Some(uhd::ReceiveErrorKind::Timeout)
-                ) {
-                    trace!("UHD receive timed out");
-                    return Ok(BlockRet::Pending);
-                }
-                if let Some(error) = &error {
-                    warn!("UHD receive metadata error: {error}");
-                }
                 self.pending_tags.extend(metadata_tags(&metadata));
+                match error.as_ref().map(uhd::ReceiveError::kind) {
+                    None => {}
+                    Some(uhd::ReceiveErrorKind::Timeout | uhd::ReceiveErrorKind::OutOfSequence) => {
+                        trace!("UHD receive timed out");
+                    }
+                    Some(uhd::ReceiveErrorKind::Overflow) => {
+                        warn!("UHD receive metadata error: {error:?}");
+                        // Immediately retry. Returning Pending would only make
+                        // things worse.
+                        continue;
+                    }
+                    Some(_other) => warn!("UHD receive metadata error: {error:?}"),
+                }
                 return Ok(BlockRet::Pending);
             }
             assert!(
@@ -313,7 +316,7 @@ fn metadata_tags(metadata: &uhd::ReceiveMetadata) -> Vec<Tag> {
     let mut tags = Vec::new();
     if let Some(ref err) = error {
         warn!("UhdSource: {err:?}");
-        metadata_tag("error", TagValue::Bool(true));
+        tags.push(metadata_tag("error", TagValue::Bool(true)));
     }
     if metadata.start_of_burst() {
         tags.push(metadata_tag("burst", TagValue::Bool(true)));
@@ -335,7 +338,7 @@ fn metadata_tags(metadata: &uhd::ReceiveMetadata) -> Vec<Tag> {
         tags.push(metadata_tag(
             "time_ns",
             TagValue::I64(
-                time.seconds * 1000_000_000i64 + (1_000_000_000f64 * time.fraction) as i64,
+                time.seconds * 1_000_000_000_i64 + (1_000_000_000_f64 * time.fraction) as i64,
             ),
         ));
     }
@@ -414,22 +417,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_metadata_has_every_unconditional_field() {
+    fn default_metadata_has_no_event_tags() {
         let metadata = uhd::ReceiveMetadata::new();
         let tags = metadata_tags(&metadata);
-        let keys = tags.iter().map(Tag::key).collect::<Vec<_>>();
-        assert_eq!(
-            keys,
-            [
-                "UhdSource::metadata_start_of_burst",
-                "UhdSource::metadata_end_of_burst",
-                "UhdSource::metadata_more_fragments",
-                "UhdSource::metadata_fragment_offset",
-                "UhdSource::metadata_out_of_sequence",
-                "UhdSource::metadata_samples",
-                "UhdSource::metadata_error",
-            ]
-        );
+        assert!(tags.is_empty());
     }
 
     #[test]
