@@ -16,6 +16,11 @@ next agent continue without rediscovering everything. Include:
 Keep handoffs factual and short. Do not paste full command logs unless
 the exact output is necessary to diagnose the next step.
 
+## Dependencies
+
+Avoid adding dependencies. Ask the user if it truly is the best choice. Never
+vendor dependencies.
+
 ## Commit Messages
 
 Use the existing project style:
