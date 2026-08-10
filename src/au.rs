@@ -238,10 +238,10 @@ impl Block for AuDecode {
                 }
                 let bitrate = u32::from_be_bytes(head[8..12].try_into().unwrap());
                 if self.bitrate != bitrate {
-                    return Err(Error::msg(format![
+                    return Err(Error::msg(format!(
                         "AU block initialized with bitrate {}, got {bitrate}",
                         self.bitrate
-                    ]));
+                    )));
                 }
                 let channels = u32::from_be_bytes(head[12..16].try_into().unwrap());
                 if channels != 1 {

@@ -64,7 +64,7 @@ mod tests {
             let (mut ib, src) = VectorSource::builder(vec![1u8, 2, 3, 4, 5, 6])
                 .repeat(Repeat::finite(2))
                 .build()?;
-            while !matches![ib.work()?, BlockRet::EOF] {}
+            while !matches!(ib.work()?, BlockRet::EOF) {}
             let (mut b, out) = Skip::new(src, skip);
             let ret = b.work()?;
             assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");

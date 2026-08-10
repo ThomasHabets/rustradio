@@ -162,9 +162,9 @@ mod tests {
     fn source_dst_full() -> Result<()> {
         let (mut src, _) = FileSource::<Float>::new("/dev/zero")?;
         let ret = src.work()?;
-        assert!(matches![ret, BlockRet::Again], "{ret:?}");
+        assert!(matches!(ret, BlockRet::Again), "{ret:?}");
         let ret = src.work()?;
-        assert!(matches![ret, BlockRet::WaitForStream(_, 1)], "{ret:?}");
+        assert!(matches!(ret, BlockRet::WaitForStream(_, 1)), "{ret:?}");
         Ok(())
     }
 
@@ -260,7 +260,7 @@ mod tests {
         let (mut src, src_out) = FileSource::<u32>::builder(&tmpfn)
             .repeat(crate::Repeat::finite(2))
             .build()?;
-        while !matches![src.work()?, BlockRet::EOF] {}
+        while !matches!(src.work()?, BlockRet::EOF) {}
 
         let (res, _) = src_out.read_buf()?;
         assert_eq!(res.slice(), &[1, 1]);

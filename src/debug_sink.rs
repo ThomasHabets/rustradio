@@ -87,7 +87,7 @@ where
                         .join(",")
                 })
                 .unwrap_or_default();
-            self.dst.push(format!["{s:?} {ts}"], &[]);
+            self.dst.push(format!("{s:?} {ts}"), &[]);
         });
         i.consume(l);
         if wait_for_dst {

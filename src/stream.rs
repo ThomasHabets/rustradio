@@ -127,8 +127,13 @@ pub trait StreamWait {
     #[must_use]
     fn closed(&self) -> bool;
 
+    /// Wait for "a while" or until `need` samples are available/space available.
+    ///
+    /// Return true if `need` will *never* be satisfied, and blocks waiting for
+    /// it should just go ahead and EOF.
+    ///
+    /// `must_use` implied by async/Future.
     #[cfg(feature = "async")]
-    #[must_use]
     async fn wait_async(&self, need: usize) -> bool;
 }
 
