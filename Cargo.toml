@@ -131,6 +131,10 @@ required-features = ["audio"]
 [[example]]
 name = "uhd_full_duplex"
 required-features = ["uhd"]
+
+[[example]]
+name = "uhd_rf_survey"
+required-features = ["uhd"]
 # debug = true
 
 [profile.nodebug]
@@ -159,3 +163,6 @@ undocumented-unsafe-blocks = "warn"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+
+[patch.crates-io]
+uhd = { path = "../uhd-rust/uhd" }
