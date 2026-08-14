@@ -99,10 +99,10 @@ where
     let inited = MAIN_UI_TX.with(|slot| slot.borrow().is_some());
     if inited {
         let tx = with_main_ui_tx::<App, _>(Clone::clone)
-        .await
-        .ok_or_else(|| {
-            rustradio::Error::msg("MAIN_UI_TX has wrong type or was not initialized")
-        })?;
+            .await
+            .ok_or_else(|| {
+                rustradio::Error::msg("MAIN_UI_TX has wrong type or was not initialized")
+            })?;
         tx.send(msg)
             .await
             .map_err(|e| rustradio::Error::msg(format!("main UI channel is closed: {e}")))

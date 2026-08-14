@@ -69,6 +69,9 @@ pub enum MainToWorker<App: ApplicationSpecific> {
     /// (which gets it from WebUSB) to the worker thread.
     Bytes(String, Vec<TaggedVec<u8>>),
 
+    /// Send complex sample streams from the main UI thread to the worker.
+    Complexes(String, Vec<TaggedVec<Complex>>),
+
     /// Send a ping with a `performance.now()` timestamp.
     /// The timestamp will be reflected in the Pong.
     Ping(f64),
@@ -189,4 +192,34 @@ where
             error!("{e:?}");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn main_to_worker_complexes_round_trip() {
+        let message = MainToWorker::<AppEmpty>::Complexes(
+            "receiver".into(),
+            vec![TaggedVec {
+                data: vec![Complex::new(1.0, -0.5)],
+                tags: vec![],
+            }],
+        );
+
+        let json = serde_json::to_string(&message).unwrap();
+        let decoded: MainToWorker<AppEmpty> = serde_json::from_str(&json).unwrap();
+        let MainToWorker::Complexes(name, streams) = decoded else {
+            panic!("decoded the wrong MainToWorker variant");
+        };
+        assert_eq!(name, "receiver");
+        assert_eq!(
+            streams,
+            vec![TaggedVec {
+                data: vec![Complex::new(1.0, -0.5)],
+                tags: vec![],
+            }]
+        );
+    }
 }

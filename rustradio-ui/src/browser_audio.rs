@@ -73,7 +73,10 @@ fn request_resume(context: &AudioContext) -> Result<(), JsValue> {
     let resume = context.resume()?;
     spawn_local(async move {
         match JsFuture::from(resume).await {
-            Ok(_) => info!("Web Audio context resume completed with state {:?}", context.state()),
+            Ok(_) => info!(
+                "Web Audio context resume completed with state {:?}",
+                context.state()
+            ),
             Err(error) => error!("Web Audio context resume failed: {error:?}"),
         }
     });
