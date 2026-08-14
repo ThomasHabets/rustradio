@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RustRadio RTL-SDR FM Receiver</title>
+  <title>RustRadio FM Receiver</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,9 +11,16 @@
     <header class="rr-rtlsdr-header">
       <div class="rr-rtlsdr-title-group">
         <p class="rr-rtlsdr-eyebrow">RustRadio WASM</p>
-        <h1>RTL-SDR FM</h1>
+        <h1>FM Receiver</h1>
       </div>
-      <button id="button-start" class="rr-rtlsdr-start" disabled>Start</button>
+      <div class="rr-rtlsdr-start-group">
+        <label for="select-source" class="rr-visually-hidden">SDR source</label>
+        <select id="select-source" disabled>
+          <option value="rtlsdr">RTL-SDR</option>
+          <option value="b200">USRP B200</option>
+        </select>
+        <button id="button-start" class="rr-rtlsdr-start" disabled>Start</button>
+      </div>
     </header>
 
     <section class="rr-rtlsdr-controls" aria-label="SDR controls">

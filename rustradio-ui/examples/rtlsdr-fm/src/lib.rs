@@ -14,9 +14,8 @@ impl rustradio_ui::ApplicationSpecific for MyWorkerToMain {
     type Ready = rustradio_ui::AppEmpty;
 }
 
-pub(crate) type MyMainToWorker = MyWorkerToMain;
 pub(crate) type WorkerToMain = rustradio_ui::WorkerToMain<MyWorkerToMain>;
-pub(crate) type MainToWorker = rustradio_ui::MainToWorker<MyMainToWorker>;
+pub(crate) type MainToWorker = rustradio_ui::MainToWorker<rustradio_ui::AppEmpty>;
 
 #[wasm_bindgen]
 pub async fn start() -> Result<(), JsValue> {

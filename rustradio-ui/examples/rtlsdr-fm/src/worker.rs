@@ -5,29 +5,32 @@ use log::{error, info, trace};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
+use rustradio::Complex;
 use rustradio::blockchain;
 use rustradio::graph::GraphRunner;
 use rustradio_ui::worker::{send_message, source};
-use rustradio_ui::{spawn, AppEmpty, TaggedVec};
+use rustradio_ui::{AppEmpty, TaggedVec, spawn};
 
 use crate::{MainToWorker, MyWorkerToMain, WorkerToMain};
 
-pub(crate) const RCV_SOURCE_ID: &str = "rtl-sdr";
+pub(crate) const RCV_SOURCE_ID: &str = "sdr-source";
 pub(crate) const STREAM_AUDIO: &str = "audio";
 pub(crate) const STREAM_SPECTRUM: &str = "spectrum";
 pub(crate) const AUDIO_SAMPLE_RATE: usize = 44_100;
 const SOURCE_CHANNEL_SIZE: usize = 10;
 const SPECTRUM_SIZE: usize = 2048;
-const DECI: u32 = crate::mainthread::SAMPLE_RATE / 50_000;
+const AUDIO_CHUNK_SIZE: usize = 2048;
+//const DECI: u32 = crate::mainthread::SAMPLE_RATE / 50_000;
+const DECI: u32 = 1;
 
 thread_local! {
-static SOURCE: OnceCell<Sender<source::Msg<u8>>> = const { OnceCell::new() };
+static SOURCE: OnceCell<Sender<source::Msg<Complex>>> = const { OnceCell::new() };
 static GRAPH_POKE: OnceCell<Sender<()>> = const { OnceCell::new() };
 }
 
 async fn run_graph() -> Result<(), rustradio::Error> {
     use rustradio::blocks::*;
-    use rustradio_ui::worker::{FloatPduSink, FloatSink};
+    use rustradio_ui::worker::FloatPduSink;
 
     let mut g = rustradio::wasm::wasm_graph::WasmGraph::default();
     let (src, prev, src_tx) = source::WasmSource::<MyWorkerToMain, _>::new(RCV_SOURCE_ID);
@@ -44,7 +47,6 @@ async fn run_graph() -> Result<(), rustradio::Error> {
         g,
         prev,
         (src, prev),
-        RtlSdrDecode::new(prev),
         {
             let mut dropcount = 0;
             let (tee, a, prev) = Tee::new(prev);
@@ -86,8 +88,9 @@ async fn run_graph() -> Result<(), rustradio::Error> {
             .deci((samp_rate as usize) / (DECI as usize))
             .interp(AUDIO_SAMPLE_RATE)
             .build(prev)?,
+        StreamChunks::new(prev, AUDIO_CHUNK_SIZE),
     ];
-    g.add(Box::new(FloatSink::<MyWorkerToMain>::new(
+    g.add(Box::new(FloatPduSink::<MyWorkerToMain>::new(
         prev,
         STREAM_AUDIO,
     )));
@@ -113,7 +116,7 @@ async fn worker_msg(msg: MainToWorker) -> Result<(), JsValue> {
                 Ok(())
             })
         }
-        MainToWorker::Bytes(_name, streams) => {
+        MainToWorker::Complexes(name, streams) if name == RCV_SOURCE_ID => {
             send_source_msg(source_msg_from_streams(streams)?).await?
         }
         other => error!("Got unknown message {other:?}"),
@@ -121,13 +124,13 @@ async fn worker_msg(msg: MainToWorker) -> Result<(), JsValue> {
     Ok(())
 }
 
-async fn send_source_msg(msg: source::Msg<u8>) -> Result<(), JsValue> {
+async fn send_source_msg(msg: source::Msg<Complex>) -> Result<(), JsValue> {
     let Some(tx) = SOURCE.with(|cell| {
         let cell = cell.clone();
         cell.get().cloned()
     }) else {
         return Err(JsValue::from_str(
-            "tried to send bytes before graph was started",
+            "tried to send samples before graph was started",
         ));
     };
     tx.send(msg)
@@ -137,7 +140,7 @@ async fn send_source_msg(msg: source::Msg<u8>) -> Result<(), JsValue> {
         let cell = cell.clone();
         cell.get().cloned()
     }) else {
-        return Err(JsValue::from_str("tried to send bytes with poke unset"));
+        return Err(JsValue::from_str("tried to send samples with poke unset"));
     };
     trace!("Waking up graph");
     tx.send(())
@@ -147,10 +150,12 @@ async fn send_source_msg(msg: source::Msg<u8>) -> Result<(), JsValue> {
     Ok(())
 }
 
-fn source_msg_from_streams(mut streams: Vec<TaggedVec<u8>>) -> Result<source::Msg<u8>, JsValue> {
+fn source_msg_from_streams(
+    mut streams: Vec<TaggedVec<Complex>>,
+) -> Result<source::Msg<Complex>, JsValue> {
     if streams.len() != 1 {
         return Err(JsValue::from_str(&format!(
-            "Got bytes with {} streams, want 1",
+            "Got samples with {} streams, want 1",
             streams.len()
         )));
     }
