@@ -49,6 +49,7 @@ audio = [
         "web-sys/AudioBuffer",
         "web-sys/AudioBufferSourceNode",
         "web-sys/AudioContext",
+        "web-sys/AudioContextState",
         "web-sys/AudioDestinationNode",
         "web-sys/AudioParam",
         "web-sys/GainNode",

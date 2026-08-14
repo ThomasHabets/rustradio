@@ -2,10 +2,11 @@
 use std::cell::Cell;
 use std::cell::RefCell;
 
-use log::info;
+use log::{error, info};
 use wasm_bindgen::prelude::{JsCast, JsValue};
+use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::js_sys;
-use web_sys::{AudioContext, GainNode};
+use web_sys::{AudioContext, AudioContextState, GainNode};
 
 // Maybe some of these should jut be default values, settable by the user.
 const AUDIO_SAMPLE_RATE: f32 = 44_100.0;
@@ -18,6 +19,7 @@ struct AudioPlayback {
     context: AudioContext,
     gain: GainNode,
     next_time: f64,
+    chunks_queued: u64,
 }
 
 thread_local! {
@@ -42,7 +44,7 @@ fn ensure_audio_playback() -> Result<(), JsValue> {
         let mut slot = slot.borrow_mut();
         if let Some(audio) = slot.as_mut() {
             audio.gain.gain().set_value(volume);
-            let _ = audio.context.resume()?;
+            request_resume(&audio.context)?;
             return Ok(());
         }
 
@@ -50,15 +52,32 @@ fn ensure_audio_playback() -> Result<(), JsValue> {
         let gain = context.create_gain()?;
         gain.gain().set_value(volume);
         gain.connect_with_audio_node(context.destination().unchecked_ref())?;
-        let _ = context.resume()?;
+        info!("Web Audio context created with state {:?}", context.state());
+        request_resume(&context)?;
         let next_time = context.current_time() + AUDIO_START_LATENCY_SECONDS;
         *slot = Some(AudioPlayback {
             context,
             gain,
             next_time,
+            chunks_queued: 0,
         });
         Ok(())
     })
+}
+
+fn request_resume(context: &AudioContext) -> Result<(), JsValue> {
+    if context.state() == AudioContextState::Running {
+        return Ok(());
+    }
+    let context = context.clone();
+    let resume = context.resume()?;
+    spawn_local(async move {
+        match JsFuture::from(resume).await {
+            Ok(_) => info!("Web Audio context resume completed with state {:?}", context.state()),
+            Err(error) => error!("Web Audio context resume failed: {error:?}"),
+        }
+    });
+    Ok(())
 }
 
 /// Restart sample scheduling slightly in the future to avoid immediate underruns.
@@ -98,6 +117,13 @@ pub fn enqueue(samples: impl IntoIterator<Item = f32>) -> Result<(), JsValue> {
         let audio = slot
             .as_mut()
             .ok_or_else(|| JsValue::from_str("audio playback is not initialized"))?;
+        if audio.chunks_queued == 0 {
+            info!(
+                "Web Audio scheduling first buffer: {} samples, context state {:?}",
+                samples.len(),
+                audio.context.state()
+            );
+        }
         let now = audio.context.current_time();
         let start_time = audio.next_time.max(now + AUDIO_START_LATENCY_SECONDS);
         let queued_seconds = (start_time - now).max(0.0);
@@ -137,6 +163,7 @@ pub fn enqueue(samples: impl IntoIterator<Item = f32>) -> Result<(), JsValue> {
         source.playback_rate().set_value(playback_rate);
         source.connect_with_audio_node(audio.gain.unchecked_ref())?;
         source.start_with_when(start_time)?;
+        audio.chunks_queued += 1;
         audio.next_time = start_time
             + samples.len() as f64 / f64::from(AUDIO_SAMPLE_RATE) / f64::from(playback_rate);
         Ok(())

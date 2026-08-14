@@ -52,11 +52,14 @@ where
 {
     let inited = WORKER_TX.with(|slot| slot.borrow().is_some());
     if inited {
-        with_worker_tx::<App, _>(|tx| {
-            let _ = tx.try_send(msg);
-        })
+        let tx = with_worker_tx::<App, _>(Clone::clone)
         .await
-        .ok_or_else(|| rustradio::Error::msg("MAIN_UI_TX has wrong type or was not initialized"))
+        .ok_or_else(|| {
+            rustradio::Error::msg("MAIN_UI_TX has wrong type or was not initialized")
+        })?;
+        tx.send(msg)
+            .await
+            .map_err(|e| rustradio::Error::msg(format!("worker channel is closed: {e}")))
     } else {
         error!("Tried to send before worker channel set up. Falling back to posting");
         post_message(&msg)
