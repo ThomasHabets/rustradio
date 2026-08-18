@@ -133,11 +133,6 @@ required-features = ["audio"]
 name = "uhd_full_duplex"
 required-features = ["uhd"]
 
-[[example]]
-name = "uhd_rf_survey"
-required-features = ["uhd"]
-# debug = true
-
 [profile.nodebug]
 inherits = "dev"
 debug = 0
