@@ -4,10 +4,6 @@ no-default-features = false
 
 [advisories]
 ignore = [
-        # Pending https://github.com/samcrow/uhd-rust/pull/18
-        "RUSTSEC-2021-0139",
-        "RUSTSEC-2024-0006",
-        "RUSTSEC-2024-0375",
 ]
 
 [licenses]
