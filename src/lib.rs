@@ -226,6 +226,10 @@ pub mod soapysdr_sink;
 #[cfg(feature = "soapysdr")]
 pub mod soapysdr_source;
 
+/// Re-export uhd dep since it may be a prerelease.
+#[cfg(feature = "uhd")]
+pub use uhd;
+
 #[cfg(feature = "uhd")]
 pub mod uhd_device;
 
