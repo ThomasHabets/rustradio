@@ -50,7 +50,7 @@ jobs:
     - name: apt-get update
       run:  sudo apt-get update
     - name: Install dependencies
-      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev schedtool libpipewire-0.3-dev libvolk*-dev
+      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev schedtool libpipewire-0.3-dev libvolk*-dev libuhd-dev
     - name: Run tickbox
       run: SLOW=true NODIFF=true CLEANUP=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1 --matching '^(10|26)-.*'
 #    - name: Check semver
