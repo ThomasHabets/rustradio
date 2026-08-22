@@ -2,7 +2,7 @@
 set -uoe pipefail
 if [[ ${SLOW:-} = "true" ]]; then
         cd "$TICKBOX_TEMPDIR/work"
-        for feature in rtlsdr soapysdr fast-math audio fftw simd async nix pipewire volk; do
+        for feature in rtlsdr soapysdr fast-math audio fftw simd async nix pipewire volk uhd; do
                 export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.feature.${feature}"
                 cargo +nightly test -F "${feature}"
                 if [[ ${CLEANUP:-} = true ]]; then
