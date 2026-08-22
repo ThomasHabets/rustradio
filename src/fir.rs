@@ -16,6 +16,39 @@ use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
 use crate::{Complex, Float, Result, Sample};
 
+/// Algebraic ops, allowing more optimizations.
+pub trait AlgebraicOps {
+    #[must_use]
+    fn algebraic_add(self, rhs: Self) -> Self;
+    #[must_use]
+    fn algebraic_mul(self, rhs: Self) -> Self;
+}
+
+impl AlgebraicOps for Float {
+    fn algebraic_add(self, rhs: Self) -> Self {
+        Float::algebraic_add(self, rhs)
+    }
+    fn algebraic_mul(self, rhs: Self) -> Self {
+        Float::algebraic_mul(self, rhs)
+    }
+}
+
+impl AlgebraicOps for Complex {
+    fn algebraic_add(self, rhs: Self) -> Self {
+        Complex::new(self.re.algebraic_add(rhs.re), self.im.algebraic_add(rhs.im))
+    }
+    fn algebraic_mul(self, rhs: Self) -> Self {
+        Complex::new(
+            self.re
+                .algebraic_mul(rhs.re)
+                .algebraic_sub(self.im.algebraic_mul(rhs.im)),
+            self.re
+                .algebraic_mul(rhs.im)
+                .algebraic_add(self.im.algebraic_mul(rhs.re)),
+        )
+    }
+}
+
 #[doc(hidden)]
 pub trait FrequencyTranslate {
     /// Per-block translation state.
@@ -102,7 +135,9 @@ fn sum_product_avx(vec1: &[f32], vec2: &[f32]) -> f32 {
         vec1[skip..]
             .iter()
             .zip(vec2[skip..].iter())
-            .fold(partial, |acc, (&f, &x)| acc + x * f)
+            .fold(partial, |acc, (&f, &x)| {
+                acc.algebraic_add(x.algebraic_mul(f))
+            })
     }
 }
 
@@ -140,7 +175,9 @@ impl Fir<Float> {
             return input[skip..]
                 .iter()
                 .zip(self.taps[skip..].iter())
-                .fold(partial, |acc, (&f, &x)| acc + x * f);
+                .fold(partial, |acc, (&f, &x)| {
+                    acc.algebraic_add(x.algebraic_mul(f))
+                });
         }
         #[allow(unreachable_code)]
         self.filter(input)
@@ -149,7 +186,7 @@ impl Fir<Float> {
 
 impl<T> Fir<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + AlgebraicOps,
 {
     /// Create new FIR.
     #[must_use]
@@ -173,7 +210,9 @@ where
         input
             .iter()
             .zip(self.taps.iter())
-            .fold(T::default(), |acc, (&f, &x)| acc + x * f)
+            .fold(T::default(), |acc, (&f, &x)| {
+                acc.algebraic_add(x.algebraic_mul(f))
+            })
     }
 
     /// Call `filter()` multiple times, across an input range.
@@ -239,7 +278,7 @@ fn sum_product_float_wasm(input: &[Float], taps: &[Float]) -> Float {
         .iter()
         .zip(taps[len..].iter())
         .fold(horizontal_sum_f32x4(acc), |acc, (&input, &tap)| {
-            acc + tap * input
+            acc.algebraic_add(tap.algebraic_mul(input))
         })
 }
 
@@ -292,7 +331,7 @@ fn sum_product_complex_wasm(input: &[Complex], taps: &[Complex]) -> Complex {
         horizontal_sum_f32x4(imag_acc),
     );
     for (&input, &tap) in input[len..].iter().zip(taps[len..].iter()) {
-        ret += tap * input;
+        ret = ret.algebraic_add(tap.algebraic_mul(input));
     }
     ret
 }
@@ -309,7 +348,11 @@ pub struct FirFilterBuilder<T> {
 
 impl<T> FirFilterBuilder<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + FrequencyTranslate,
+    T: Sample
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>
+        + FrequencyTranslate
+        + AlgebraicOps,
 {
     /// Set the decimation to the given value.
     ///
@@ -356,7 +399,11 @@ pub struct FirFilter<T: Sample + FrequencyTranslate> {
 
 impl<T> FirFilter<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + FrequencyTranslate,
+    T: Sample
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>
+        + FrequencyTranslate
+        + AlgebraicOps,
 {
     /// Create new `FirFilterBuilder`, with the supplied taps.
     pub fn builder(taps: impl Into<Vec<T>>) -> FirFilterBuilder<T> {
@@ -466,8 +513,8 @@ impl FrequencyTranslate for Complex {
         // errors?
         if let Some(translator) = translator {
             for sample in out {
-                *sample *= translator.phase;
-                translator.phase *= translator.step;
+                *sample = sample.algebraic_mul(translator.phase);
+                translator.phase = translator.phase.algebraic_mul(translator.step);
             }
         }
     }
@@ -487,7 +534,11 @@ impl FirFilterBuilder<Complex> {
 
 impl<T> Block for FirFilter<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + FrequencyTranslate,
+    T: Sample
+        + std::ops::Mul<T, Output = T>
+        + std::ops::Add<T, Output = T>
+        + FrequencyTranslate
+        + AlgebraicOps,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let (input, mut tags) = self.src.read_buf()?;

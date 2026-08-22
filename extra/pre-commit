@@ -5,8 +5,6 @@ if [[ ${NO_PRECOMMIT:-} = true ]]; then
         exit 0
 fi
 
-exec schedtool -D -e tickbox --dir tickbox/precommit
-
 if [[ ${AI_REVIEW:-} = true ]]; then
     exec < /dev/tty
     CODEBOT=codebot
@@ -20,3 +18,4 @@ if [[ ${AI_REVIEW:-} = true ]]; then
         fi
     fi
 fi
+exec schedtool -D -e tickbox --dir tickbox/precommit
