@@ -45,7 +45,7 @@ web-sys = { version = "0.3.77", features = ["Performance", "Window"], optional =
 wasm-bindgen = { version = "0.2.100", optional = true }
 async-channel = { version = "2.5.0", default-features = false, optional=true }
 # TODO: depend on `uhd` directly once a new version has been released.
-uhd = { version = "0.4.1", package = "uhd-post-0-4-0-prerelease", optional=true }
+uhd = { version = "0.4.1", optional=true }
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
 [dependencies.fftw]

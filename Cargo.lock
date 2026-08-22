@@ -2397,7 +2397,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "uhd-post-0-4-0-prerelease",
+ "uhd",
  "volk",
  "wasm-bindgen",
  "web-sys",
@@ -3091,23 +3091,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 
 [[package]]
-name = "uhd-post-0-4-0-prerelease"
+name = "uhd"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b981f16e65930027a9fbfda7fb21bd3e8b5229a9bf0dae9c062aed9e02af5d12"
+checksum = "428e7871f9f34ae1005a7fd622dbea8594583a7517d979b307e784788cee5ea5"
 dependencies = [
  "anyhow",
  "libc",
  "num-complex",
  "thiserror 1.0.69",
- "uhd-sys-post-0-1-3-prerelease",
+ "uhd-sys",
 ]
 
 [[package]]
-name = "uhd-sys-post-0-1-3-prerelease"
+name = "uhd-sys"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9de33c62a99beb46f4e40c12c17b4e9096e896e7b5d49a73d9109be4cdb0910"
+checksum = "805d058842422c2e823deb19d2a5d9448a36339c160c8cc9dfc512ccde27a2e6"
 dependencies = [
  "bindgen 0.69.5",
  "metadeps",
