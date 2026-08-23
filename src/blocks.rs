@@ -36,6 +36,7 @@ pub use crate::pdu_average::PduAverage;
 pub use crate::pdu_to_stream::PduToStream;
 pub use crate::pdu_writer::PduWriter;
 pub use crate::pwm_decoder::{PwmDecoder, PwmDecoderBuilder, PwmFrame, PwmGapPulse};
+pub use crate::pwm_encoder::{PwmEncoder, PwmEncoderBuilder};
 pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
 pub use crate::rational_resampler::RationalResampler;
 pub use crate::reader_source::ReaderSource;

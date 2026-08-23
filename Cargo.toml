@@ -109,6 +109,10 @@ name = "fm_tx"
 required-features = ["soapysdr"]
 
 [[example]]
+name = "restaurant_pager_tx"
+required-features = ["soapysdr"]
+
+[[example]]
 name = "rtl_downsampled"
 required-features = ["rtlsdr"]
 
