@@ -127,7 +127,7 @@ impl Drop for Metadata {
 }
 
 fn main() -> Result<()> {
-    println!("soapy_fm receiver example");
+    println!("soapysdr SigMF capture example");
     let opt = Opt::parse();
     stderrlog::new()
         .module(module_path!())
@@ -151,7 +151,7 @@ fn main() -> Result<()> {
         g,
         prev,
         SoapySdrSource::builder(&dev, opt.freq, opt.samp_rate)
-            .igain(opt.gain)
+            .igain(opt.gain)?
             .gps_coordinates(opt.gps_coordinates)
             .build()?,
         Metadata::new(

@@ -1,11 +1,11 @@
 //! SoapySDR sink.
 
-use crate::Result;
 use log::debug;
 
 use crate::Complex;
 use crate::block::{Block, BlockRet};
 use crate::stream::ReadStream;
+use crate::{Error, Result};
 
 fn ai_string(ai: &soapysdr::ArgInfo) -> String {
     format!(
@@ -34,9 +34,12 @@ impl SoapySdrSinkBuilder<'_> {
     /// Set input gain.
     ///
     /// Normalized to 0.0 to 1.0.
-    pub fn ogain(mut self, igain: f64) -> Self {
-        self.ogain = igain;
-        self
+    pub fn ogain(mut self, gain: f64) -> Result<Self> {
+        if gain < 0.0 || gain > 1.0 {
+            return Err(Error::msg("output gain must be in range 0.0 - 1.0"));
+        }
+        self.ogain = gain;
+        Ok(self)
     }
     /// Set antenna.
     pub fn antenna<T: Into<String>>(mut self, a: T) -> Self {
@@ -125,6 +128,10 @@ impl SoapySdrSinkBuilder<'_> {
     }
 }
 
+/// Transmit I/Q samples through SoapySDR.
+///
+/// Input stream tags are currently ignored. Timed and explicitly segmented
+/// bursts are therefore not inferred from tags.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct SoapySdrSink {

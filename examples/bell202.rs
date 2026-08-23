@@ -185,7 +185,7 @@ pub fn main() -> Result<()> {
         ];
         g.add(Box::new(
             SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
-                .ogain(opt.ogain)
+                .ogain(opt.ogain)?
                 .build(prev)?,
         ));
     }

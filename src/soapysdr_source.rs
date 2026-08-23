@@ -105,7 +105,7 @@ macro_rules! log_and_tag {
 }
 
 impl SoapySdrSourceBuilder<'_> {
-    /// Set channel number.
+    /// Set channel number. Default is 0.
     pub fn channel(mut self, channel: usize) -> Self {
         self.channel = channel;
         self
@@ -113,9 +113,12 @@ impl SoapySdrSourceBuilder<'_> {
     /// Set input gain.
     ///
     /// Normalized to 0.0 to 1.0.
-    pub fn igain(mut self, igain: f64) -> Self {
+    pub fn igain(mut self, igain: f64) -> Result<Self> {
+        if igain < 0.0 || igain > 1.0 {
+            return Err(Error::msg("input gain must be in range 0.0 - 1.0"));
+        }
         self.igain = igain;
-        self
+        Ok(self)
     }
     /// Set antenna.
     pub fn antenna<T: Into<String>>(mut self, a: T) -> Self {
@@ -248,6 +251,7 @@ impl SoapySdrSourceBuilder<'_> {
             .set_sample_rate(soapysdr::Direction::Rx, self.channel, self.samp_rate)?;
         let gr = self.dev.gain_range(soapysdr::Direction::Rx, self.channel)?;
         let gain = gr.minimum + self.igain * (gr.maximum - gr.minimum);
+        let gain = gain.min(gr.maximum).max(gr.minimum);
         debug!(
             "SoapySdrSource: input gain {} in range {}-{} became {gain}",
             self.igain, gr.minimum, gr.maximum

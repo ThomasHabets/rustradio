@@ -94,7 +94,7 @@ pub fn main() -> Result<()> {
             g,
             prev,
             SoapySdrSource::builder(&dev, 739_500_000.0, 300_000.0)
-                .igain(0.7)
+                .igain(0.7)?
                 .build()?,
         ];
         let mode = Mode::Overwrite;
@@ -149,7 +149,7 @@ pub fn main() -> Result<()> {
     ];
     g.add(Box::new(
         SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
-            .ogain(opt.ogain)
+            .ogain(opt.ogain)?
             .build(prev)?,
     ));
     let cancel = g.cancel_token();

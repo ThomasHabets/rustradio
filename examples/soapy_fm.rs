@@ -27,13 +27,13 @@ struct Opt {
 
     // Unused if soapysdr feature not enabled.
     #[allow(dead_code)]
-    #[arg(long = "gain", default_value = "20")]
-    gain: i32,
+    #[arg(long = "gain", default_value_t = 0.2)]
+    gain: f32,
 
     #[arg(short, default_value = "0")]
     verbose: usize,
 
-    #[arg(long = "volume", default_value = "1.0")]
+    #[arg(long = "volume", default_value_t = 1.0)]
     volume: Float,
 }
 
@@ -56,7 +56,7 @@ pub fn main() -> Result<()> {
         g,
         prev,
         SoapySdrSource::builder(&dev, opt.freq as f64, samp_rate as f64)
-            .igain(opt.gain as f64)
+            .igain(opt.gain as f64)?
             .build()?
     ];
 

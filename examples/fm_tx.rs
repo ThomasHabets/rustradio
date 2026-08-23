@@ -96,7 +96,7 @@ fn main() -> Result<()> {
             (1_000_000.0 * opt.freq).into(),
             opt.sample_rate as f64,
         )
-        .ogain(opt.ogain.into())
+        .ogain(opt.ogain.into())?
         .build(prev)?,
     ));
 
