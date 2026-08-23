@@ -20,7 +20,7 @@ use clap::Parser;
 use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::{ComplexToMag2, FileSource, PwmDecoder, PwmFrame, PwmGapPulse};
 use rustradio::graph::{Graph, GraphRunner};
-use rustradio::stream::NCReadStream;
+use rustradio::stream::{NCReadStream, ReadStream};
 use rustradio::{Complex, Float};
 
 const SHORT_US: u32 = 204;
@@ -32,9 +32,6 @@ const FRAME_BITS: usize = 25;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Opt {
-    /// Raw little-endian complex-f32 I/Q capture.
-    input: PathBuf,
-
     /// Capture sample rate in samples per second.
     #[arg(long, default_value_t = 125_000)]
     sample_rate: u32,
@@ -46,6 +43,20 @@ struct Opt {
     /// Number of identical frames required in one transmission.
     #[arg(long, default_value_t = 3)]
     repeats: usize,
+
+    #[command(subcommand)]
+    source: Source,
+}
+
+#[derive(clap::Args, Debug)]
+struct FileOpt {
+    /// Raw little-endian complex-f32 I/Q capture.
+    input: PathBuf,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Source {
+    File(FileOpt),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -148,16 +159,28 @@ impl Block for RestaurantPagerPrinter {
     }
 }
 
+fn source(opt: &Opt) -> Result<(Box<dyn Block>, ReadStream<Complex>)> {
+    let (b, prev) = match opt.source {
+        Source::File(ref o) => FileSource::<Complex>::new(&o.input)?,
+    };
+    Ok((Box::new(b), prev))
+}
+
 /// Build and run the restaurant-pager decoding graph.
 fn main() -> Result<()> {
     let opt = Opt::parse();
     ensure!(opt.sample_rate > 0, "sample rate must be greater than zero");
     let mut graph = Graph::new();
 
+    let prev = {
+        let (b, prev) = source(&opt)?;
+        graph.add(b);
+        prev
+    };
+
     let prev = rustradio::blockchain![
         graph,
         prev,
-        FileSource::<Complex>::new(&opt.input)?,
         ComplexToMag2::new(prev),
         PwmDecoder::builder(
             opt.threshold,
