@@ -25,18 +25,22 @@ pub trait AlgebraicOps {
 }
 
 impl AlgebraicOps for Float {
+    #[inline(always)]
     fn algebraic_add(self, rhs: Self) -> Self {
         Float::algebraic_add(self, rhs)
     }
+    #[inline(always)]
     fn algebraic_mul(self, rhs: Self) -> Self {
         Float::algebraic_mul(self, rhs)
     }
 }
 
 impl AlgebraicOps for Complex {
+    #[inline(always)]
     fn algebraic_add(self, rhs: Self) -> Self {
         Complex::new(self.re.algebraic_add(rhs.re), self.im.algebraic_add(rhs.im))
     }
+    #[inline(always)]
     fn algebraic_mul(self, rhs: Self) -> Self {
         Complex::new(
             self.re
