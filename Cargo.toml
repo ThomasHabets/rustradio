@@ -132,6 +132,10 @@ required-features = ["audio"]
 name = "uhd_full_duplex"
 required-features = ["uhd"]
 
+[[example]]
+name = "soapy_fm"
+required-features = ["soapysdr"]
+
 [profile.nodebug]
 inherits = "dev"
 debug = 0
