@@ -15,6 +15,7 @@ jobs:
     name: Low dependency build
     steps:
     - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
     - name: Build
       run: cargo build --verbose
     - name: Build examples
@@ -24,6 +25,7 @@ jobs:
     name: Standard tests
     steps:
     - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
     - name: Install Rust nightly
       run: rustup install nightly
     - name: Rustup install nightly clippy
@@ -41,6 +43,7 @@ jobs:
     name: Individual features
     steps:
     - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
     - name: Install Rust nightly
       run: rustup install nightly
     - name: Rustup install nightly clippy
