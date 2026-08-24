@@ -42,9 +42,19 @@ use rustradio::graph::CancellationToken;
 #[cfg(feature = "soapysdr")]
 use rustradio::stream::{NCWriteStream, Tag, TagValue, new_nocopy_stream};
 #[cfg(feature = "soapysdr")]
-use rustyline::DefaultEditor;
+use rustyline::completion::{Completer, Pair};
 #[cfg(feature = "soapysdr")]
 use rustyline::error::ReadlineError;
+#[cfg(feature = "soapysdr")]
+use rustyline::highlight::Highlighter;
+#[cfg(feature = "soapysdr")]
+use rustyline::hint::Hinter;
+#[cfg(feature = "soapysdr")]
+use rustyline::history::DefaultHistory;
+#[cfg(feature = "soapysdr")]
+use rustyline::validate::Validator;
+#[cfg(feature = "soapysdr")]
+use rustyline::{Context, Editor, Helper};
 
 #[path = "restaurant_pager/common.rs"]
 mod common;
@@ -313,6 +323,83 @@ Examples:
   5 buzz
   system-id 0xabcd";
 
+#[cfg(feature = "soapysdr")]
+const PROMPT_COMMAND_COMPLETIONS: &[(&str, &str)] = &[
+    ("help", "help"),
+    ("quit", "quit"),
+    ("exit", "exit"),
+    ("system-id", "system-id "),
+];
+
+#[cfg(feature = "soapysdr")]
+const PROMPT_FUNCTION_COMPLETIONS: &[(&str, &str)] = &[("buzz", "buzz"), ("sync", "sync")];
+
+#[cfg(feature = "soapysdr")]
+struct PagerPromptHelper;
+
+#[cfg(feature = "soapysdr")]
+type PagerEditor = Editor<PagerPromptHelper, DefaultHistory>;
+
+/// Return completion candidates for the word at the cursor.
+#[cfg(feature = "soapysdr")]
+fn prompt_completions(line: &str, pos: usize) -> (usize, Vec<Pair>) {
+    let before_cursor = &line[..pos];
+    let word_start = before_cursor
+        .char_indices()
+        .rev()
+        .find(|(_, character)| character.is_whitespace())
+        .map_or(0, |(index, character)| index + character.len_utf8());
+    let word = &before_cursor[word_start..];
+    let preceding_words: Vec<_> = before_cursor[..word_start].split_whitespace().collect();
+
+    let choices = match preceding_words.as_slice() {
+        [] => PROMPT_COMMAND_COMPLETIONS,
+        [pager] if pager.parse::<PagerMessage>().is_ok() => PROMPT_FUNCTION_COMPLETIONS,
+        _ => &[],
+    };
+    let candidates = choices
+        .iter()
+        .filter(|(display, _)| {
+            display
+                .get(..word.len())
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case(word))
+        })
+        .map(|(display, replacement)| Pair {
+            display: (*display).to_string(),
+            replacement: (*replacement).to_string(),
+        })
+        .collect();
+    (word_start, candidates)
+}
+
+#[cfg(feature = "soapysdr")]
+impl Completer for PagerPromptHelper {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _context: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
+        Ok(prompt_completions(line, pos))
+    }
+}
+
+#[cfg(feature = "soapysdr")]
+impl Hinter for PagerPromptHelper {
+    type Hint = String;
+}
+
+#[cfg(feature = "soapysdr")]
+impl Highlighter for PagerPromptHelper {}
+
+#[cfg(feature = "soapysdr")]
+impl Validator for PagerPromptHelper {}
+
+#[cfg(feature = "soapysdr")]
+impl Helper for PagerPromptHelper {}
+
 /// Parse a 16-bit hexadecimal pager-system identifier.
 #[cfg(feature = "soapysdr")]
 fn parse_hex_system_id(value: &str) -> std::result::Result<u16, String> {
@@ -385,7 +472,7 @@ fn queue_message(packets: &NCWriteStream<Vec<u8>>, system_id: u16, message: Page
 /// Run the Rustyline editor and feed accepted messages to the graph.
 #[cfg(feature = "soapysdr")]
 fn prompt_loop(
-    mut editor: DefaultEditor,
+    mut editor: PagerEditor,
     packets: NCWriteStream<Vec<u8>>,
     cancel: CancellationToken,
     mut system_id: u16,
@@ -478,7 +565,8 @@ fn add_interactive_transmitter(
     }
     graph.add(Box::new(sink.build(samples)?));
 
-    let mut editor = DefaultEditor::new()?;
+    let mut editor = PagerEditor::new()?;
+    editor.set_helper(Some(PagerPromptHelper));
     let printer = editor.create_external_printer()?;
     let output = PagerOutput::Rustyline(Box::new(printer));
     let cancel = graph.cancel_token();
@@ -619,5 +707,54 @@ mod tests {
         assert!(parse_prompt_command("system-id 10000").is_err());
         assert!(parse_prompt_command("11:buzz").is_err());
         assert!(parse_prompt_command("not a message").is_err());
+    }
+
+    /// Verify tab completion follows the command grammar at the cursor.
+    #[cfg(feature = "soapysdr")]
+    #[test]
+    fn completes_prompt_commands() {
+        fn completions(line: &str) -> (usize, Vec<(String, String)>) {
+            let (start, candidates) = prompt_completions(line, line.len());
+            (
+                start,
+                candidates
+                    .into_iter()
+                    .map(|candidate| (candidate.display, candidate.replacement))
+                    .collect(),
+            )
+        }
+
+        assert_eq!(
+            completions(""),
+            (
+                0,
+                vec![
+                    ("help".to_string(), "help".to_string()),
+                    ("quit".to_string(), "quit".to_string()),
+                    ("exit".to_string(), "exit".to_string()),
+                    ("system-id".to_string(), "system-id ".to_string()),
+                ],
+            )
+        );
+        assert_eq!(
+            completions("S"),
+            (0, vec![("system-id".to_string(), "system-id ".to_string())],)
+        );
+        assert_eq!(
+            completions("1 "),
+            (
+                2,
+                vec![
+                    ("buzz".to_string(), "buzz".to_string()),
+                    ("sync".to_string(), "sync".to_string()),
+                ],
+            )
+        );
+        assert_eq!(
+            completions("5 s"),
+            (2, vec![("sync".to_string(), "sync".to_string())])
+        );
+        assert_eq!(completions("system-id "), (10, Vec::new()));
+        assert_eq!(completions("16 "), (3, Vec::new()));
     }
 }
