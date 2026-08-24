@@ -7,7 +7,10 @@
 //!
 //! ```text
 //! cargo run --release --example restaurant_pager -- \
-//!     data.c32
+//!     file data.c32
+//! cargo run -F soapysdr --example restaurant_pager -- \
+//!     --threshold 0.1 \
+//!     soapy-sdr driver=lime --freq 2.45G --igain 0.7
 //! ```
 //!
 //! [protocol]: https://github.com/jflaflamme/rtl_433/blob/1b5550e75a2c1f483db1fb29e80173356bbb74be/conf/restaurant_pager.conf
@@ -54,9 +57,21 @@ struct FileOpt {
     input: PathBuf,
 }
 
+#[derive(clap::Args, Debug)]
+struct SoapyOpt {
+    #[arg(long, value_parser=rustradio::parse_frequency)]
+    freq: f64,
+    #[arg(long, default_value_t = 0.3)]
+    igain: f64,
+    /// SoapySDR driver string.
+    driver: String,
+}
+
 #[derive(clap::Subcommand, Debug)]
 enum Source {
     File(FileOpt),
+    #[cfg(feature = "soapysdr")]
+    SoapySdr(SoapyOpt),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -159,11 +174,24 @@ impl Block for RestaurantPagerPrinter {
     }
 }
 
-fn source(opt: &Opt) -> Result<(Box<dyn Block>, ReadStream<Complex>)> {
-    let (b, prev) = match opt.source {
-        Source::File(ref o) => FileSource::<Complex>::new(&o.input)?,
-    };
-    Ok((Box::new(b), prev))
+fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<ReadStream<Complex>> {
+    Ok(match opt.source {
+        Source::File(ref o) => {
+            let (b, prev) = FileSource::<Complex>::new(&o.input)?;
+            g.add(Box::new(b));
+            prev
+        }
+        #[cfg(feature = "soapysdr")]
+        Source::SoapySdr(ref o) => {
+            let dev = soapysdr::Device::new(&*o.driver)?;
+            let (b, prev) =
+                rustradio::blocks::SoapySdrSource::builder(&dev, o.freq, opt.sample_rate.into())
+                    .igain(o.igain)
+                    .build()?;
+            g.add(Box::new(b));
+            prev
+        }
+    })
 }
 
 /// Build and run the restaurant-pager decoding graph.
@@ -172,11 +200,7 @@ fn main() -> Result<()> {
     ensure!(opt.sample_rate > 0, "sample rate must be greater than zero");
     let mut graph = Graph::new();
 
-    let prev = {
-        let (b, prev) = source(&opt)?;
-        graph.add(b);
-        prev
-    };
+    let prev = source(&opt, &mut graph)?;
 
     let prev = rustradio::blockchain![
         graph,
