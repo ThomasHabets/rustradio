@@ -181,7 +181,7 @@ fn main() -> Result<()> {
     graph.add(Box::new(to_complex));
     let mut sink = SoapySdrSink::builder(&device, opt.frequency, opt.sample_rate)
         .channel(opt.channel)
-        .ogain(opt.gain);
+        .ogain(opt.gain)?;
     if let Some(antenna) = opt.antenna {
         sink = sink.antenna(antenna);
     }

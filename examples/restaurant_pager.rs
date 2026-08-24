@@ -287,7 +287,7 @@ fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
             let dev = soapysdr::Device::new(&*o.driver)?;
             let (b, prev) =
                 rustradio::blocks::SoapySdrSource::builder(&dev, o.freq, opt.sample_rate.into())
-                    .igain(o.igain)
+                    .igain(o.igain)?
                     .build()?;
             g.add(Box::new(b));
             SourceOutput {
@@ -560,7 +560,7 @@ fn add_interactive_transmitter(
 
     let mut sink = SoapySdrSink::builder(device, soapy.freq, f64::from(opt.sample_rate))
         .channel(soapy.tx_channel)
-        .ogain(soapy.tx_gain);
+        .ogain(soapy.tx_gain)?;
     if let Some(antenna) = &soapy.tx_antenna {
         sink = sink.antenna(antenna.clone());
     }
