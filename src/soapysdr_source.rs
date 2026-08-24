@@ -2,7 +2,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-use log::{debug, trace};
+use log::{debug, trace, warn};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
@@ -389,6 +389,10 @@ impl Block for SoapySdrSource {
             Ok(x) => x,
             Err(e) => {
                 if e.code == soapysdr::ErrorCode::Timeout {
+                    return Ok(BlockRet::Pending);
+                }
+                if e.code == soapysdr::ErrorCode::Overflow {
+                    warn!("SoapySdrSource: overflow");
                     return Ok(BlockRet::Pending);
                 }
                 return Err(e.into());
