@@ -147,6 +147,7 @@ pub use rustradio_macros;
 // Blocks.
 pub mod add;
 pub mod add_const;
+pub mod agc;
 pub mod au;
 pub mod binary_slicer;
 pub mod burst_tagger;
