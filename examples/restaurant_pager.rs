@@ -32,7 +32,7 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 
 use rustradio::block::{Block, BlockRet};
-use rustradio::blocks::{ComplexToMag2, FileSource, PwmDecoder, PwmFrame, PwmGapPulse};
+use rustradio::blocks::{Agc, ComplexToMag2, FileSource, PwmDecoder, PwmFrame, PwmGapPulse};
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::{NCReadStream, ReadStream};
@@ -791,6 +791,7 @@ fn main() -> Result<()> {
     let prev = rustradio::blockchain![
         graph,
         prev,
+        Agc::new(prev, 0.2, 1e-4)?,
         ComplexToMag2::new(prev),
         PwmDecoder::builder(
             opt.threshold,
