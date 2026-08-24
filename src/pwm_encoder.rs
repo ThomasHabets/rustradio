@@ -9,7 +9,10 @@
 //! The encoder expands packets incrementally, so even very long pulse widths
 //! do not require an equally large temporary allocation. Each packet becomes
 //! one transmission containing a configurable number of identical frames,
-//! followed by the configured reset gap.
+//! followed by the configured reset gap. The repeat count can be changed at
+//! runtime with [`PwmEncoderControl`]; changes take effect between packets.
+
+use std::sync::mpsc;
 
 use crate::block::{Block, BlockEOF, BlockRet};
 use crate::pwm_decoder::PwmGapPulse;
@@ -30,6 +33,53 @@ pub const TAG_END: &str = "PwmEncoder::end";
 ///
 /// Its value is the zero-based repeat index.
 pub const TAG_REPEAT: &str = "PwmEncoder::repeat";
+
+/// Runtime control handle for [`PwmEncoder`].
+///
+/// Clones may be sent to threads that need to reconfigure an encoder while its
+/// graph is running. Changes take effect when the encoder starts its next input
+/// packet; a packet already being emitted keeps its original repeat count.
+#[derive(Clone, Debug)]
+pub struct PwmEncoderControl {
+    tx: mpsc::Sender<PwmEncoderCommand>,
+    repeated_frames_supported: bool,
+}
+
+#[derive(Debug)]
+enum PwmEncoderCommand {
+    Repeats(usize),
+}
+
+impl PwmEncoderControl {
+    /// Set the number of identical frames emitted for each subsequent packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `repeats` is zero, the encoder's frame and reset
+    /// gaps cannot distinguish repeated frames, or the encoder has been
+    /// dropped.
+    pub fn set_repeats(&self, repeats: usize) -> Result<()> {
+        validate_repeat_count(repeats, self.repeated_frames_supported)?;
+        self.tx
+            .send(PwmEncoderCommand::Repeats(repeats))
+            .map_err(|error| Error::wrap(error, "PwmEncoder control channel"))
+    }
+}
+
+/// Validate a repeat count against the configured frame/reset gap relationship.
+fn validate_repeat_count(repeats: usize, repeated_frames_supported: bool) -> Result<()> {
+    if repeats == 0 {
+        return Err(Error::msg(
+            "PwmEncoder repeat count must be greater than zero",
+        ));
+    }
+    if repeats > 1 && !repeated_frames_supported {
+        return Err(Error::msg(
+            "PwmEncoder reset gap must be greater than the frame gap when emitting repeated frames",
+        ));
+    }
+    Ok(())
+}
 
 /// Validated settings retained by [`PwmEncoder`].
 #[derive(Clone, Debug)]
@@ -85,16 +135,7 @@ impl PwmEncoderSettings {
                 "PwmEncoder reset gap must be at least as long as the frame gap",
             ));
         }
-        if self.repeats == 0 {
-            return Err(Error::msg(
-                "PwmEncoder repeat count must be greater than zero",
-            ));
-        }
-        if self.repeats > 1 && self.reset_gap == self.frame_gap {
-            return Err(Error::msg(
-                "PwmEncoder reset gap must be greater than the frame gap when emitting repeated frames",
-            ));
-        }
+        validate_repeat_count(self.repeats, self.reset_gap > self.frame_gap)?;
         if self.max_frame_bits == 0 {
             return Err(Error::msg(
                 "PwmEncoder maximum frame length must be greater than zero",
@@ -437,10 +478,11 @@ impl ActiveTransmission {
 /// use rustradio::stream::new_nocopy_stream;
 ///
 /// let (_packets, input) = new_nocopy_stream::<Vec<u8>>();
-/// let (_encoder, _samples) = PwmEncoder::builder(25, 80, 110, 914)
+/// let (encoder, _samples) = PwmEncoder::builder(25, 80, 110, 914)
 ///     .repeats(3)
 ///     .gap_pulse(PwmGapPulse::Delimiter)
 ///     .build(input)?;
+/// encoder.control().set_repeats(5)?;
 /// # Ok::<(), rustradio::Error>(())
 /// ```
 #[derive(rustradio_macros::Block)]
@@ -452,6 +494,8 @@ pub struct PwmEncoder {
     dst: WriteStream<Float>,
     settings: PwmEncoderSettings,
     active: Option<ActiveTransmission>,
+    command_rx: mpsc::Receiver<PwmEncoderCommand>,
+    control_tx: PwmEncoderControl,
 }
 
 impl PwmEncoder {
@@ -485,15 +529,37 @@ impl PwmEncoder {
         settings: PwmEncoderSettings,
     ) -> (Self, ReadStream<Float>) {
         let (dst, dst_read) = crate::stream::new_stream();
+        let (command_tx, command_rx) = mpsc::channel();
+        let control_tx = PwmEncoderControl {
+            tx: command_tx,
+            repeated_frames_supported: settings.reset_gap > settings.frame_gap,
+        };
         (
             Self {
                 src,
                 dst,
                 settings,
                 active: None,
+                command_rx,
+                control_tx,
             },
             dst_read,
         )
+    }
+
+    /// Return a control handle for changing settings while the graph is running.
+    #[must_use]
+    pub fn control(&self) -> PwmEncoderControl {
+        self.control_tx.clone()
+    }
+
+    /// Apply all queued changes before starting a new packet.
+    fn apply_pending_commands(&mut self) {
+        while let Ok(command) = self.command_rx.try_recv() {
+            match command {
+                PwmEncoderCommand::Repeats(repeats) => self.settings.repeats = repeats,
+            }
+        }
     }
 }
 
@@ -513,6 +579,7 @@ impl Block for PwmEncoder {
         }
 
         if self.active.is_none() {
+            self.apply_pending_commands();
             let Some((bits, tags)) = self.src.pop() else {
                 return if self.src.eof() {
                     Ok(BlockRet::EOF)
@@ -571,6 +638,14 @@ mod tests {
         input.push(bits, input_tags);
         drop(input);
         let (mut encoder, output) = builder.build(input_read)?;
+        drain_encoder(&mut encoder, &output)
+    }
+
+    /// Drain an encoder whose input has been closed, collecting samples and tags.
+    fn drain_encoder(
+        encoder: &mut PwmEncoder,
+        output: &ReadStream<Float>,
+    ) -> Result<(Vec<Float>, Vec<Tag>)> {
         let mut samples = Vec::new();
         let mut tags = Vec::new();
         loop {
@@ -590,6 +665,27 @@ mod tests {
             }
         }
         Ok((samples, tags))
+    }
+
+    /// Consume currently buffered output and summarize its repeat tags.
+    fn consume_output(
+        output: &ReadStream<Float>,
+        samples: &mut usize,
+        repeats: &mut Vec<u64>,
+    ) -> Result<()> {
+        let (buffer, tags) = output.read_buf()?;
+        *samples += buffer.len();
+        repeats.extend(tags.into_iter().filter_map(|tag| {
+            if tag.key() == TAG_REPEAT
+                && let TagValue::U64(repeat) = tag.val()
+            {
+                return Some(*repeat);
+            }
+            None
+        }));
+        let n = buffer.len();
+        buffer.consume(n);
+        Ok(())
     }
 
     /// Decode generated samples with the public inverse block.
@@ -644,6 +740,92 @@ mod tests {
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].bits(), bits);
         assert_eq!(frames[0].repeats(), 3);
+        Ok(())
+    }
+
+    /// Verify runtime changes are applied before the next packet starts.
+    #[test]
+    fn runtime_repeat_change_applies_to_next_packet() -> Result<()> {
+        let bits = vec![1, 0, 1, 1];
+        let (input, input_read) = new_nocopy_stream();
+        input.push(bits.clone(), &[]);
+        drop(input);
+        let (mut encoder, output) = builder()
+            .gap_pulse(PwmGapPulse::Delimiter)
+            .build(input_read)?;
+        let control = encoder.control();
+        control.set_repeats(2)?;
+        control.set_repeats(3)?;
+
+        let (samples, tags) = drain_encoder(&mut encoder, &output)?;
+        let repeats = tags
+            .iter()
+            .filter(|tag| tag.key() == TAG_REPEAT)
+            .map(Tag::val)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            repeats,
+            vec![&TagValue::U64(0), &TagValue::U64(1), &TagValue::U64(2)]
+        );
+        let frames = decode(&samples, bits.len(), 3)?;
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].bits(), bits);
+        assert_eq!(frames[0].repeats(), 3);
+        Ok(())
+    }
+
+    /// Verify an active packet retains its original repeat count.
+    #[test]
+    fn runtime_repeat_change_waits_for_active_packet() -> Result<()> {
+        let long = DEFAULT_STREAM_SIZE + 5;
+        let frame_gap = long + 1;
+        let reset_gap = frame_gap + 3;
+        let mut first_settings = PwmEncoderSettings::new(1, long, frame_gap, reset_gap);
+        let first_samples = first_settings.transmission_samples(&[0])?.1;
+        first_settings.repeats = 2;
+        let second_samples = first_settings.transmission_samples(&[0])?.1;
+
+        let (input, input_read) = new_nocopy_stream();
+        input.push(vec![0], &[]);
+        input.push(vec![0], &[]);
+        drop(input);
+        let (mut encoder, output) =
+            PwmEncoder::builder(1, long, frame_gap, reset_gap).build(input_read)?;
+        let control = encoder.control();
+
+        assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
+        let mut samples = 0;
+        let mut repeat_tags = Vec::new();
+        consume_output(&output, &mut samples, &mut repeat_tags)?;
+        assert_eq!(repeat_tags, vec![0]);
+
+        control.set_repeats(2)?;
+        loop {
+            let ret = encoder.work()?;
+            consume_output(&output, &mut samples, &mut repeat_tags)?;
+            if matches!(ret, BlockRet::EOF) {
+                break;
+            }
+        }
+        assert_eq!(samples, first_samples + second_samples);
+        assert_eq!(repeat_tags, vec![0, 0, 1]);
+        Ok(())
+    }
+
+    /// Verify the control handle rejects repeat counts invalid for this encoder.
+    #[test]
+    fn runtime_repeat_change_validates_count_and_gaps() -> Result<()> {
+        let (_input, input_read) = new_nocopy_stream();
+        let (encoder, _) = builder().build(input_read)?;
+        let control = encoder.control();
+        assert!(control.set_repeats(0).is_err());
+        control.set_repeats(2)?;
+
+        let (_input, input_read) = new_nocopy_stream();
+        let (encoder, _) = PwmEncoder::builder(2, 5, 9, 9).build(input_read)?;
+        let control = encoder.control();
+        control.set_repeats(1)?;
+        assert!(control.set_repeats(2).is_err());
         Ok(())
     }
 

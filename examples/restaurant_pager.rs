@@ -18,8 +18,9 @@
 //!
 //! At the interactive prompt, enter a pager number to buzz it, or add a
 //! function such as `1 sync` or `5 buzz`. Use `system-id 0xabcd` to change the
-//! system ID. Enter `help` for syntax and `quit` to stop. Ensure the selected
-//! frequency and any transmission are legal in your location.
+//! system ID and `repeats 5` to change the number of frames per message. Enter
+//! `help` for syntax and `quit` to stop. Ensure the selected frequency and any
+//! transmission are legal in your location.
 //!
 //! [protocol]: https://github.com/jflaflamme/rtl_433/blob/1b5550e75a2c1f483db1fb29e80173356bbb74be/conf/restaurant_pager.conf
 
@@ -36,7 +37,7 @@ use rustradio::stream::{NCReadStream, ReadStream};
 use rustradio::{Complex, Float};
 
 #[cfg(feature = "soapysdr")]
-use rustradio::blocks::{Map, PwmEncoder, SoapySdrSink};
+use rustradio::blocks::{Map, PwmEncoder, PwmEncoderControl, SoapySdrSink};
 #[cfg(feature = "soapysdr")]
 use rustradio::graph::CancellationToken;
 #[cfg(feature = "soapysdr")]
@@ -304,6 +305,7 @@ enum PromptCommand {
     Empty,
     Help,
     Quit,
+    SetRepeats(usize),
     SetSystemId(u16),
     Send(PagerMessage),
 }
@@ -314,6 +316,7 @@ Commands:
   PAGER                  Buzz the specified pager (0-15)
   PAGER FUNCTION         Send buzz, sync, or a numeric function (0-15)
   system-id HEX          Change the 16-bit system ID
+  repeats COUNT          Change the number of frames per message
   help                   Show this help
   quit | exit            Stop the transmitter (Ctrl-D also works)
   Ctrl-X Ctrl-R          Redraw the current input line
@@ -322,7 +325,8 @@ Examples:
   1
   1 sync
   5 buzz
-  system-id 0xabcd";
+  system-id 0xabcd
+  repeats 5";
 
 #[cfg(feature = "soapysdr")]
 const PROMPT_COMMAND_COMPLETIONS: &[(&str, &str)] = &[
@@ -330,6 +334,7 @@ const PROMPT_COMMAND_COMPLETIONS: &[(&str, &str)] = &[
     ("quit", "quit"),
     ("exit", "exit"),
     ("system-id", "system-id "),
+    ("repeats", "repeats "),
 ];
 
 #[cfg(feature = "soapysdr")]
@@ -415,6 +420,18 @@ fn parse_hex_system_id(value: &str) -> std::result::Result<u16, String> {
         .map_err(|error| format!("invalid hexadecimal system ID {value:?}: {error}"))
 }
 
+/// Parse a positive PWM repeat count.
+#[cfg(feature = "soapysdr")]
+fn parse_repeat_count(value: &str) -> std::result::Result<usize, String> {
+    let repeats = value
+        .parse::<usize>()
+        .map_err(|error| format!("invalid repeat count {value:?}: {error}"))?;
+    if repeats == 0 {
+        return Err("repeat count must be greater than zero".to_string());
+    }
+    Ok(repeats)
+}
+
 /// Parse one interactive command without terminating the prompt on errors.
 #[cfg(feature = "soapysdr")]
 fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String> {
@@ -425,10 +442,8 @@ fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String
         "quit" | "exit" => Ok(PromptCommand::Quit),
         _ => {
             let mut fields = line.split_whitespace();
-            if fields
-                .next()
-                .is_some_and(|command| command.eq_ignore_ascii_case("system-id"))
-            {
+            let command = fields.next().expect("trimmed command is not empty");
+            if command.eq_ignore_ascii_case("system-id") {
                 let value = fields
                     .next()
                     .ok_or_else(|| "system-id requires a hexadecimal value".to_string())?;
@@ -436,6 +451,14 @@ fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String
                     return Err("system-id accepts exactly one hexadecimal value".to_string());
                 }
                 parse_hex_system_id(value).map(PromptCommand::SetSystemId)
+            } else if command.eq_ignore_ascii_case("repeats") {
+                let value = fields
+                    .next()
+                    .ok_or_else(|| "repeats requires a positive count".to_string())?;
+                if fields.next().is_some() {
+                    return Err("repeats accepts exactly one count".to_string());
+                }
+                parse_repeat_count(value).map(PromptCommand::SetRepeats)
             } else {
                 line.parse().map(PromptCommand::Send)
             }
@@ -475,6 +498,7 @@ fn queue_message(packets: &NCWriteStream<Vec<u8>>, system_id: u16, message: Page
 fn prompt_loop(
     mut editor: PagerEditor,
     packets: NCWriteStream<Vec<u8>>,
+    encoder_control: PwmEncoderControl,
     cancel: CancellationToken,
     mut system_id: u16,
 ) {
@@ -497,6 +521,12 @@ fn prompt_loop(
                     Ok(PromptCommand::SetSystemId(value)) => {
                         system_id = value;
                         println!("System ID set to 0x{system_id:04x}");
+                    }
+                    Ok(PromptCommand::SetRepeats(value)) => {
+                        match encoder_control.set_repeats(value) {
+                            Ok(()) => println!("Repeat count set to {value}"),
+                            Err(error) => eprintln!("could not set repeat count: {error}"),
+                        }
                     }
                     Ok(PromptCommand::Send(message)) => {
                         queue_message(&packets, system_id, message);
@@ -550,6 +580,7 @@ fn add_interactive_transmitter(
     .max_frame_bits(FRAME_BITS)
     .gap_pulse(PwmGapPulse::Delimiter)
     .build(packet_stream)?;
+    let encoder_control = encoder.control();
     graph.add(Box::new(encoder));
 
     let amplitude = soapy.tx_amplitude;
@@ -578,7 +609,7 @@ fn add_interactive_transmitter(
     let system_id = soapy.system_id;
     let prompt = std::thread::Builder::new()
         .name("restaurant-pager-prompt".to_string())
-        .spawn(move || prompt_loop(editor, packets, cancel, system_id))?;
+        .spawn(move || prompt_loop(editor, packets, encoder_control, cancel, system_id))?;
     Ok((output, prompt))
 }
 
@@ -706,10 +737,18 @@ mod tests {
             parse_prompt_command("system-id f9bf"),
             Ok(PromptCommand::SetSystemId(0xf9bf))
         );
+        assert_eq!(
+            parse_prompt_command("REPEATS 5"),
+            Ok(PromptCommand::SetRepeats(5))
+        );
         assert!(parse_prompt_command("system-id").is_err());
         assert!(parse_prompt_command("system-id 0x1234 extra").is_err());
         assert!(parse_prompt_command("system-id 0x").is_err());
         assert!(parse_prompt_command("system-id 10000").is_err());
+        assert!(parse_prompt_command("repeats").is_err());
+        assert!(parse_prompt_command("repeats 0").is_err());
+        assert!(parse_prompt_command("repeats many").is_err());
+        assert!(parse_prompt_command("repeats 5 extra").is_err());
         assert!(parse_prompt_command("11:buzz").is_err());
         assert!(parse_prompt_command("not a message").is_err());
     }
@@ -738,6 +777,7 @@ mod tests {
                     ("quit".to_string(), "quit".to_string()),
                     ("exit".to_string(), "exit".to_string()),
                     ("system-id".to_string(), "system-id ".to_string()),
+                    ("repeats".to_string(), "repeats ".to_string()),
                 ],
             )
         );
@@ -760,6 +800,11 @@ mod tests {
             (2, vec![("sync".to_string(), "sync".to_string())])
         );
         assert_eq!(completions("system-id "), (10, Vec::new()));
+        assert_eq!(
+            completions("r"),
+            (0, vec![("repeats".to_string(), "repeats ".to_string())])
+        );
+        assert_eq!(completions("repeats "), (8, Vec::new()));
         assert_eq!(completions("16 "), (3, Vec::new()));
     }
 }
