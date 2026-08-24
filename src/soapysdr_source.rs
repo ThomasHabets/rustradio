@@ -401,7 +401,10 @@ impl Block for SoapySdrSource {
         if n == 0 {
             return Ok(BlockRet::Pending);
         }
-        if n > 0 {
+        /*
+         * Temporarily disabled because it causes overflows.
+         */
+        if false && n > 0 {
             if match self.last_time_tag {
                 None => true,
                 Some(x) if x.elapsed() > TIME_TAG_INTERVAL => true,
