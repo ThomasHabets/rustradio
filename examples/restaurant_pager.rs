@@ -54,7 +54,7 @@ use rustyline::history::DefaultHistory;
 #[cfg(feature = "soapysdr")]
 use rustyline::validate::Validator;
 #[cfg(feature = "soapysdr")]
-use rustyline::{Context, Editor, Helper};
+use rustyline::{Cmd, Context, Editor, Event, Helper, KeyEvent};
 
 #[path = "restaurant_pager/common.rs"]
 mod common;
@@ -316,6 +316,7 @@ Commands:
   system-id HEX          Change the 16-bit system ID
   help                   Show this help
   quit | exit            Stop the transmitter (Ctrl-D also works)
+  Ctrl-X Ctrl-R          Redraw the current input line
 
 Examples:
   1
@@ -567,6 +568,10 @@ fn add_interactive_transmitter(
 
     let mut editor = PagerEditor::new()?;
     editor.set_helper(Some(PagerPromptHelper));
+    let _ = editor.bind_sequence(
+        Event::KeySeq(vec![KeyEvent::ctrl('X'), KeyEvent::ctrl('R')]),
+        Cmd::Repaint,
+    );
     let printer = editor.create_external_printer()?;
     let output = PagerOutput::Rustyline(Box::new(printer));
     let cancel = graph.cancel_token();
