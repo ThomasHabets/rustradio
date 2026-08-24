@@ -18,9 +18,11 @@
 //!
 //! At the interactive prompt, enter a pager number to buzz it, or add a
 //! function such as `1 sync` or `5 buzz`. Use `system-id 0xabcd` to change the
-//! system ID and `repeats 5` to change the number of frames per message. Enter
-//! `help` for syntax and `quit` to stop. Ensure the selected frequency and any
-//! transmission are legal in your location.
+//! system ID, `repeats 5` to change the number of frames per message, and
+//! `igain 0.5` or `ogain 0.5` to adjust normalized receive or transmit gain.
+//! Enter `info` to show the current message settings, `help` for syntax, and
+//! `quit` to stop. Ensure the selected frequency and any transmission are
+//! legal in your location.
 //!
 //! [protocol]: https://github.com/jflaflamme/rtl_433/blob/1b5550e75a2c1f483db1fb29e80173356bbb74be/conf/restaurant_pager.conf
 
@@ -62,6 +64,9 @@ mod common;
 use common::{FRAME_BITS, LONG_US, RESET_US, ROW_GAP_US, SHORT_US};
 #[cfg(feature = "soapysdr")]
 use common::{PagerMessage, encode_message, parse_system_id};
+
+#[cfg(feature = "soapysdr")]
+const RX_CHANNEL: usize = 0;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -288,6 +293,7 @@ fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
             let dev = soapysdr::Device::new(&*o.driver)?;
             let (b, prev) =
                 rustradio::blocks::SoapySdrSource::builder(&dev, o.freq, opt.sample_rate.into())
+                    .channel(RX_CHANNEL)
                     .igain(o.igain)?
                     .build()?;
             g.add(Box::new(b));
@@ -300,14 +306,35 @@ fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
 }
 
 #[cfg(feature = "soapysdr")]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum PromptCommand {
     Empty,
     Help,
+    Info,
     Quit,
+    SetInputGain(f64),
+    SetOutputGain(f64),
     SetRepeats(usize),
     SetSystemId(u16),
     Send(PagerMessage),
+}
+
+#[cfg(feature = "soapysdr")]
+#[derive(Debug, Eq, PartialEq)]
+struct PromptState {
+    system_id: u16,
+    repeats: usize,
+}
+
+#[cfg(feature = "soapysdr")]
+impl PromptState {
+    /// Format the message settings changed by interactive commands.
+    fn info(&self) -> String {
+        format!(
+            "System ID: 0x{:04x}\nRepeat count: {}",
+            self.system_id, self.repeats
+        )
+    }
 }
 
 #[cfg(feature = "soapysdr")]
@@ -315,8 +342,11 @@ const PROMPT_HELP: &str = "\
 Commands:
   PAGER                  Buzz the specified pager (0-15)
   PAGER FUNCTION         Send buzz, sync, or a numeric function (0-15)
+  info                   Show the system ID and repeat count
   system-id HEX          Change the 16-bit system ID
   repeats COUNT          Change the number of frames per message
+  igain GAIN             Change normalized receive gain (0.0-1.0)
+  ogain GAIN             Change normalized transmit gain (0.0-1.0)
   help                   Show this help
   quit | exit            Stop the transmitter (Ctrl-D also works)
   Ctrl-X Ctrl-R          Redraw the current input line
@@ -326,15 +356,20 @@ Examples:
   1 sync
   5 buzz
   system-id 0xabcd
-  repeats 5";
+  repeats 5
+  igain 0.5
+  ogain 0.2";
 
 #[cfg(feature = "soapysdr")]
 const PROMPT_COMMAND_COMPLETIONS: &[(&str, &str)] = &[
     ("help", "help"),
+    ("info", "info"),
     ("quit", "quit"),
     ("exit", "exit"),
     ("system-id", "system-id "),
     ("repeats", "repeats "),
+    ("igain", "igain "),
+    ("ogain", "ogain "),
 ];
 
 #[cfg(feature = "soapysdr")]
@@ -432,6 +467,43 @@ fn parse_repeat_count(value: &str) -> std::result::Result<usize, String> {
     Ok(repeats)
 }
 
+/// Convert a normalized gain to a device gain range.
+#[cfg(feature = "soapysdr")]
+fn denormalize_gain(
+    normalized: f64,
+    minimum: f64,
+    maximum: f64,
+) -> std::result::Result<f64, String> {
+    if !normalized.is_finite() || !(0.0..=1.0).contains(&normalized) {
+        return Err("gain must be finite and between zero and one".to_string());
+    }
+    Ok(minimum + normalized * (maximum - minimum))
+}
+
+/// Parse a normalized gain accepted by the interactive prompt.
+#[cfg(feature = "soapysdr")]
+fn parse_normalized_gain(value: &str) -> std::result::Result<f64, String> {
+    let normalized = value
+        .parse::<f64>()
+        .map_err(|error| format!("invalid gain {value:?}: {error}"))?;
+    denormalize_gain(normalized, 0.0, 1.0).map(|_| normalized)
+}
+
+/// Set one SoapySDR channel's gain using the example's normalized scale.
+#[cfg(feature = "soapysdr")]
+fn set_normalized_gain(
+    device: &soapysdr::Device,
+    direction: soapysdr::Direction,
+    channel: usize,
+    normalized: f64,
+) -> Result<f64> {
+    let range = device.gain_range(direction, channel)?;
+    let gain =
+        denormalize_gain(normalized, range.minimum, range.maximum).map_err(anyhow::Error::msg)?;
+    device.set_gain(direction, channel, gain)?;
+    Ok(gain)
+}
+
 /// Parse one interactive command without terminating the prompt on errors.
 #[cfg(feature = "soapysdr")]
 fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String> {
@@ -439,6 +511,7 @@ fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String
     match line.to_ascii_lowercase().as_str() {
         "" => Ok(PromptCommand::Empty),
         "help" => Ok(PromptCommand::Help),
+        "info" => Ok(PromptCommand::Info),
         "quit" | "exit" => Ok(PromptCommand::Quit),
         _ => {
             let mut fields = line.split_whitespace();
@@ -459,6 +532,22 @@ fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String
                     return Err("repeats accepts exactly one count".to_string());
                 }
                 parse_repeat_count(value).map(PromptCommand::SetRepeats)
+            } else if command.eq_ignore_ascii_case("igain") {
+                let value = fields
+                    .next()
+                    .ok_or_else(|| "igain requires a normalized gain".to_string())?;
+                if fields.next().is_some() {
+                    return Err("igain accepts exactly one gain".to_string());
+                }
+                parse_normalized_gain(value).map(PromptCommand::SetInputGain)
+            } else if command.eq_ignore_ascii_case("ogain") {
+                let value = fields
+                    .next()
+                    .ok_or_else(|| "ogain requires a normalized gain".to_string())?;
+                if fields.next().is_some() {
+                    return Err("ogain accepts exactly one gain".to_string());
+                }
+                parse_normalized_gain(value).map(PromptCommand::SetOutputGain)
             } else {
                 line.parse().map(PromptCommand::Send)
             }
@@ -499,8 +588,10 @@ fn prompt_loop(
     mut editor: PagerEditor,
     packets: NCWriteStream<Vec<u8>>,
     encoder_control: PwmEncoderControl,
+    device: soapysdr::Device,
+    tx_channel: usize,
     cancel: CancellationToken,
-    mut system_id: u16,
+    mut state: PromptState,
 ) {
     println!("Interactive transmitter ready; enter `help` for commands");
     loop {
@@ -514,22 +605,52 @@ fn prompt_loop(
                 match parse_prompt_command(&line) {
                     Ok(PromptCommand::Empty) => {}
                     Ok(PromptCommand::Help) => println!("{PROMPT_HELP}"),
+                    Ok(PromptCommand::Info) => println!("{}", state.info()),
                     Ok(PromptCommand::Quit) => {
                         cancel.cancel();
                         break;
                     }
                     Ok(PromptCommand::SetSystemId(value)) => {
-                        system_id = value;
-                        println!("System ID set to 0x{system_id:04x}");
+                        state.system_id = value;
+                        println!("System ID set to 0x{:04x}", state.system_id);
                     }
                     Ok(PromptCommand::SetRepeats(value)) => {
                         match encoder_control.set_repeats(value) {
-                            Ok(()) => println!("Repeat count set to {value}"),
+                            Ok(()) => {
+                                state.repeats = value;
+                                println!("Repeat count set to {value}");
+                            }
                             Err(error) => eprintln!("could not set repeat count: {error}"),
                         }
                     }
+                    Ok(PromptCommand::SetInputGain(value)) => {
+                        match set_normalized_gain(
+                            &device,
+                            soapysdr::Direction::Rx,
+                            RX_CHANNEL,
+                            value,
+                        ) {
+                            Ok(gain) => {
+                                println!("Input gain set to {value} ({gain} dB)");
+                            }
+                            Err(error) => eprintln!("could not set input gain: {error}"),
+                        }
+                    }
+                    Ok(PromptCommand::SetOutputGain(value)) => {
+                        match set_normalized_gain(
+                            &device,
+                            soapysdr::Direction::Tx,
+                            tx_channel,
+                            value,
+                        ) {
+                            Ok(gain) => {
+                                println!("Output gain set to {value} ({gain} dB)");
+                            }
+                            Err(error) => eprintln!("could not set output gain: {error}"),
+                        }
+                    }
                     Ok(PromptCommand::Send(message)) => {
-                        queue_message(&packets, system_id, message);
+                        queue_message(&packets, state.system_id, message);
                     }
                     Err(error) => eprintln!("invalid command: {error}"),
                 }
@@ -606,10 +727,25 @@ fn add_interactive_transmitter(
     let printer = editor.create_external_printer()?;
     let output = PagerOutput::Rustyline(Box::new(printer));
     let cancel = graph.cancel_token();
-    let system_id = soapy.system_id;
+    let device = device.clone();
+    let tx_channel = soapy.tx_channel;
+    let state = PromptState {
+        system_id: soapy.system_id,
+        repeats: soapy.tx_repeats,
+    };
     let prompt = std::thread::Builder::new()
         .name("restaurant-pager-prompt".to_string())
-        .spawn(move || prompt_loop(editor, packets, encoder_control, cancel, system_id))?;
+        .spawn(move || {
+            prompt_loop(
+                editor,
+                packets,
+                encoder_control,
+                device,
+                tx_channel,
+                cancel,
+                state,
+            );
+        })?;
     Ok((output, prompt))
 }
 
@@ -707,6 +843,7 @@ mod tests {
     fn parses_prompt_commands() {
         assert_eq!(parse_prompt_command(""), Ok(PromptCommand::Empty));
         assert_eq!(parse_prompt_command(" HELP "), Ok(PromptCommand::Help));
+        assert_eq!(parse_prompt_command("INFO"), Ok(PromptCommand::Info));
         assert_eq!(parse_prompt_command("exit"), Ok(PromptCommand::Quit));
         assert_eq!(
             parse_prompt_command("1"),
@@ -741,6 +878,15 @@ mod tests {
             parse_prompt_command("REPEATS 5"),
             Ok(PromptCommand::SetRepeats(5))
         );
+        assert_eq!(
+            parse_prompt_command("IGAIN 0.5"),
+            Ok(PromptCommand::SetInputGain(0.5))
+        );
+        assert_eq!(
+            parse_prompt_command("ogain 1"),
+            Ok(PromptCommand::SetOutputGain(1.0))
+        );
+        assert!(parse_prompt_command("info extra").is_err());
         assert!(parse_prompt_command("system-id").is_err());
         assert!(parse_prompt_command("system-id 0x1234 extra").is_err());
         assert!(parse_prompt_command("system-id 0x").is_err());
@@ -749,8 +895,41 @@ mod tests {
         assert!(parse_prompt_command("repeats 0").is_err());
         assert!(parse_prompt_command("repeats many").is_err());
         assert!(parse_prompt_command("repeats 5 extra").is_err());
+        for command in [
+            "igain",
+            "igain -0.1",
+            "igain 1.1",
+            "igain NaN",
+            "igain many",
+            "igain 0.5 extra",
+            "ogain",
+            "ogain -0.1",
+            "ogain 1.1",
+            "ogain inf",
+            "ogain many",
+            "ogain 0.5 extra",
+        ] {
+            assert!(
+                parse_prompt_command(command).is_err(),
+                "{command:?} should be rejected"
+            );
+        }
         assert!(parse_prompt_command("11:buzz").is_err());
         assert!(parse_prompt_command("not a message").is_err());
+    }
+
+    /// Verify status formatting and normalized gain conversion.
+    #[cfg(feature = "soapysdr")]
+    #[test]
+    fn formats_prompt_info_and_denormalizes_gain() {
+        let state = PromptState {
+            system_id: 0xf9bf,
+            repeats: 8,
+        };
+        assert_eq!(state.info(), "System ID: 0xf9bf\nRepeat count: 8");
+        assert_eq!(denormalize_gain(0.0, -10.0, 30.0), Ok(-10.0));
+        assert_eq!(denormalize_gain(0.5, -10.0, 30.0), Ok(10.0));
+        assert_eq!(denormalize_gain(1.0, -10.0, 30.0), Ok(30.0));
     }
 
     /// Verify tab completion follows the command grammar at the cursor.
@@ -774,10 +953,13 @@ mod tests {
                 0,
                 vec![
                     ("help".to_string(), "help".to_string()),
+                    ("info".to_string(), "info".to_string()),
                     ("quit".to_string(), "quit".to_string()),
                     ("exit".to_string(), "exit".to_string()),
                     ("system-id".to_string(), "system-id ".to_string()),
                     ("repeats".to_string(), "repeats ".to_string()),
+                    ("igain".to_string(), "igain ".to_string()),
+                    ("ogain".to_string(), "ogain ".to_string()),
                 ],
             )
         );
@@ -805,6 +987,22 @@ mod tests {
             (0, vec![("repeats".to_string(), "repeats ".to_string())])
         );
         assert_eq!(completions("repeats "), (8, Vec::new()));
+        assert_eq!(
+            completions("i"),
+            (
+                0,
+                vec![
+                    ("info".to_string(), "info".to_string()),
+                    ("igain".to_string(), "igain ".to_string()),
+                ],
+            )
+        );
+        assert_eq!(
+            completions("o"),
+            (0, vec![("ogain".to_string(), "ogain ".to_string())])
+        );
+        assert_eq!(completions("igain "), (6, Vec::new()));
+        assert_eq!(completions("ogain "), (6, Vec::new()));
         assert_eq!(completions("16 "), (3, Vec::new()));
     }
 }
