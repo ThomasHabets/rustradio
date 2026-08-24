@@ -63,6 +63,7 @@ ctrlc = "3.4"
 ratatui = { version = "0.30", features = ["all-widgets"]}
 crossterm = "0.29"
 humantime = "2.2.0"
+rustyline = { version = "18.0.1", default-features = false }
 # apt install libgoogle-perftools-dev google-perftools
 # Uncomment the PROFILER stuff in examples/ax25-1200-rx.rs
 # google-pprof --lines target/release/examples/ax25-1200-rx my-prof.prof

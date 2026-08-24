@@ -11,7 +11,14 @@
 //! cargo run -F soapysdr --example restaurant_pager -- \
 //!     --threshold 0.1 \
 //!     soapy-sdr driver=lime --freq 2.45G --igain 0.7
+//! cargo run -F soapysdr --example restaurant_pager -- \
+//!     soapy-sdr driver=lime --freq 433.92M --interactive \
+//!     --system-id 0xf9bf --tx-gain 0.1
 //! ```
+//!
+//! At the interactive prompt, enter messages such as `11:buzz` or `3:sync`.
+//! Enter `help` for syntax and `quit` to stop. Ensure the selected frequency
+//! and any transmission are legal in your location.
 //!
 //! [protocol]: https://github.com/jflaflamme/rtl_433/blob/1b5550e75a2c1f483db1fb29e80173356bbb74be/conf/restaurant_pager.conf
 
@@ -26,11 +33,22 @@ use rustradio::graph::{Graph, GraphRunner};
 use rustradio::stream::{NCReadStream, ReadStream};
 use rustradio::{Complex, Float};
 
-const SHORT_US: u32 = 204;
-const LONG_US: u32 = 636;
-const ROW_GAP_US: u32 = 880;
-const RESET_US: u32 = 7_312;
-const FRAME_BITS: usize = 25;
+#[cfg(feature = "soapysdr")]
+use rustradio::blocks::{Map, PwmEncoder, SoapySdrSink};
+#[cfg(feature = "soapysdr")]
+use rustradio::graph::CancellationToken;
+#[cfg(feature = "soapysdr")]
+use rustradio::stream::{NCWriteStream, Tag, TagValue, new_nocopy_stream};
+#[cfg(feature = "soapysdr")]
+use rustyline::DefaultEditor;
+#[cfg(feature = "soapysdr")]
+use rustyline::error::ReadlineError;
+
+#[path = "restaurant_pager/common.rs"]
+mod common;
+use common::{FRAME_BITS, LONG_US, RESET_US, ROW_GAP_US, SHORT_US};
+#[cfg(feature = "soapysdr")]
+use common::{PagerMessage, encode_message, parse_system_id};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -57,14 +75,47 @@ struct FileOpt {
     input: PathBuf,
 }
 
+#[cfg(feature = "soapysdr")]
 #[derive(clap::Args, Debug)]
 struct SoapyOpt {
+    /// RF center frequency in Hz.
     #[arg(long, value_parser=rustradio::parse_frequency)]
     freq: f64,
+
+    /// Normalized receive gain from zero through one.
     #[arg(long, default_value_t = 0.3)]
     igain: f64,
+
     /// SoapySDR driver string.
     driver: String,
+
+    /// Start a command prompt for transmitting pager messages.
+    #[arg(long)]
+    interactive: bool,
+
+    /// Pager system identifier, in decimal or hexadecimal.
+    #[arg(long, value_parser = parse_system_id, default_value = "0xf9bf")]
+    system_id: u16,
+
+    /// Normalized transmit gain from zero through one.
+    #[arg(long, default_value_t = 0.1)]
+    tx_gain: f64,
+
+    /// Complex baseband amplitude while the OOK carrier is on.
+    #[arg(long, default_value_t = 0.5)]
+    tx_amplitude: Float,
+
+    /// Number of identical frames sent for each message.
+    #[arg(long, default_value_t = 8)]
+    tx_repeats: usize,
+
+    /// SoapySDR transmit channel.
+    #[arg(long, default_value_t = 0)]
+    tx_channel: usize,
+
+    /// SoapySDR transmit antenna name.
+    #[arg(long)]
+    tx_antenna: Option<String>,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -152,12 +203,36 @@ fn us_to_samples(sample_rate: u32, micros: u32) -> usize {
 }
 
 /// Print decoded messages without coupling console I/O to the DSP block.
+enum PagerOutput {
+    Stdout,
+    #[cfg(feature = "soapysdr")]
+    Rustyline(Box<dyn rustyline::ExternalPrinter + Send>),
+}
+
+impl PagerOutput {
+    /// Print a decoded message, preserving an active Rustyline prompt.
+    fn print(&mut self, message: String) {
+        match self {
+            Self::Stdout => println!("{message}"),
+            #[cfg(feature = "soapysdr")]
+            Self::Rustyline(printer) => {
+                if let Err(error) = printer.print(message.clone()) {
+                    eprintln!("interactive output error: {error}");
+                    println!("{message}");
+                }
+            }
+        }
+    }
+}
+
+/// Print decoded messages without coupling console I/O to the DSP block.
 #[derive(rustradio_macros::Block)]
 #[rustradio(new)]
 struct RestaurantPagerPrinter {
     #[rustradio(in)]
     src: NCReadStream<PwmFrame>,
     sample_rate: u32,
+    output: PagerOutput,
 }
 
 impl Block for RestaurantPagerPrinter {
@@ -168,18 +243,28 @@ impl Block for RestaurantPagerPrinter {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
             if let Some(decoded) = DecodedTransmission::from_frame(frame, self.sample_rate) {
-                println!("{decoded}");
+                self.output.print(decoded.to_string());
             }
         }
     }
 }
 
-fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<ReadStream<Complex>> {
+struct SourceOutput {
+    samples: ReadStream<Complex>,
+    #[cfg(feature = "soapysdr")]
+    device: Option<soapysdr::Device>,
+}
+
+fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
     Ok(match opt.source {
         Source::File(ref o) => {
             let (b, prev) = FileSource::<Complex>::new(&o.input)?;
             g.add(Box::new(b));
-            prev
+            SourceOutput {
+                samples: prev,
+                #[cfg(feature = "soapysdr")]
+                device: None,
+            }
         }
         #[cfg(feature = "soapysdr")]
         Source::SoapySdr(ref o) => {
@@ -189,9 +274,166 @@ fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<ReadStream<Complex>> {
                     .igain(o.igain)
                     .build()?;
             g.add(Box::new(b));
-            prev
+            SourceOutput {
+                samples: prev,
+                device: Some(dev),
+            }
         }
     })
+}
+
+#[cfg(feature = "soapysdr")]
+#[derive(Debug, Eq, PartialEq)]
+enum PromptCommand {
+    Empty,
+    Help,
+    Quit,
+    Send(PagerMessage),
+}
+
+/// Parse one interactive command without terminating the prompt on errors.
+#[cfg(feature = "soapysdr")]
+fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String> {
+    let line = line.trim();
+    match line.to_ascii_lowercase().as_str() {
+        "" => Ok(PromptCommand::Empty),
+        "help" => Ok(PromptCommand::Help),
+        "quit" | "exit" => Ok(PromptCommand::Quit),
+        _ => line.parse().map(PromptCommand::Send),
+    }
+}
+
+/// Push one encoded message into the transmitter queue.
+#[cfg(feature = "soapysdr")]
+fn queue_message(packets: &NCWriteStream<Vec<u8>>, system_id: u16, message: PagerMessage) {
+    if packets.remaining() == 0 {
+        eprintln!("transmit queue is full; message was not queued");
+        return;
+    }
+    let (raw, bits) = encode_message(system_id, &message);
+    println!(
+        "Queueing id=0x{system_id:04x} pager={} function={} (0x{:x}) raw=0x{raw:07x}",
+        message.pager,
+        message.function_name(),
+        message.function,
+    );
+    packets.push(
+        bits,
+        vec![Tag::new(
+            0,
+            "RestaurantPagerTx::message",
+            TagValue::String(format!(
+                "id=0x{system_id:04x} pager={} function=0x{:x}",
+                message.pager, message.function,
+            )),
+        )],
+    );
+}
+
+/// Run the Rustyline editor and feed accepted messages to the graph.
+#[cfg(feature = "soapysdr")]
+fn prompt_loop(
+    mut editor: DefaultEditor,
+    packets: NCWriteStream<Vec<u8>>,
+    cancel: CancellationToken,
+    system_id: u16,
+) {
+    println!("Interactive transmitter ready; enter `help` for commands");
+    loop {
+        match editor.readline("pager> ") {
+            Ok(line) => {
+                if !line.trim().is_empty()
+                    && let Err(error) = editor.add_history_entry(line.as_str())
+                {
+                    eprintln!("could not add prompt history: {error}");
+                }
+                match parse_prompt_command(&line) {
+                    Ok(PromptCommand::Empty) => {}
+                    Ok(PromptCommand::Help) => println!(
+                        "Enter PAGER:FUNCTION, for example 11:buzz or 3:sync. \
+                         Enter quit or press Ctrl-D to stop."
+                    ),
+                    Ok(PromptCommand::Quit) => {
+                        cancel.cancel();
+                        break;
+                    }
+                    Ok(PromptCommand::Send(message)) => {
+                        queue_message(&packets, system_id, message);
+                    }
+                    Err(error) => eprintln!("invalid pager message: {error}"),
+                }
+            }
+            Err(ReadlineError::Interrupted) => {}
+            Err(ReadlineError::Eof) => {
+                cancel.cancel();
+                break;
+            }
+            Err(error) => {
+                eprintln!("interactive input error: {error}");
+                cancel.cancel();
+                break;
+            }
+        }
+    }
+}
+
+/// Add the interactive transmitter branch and start its input thread.
+#[cfg(feature = "soapysdr")]
+fn add_interactive_transmitter(
+    graph: &mut impl GraphRunner,
+    device: &soapysdr::Device,
+    opt: &Opt,
+    soapy: &SoapyOpt,
+) -> Result<(PagerOutput, std::thread::JoinHandle<()>)> {
+    ensure!(
+        (0.0..=1.0).contains(&soapy.tx_gain) && soapy.tx_gain.is_finite(),
+        "transmit gain must be finite and between zero and one",
+    );
+    ensure!(
+        soapy.tx_amplitude > 0.0 && soapy.tx_amplitude <= 1.0 && soapy.tx_amplitude.is_finite(),
+        "transmit amplitude must be finite, greater than zero, and no greater than one",
+    );
+    ensure!(
+        soapy.tx_repeats > 0,
+        "transmit repeat count must be greater than zero"
+    );
+
+    let (packets, packet_stream) = new_nocopy_stream();
+    let (encoder, envelope) = PwmEncoder::builder(
+        us_to_samples(opt.sample_rate, SHORT_US),
+        us_to_samples(opt.sample_rate, LONG_US),
+        us_to_samples(opt.sample_rate, ROW_GAP_US),
+        us_to_samples(opt.sample_rate, RESET_US),
+    )
+    .repeats(soapy.tx_repeats)
+    .max_frame_bits(FRAME_BITS)
+    .gap_pulse(PwmGapPulse::Delimiter)
+    .build(packet_stream)?;
+    graph.add(Box::new(encoder));
+
+    let amplitude = soapy.tx_amplitude;
+    let (to_complex, samples) = Map::keep_tags(envelope, "OokToComplex", move |level| {
+        Complex::new(amplitude * level, 0.0)
+    });
+    graph.add(Box::new(to_complex));
+
+    let mut sink = SoapySdrSink::builder(device, soapy.freq, f64::from(opt.sample_rate))
+        .channel(soapy.tx_channel)
+        .ogain(soapy.tx_gain);
+    if let Some(antenna) = &soapy.tx_antenna {
+        sink = sink.antenna(antenna.clone());
+    }
+    graph.add(Box::new(sink.build(samples)?));
+
+    let mut editor = DefaultEditor::new()?;
+    let printer = editor.create_external_printer()?;
+    let output = PagerOutput::Rustyline(Box::new(printer));
+    let cancel = graph.cancel_token();
+    let system_id = soapy.system_id;
+    let prompt = std::thread::Builder::new()
+        .name("restaurant-pager-prompt".to_string())
+        .spawn(move || prompt_loop(editor, packets, cancel, system_id))?;
+    Ok((output, prompt))
 }
 
 /// Build and run the restaurant-pager decoding graph.
@@ -200,8 +442,23 @@ fn main() -> Result<()> {
     ensure!(opt.sample_rate > 0, "sample rate must be greater than zero");
     let mut graph = Graph::new();
 
-    let prev = source(&opt, &mut graph)?;
+    let source = source(&opt, &mut graph)?;
+    #[cfg(feature = "soapysdr")]
+    let (output, prompt) = match &opt.source {
+        Source::SoapySdr(soapy) if soapy.interactive => {
+            let device = source
+                .device
+                .as_ref()
+                .expect("SoapySDR source must retain its device");
+            let (output, prompt) = add_interactive_transmitter(&mut graph, device, &opt, soapy)?;
+            (output, Some(prompt))
+        }
+        _ => (PagerOutput::Stdout, None),
+    };
+    #[cfg(not(feature = "soapysdr"))]
+    let output = PagerOutput::Stdout;
 
+    let prev = source.samples;
     let prev = rustradio::blockchain![
         graph,
         prev,
@@ -218,9 +475,22 @@ fn main() -> Result<()> {
         .gap_pulse(PwmGapPulse::Delimiter)
         .build(prev)?,
     ];
-    graph.add(Box::new(RestaurantPagerPrinter::new(prev, opt.sample_rate)));
+    graph.add(Box::new(RestaurantPagerPrinter::new(
+        prev,
+        opt.sample_rate,
+        output,
+    )));
 
-    graph.run()?;
+    let run_result = graph.run();
+    #[cfg(feature = "soapysdr")]
+    if run_result.is_ok()
+        && let Some(prompt) = prompt
+    {
+        prompt
+            .join()
+            .map_err(|_| anyhow::anyhow!("interactive prompt thread panicked"))?;
+    }
+    run_result?;
     Ok(())
 }
 
@@ -242,5 +512,22 @@ mod tests {
         assert_eq!(decoded.pager(), 11);
         assert_eq!(decoded.function(), 0x0d);
         assert_eq!(decoded.function_name(), "Buzz");
+    }
+
+    /// Verify interactive commands and messages are distinguished.
+    #[cfg(feature = "soapysdr")]
+    #[test]
+    fn parses_prompt_commands() {
+        assert_eq!(parse_prompt_command(""), Ok(PromptCommand::Empty));
+        assert_eq!(parse_prompt_command(" HELP "), Ok(PromptCommand::Help));
+        assert_eq!(parse_prompt_command("exit"), Ok(PromptCommand::Quit));
+        assert_eq!(
+            parse_prompt_command("11:buzz"),
+            Ok(PromptCommand::Send(PagerMessage {
+                pager: 11,
+                function: 0x0d,
+            }))
+        );
+        assert!(parse_prompt_command("not a message").is_err());
     }
 }

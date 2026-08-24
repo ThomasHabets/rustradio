@@ -14,8 +14,6 @@
 //!
 //! Ensure the selected frequency and transmission are legal in your location.
 
-use std::str::FromStr;
-
 use anyhow::{Result, ensure};
 use clap::Parser;
 
@@ -24,74 +22,12 @@ use rustradio::graph::{Graph, GraphRunner};
 use rustradio::stream::{Tag, TagValue, new_nocopy_stream};
 use rustradio::{Complex, Float, parse_frequency, parse_verbosity};
 
-const SHORT_US: u32 = 204;
-const LONG_US: u32 = 636;
-const ROW_GAP_US: u32 = 880;
-const RESET_US: u32 = 7_312;
-const FRAME_BITS: usize = 25;
-
-/// One pager number and function requested on the command line.
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct PagerMessage {
-    pager: u8,
-    function: u8,
-}
-
-impl PagerMessage {
-    /// Return a readable function name for logging.
-    fn function_name(&self) -> &'static str {
-        match self.function {
-            0x0d => "Buzz",
-            0x0f => "Sync",
-            _ => "Custom",
-        }
-    }
-}
-
-impl FromStr for PagerMessage {
-    type Err = String;
-
-    /// Parse `PAGER:FUNCTION`, accepting named or numeric functions.
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        let (pager, function) = value
-            .split_once(':')
-            .ok_or_else(|| "message must be PAGER:FUNCTION, such as 11:buzz".to_string())?;
-        let pager = parse_integer(pager)?;
-        if pager > 0x0f {
-            return Err("pager number must be between 0 and 15".to_string());
-        }
-        let function = match function.to_ascii_lowercase().as_str() {
-            "buzz" => 0x0d,
-            "sync" => 0x0f,
-            _ => parse_integer(function)?,
-        };
-        if function > 0x0f {
-            return Err("pager function must be between 0 and 15".to_string());
-        }
-        Ok(Self {
-            pager: pager as u8,
-            function: function as u8,
-        })
-    }
-}
-
-/// Parse a decimal or `0x`-prefixed hexadecimal integer.
-fn parse_integer(value: &str) -> std::result::Result<u32, String> {
-    let hexadecimal = value
-        .strip_prefix("0x")
-        .or_else(|| value.strip_prefix("0X"));
-    match hexadecimal {
-        Some(value) => u32::from_str_radix(value, 16),
-        None => value.parse(),
-    }
-    .map_err(|error| format!("invalid integer {value:?}: {error}"))
-}
-
-/// Parse and range-check the 16-bit pager-system identifier.
-fn parse_system_id(value: &str) -> std::result::Result<u16, String> {
-    let value = parse_integer(value)?;
-    u16::try_from(value).map_err(|_| "system ID must fit in 16 bits".to_string())
-}
+#[path = "restaurant_pager/common.rs"]
+mod common;
+use common::{
+    FRAME_BITS, LONG_US, PagerMessage, RESET_US, ROW_GAP_US, SHORT_US, encode_message,
+    parse_system_id,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -161,19 +97,6 @@ fn us_to_samples(sample_rate: f64, micros: u32) -> Result<usize> {
         "{micros} us does not fit the selected sample rate",
     );
     Ok(samples as usize)
-}
-
-/// Pack the restaurant-pager fields and return 25 MSB-first bits.
-fn encode_message(system_id: u16, message: &PagerMessage) -> (u32, Vec<u8>) {
-    let raw = (u32::from(system_id) << 9)
-        | (u32::from(message.pager) << 5)
-        | (u32::from(message.function) << 1)
-        | 1;
-    let bits = (0..FRAME_BITS)
-        .rev()
-        .map(|shift| ((raw >> shift) & 1) as u8)
-        .collect();
-    (raw, bits)
 }
 
 fn main() -> Result<()> {
@@ -272,46 +195,4 @@ fn main() -> Result<()> {
     graph.run()?;
     println!("Transmission complete");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Verify the transmitter and receiver agree on the field layout.
-    #[test]
-    fn message_layout_matches_decoder() {
-        let message = PagerMessage {
-            pager: 11,
-            function: 0x0d,
-        };
-        let (raw, bits) = encode_message(0xf9bf, &message);
-        assert_eq!(bits.len(), FRAME_BITS);
-        assert_eq!(bits.last(), Some(&1));
-        assert_eq!((raw >> 9) & 0xffff, 0xf9bf);
-        assert_eq!((raw >> 5) & 0x0f, 11);
-        assert_eq!((raw >> 1) & 0x0f, 0x0d);
-    }
-
-    /// Verify named, decimal, and hexadecimal message forms.
-    #[test]
-    fn parses_messages() {
-        assert_eq!(
-            "11:buzz".parse(),
-            Ok(PagerMessage {
-                pager: 11,
-                function: 0x0d,
-            })
-        );
-        assert_eq!(
-            "0xf:0x2".parse(),
-            Ok(PagerMessage {
-                pager: 15,
-                function: 2,
-            })
-        );
-        assert!("16:sync".parse::<PagerMessage>().is_err());
-        assert!("1:16".parse::<PagerMessage>().is_err());
-        assert!("buzz".parse::<PagerMessage>().is_err());
-    }
 }
