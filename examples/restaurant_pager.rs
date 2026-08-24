@@ -29,7 +29,8 @@ use clap::Parser;
 
 use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::{ComplexToMag2, FileSource, PwmDecoder, PwmFrame, PwmGapPulse};
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::GraphRunner;
+use rustradio::mtgraph::MTGraph;
 use rustradio::stream::{NCReadStream, ReadStream};
 use rustradio::{Complex, Float};
 
@@ -56,6 +57,10 @@ struct Opt {
     /// Capture sample rate in samples per second.
     #[arg(long, default_value_t = 125_000)]
     sample_rate: u32,
+
+    /// Verbosity level.
+    #[arg(short, value_parser=rustradio::parse_verbosity, default_value = "info")]
+    verbose: usize,
 
     /// OOK power threshold (the input is magnitude squared).
     #[arg(long, default_value_t = 0.01)]
@@ -439,8 +444,18 @@ fn add_interactive_transmitter(
 /// Build and run the restaurant-pager decoding graph.
 fn main() -> Result<()> {
     let opt = Opt::parse();
+    stderrlog::new()
+        .module(module_path!())
+        .module("rustradio")
+        .module("soapysdr")
+        .quiet(false)
+        .verbosity(opt.verbose)
+        .timestamp(stderrlog::Timestamp::Second)
+        .init()?;
+    //soapysdr::configure_logging();
+
     ensure!(opt.sample_rate > 0, "sample rate must be greater than zero");
-    let mut graph = Graph::new();
+    let mut graph = MTGraph::new();
 
     let source = source(&opt, &mut graph)?;
     #[cfg(feature = "soapysdr")]
