@@ -87,6 +87,41 @@ impl AgcBuilder {
 /// maximum gain is optional, but is useful when long periods of silence are
 /// expected.
 ///
+/// ## Selecting good values
+///
+/// A useful first approximation for a rate is:
+///
+/// `r = 1 - e^(-1/Fs*T)`, or `1/(Fs * t)`
+///
+/// * `r` is the rate (attack or decay rate).
+/// * `t` is how fast it should "mostly converge".
+/// * `Fs` is the same rate.
+///
+/// So an attack rate of 0.2 at 125ksps should mostly converge in
+/// `1/(0.2*125e3)=40us`. For a strong nearby signal with little else
+/// overpowering it, that could work well for OOK or short burst packets.
+///
+/// For the receiver to put its ear to the ground a decay rate of 1e-4 with the
+/// same formula gives 80ms. A common starting point for decay rate is 10 to
+/// 100x attack rate, though in this example it was 2000.
+///
+/// For longer bursts with preambles, or QAM or other multi-amplitude
+/// modulations, the rates will likely need to be dialed in to get an even
+/// signal, and yet not modify individual symbols or levels across symbols.
+///
+/// FM/FSK and constant envelope PSK can usually tolerate fast AGC. In fact,
+/// forcing to fixed magnitude it's often part of demod.
+///
+/// For extra sensitivity you may want to feed back the signal strength into the
+/// SDR hardware input gain instead, since this AGC block can only work with the
+/// bits that it has. An SDR input gain will likely happen before the ADC, thus
+/// lose less precision.
+///
+/// ## TODO
+///
+/// It may be best to turn off AGC after the preamble. This block should support
+/// that through tags in the stream.
+///
 /// # Example
 ///
 /// ```
