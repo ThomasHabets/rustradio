@@ -320,10 +320,12 @@ enum PromptCommand {
 }
 
 #[cfg(feature = "soapysdr")]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 struct PromptState {
     system_id: u16,
     repeats: usize,
+    input_gain: f64,
+    output_gain: f64,
 }
 
 #[cfg(feature = "soapysdr")]
@@ -331,8 +333,8 @@ impl PromptState {
     /// Format the message settings changed by interactive commands.
     fn info(&self) -> String {
         format!(
-            "System ID: 0x{:04x}\nRepeat count: {}",
-            self.system_id, self.repeats
+            "System ID: 0x{:04x}\nRepeat count: {}\nInput gain: {}\nOutput gain: {}",
+            self.system_id, self.repeats, self.input_gain, self.output_gain
         )
     }
 }
@@ -342,7 +344,7 @@ const PROMPT_HELP: &str = "\
 Commands:
   PAGER                  Buzz the specified pager (0-15)
   PAGER FUNCTION         Send buzz, sync, or a numeric function (0-15)
-  info                   Show the system ID and repeat count
+  info                   Show the current system, repeat, and gain settings
   system-id HEX          Change the 16-bit system ID
   repeats COUNT          Change the number of frames per message
   igain GAIN             Change normalized receive gain (0.0-1.0)
@@ -631,6 +633,7 @@ fn prompt_loop(
                             value,
                         ) {
                             Ok(gain) => {
+                                state.input_gain = value;
                                 println!("Input gain set to {value} ({gain} dB)");
                             }
                             Err(error) => eprintln!("could not set input gain: {error}"),
@@ -644,6 +647,7 @@ fn prompt_loop(
                             value,
                         ) {
                             Ok(gain) => {
+                                state.output_gain = value;
                                 println!("Output gain set to {value} ({gain} dB)");
                             }
                             Err(error) => eprintln!("could not set output gain: {error}"),
@@ -732,6 +736,8 @@ fn add_interactive_transmitter(
     let state = PromptState {
         system_id: soapy.system_id,
         repeats: soapy.tx_repeats,
+        input_gain: soapy.igain,
+        output_gain: soapy.tx_gain,
     };
     let prompt = std::thread::Builder::new()
         .name("restaurant-pager-prompt".to_string())
@@ -925,8 +931,13 @@ mod tests {
         let state = PromptState {
             system_id: 0xf9bf,
             repeats: 8,
+            input_gain: 0.3,
+            output_gain: 0.1,
         };
-        assert_eq!(state.info(), "System ID: 0xf9bf\nRepeat count: 8");
+        assert_eq!(
+            state.info(),
+            "System ID: 0xf9bf\nRepeat count: 8\nInput gain: 0.3\nOutput gain: 0.1"
+        );
         assert_eq!(denormalize_gain(0.0, -10.0, 30.0), Ok(-10.0));
         assert_eq!(denormalize_gain(0.5, -10.0, 30.0), Ok(10.0));
         assert_eq!(denormalize_gain(1.0, -10.0, 30.0), Ok(30.0));
