@@ -1,15 +1,16 @@
 //! Transmit a finite burst of restaurant guest-pager messages with SoapySDR.
 //!
 //! The generated packets match the 25-bit EV1527 variant decoded by
-//! `examples/restaurant_pager.rs`. Each `--message` is `PAGER:FUNCTION`, where
-//! the function is `buzz`, `sync`, or a numeric value from 0 through 15.
+//! `examples/restaurant_pager.rs`. Each `--message` is a pager number, which
+//! defaults to `buzz`, or `PAGER FUNCTION`, where the function is `buzz`,
+//! `sync`, or a numeric value from 0 through 15.
 //!
 //! ```text
 //! cargo run --release --features soapysdr --example restaurant_pager_tx -- \
 //!     --driver 'driver=lime' \
 //!     --system-id 0xf9bf \
-//!     --message 11:buzz \
-//!     --message 3:sync
+//!     --message 11 \
+//!     --message '3 sync'
 //! ```
 //!
 //! Ensure the selected frequency and transmission are legal in your location.
@@ -59,11 +60,11 @@ struct Opt {
     #[arg(long, value_parser = parse_system_id, default_value = "0xf9bf")]
     system_id: u16,
 
-    /// Pager message in PAGER:FUNCTION form; may be specified more than once.
+    /// Pager number and optional function; may be specified more than once.
     #[arg(
         short,
         long,
-        value_name = "PAGER:FUNCTION",
+        value_name = "MESSAGE",
         required_unless_present = "list_devices"
     )]
     message: Vec<PagerMessage>,

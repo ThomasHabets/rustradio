@@ -33,11 +33,18 @@ impl PagerMessage {
 impl FromStr for PagerMessage {
     type Err = String;
 
-    /// Parse `PAGER:FUNCTION`, accepting named or numeric functions.
+    /// Parse `PAGER [FUNCTION]`, defaulting to the buzz function.
     fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        let (pager, function) = value
-            .split_once(':')
-            .ok_or_else(|| "message must be PAGER:FUNCTION, such as 11:buzz".to_string())?;
+        let mut fields = value.split_whitespace();
+        let pager = fields.next().ok_or_else(|| {
+            "message must be PAGER or PAGER FUNCTION, such as 11 or 11 sync".to_string()
+        })?;
+        let function = fields.next().unwrap_or("buzz");
+        if fields.next().is_some() {
+            return Err(
+                "message must be PAGER or PAGER FUNCTION, such as 11 or 11 sync".to_string(),
+            );
+        }
         let pager = parse_integer(pager)?;
         if pager > 0x0f {
             return Err("pager number must be between 0 and 15".to_string());
@@ -95,25 +102,41 @@ pub fn encode_message(system_id: u16, message: &PagerMessage) -> (u32, Vec<u8>) 
 mod tests {
     use super::*;
 
-    /// Verify named, decimal, and hexadecimal message forms.
+    /// Verify the default, named, decimal, and hexadecimal message forms.
     #[test]
     fn parses_messages() {
         assert_eq!(
-            "11:buzz".parse(),
+            "11".parse(),
             Ok(PagerMessage {
                 pager: 11,
                 function: 0x0d,
             })
         );
         assert_eq!(
-            "0xf:0x2".parse(),
+            "1 sync".parse(),
+            Ok(PagerMessage {
+                pager: 1,
+                function: 0x0f,
+            })
+        );
+        assert_eq!(
+            "5 buzz".parse(),
+            Ok(PagerMessage {
+                pager: 5,
+                function: 0x0d,
+            })
+        );
+        assert_eq!(
+            "0xf 0x2".parse(),
             Ok(PagerMessage {
                 pager: 15,
                 function: 2,
             })
         );
-        assert!("16:sync".parse::<PagerMessage>().is_err());
-        assert!("1:16".parse::<PagerMessage>().is_err());
+        assert!("16 sync".parse::<PagerMessage>().is_err());
+        assert!("1 16".parse::<PagerMessage>().is_err());
+        assert!("1 sync extra".parse::<PagerMessage>().is_err());
+        assert!("11:buzz".parse::<PagerMessage>().is_err());
         assert!("buzz".parse::<PagerMessage>().is_err());
     }
 

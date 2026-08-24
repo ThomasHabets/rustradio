@@ -16,9 +16,10 @@
 //!     --system-id 0xf9bf --tx-gain 0.1
 //! ```
 //!
-//! At the interactive prompt, enter messages such as `11:buzz` or `3:sync`.
-//! Enter `help` for syntax and `quit` to stop. Ensure the selected frequency
-//! and any transmission are legal in your location.
+//! At the interactive prompt, enter a pager number to buzz it, or add a
+//! function such as `1 sync` or `5 buzz`. Use `system-id 0xabcd` to change the
+//! system ID. Enter `help` for syntax and `quit` to stop. Ensure the selected
+//! frequency and any transmission are legal in your location.
 //!
 //! [protocol]: https://github.com/jflaflamme/rtl_433/blob/1b5550e75a2c1f483db1fb29e80173356bbb74be/conf/restaurant_pager.conf
 
@@ -293,7 +294,37 @@ enum PromptCommand {
     Empty,
     Help,
     Quit,
+    SetSystemId(u16),
     Send(PagerMessage),
+}
+
+#[cfg(feature = "soapysdr")]
+const PROMPT_HELP: &str = "\
+Commands:
+  PAGER                  Buzz the specified pager (0-15)
+  PAGER FUNCTION         Send buzz, sync, or a numeric function (0-15)
+  system-id HEX          Change the 16-bit system ID
+  help                   Show this help
+  quit | exit            Stop the transmitter (Ctrl-D also works)
+
+Examples:
+  1
+  1 sync
+  5 buzz
+  system-id 0xabcd";
+
+/// Parse a 16-bit hexadecimal pager-system identifier.
+#[cfg(feature = "soapysdr")]
+fn parse_hex_system_id(value: &str) -> std::result::Result<u16, String> {
+    let digits = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .unwrap_or(value);
+    if digits.is_empty() {
+        return Err("system ID must contain hexadecimal digits".to_string());
+    }
+    u16::from_str_radix(digits, 16)
+        .map_err(|error| format!("invalid hexadecimal system ID {value:?}: {error}"))
 }
 
 /// Parse one interactive command without terminating the prompt on errors.
@@ -304,7 +335,23 @@ fn parse_prompt_command(line: &str) -> std::result::Result<PromptCommand, String
         "" => Ok(PromptCommand::Empty),
         "help" => Ok(PromptCommand::Help),
         "quit" | "exit" => Ok(PromptCommand::Quit),
-        _ => line.parse().map(PromptCommand::Send),
+        _ => {
+            let mut fields = line.split_whitespace();
+            if fields
+                .next()
+                .is_some_and(|command| command.eq_ignore_ascii_case("system-id"))
+            {
+                let value = fields
+                    .next()
+                    .ok_or_else(|| "system-id requires a hexadecimal value".to_string())?;
+                if fields.next().is_some() {
+                    return Err("system-id accepts exactly one hexadecimal value".to_string());
+                }
+                parse_hex_system_id(value).map(PromptCommand::SetSystemId)
+            } else {
+                line.parse().map(PromptCommand::Send)
+            }
+        }
     }
 }
 
@@ -341,7 +388,7 @@ fn prompt_loop(
     mut editor: DefaultEditor,
     packets: NCWriteStream<Vec<u8>>,
     cancel: CancellationToken,
-    system_id: u16,
+    mut system_id: u16,
 ) {
     println!("Interactive transmitter ready; enter `help` for commands");
     loop {
@@ -354,18 +401,19 @@ fn prompt_loop(
                 }
                 match parse_prompt_command(&line) {
                     Ok(PromptCommand::Empty) => {}
-                    Ok(PromptCommand::Help) => println!(
-                        "Enter PAGER:FUNCTION, for example 11:buzz or 3:sync. \
-                         Enter quit or press Ctrl-D to stop."
-                    ),
+                    Ok(PromptCommand::Help) => println!("{PROMPT_HELP}"),
                     Ok(PromptCommand::Quit) => {
                         cancel.cancel();
                         break;
                     }
+                    Ok(PromptCommand::SetSystemId(value)) => {
+                        system_id = value;
+                        println!("System ID set to 0x{system_id:04x}");
+                    }
                     Ok(PromptCommand::Send(message)) => {
                         queue_message(&packets, system_id, message);
                     }
-                    Err(error) => eprintln!("invalid pager message: {error}"),
+                    Err(error) => eprintln!("invalid command: {error}"),
                 }
             }
             Err(ReadlineError::Interrupted) => {}
@@ -537,12 +585,39 @@ mod tests {
         assert_eq!(parse_prompt_command(" HELP "), Ok(PromptCommand::Help));
         assert_eq!(parse_prompt_command("exit"), Ok(PromptCommand::Quit));
         assert_eq!(
-            parse_prompt_command("11:buzz"),
+            parse_prompt_command("1"),
             Ok(PromptCommand::Send(PagerMessage {
-                pager: 11,
+                pager: 1,
                 function: 0x0d,
             }))
         );
+        assert_eq!(
+            parse_prompt_command("1 sync"),
+            Ok(PromptCommand::Send(PagerMessage {
+                pager: 1,
+                function: 0x0f,
+            }))
+        );
+        assert_eq!(
+            parse_prompt_command("5 buzz"),
+            Ok(PromptCommand::Send(PagerMessage {
+                pager: 5,
+                function: 0x0d,
+            }))
+        );
+        assert_eq!(
+            parse_prompt_command("SYSTEM-ID 0xabcd"),
+            Ok(PromptCommand::SetSystemId(0xabcd))
+        );
+        assert_eq!(
+            parse_prompt_command("system-id f9bf"),
+            Ok(PromptCommand::SetSystemId(0xf9bf))
+        );
+        assert!(parse_prompt_command("system-id").is_err());
+        assert!(parse_prompt_command("system-id 0x1234 extra").is_err());
+        assert!(parse_prompt_command("system-id 0x").is_err());
+        assert!(parse_prompt_command("system-id 10000").is_err());
+        assert!(parse_prompt_command("11:buzz").is_err());
         assert!(parse_prompt_command("not a message").is_err());
     }
 }
