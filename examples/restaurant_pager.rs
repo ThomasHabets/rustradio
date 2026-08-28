@@ -32,6 +32,7 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 
 use rustradio::block::{Block, BlockRet};
+use rustradio::blockchain;
 use rustradio::blocks::{Agc, ComplexToMag2, FileSource, PwmDecoder, PwmFrame, PwmGapPulse};
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
@@ -72,8 +73,8 @@ const RX_CHANNEL: usize = 0;
 #[command(version, about)]
 struct Opt {
     /// Capture sample rate in samples per second.
-    #[arg(long, default_value_t = 125_000)]
-    sample_rate: u32,
+    #[arg(long, value_parser=rustradio::parse_frequency, default_value = "125k")]
+    sample_rate: f64,
 
     /// Verbosity level.
     #[arg(short, value_parser=rustradio::parse_verbosity, default_value = "info")]
@@ -103,6 +104,10 @@ struct SoapyOpt {
     /// RF center frequency in Hz.
     #[arg(long, value_parser=rustradio::parse_frequency)]
     freq: f64,
+
+    /// RF center frequency in Hz.
+    #[arg(long, value_parser=rustradio::parse_frequency, default_value="0")]
+    freq_offset: f64,
 
     /// Normalized receive gain from zero through one.
     #[arg(long, default_value_t = 0.3)]
@@ -217,8 +222,8 @@ impl std::fmt::Display for DecodedTransmission {
 }
 
 /// Convert a duration in microseconds to a rounded input-sample count.
-fn us_to_samples(sample_rate: u32, micros: u32) -> usize {
-    ((u64::from(sample_rate) * u64::from(micros) + 500_000) / 1_000_000)
+fn us_to_samples(sample_rate: f64, micros: u32) -> usize {
+    (((sample_rate as u64) * u64::from(micros) + 500_000) / 1_000_000)
         .max(1)
         .try_into()
         .expect("sample count does not fit in usize")
@@ -291,8 +296,9 @@ fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
         #[cfg(feature = "soapysdr")]
         Source::SoapySdr(ref o) => {
             let dev = soapysdr::Device::new(&*o.driver)?;
+            // TODO: add freq offset for receiver.
             let (b, prev) =
-                rustradio::blocks::SoapySdrSource::builder(&dev, o.freq, opt.sample_rate.into())
+                rustradio::blocks::SoapySdrSource::builder(&dev, o.freq, opt.sample_rate)
                     .channel(RX_CHANNEL)
                     .igain(o.igain)?
                     .build()?;
@@ -708,13 +714,27 @@ fn add_interactive_transmitter(
     let encoder_control = encoder.control();
     graph.add(Box::new(encoder));
 
-    let amplitude = soapy.tx_amplitude;
-    let (to_complex, samples) = Map::keep_tags(envelope, "OokToComplex", move |level| {
-        Complex::new(amplitude * level, 0.0)
-    });
-    graph.add(Box::new(to_complex));
+    let xlat = {
+        let (b, xlat) = rustradio::blocks::SignalSourceComplex::new(
+            opt.sample_rate as f32,
+            soapy.freq_offset as f32,
+            1.0,
+        );
+        graph.add(Box::new(b));
+        xlat
+    };
 
-    let mut sink = SoapySdrSink::builder(device, soapy.freq, f64::from(opt.sample_rate))
+    let amplitude = soapy.tx_amplitude;
+    let samples = blockchain![
+        graph,
+        prev,
+        Map::keep_tags(envelope, "OokToComplex", move |level| {
+            Complex::new(amplitude * level, 0.0)
+        }),
+        rustradio::blocks::Multiply::new(prev, xlat),
+    ];
+
+    let mut sink = SoapySdrSink::builder(device, soapy.freq - soapy.freq_offset, opt.sample_rate)
         .channel(soapy.tx_channel)
         .ogain(soapy.tx_gain)?;
     if let Some(antenna) = &soapy.tx_antenna {
@@ -768,7 +788,10 @@ fn main() -> Result<()> {
         .init()?;
     //soapysdr::configure_logging();
 
-    ensure!(opt.sample_rate > 0, "sample rate must be greater than zero");
+    ensure!(
+        opt.sample_rate > 0.0,
+        "sample rate must be greater than zero"
+    );
     let mut graph = MTGraph::new();
 
     let source = source(&opt, &mut graph)?;
@@ -788,7 +811,7 @@ fn main() -> Result<()> {
     let output = PagerOutput::Stdout;
 
     let prev = source.samples;
-    let prev = rustradio::blockchain![
+    let prev = blockchain![
         graph,
         prev,
         Agc::new(prev, 0.2, 1e-4)?,
@@ -807,7 +830,7 @@ fn main() -> Result<()> {
     ];
     graph.add(Box::new(RestaurantPagerPrinter::new(
         prev,
-        opt.sample_rate,
+        opt.sample_rate as u32,
         output,
     )));
 
