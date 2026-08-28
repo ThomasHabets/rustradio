@@ -112,8 +112,11 @@ impl SoapySdrSinkBuilder<'_> {
                 self.dev.channel_info(dir, channel)?
             );
         }
-        self.dev
-            .set_frequency(dir, self.channel, self.freq, soapysdr::Args::new())?;
+        let mut args = soapysdr::Args::new();
+        if false {
+            args.set("OFFSET", "50000");
+        }
+        self.dev.set_frequency(dir, self.channel, self.freq, args)?;
         self.dev
             .set_sample_rate(dir, self.channel, self.samp_rate)?;
         let gr = self.dev.gain_range(dir, self.channel)?;

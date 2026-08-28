@@ -364,12 +364,12 @@ impl SoapySdrSourceBuilder<'_> {
                 self.dev.channel_info(soapysdr::Direction::Rx, channel)?
             );
         }
-        self.dev.set_frequency(
-            soapysdr::Direction::Rx,
-            self.channel,
-            self.freq,
-            soapysdr::Args::new(),
-        )?;
+        let mut args = soapysdr::Args::new();
+        if false {
+            args.set("OFFSET", "1e6");
+        }
+        self.dev
+            .set_frequency(soapysdr::Direction::Rx, self.channel, self.freq, args)?;
         self.dev
             .set_sample_rate(soapysdr::Direction::Rx, self.channel, self.samp_rate)?;
         let gr = self.dev.gain_range(soapysdr::Direction::Rx, self.channel)?;
