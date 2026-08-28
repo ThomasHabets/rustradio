@@ -177,6 +177,7 @@ pub mod il2p_deframer;
 pub mod iq_balance;
 pub mod kiss;
 pub mod morse_encode;
+pub mod multiply;
 pub mod multiply_const;
 pub mod nrzi;
 pub mod null_sink;
