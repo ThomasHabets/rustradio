@@ -12,3 +12,8 @@
 ### Internal
 
 * Do we really need refcounted streams?
+
+### New block ideas
+
+* Combine Multiply with SignalSourceComplex into MultiplyBySignalSource or
+  something, since it's a common op that doesn't need joins.
