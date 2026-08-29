@@ -16,4 +16,5 @@
 ### New block ideas
 
 * Combine Multiply with SignalSourceComplex into MultiplyBySignalSource or
-  something, since it's a common op that doesn't need joins.
+  something, since it's a common op that doesn't need joins. Or maybe build it
+  into Vco, by changing the amplitude via tags?
