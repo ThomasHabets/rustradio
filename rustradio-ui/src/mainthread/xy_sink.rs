@@ -131,6 +131,12 @@ impl XySink {
         dom_result(inner.draw(), "clearing XY sink")
     }
 
+    /// Redraw the current data using the current page theme and dimensions.
+    pub fn redraw(&self) -> rustradio::Result<()> {
+        let mut inner = self.inner.borrow_mut();
+        dom_result(inner.draw(), "redrawing XY sink")
+    }
+
     /// Export the current canvas, including axes and legend, as a PNG data URL.
     pub fn png_data_url(&self) -> rustradio::Result<String> {
         dom_result(
@@ -537,10 +543,21 @@ struct CanvasTheme {
 
 impl CanvasTheme {
     fn current() -> Result<Self, JsValue> {
-        let dark = web_sys::window()
-            .ok_or(JsValue::from_str("no window"))?
-            .match_media("(prefers-color-scheme: dark)")?
-            .is_some_and(|media| media.matches());
+        let window = web_sys::window().ok_or(JsValue::from_str("no window"))?;
+        let document = window.document().ok_or(JsValue::from_str("no document"))?;
+        let root = document
+            .document_element()
+            .ok_or(JsValue::from_str("document has no root element"))?;
+        let classes = root.class_list();
+        let dark = if classes.contains("rr-theme-dark") {
+            true
+        } else if classes.contains("rr-theme-light") {
+            false
+        } else {
+            window
+                .match_media("(prefers-color-scheme: dark)")?
+                .is_some_and(|media| media.matches())
+        };
         Ok(if dark {
             Self {
                 bg: "#0b0b0b",
