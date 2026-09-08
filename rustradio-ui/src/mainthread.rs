@@ -15,6 +15,7 @@ pub mod constellation_sink;
 pub mod spectrum_sink;
 pub mod time_sink;
 mod worker_startup;
+pub mod xy_sink;
 
 pub(crate) const CLASS_SINK: &str = "rr-sink-section";
 

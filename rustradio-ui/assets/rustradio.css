@@ -49,6 +49,18 @@
 }
 
 /*
+ * Arbitrary-X sink
+ */
+.rr-xy-sink-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(330px, 42vh, 560px);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+/*
  * Waterfall sink
  */
 .rr-waterfall-sink-layout {
