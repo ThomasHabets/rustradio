@@ -712,35 +712,35 @@ fn add_interactive_transmitter(
     .gap_pulse(PwmGapPulse::Delimiter)
     .build(packet_stream)?;
     let encoder_control = encoder.control();
-    graph.add(Box::new(encoder));
-
-    let xlat = {
-        let (b, xlat) = rustradio::blocks::SignalSourceComplex::new(
-            opt.sample_rate as f32,
-            soapy.freq_offset as f32,
-            1.0,
-        );
-        graph.add(Box::new(b));
-        xlat
-    };
 
     let amplitude = soapy.tx_amplitude;
-    let samples = blockchain![
+    blockchain![
         graph,
         prev,
-        Map::keep_tags(envelope, "OokToComplex", move |level| {
+        (encoder, envelope),
+        Map::keep_tags(prev, "OokToComplex", move |level| {
             Complex::new(amplitude * level, 0.0)
         }),
-        rustradio::blocks::Multiply::new(prev, xlat),
+        {
+            let (b, xlat) = rustradio::blocks::SignalSourceComplex::new(
+                opt.sample_rate as f32,
+                soapy.freq_offset as f32,
+                1.0,
+            );
+            graph.add(Box::new(b));
+            rustradio::blocks::Multiply::new(prev, xlat)
+        },
+        {
+            let mut sink =
+                SoapySdrSink::builder(device, soapy.freq - soapy.freq_offset, opt.sample_rate)
+                    .channel(soapy.tx_channel)
+                    .ogain(soapy.tx_gain)?;
+            if let Some(antenna) = &soapy.tx_antenna {
+                sink = sink.antenna(antenna.clone());
+            }
+            (sink.build(prev)?, ())
+        },
     ];
-
-    let mut sink = SoapySdrSink::builder(device, soapy.freq - soapy.freq_offset, opt.sample_rate)
-        .channel(soapy.tx_channel)
-        .ogain(soapy.tx_gain)?;
-    if let Some(antenna) = &soapy.tx_antenna {
-        sink = sink.antenna(antenna.clone());
-    }
-    graph.add(Box::new(sink.build(samples)?));
 
     let mut editor = PagerEditor::new()?;
     editor.set_helper(Some(PagerPromptHelper));
