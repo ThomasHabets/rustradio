@@ -1,5 +1,6 @@
 //! Responsive arbitrary-X plots for application-level measurements.
 
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -48,6 +49,21 @@ pub struct XySeries {
     pub label: String,
     pub color: String,
     pub points: Vec<XyPoint>,
+}
+
+/// Extrema for one series, grouped into X-axis display columns.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct XyEnvelopeSeries {
+    pub label: String,
+    pub color: String,
+    pub buckets: Vec<Option<(f64, f64)>>,
+}
+
+/// Pixel-column extrema with the original frequency range.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct XyEnvelope {
+    pub x_range: (f64, f64),
+    pub series: Vec<XyEnvelopeSeries>,
 }
 
 /// A labelled X-axis interval drawn behind the plotted series.
@@ -118,15 +134,54 @@ impl XySink {
     /// Replace all series and regions, then redraw the plot.
     pub fn update(&self, series: Vec<XySeries>, regions: Vec<XyRegion>) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
+        inner.envelope = None;
+        inner.cache.clear();
+        inner.ranges = None;
         inner.series = series;
         inner.regions = regions;
         dom_result(inner.draw(), "updating XY sink")
+    }
+
+    /// Replace the plot with pre-bucketed display-column extrema and redraw it.
+    pub fn update_envelope(
+        &self,
+        envelope: XyEnvelope,
+        regions: Vec<XyRegion>,
+    ) -> rustradio::Result<()> {
+        let series = envelope
+            .series
+            .iter()
+            .map(|s| XySeries {
+                label: s.label.clone(),
+                color: s.color.clone(),
+                points: Vec::new(),
+            })
+            .collect();
+        let mut inner = self.inner.borrow_mut();
+        inner.series = series;
+        inner.cache.clear();
+        inner.envelope = Some(envelope);
+        inner.ranges = None;
+        inner.regions = regions;
+        dom_result(inner.draw(), "updating XY envelope")
+    }
+
+    /// Number of physical-pixel columns available for plot data.
+    pub fn bucket_count(&self) -> usize {
+        let inner = self.inner.as_ref().borrow();
+        let dpr = web_sys::window().map_or(1.0, |w| w.device_pixel_ratio());
+        (f64::from(inner.canvas.client_width()) * dpr - AXIS_MARGIN_LEFT - AXIS_MARGIN_RIGHT)
+            .round()
+            .clamp(1.0, 16384.0) as usize
     }
 
     /// Drop retained data and redraw the empty plot.
     pub fn clear(&self) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
         inner.series.clear();
+        inner.envelope = None;
+        inner.cache.clear();
+        inner.ranges = None;
         inner.regions.clear();
         dom_result(inner.draw(), "clearing XY sink")
     }
@@ -166,6 +221,10 @@ impl XySink {
                 ctx,
                 options: options.clone(),
                 series: Vec::new(),
+                envelope: None,
+                cache: Vec::new(),
+                cache_width: 0,
+                ranges: None,
                 regions: Vec::new(),
                 callbacks: Vec::new(),
             })),
@@ -195,6 +254,10 @@ struct XyInner {
     ctx: CanvasRenderingContext2d,
     options: XySinkOptions,
     series: Vec<XySeries>,
+    envelope: Option<XyEnvelope>,
+    cache: Vec<Vec<Option<(f64, f64)>>>,
+    cache_width: usize,
+    ranges: Option<((f64, f64), (f64, f64))>,
     regions: Vec<XyRegion>,
     callbacks: Vec<Closure<dyn FnMut(Event)>>,
 }
@@ -209,9 +272,14 @@ impl XyInner {
         self.ctx
             .stroke_rect(0.5, 0.5, (width - 1.0).max(0.0), (height - 1.0).max(0.0));
 
-        let Some(((x_min, x_max), (y_min, y_max))) =
-            plot_ranges(&self.series, self.options.include_y_zero)
-        else {
+        if self.ranges.is_none() {
+            self.ranges = self
+                .envelope
+                .as_ref()
+                .and_then(|e| envelope_ranges(e, self.options.include_y_zero))
+                .or_else(|| plot_ranges(&self.series, self.options.include_y_zero));
+        }
+        let Some(((x_min, x_max), (y_min, y_max))) = self.ranges else {
             self.ctx.set_fill_style_str(theme.text);
             self.ctx.set_font("12px sans-serif");
             self.ctx.fill_text("Waiting for plot data...", 12.0, 20.0)?;
@@ -222,6 +290,15 @@ impl XyInner {
         let plot_top = AXIS_MARGIN_TOP.min((height - 1.0).max(0.0));
         let plot_width = (width - AXIS_MARGIN_LEFT - AXIS_MARGIN_RIGHT).max(1.0);
         let plot_height = (height - AXIS_MARGIN_TOP - AXIS_MARGIN_BOTTOM).max(1.0);
+        let columns = plot_width.round().max(1.0) as usize;
+        if self.envelope.is_none() && (self.cache.is_empty() || self.cache_width != columns) {
+            self.cache = self
+                .series
+                .iter()
+                .map(|s| bucket_extents(&s.points, (x_min, x_max), columns))
+                .collect();
+            self.cache_width = columns;
+        }
         self.draw_regions(
             &theme,
             plot_left,
@@ -303,15 +380,17 @@ impl XyInner {
         x_range: (f64, f64),
         y_range: (f64, f64),
     ) {
-        let bucket_count = plot_width.round().max(1.0) as usize;
-        for series in &self.series {
+        let _ = x_range;
+        for (index, series) in self.series.iter().enumerate() {
             self.ctx.set_stroke_style_str(&series.color);
             self.ctx.set_fill_style_str(&series.color);
             self.ctx.set_line_width(1.0);
-            for (bucket, extent) in bucket_extents(&series.points, x_range, bucket_count)
-                .into_iter()
-                .enumerate()
-            {
+            let buckets = self
+                .envelope
+                .as_ref()
+                .map_or_else(|| &self.cache[index], |e| &e.series[index].buckets);
+            let bucket_count = buckets.len().max(1);
+            for (bucket, &extent) in buckets.iter().enumerate() {
                 let Some((minimum, maximum)) = extent else {
                     continue;
                 };
@@ -427,6 +506,31 @@ fn draw_axes(
     Ok(())
 }
 
+fn envelope_ranges(
+    envelope: &XyEnvelope,
+    include_y_zero: bool,
+) -> Option<((f64, f64), (f64, f64))> {
+    let mut minimum = f64::INFINITY;
+    let mut maximum = f64::NEG_INFINITY;
+    for &(low, high) in envelope
+        .series
+        .iter()
+        .flat_map(|s| s.buckets.iter().flatten())
+    {
+        if low.is_finite() && high.is_finite() {
+            minimum = minimum.min(low);
+            maximum = maximum.max(high);
+        }
+    }
+    padded_ranges(
+        envelope.x_range.0,
+        envelope.x_range.1,
+        minimum,
+        maximum,
+        include_y_zero,
+    )
+}
+
 fn plot_ranges(series: &[XySeries], include_y_zero: bool) -> Option<((f64, f64), (f64, f64))> {
     let mut x_min = f64::INFINITY;
     let mut x_max = f64::NEG_INFINITY;
@@ -441,6 +545,16 @@ fn plot_ranges(series: &[XySeries], include_y_zero: bool) -> Option<((f64, f64),
         y_min = y_min.min(point.y);
         y_max = y_max.max(point.y);
     }
+    padded_ranges(x_min, x_max, y_min, y_max, include_y_zero)
+}
+
+fn padded_ranges(
+    mut x_min: f64,
+    mut x_max: f64,
+    mut y_min: f64,
+    mut y_max: f64,
+    include_y_zero: bool,
+) -> Option<((f64, f64), (f64, f64))> {
     if !(x_min.is_finite() && x_max.is_finite() && y_min.is_finite() && y_max.is_finite()) {
         return None;
     }
@@ -649,6 +763,22 @@ mod tests {
         let buckets = bucket_extents(&points, (0.0, 1.0), 2);
         assert_eq!(buckets[0], Some((-4.0, 8.0)));
         assert_eq!(buckets[1], Some((2.0, 2.0)));
+    }
+
+    #[test]
+    fn envelope_ranges_use_all_extrema_and_include_zero() {
+        let envelope = XyEnvelope {
+            x_range: (10.0, 20.0),
+            series: vec![XyEnvelopeSeries {
+                label: "signal".into(),
+                color: "blue".into(),
+                buckets: vec![Some((2.0, 3.0)), None, Some((-4.0, 8.0))],
+            }],
+        };
+        let ((x_min, x_max), (y_min, y_max)) = envelope_ranges(&envelope, true).unwrap();
+        assert_eq!((x_min, x_max), (10.0, 20.0));
+        assert!(y_min < -4.0);
+        assert!(y_max > 8.0);
     }
 
     #[test]
