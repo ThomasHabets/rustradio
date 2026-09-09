@@ -1,98 +1,44 @@
-//! Log provider that logs both to the browser console and to an element in the
-//! web page DOM.
+//! Buffered logging: shared-memory producers never touch the DOM.
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 use log::{Level, LevelFilter, Log, Metadata, Record};
-use wasm_bindgen::JsCast;
-use web_sys::{HtmlElement, window};
+use wasm_bindgen::prelude::*;
 
 use crate::{ApplicationSpecific, WorkerToMain};
 
+// We should never reach max messages. 1000 log lines in 250ms? Unlikely.
 const MAX_LOG_MESSAGES: usize = 1000;
+const LOG_PERIOD_MS: i32 = 250;
 
-fn console_log(s: impl AsRef<str>) {
-    web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(s.as_ref()));
+#[derive(Default)]
+struct Pending {
+    lines: VecDeque<(Level, String)>,
+    dropped: usize,
 }
 
-struct DomConsoleLogger<App: ApplicationSpecific> {
+struct DomConsoleLogger {
     level: LevelFilter,
-    log_lines: std::sync::Mutex<VecDeque<String>>,
-    element_id: String,
-    _app: std::marker::PhantomData<fn() -> App>,
+    pending: Arc<Mutex<Pending>>,
 }
 
-impl<App: ApplicationSpecific> Log for DomConsoleLogger<App> {
+impl Log for DomConsoleLogger {
     fn enabled(&self, metadata: &Metadata<'_>) -> bool {
         metadata.level() <= self.level
     }
-
     fn log(&self, record: &Record<'_>) {
         if !self.enabled(record.metadata()) {
             return;
         }
-
-        let line = format!("[{}] {}", record.level(), record.args());
-
-        // Also log to browser console.
-        match record.level() {
-            Level::Error => web_sys::console::error_1(&line.clone().into()),
-            Level::Warn => web_sys::console::warn_1(&line.clone().into()),
-            Level::Info => web_sys::console::info_1(&line.clone().into()),
-            Level::Debug => web_sys::console::log_1(&line.clone().into()),
-            Level::Trace => web_sys::console::debug_1(&line.clone().into()),
+        let mut pending = self.pending.lock().unwrap();
+        if pending.lines.len() == MAX_LOG_MESSAGES {
+            pending.dropped += 1;
+            return;
         }
-
-        // DOM sink.
-        //
-        // TODO: can we cache this JS object? Or what happens if it's GC'd?
-
-        let Some(document) = window().and_then(|w| w.document()) else {
-            if let Err(e) =
-                crate::worker::post_message::<WorkerToMain<App>>(&WorkerToMain::LogLine {
-                    level: record.level(),
-                    line: record.args().to_string(),
-                })
-            {
-                console_log(format!("Error posting log message from worker: {e:?}"));
-                console_log(format!("Worker console fallback: {line}"));
-            }
-            return;
-        };
-
-        let Some(el) = document.get_element_by_id(&self.element_id) else {
-            return;
-        };
-
-        let Ok(el) = el.dyn_into::<HtmlElement>() else {
-            return;
-        };
-
-        // Not that we expect to be multithreaded, but hold the lock a
-        // shorter time anyway.
-        let content = {
-            let mut lines = self.log_lines.lock().unwrap();
-            lines.push_back(line);
-            while lines.len() > MAX_LOG_MESSAGES {
-                lines.pop_front();
-            }
-
-            let mut content = String::new();
-            for line in lines.iter() {
-                content.push_str(line);
-                content.push('\n');
-            }
-            content
-        };
-        el.set_inner_text(&content);
-
-        // Looks like this type varies, so either into() is needed, or in clippy
-        // warns.
-        #[allow(clippy::useless_conversion)]
-        {
-            el.set_scroll_top(el.scroll_height().into());
-        }
+        pending
+            .lines
+            .push_back((record.level(), record.args().to_string()));
     }
-
     fn flush(&self) {}
 }
 
@@ -103,18 +49,89 @@ pub fn init_logging<App>(
 where
     App: ApplicationSpecific + 'static,
 {
-    let logger = Box::new(DomConsoleLogger {
-        // Make consistent, and configurable.
+    let pending = Arc::new(Mutex::new(Pending::default()));
+    log::set_boxed_logger(Box::new(DomConsoleLogger {
         level,
-        // TODO: make the ID configurable.
-        element_id: element_id.into(),
-        log_lines: std::sync::Mutex::new(VecDeque::new()),
-        _app: std::marker::PhantomData::<fn() -> App>,
-    });
-
-    log::set_boxed_logger(logger)?;
-    // Make consistent, and configurable.
+        pending: pending.clone(),
+    }))?;
     log::set_max_level(level);
-    console_log("Test of console log fallback");
+    let element_id = element_id.into();
+    let mut history = VecDeque::new();
+    let callback = Closure::<dyn FnMut()>::new(move || {
+        let Pending { mut lines, dropped } = {
+            let mut pending = pending.lock().unwrap();
+            if pending.lines.is_empty() && pending.dropped == 0 {
+                return;
+            }
+            std::mem::take(&mut *pending)
+        };
+        if dropped > 0 {
+            lines.push_back((Level::Warn, format!("Suppressed {dropped} log messages")));
+        }
+        let document = web_sys::window().and_then(|w| w.document());
+
+        // Console log only once per level, for performance.
+        for level in [
+            Level::Error,
+            Level::Warn,
+            Level::Info,
+            Level::Debug,
+            Level::Trace,
+        ] {
+            let text = lines
+                .iter()
+                .filter(|(l, _)| *l == level)
+                .map(|(_, text)| text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if text.is_empty() {
+                continue;
+            }
+            let text = JsValue::from_str(&text);
+            match level {
+                Level::Error => web_sys::console::error_1(&text),
+                Level::Warn => web_sys::console::warn_1(&text),
+                Level::Info => web_sys::console::info_1(&text),
+                _ => web_sys::console::debug_1(&text),
+            }
+        }
+        for (level, line) in lines {
+            if document.is_none() {
+                // Fallback for workers with a separately installed logger.
+                let _ = crate::worker::post_message::<WorkerToMain<App>>(&WorkerToMain::LogLine {
+                    level,
+                    line,
+                });
+            } else {
+                history.push_back(format!("[{level}] {line}\n"));
+            }
+        }
+        while history.len() > MAX_LOG_MESSAGES {
+            history.pop_front();
+        }
+        if let Some(el) = document.and_then(|d| d.get_element_by_id(&element_id)) {
+            let text: String = history.iter().map(String::as_str).collect();
+            el.set_text_content(Some(&text));
+            #[allow(clippy::useless_conversion)]
+            el.set_scroll_top(el.scroll_height().into());
+        }
+    });
+    // Schedule periodic logging of batched messages.
+    let scheduled = if let Some(window) = web_sys::window() {
+        window.set_interval_with_callback_and_timeout_and_arguments_0(
+            callback.as_ref().unchecked_ref(),
+            LOG_PERIOD_MS,
+        )
+    } else {
+        js_sys::global()
+            .unchecked_into::<web_sys::WorkerGlobalScope>()
+            .set_interval_with_callback_and_timeout_and_arguments_0(
+                callback.as_ref().unchecked_ref(),
+                LOG_PERIOD_MS,
+            )
+    };
+    if scheduled.is_ok() {
+        callback.forget();
+    }
     Ok(())
 }
