@@ -127,7 +127,20 @@ fn read_sensor_tags(
 struct SensorPoller {
     latest_tags: Arc<Mutex<Vec<Tag>>>,
     shutdown: Option<mpsc::Sender<()>>,
-    thread: Option<std::thread::JoinHandle<()>>,
+
+    // The only risk to asserting `UnwindSafe` for a `JoinHandle` seems to be
+    // that nobody will wait for the thread. But:
+    // 1. This is only set once, and `thread` isn't dropped until `SensorPoller`
+    //    is dropped, which will tell the thread to stop.
+    // 2. Dropping `shutdown` will also trigger thread terminating.
+    // 3. When dropping, we wait for the thread in `stop()`.
+    //
+    // So worst case: Future refactorings will cause the waiting to no longer
+    // work, and the poller thread continues for a few more milliseconds? Seems
+    // fine.
+    //
+    // This wrap is to make `SoapySdrSource` `UnsafeSafe`, again.
+    thread: Option<std::panic::AssertUnwindSafe<std::thread::JoinHandle<()>>>,
 }
 
 impl SensorPoller {
@@ -169,7 +182,7 @@ impl SensorPoller {
         Ok(Self {
             latest_tags,
             shutdown: Some(shutdown),
-            thread: Some(thread),
+            thread: Some(std::panic::AssertUnwindSafe(thread)),
         })
     }
 
@@ -188,7 +201,7 @@ impl SensorPoller {
             let _ = shutdown.send(());
         }
         if let Some(thread) = self.thread.take()
-            && let Err(error) = thread.join()
+            && let Err(error) = thread.0.join()
         {
             warn!("SoapySdrSource sensor thread panicked: {error:?}");
         }
