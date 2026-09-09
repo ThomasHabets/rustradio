@@ -11,6 +11,9 @@
 //! one transmission containing a configurable number of identical frames,
 //! followed by the configured reset gap. The repeat count can be changed at
 //! runtime with [`PwmEncoderControl`]; changes take effect between packets.
+//! Gap settings are emitted durations, while [`crate::pwm_decoder::PwmDecoder`]
+//! takes strict gap thresholds; use a decoder threshold shorter than the
+//! corresponding encoded gap.
 
 use std::sync::mpsc;
 
@@ -688,14 +691,15 @@ mod tests {
         Ok(())
     }
 
-    /// Decode generated samples with the public inverse block.
+    /// Decode generated samples with strict thresholds below the emitted gaps.
     fn decode(samples: &[Float], bits: usize, repeats: usize) -> Result<Vec<PwmFrame>> {
         let input = crate::stream::ReadStream::from_slice(samples);
-        let (mut decoder, output) = PwmDecoder::builder(0.5, SHORT, LONG, FRAME_GAP, RESET_GAP)
-            .frame_bits(Some(bits))
-            .min_repeats(repeats)
-            .gap_pulse(PwmGapPulse::Delimiter)
-            .build(input)?;
+        let (mut decoder, output) =
+            PwmDecoder::builder(0.5, SHORT, LONG, FRAME_GAP - 1, RESET_GAP - 1)
+                .frame_bits(Some(bits))
+                .min_repeats(repeats)
+                .gap_pulse(PwmGapPulse::Delimiter)
+                .build(input)?;
         loop {
             if matches!(decoder.work()?, BlockRet::EOF) {
                 break;
@@ -835,10 +839,11 @@ mod tests {
         let bits = vec![1, 0, 1, 1];
         let (samples, _) = encode(bits.clone(), &[], builder().short_is_one(false))?;
         let input = crate::stream::ReadStream::from_slice(&samples);
-        let (mut decoder, output) = PwmDecoder::builder(0.5, SHORT, LONG, FRAME_GAP, RESET_GAP)
-            .frame_bits(Some(bits.len()))
-            .short_is_one(false)
-            .build(input)?;
+        let (mut decoder, output) =
+            PwmDecoder::builder(0.5, SHORT, LONG, FRAME_GAP - 1, RESET_GAP - 1)
+                .frame_bits(Some(bits.len()))
+                .short_is_one(false)
+                .build(input)?;
         assert!(matches!(decoder.work()?, BlockRet::EOF));
         assert_eq!(output.pop().expect("frame").0.bits(), bits);
         Ok(())

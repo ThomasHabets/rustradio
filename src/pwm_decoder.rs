@@ -1,7 +1,8 @@
 //! Decode pulse-width-modulated OOK frames.
 //!
 //! [`PwmDecoder`] thresholds a [`Float`] power stream, measures
-//! high-pulse widths, and emits frames separated by a configurable low gap.
+//! high-pulse widths, and emits frames separated by a configurable low-gap
+//! threshold.
 //! Timings are expressed in input samples, so callers can derive them from the
 //! sample rate and protocol timings without coupling the block to either.
 //!
@@ -46,10 +47,10 @@ struct PwmDecoderSettings {
     /// Maximum distance from either nominal pulse width, in input samples.
     pulse_tolerance: usize,
 
-    /// Consecutive low samples required to terminate a frame.
+    /// Low-gap threshold after which a frame is terminated.
     frame_gap: usize,
 
-    /// Consecutive low samples required to terminate a transmission.
+    /// Low-gap threshold after which a transmission is terminated.
     reset_gap: usize,
 
     /// Required bits per frame, or `None` to accept gap-delimited lengths.
@@ -125,9 +126,19 @@ impl PwmDecoderSettings {
         if self.frame_gap == 0 {
             return Err(Error::msg("PwmDecoder frame gap must be greater than zero"));
         }
+        if self.frame_gap == usize::MAX {
+            return Err(Error::msg(
+                "PwmDecoder frame gap must be possible to exceed",
+            ));
+        }
         if self.reset_gap < self.frame_gap {
             return Err(Error::msg(
                 "PwmDecoder reset gap must be at least as long as the frame gap",
+            ));
+        }
+        if self.reset_gap == usize::MAX {
+            return Err(Error::msg(
+                "PwmDecoder reset gap must be possible to exceed",
             ));
         }
         if self.frame_bits == Some(0) {
@@ -395,21 +406,21 @@ impl PwmState {
             None
         } else if power <= self.settings.high_threshold {
             self.low_run = self.low_run.saturating_add(1);
-            if self.low_run == self.settings.frame_gap {
+            if self.low_run == self.settings.frame_gap + 1 {
                 match self.settings.gap_pulse {
                     PwmGapPulse::Data => self.finish_pending_pulse(),
                     PwmGapPulse::Delimiter => self.pending_pulse = None,
                 }
                 self.finish_frame();
             }
-            if self.low_run == self.settings.reset_gap {
+            if self.low_run == self.settings.reset_gap + 1 {
                 Some(self.finish_transmission())
             } else {
                 None
             }
         } else {
             // Rising edge.
-            if self.low_run < self.settings.frame_gap {
+            if self.low_run <= self.settings.frame_gap {
                 self.finish_pending_pulse();
             } else {
                 self.pending_pulse = None;
@@ -520,7 +531,7 @@ impl PwmState {
 /// each frame's absolute position in the input stream.
 ///
 /// Output is only emitted once a transmission is ended by seeing
-/// the configured `reset_gap` samples in order to count all repeats,
+/// a low gap longer than the configured `reset_gap` in order to count all repeats,
 /// introducing a slight delay.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
@@ -546,12 +557,13 @@ impl PwmDecoder {
     ///   pulse used to encode one of the two bit values.
     /// - `long_width`: Nominal duration, in input samples, of the longer high
     ///   pulse. It must be greater than `short_width`.
-    /// - `frame_gap`: Consecutive low samples that mark the end of one frame.
-    ///   The pulse immediately before this gap is handled according to
-    ///   [`PwmGapPulse`].
-    /// - `reset_gap`: Consecutive low samples that mark the end of a complete
-    ///   transmission and cause frame candidates sufficiently repeated to be
-    ///   emitted. It must be at least as long as `frame_gap`.
+    /// - `frame_gap`: Maximum in-frame low gap, in samples. A longer gap marks
+    ///   the end of one frame. The pulse immediately before this gap is
+    ///   handled according to [`PwmGapPulse`].
+    /// - `reset_gap`: Maximum low gap within a transmission, in samples. A
+    ///   longer gap ends the transmission and causes frame candidates
+    ///   sufficiently repeated to be emitted. It must be at least as long as
+    ///   `frame_gap`.
     ///
     /// Other settings start with these defaults:
     ///
@@ -708,7 +720,7 @@ mod tests {
         if gap_pulse == PwmGapPulse::Delimiter {
             add_run(samples, true, SHORT);
         }
-        add_run(samples, false, FRAME_GAP);
+        add_run(samples, false, FRAME_GAP + 1);
     }
 
     /// Run the decoder to EOF and collect all emitted frames.
@@ -792,6 +804,32 @@ mod tests {
         assert_eq!(delimiter[0].bits(), &[1, 0, 1]);
         assert_eq!(data[0].bits(), &[1, 0, 1, 1]);
         Ok(())
+    }
+
+    /// Verify gaps must exceed, rather than equal, their configured thresholds.
+    #[test]
+    fn gap_thresholds_are_strict() {
+        let mut state = PwmState::new(builder(Some(2)).settings);
+
+        for _ in 0..SHORT {
+            assert!(state.process(1.0).is_none());
+        }
+        for _ in 0..FRAME_GAP {
+            assert!(state.process(0.0).is_none());
+        }
+        // A rising edge after exactly frame_gap low samples continues the row.
+        for _ in 0..LONG {
+            assert!(state.process(1.0).is_none());
+        }
+        for _ in 0..RESET_GAP {
+            assert!(state.process(0.0).is_none());
+        }
+
+        let frames = state
+            .process(0.0)
+            .expect("reset threshold should be crossed");
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].bits(), &[1, 0]);
     }
 
     /// Verify short pulses can represent either binary value.
@@ -902,6 +940,16 @@ mod tests {
         assert!(PwmDecoder::builder(0.5, 5, 5, 9, 20).build(src()).is_err());
         assert!(PwmDecoder::builder(0.5, 2, 5, 0, 20).build(src()).is_err());
         assert!(PwmDecoder::builder(0.5, 2, 5, 9, 8).build(src()).is_err());
+        assert!(
+            PwmDecoder::builder(0.5, 2, 5, usize::MAX, usize::MAX)
+                .build(src())
+                .is_err()
+        );
+        assert!(
+            PwmDecoder::builder(0.5, 2, 5, 9, usize::MAX)
+                .build(src())
+                .is_err()
+        );
         assert!(builder(None).frame_bits(Some(0)).build(src()).is_err());
         assert!(builder(None).max_frame_bits(0).build(src()).is_err());
         assert!(builder(None).frame_bits(Some(17)).build(src()).is_err());
