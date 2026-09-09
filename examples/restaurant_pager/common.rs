@@ -63,10 +63,14 @@ pub struct PagerTxTiming {
     pub tx_long_us: u32,
 
     /// Low gap between repeated frames in microseconds.
+    ///
+    /// Another decoder uses 880us as threshold. A captured example showed 6824.
     #[arg(long, value_parser = parse_positive_micros, default_value_t = TX_FRAME_GAP_US)]
     pub tx_frame_gap_us: u32,
 
     /// Final low gap ending a transmission in microseconds.
+    ///
+    /// Another decoder uses 7312us.
     #[arg(long, value_parser = parse_positive_micros, default_value_t = TX_RESET_GAP_US)]
     pub tx_reset_gap_us: u32,
 

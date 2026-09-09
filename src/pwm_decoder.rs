@@ -11,12 +11,23 @@
 //! frame gap is accepted. Source EOF flushes already completed frames, but is
 //! not itself considered a frame boundary: a partial final pulse train is
 //! discarded.
+//!
+//! Each decoded frame also reports the mean carrier-on and carrier-off power
+//! of its accepted repeats. [`PwmFrame::snr_db`] returns their ratio in
+//! decibels: `10 * log10(carrier_on_power / carrier_off_power)`. This is an OOK
+//! level ratio: carrier-on power includes noise and is not noise-subtracted.
 
 use std::collections::VecDeque;
 
 use crate::block::{Block, BlockEOF, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
 use crate::{Error, Float, Result};
+
+/// Output tag containing [`PwmFrame::snr_db`] as a [`TagValue::Float`].
+///
+/// The tag is placed at position zero of each no-copy frame output and omitted
+/// when the carrier-on or carrier-off mean is zero or non-finite.
+pub const TAG_SNR_DB: &str = "PwmDecoder::snr_db";
 
 /// How to handle the high pulse immediately before a frame gap.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -279,12 +290,26 @@ impl PwmDecoderBuilder {
 /// A decoded PWM frame.
 ///
 /// Bits are stored in transmission order, with each byte equal to zero or one.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct PwmFrame {
     bits: Vec<u8>,
     repeats: usize,
     first_sample: u64,
+    carrier_on_power: Float,
+    carrier_off_power: Float,
 }
+
+impl PartialEq for PwmFrame {
+    fn eq(&self, other: &Self) -> bool {
+        self.bits == other.bits
+            && self.repeats == other.repeats
+            && self.first_sample == other.first_sample
+            && self.carrier_on_power.to_bits() == other.carrier_on_power.to_bits()
+            && self.carrier_off_power.to_bits() == other.carrier_off_power.to_bits()
+    }
+}
+
+impl Eq for PwmFrame {}
 
 impl PwmFrame {
     /// Return the decoded bits in transmission order.
@@ -311,6 +336,43 @@ impl PwmFrame {
         self.first_sample
     }
 
+    /// Return mean input power while accepted frame pulses were carrier-on.
+    ///
+    /// The mean is weighted by sample count across all identical repeats in
+    /// this decoded transmission. Pulses discarded as delimiters are not
+    /// included.
+    #[must_use]
+    pub fn carrier_on_power(&self) -> Float {
+        self.carrier_on_power
+    }
+
+    /// Return mean input power while accepted frames were carrier-off.
+    ///
+    /// This includes the low portions of PWM symbols and their terminating
+    /// frame gaps, weighted by sample count across identical repeats.
+    #[must_use]
+    pub fn carrier_off_power(&self) -> Float {
+        self.carrier_off_power
+    }
+
+    /// Return the carrier-on to carrier-off power ratio in decibels.
+    ///
+    /// The calculation is
+    /// `10 * log10(carrier_on_power / carrier_off_power)`. Carrier-on power
+    /// includes noise, matching the usual OOK level-ratio convention rather
+    /// than subtracting carrier-off power first. `None` is returned if either
+    /// mean is zero or non-finite, or if the result is non-finite.
+    #[must_use]
+    pub fn snr_db(&self) -> Option<Float> {
+        let on = self.carrier_on_power;
+        let off = self.carrier_off_power;
+        if !on.is_finite() || !off.is_finite() || on <= 0.0 || off <= 0.0 {
+            return None;
+        }
+        let snr = 10.0 * (on / off).log10();
+        snr.is_finite().then_some(snr)
+    }
+
     /// Return the frame length in bits.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -327,6 +389,58 @@ impl PwmFrame {
     }
 }
 
+/// Sample-weighted power accumulated for one signal state.
+#[derive(Clone, Copy, Debug, Default)]
+struct PowerAccumulator {
+    sum: f64,
+    samples: u64,
+}
+
+impl PowerAccumulator {
+    /// Add one input power sample.
+    fn add(&mut self, power: Float) {
+        self.sum += f64::from(power);
+        self.samples = self.samples.saturating_add(1);
+    }
+
+    /// Merge another sample-weighted accumulator.
+    fn merge(&mut self, other: Self) {
+        self.sum += other.sum;
+        self.samples = self.samples.saturating_add(other.samples);
+    }
+
+    /// Return the arithmetic mean, or NaN if there were no samples.
+    fn mean(self) -> Float {
+        if self.samples == 0 {
+            Float::NAN
+        } else {
+            (self.sum / self.samples as f64) as Float
+        }
+    }
+}
+
+/// Carrier-on and carrier-off power accumulated for one frame or candidate.
+#[derive(Clone, Copy, Debug, Default)]
+struct FramePower {
+    on: PowerAccumulator,
+    off: PowerAccumulator,
+}
+
+impl FramePower {
+    /// Merge another frame's measurements into this candidate.
+    fn merge(&mut self, other: Self) {
+        self.on.merge(other.on);
+        self.off.merge(other.off);
+    }
+}
+
+/// A completed high run waiting for gap-sensitive classification.
+#[derive(Debug)]
+struct PendingPulse {
+    width: usize,
+    power: PowerAccumulator,
+}
+
 /// Until the transmission end (`reset_gap`), candidates are kept track of. At
 /// reset, the ones that reach at least `repeats` repetitions will be considered
 /// valid, and will be sent at transmission end.
@@ -335,6 +449,7 @@ struct Candidate {
     bits: Vec<u8>,
     repeats: usize,
     first_sample: u64,
+    power: FramePower,
 }
 
 /// State for the decoding process.
@@ -356,7 +471,13 @@ struct PwmState {
     low_run: usize,
 
     /// Width of the last high pulse, awaiting gap-sensitive classification.
-    pending_pulse: Option<usize>,
+    pending_pulse: Option<PendingPulse>,
+
+    /// Carrier-on power accumulated for the current high run.
+    high_power: PowerAccumulator,
+
+    /// Accepted carrier-on and carrier-off power for the current frame.
+    frame_power: FramePower,
 
     /// Bits decoded for the frame currently being assembled.
     bits: Vec<u8>,
@@ -385,6 +506,8 @@ impl PwmState {
             high_run: 0,
             low_run: 0,
             pending_pulse: None,
+            high_power: PowerAccumulator::default(),
+            frame_power: FramePower::default(),
             bits: Vec::with_capacity(capacity),
             frame_start: None,
             frame_invalid: false,
@@ -397,15 +520,25 @@ impl PwmState {
         let output = if self.high {
             if power >= self.settings.low_threshold {
                 self.high_run = self.high_run.saturating_add(1);
+                self.high_power.add(power);
             } else {
                 self.high = false;
-                self.pending_pulse = Some(self.high_run);
+                self.pending_pulse = Some(PendingPulse {
+                    width: self.high_run,
+                    power: std::mem::take(&mut self.high_power),
+                });
                 self.high_run = 0;
                 self.low_run = 1;
+                if self.frame_start.is_some() && !self.frame_invalid {
+                    self.frame_power.off.add(power);
+                }
             }
             None
         } else if power <= self.settings.high_threshold {
             self.low_run = self.low_run.saturating_add(1);
+            if self.frame_start.is_some() && !self.frame_invalid {
+                self.frame_power.off.add(power);
+            }
             if self.low_run == self.settings.frame_gap + 1 {
                 match self.settings.gap_pulse {
                     PwmGapPulse::Data => self.finish_pending_pulse(),
@@ -427,6 +560,8 @@ impl PwmState {
             }
             self.high = true;
             self.high_run = 1;
+            self.high_power = PowerAccumulator::default();
+            self.high_power.add(power);
             self.low_run = 0;
             if self.bits.is_empty() && !self.frame_invalid {
                 self.frame_start = Some(self.sample_index);
@@ -439,11 +574,11 @@ impl PwmState {
 
     /// Classify and append the pulse waiting behind the current low run.
     fn finish_pending_pulse(&mut self) {
-        let Some(width) = self.pending_pulse.take() else {
+        let Some(pulse) = self.pending_pulse.take() else {
             return;
         };
-        let short_distance = width.abs_diff(self.settings.short_width);
-        let long_distance = width.abs_diff(self.settings.long_width);
+        let short_distance = pulse.width.abs_diff(self.settings.short_width);
+        let long_distance = pulse.width.abs_diff(self.settings.long_width);
         let short_valid = short_distance <= self.settings.pulse_tolerance;
         let long_valid = long_distance <= self.settings.pulse_tolerance;
         let short = match (short_valid, long_valid) {
@@ -461,6 +596,7 @@ impl PwmState {
         }
         self.bits
             .push(u8::from(short == self.settings.short_is_one));
+        self.frame_power.on.merge(pulse.power);
     }
 
     /// Discard the current frame and ignore pulses until its gap completes.
@@ -468,6 +604,7 @@ impl PwmState {
         self.bits.clear();
         self.frame_start = None;
         self.frame_invalid = true;
+        self.frame_power = FramePower::default();
     }
 
     /// Reset state associated with the current frame.
@@ -476,6 +613,8 @@ impl PwmState {
         self.frame_start = None;
         self.frame_invalid = false;
         self.pending_pulse = None;
+        self.high_power = PowerAccumulator::default();
+        self.frame_power = FramePower::default();
     }
 
     /// Validate and add the completed frame to the transmission candidates.
@@ -493,17 +632,20 @@ impl PwmState {
 
         let bits = std::mem::take(&mut self.bits);
         let first_sample = self.frame_start.take().unwrap_or(self.sample_index);
+        let power = std::mem::take(&mut self.frame_power);
         if let Some(candidate) = self
             .candidates
             .iter_mut()
             .find(|candidate| candidate.bits == bits)
         {
             candidate.repeats = candidate.repeats.saturating_add(1);
+            candidate.power.merge(power);
         } else if self.candidates.len() < self.settings.max_distinct_frames {
             self.candidates.push(Candidate {
                 bits,
                 repeats: 1,
                 first_sample,
+                power,
             });
         }
         self.clear_frame();
@@ -519,6 +661,8 @@ impl PwmState {
                 bits: candidate.bits,
                 repeats: candidate.repeats,
                 first_sample: candidate.first_sample,
+                carrier_on_power: candidate.power.on.mean(),
+                carrier_off_power: candidate.power.off.mean(),
             })
             .collect()
     }
@@ -528,7 +672,8 @@ impl PwmState {
 ///
 /// The output is a no-copy stream because frames own their bit vectors. Input
 /// tags are intentionally not propagated; [`PwmFrame::first_sample`] records
-/// each frame's absolute position in the input stream.
+/// each frame's absolute position in the input stream. Each frame with a
+/// finite SNR also receives a position-zero [`TAG_SNR_DB`] output tag.
 ///
 /// Output is only emitted once a transmission is ended by seeing
 /// a low gap longer than the configured `reset_gap` in order to count all repeats,
@@ -617,7 +762,11 @@ impl PwmDecoder {
             let Some(frame) = self.pending.pop_front() else {
                 break;
             };
-            self.dst.push(frame, &[]);
+            let tags = frame
+                .snr_db()
+                .map(|snr| vec![Tag::new(0, TAG_SNR_DB, TagValue::Float(snr))])
+                .unwrap_or_default();
+            self.dst.push(frame, tags);
         }
     }
 
@@ -710,21 +859,52 @@ mod tests {
         samples.extend(std::iter::repeat_n(if high { 1.0 } else { 0.0 }, count));
     }
 
+    /// Append a run at an explicit power level.
+    fn add_power_run(samples: &mut Vec<Float>, power: Float, count: usize) {
+        samples.extend(std::iter::repeat_n(power, count));
+    }
+
     /// Encode one synthetic PWM frame into power samples.
     fn add_frame(samples: &mut Vec<Float>, bits: &[u8], gap_pulse: PwmGapPulse) {
+        add_power_frame(samples, bits, gap_pulse, 1.0, 0.0, 1.0);
+    }
+
+    /// Encode one synthetic PWM frame with explicit on, off, and delimiter power.
+    fn add_power_frame(
+        samples: &mut Vec<Float>,
+        bits: &[u8],
+        gap_pulse: PwmGapPulse,
+        on_power: Float,
+        off_power: Float,
+        delimiter_power: Float,
+    ) {
         for &bit in bits {
             let short = bit == 1;
-            add_run(samples, true, if short { SHORT } else { LONG });
-            add_run(samples, false, if short { LONG } else { SHORT });
+            add_power_run(samples, on_power, if short { SHORT } else { LONG });
+            add_power_run(samples, off_power, if short { LONG } else { SHORT });
         }
         if gap_pulse == PwmGapPulse::Delimiter {
-            add_run(samples, true, SHORT);
+            add_power_run(samples, delimiter_power, SHORT);
         }
-        add_run(samples, false, FRAME_GAP + 1);
+        add_power_run(samples, off_power, FRAME_GAP + 1);
     }
 
     /// Run the decoder to EOF and collect all emitted frames.
     fn decode(samples: &[Float], builder: PwmDecoderBuilder) -> Result<Vec<PwmFrame>> {
+        let outputs = decode_with_tags(samples, builder)?;
+        let mut frames = Vec::new();
+        for (frame, tags) in outputs {
+            assert!(tags.is_empty());
+            frames.push(frame);
+        }
+        Ok(frames)
+    }
+
+    /// Run the decoder to EOF and retain generated output tags.
+    fn decode_with_tags(
+        samples: &[Float],
+        builder: PwmDecoderBuilder,
+    ) -> Result<Vec<(PwmFrame, Vec<Tag>)>> {
         let src = ReadStream::from_slice(samples);
         let (mut decoder, output) = builder.build(src)?;
         loop {
@@ -732,12 +912,11 @@ mod tests {
                 break;
             }
         }
-        let mut frames = Vec::new();
-        while let Some((frame, tags)) = output.pop() {
-            assert!(tags.is_empty());
-            frames.push(frame);
+        let mut outputs = Vec::new();
+        while let Some(output) = output.pop() {
+            outputs.push(output);
         }
-        Ok(frames)
+        Ok(outputs)
     }
 
     /// Verify fixed-length frames are grouped by their repeated bit pattern.
@@ -803,6 +982,82 @@ mod tests {
         let data = decode(&samples, builder(None).gap_pulse(PwmGapPulse::Data))?;
         assert_eq!(delimiter[0].bits(), &[1, 0, 1]);
         assert_eq!(data[0].bits(), &[1, 0, 1, 1]);
+        Ok(())
+    }
+
+    /// Verify accepted repeats produce sample-weighted power and SNR metadata.
+    #[test]
+    fn reports_power_and_snr_for_accepted_repeats() -> Result<()> {
+        fn require_eq<T: Eq>() {}
+
+        let target = [1, 0, 1];
+        let mut samples = Vec::new();
+        // This wrong-length frame must not affect the accepted candidate.
+        add_power_frame(
+            &mut samples,
+            &[1, 0],
+            PwmGapPulse::Delimiter,
+            100.0,
+            0.2,
+            200.0,
+        );
+        add_power_frame(
+            &mut samples,
+            &target,
+            PwmGapPulse::Delimiter,
+            1.0,
+            0.1,
+            100.0,
+        );
+        add_power_frame(
+            &mut samples,
+            &target,
+            PwmGapPulse::Delimiter,
+            3.0,
+            0.1,
+            100.0,
+        );
+        add_run(&mut samples, false, RESET_GAP);
+
+        let outputs = decode_with_tags(
+            &samples,
+            builder(Some(target.len()))
+                .gap_pulse(PwmGapPulse::Delimiter)
+                .min_repeats(2),
+        )?;
+        assert_eq!(outputs.len(), 1);
+        let (frame, tags) = &outputs[0];
+        assert_eq!(frame.bits(), target);
+        assert_eq!(frame.repeats(), 2);
+        assert!((frame.carrier_on_power() - 2.0).abs() < 1e-6);
+        assert!((frame.carrier_off_power() - 0.1).abs() < 1e-6);
+        let snr_db = frame.snr_db().expect("positive finite power levels");
+        assert!((snr_db - 10.0 * 20.0_f32.log10()).abs() < 1e-5);
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].pos(), 0);
+        assert_eq!(tags[0].key(), TAG_SNR_DB);
+        assert_eq!(tags[0].val(), &TagValue::Float(snr_db));
+
+        require_eq::<PwmFrame>();
+        Ok(())
+    }
+
+    /// Verify invalid power levels do not produce non-finite SNR metadata.
+    #[test]
+    fn unavailable_snr_is_not_tagged() -> Result<()> {
+        let mut samples = Vec::new();
+        add_frame(&mut samples, &[1, 0, 1], PwmGapPulse::Data);
+        add_run(&mut samples, false, RESET_GAP);
+        let outputs = decode_with_tags(&samples, builder(None))?;
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].0.carrier_on_power(), 1.0);
+        assert_eq!(outputs[0].0.carrier_off_power(), 0.0);
+        assert_eq!(outputs[0].0.snr_db(), None);
+        assert!(outputs[0].1.is_empty());
+
+        let mut frame = outputs.into_iter().next().expect("one output").0;
+        frame.carrier_off_power = Float::NAN;
+        assert_eq!(frame.snr_db(), None);
         Ok(())
     }
 

@@ -5,6 +5,12 @@
 //! pulses are zero bits, and frames may end with the stop bit or an additional
 //! delimiter pulse followed by a long gap.
 //!
+//! The reported SNR is the decoded transmission's OOK carrier-on to
+//! carrier-off power ratio: `10 * log10(mean_on_power / mean_off_power)`. Both
+//! means are calculated from the post-AGC squared-magnitude samples in valid,
+//! identical frames. Carrier-on power includes noise, so this is an OOK level
+//! ratio rather than a noise-subtracted or calibrated RF measurement.
+//!
 //! ```text
 //! cargo run --release --example restaurant_pager -- \
 //!     file data.c32
@@ -156,12 +162,13 @@ enum Source {
     SoapySdr(SoapyOpt),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct DecodedTransmission {
     raw: u32,
     repeats: usize,
     first_sample: u64,
     sample_rate: u32,
+    snr_db: Option<Float>,
 }
 
 impl DecodedTransmission {
@@ -176,6 +183,7 @@ impl DecodedTransmission {
             repeats: frame.repeats(),
             first_sample: frame.first_sample(),
             sample_rate,
+            snr_db: frame.snr_db(),
         })
     }
 
@@ -225,14 +233,18 @@ impl std::fmt::Display for DecodedTransmission {
         write!(
             f,
             "Restaurant-Pager: id=0x{:04x} pager={} function={} (0x{:x}) \
-             repeats={} raw=0x{:07x} time={seconds:.6}s",
+             repeats={} snr=",
             self.system_id(),
             self.pager(),
             self.function_name(),
             self.function(),
             self.repeats,
-            self.raw,
-        )
+        )?;
+        match self.snr_db {
+            Some(snr_db) => write!(f, "{snr_db:.1}dB")?,
+            None => write!(f, "unavailable")?,
+        }
+        write!(f, " raw=0x{:07x} time={seconds:.6}s", self.raw)
     }
 }
 
@@ -876,11 +888,23 @@ mod tests {
             repeats: 3,
             first_sample: 0,
             sample_rate: 125_000,
+            snr_db: Some(12.34),
         };
         assert_eq!(decoded.system_id(), 0xf9bf);
         assert_eq!(decoded.pager(), 11);
         assert_eq!(decoded.function(), 0x0d);
         assert_eq!(decoded.function_name(), "Buzz");
+        assert_eq!(
+            decoded.to_string(),
+            "Restaurant-Pager: id=0xf9bf pager=11 function=Buzz (0xd) \
+             repeats=3 snr=12.3dB raw=0x1f37f7b time=0.000000s"
+        );
+
+        let unavailable = DecodedTransmission {
+            snr_db: None,
+            ..decoded
+        };
+        assert!(unavailable.to_string().contains(" snr=unavailable "));
     }
 
     /// Verify both supported physical frame endings normalize to one payload.

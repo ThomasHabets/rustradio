@@ -41,7 +41,7 @@ fn e2e_restaurant_decoding() -> Result<()> {
         "restaurant_pager",
         "kungshallen-125k.c32",
         125_000,
-        "Restaurant-Pager: id=0xf9bf pager=11 function=Buzz (0xd) repeats=39 raw=0x1f37f7b time=0.791144s",
+        "Restaurant-Pager: id=0xf9bf pager=11 function=Buzz (0xd) repeats=39 snr=38.3dB raw=0x1f37f7b time=0.791144s",
     )] {
         let testfile = Path::new("tests/testdata").join(filename);
         let mut args: Vec<_> = [
