@@ -2,8 +2,8 @@
 //!
 //! The supported protocol is the 25-bit EV1527 variant described by rtl_433's
 //! [`restaurant_pager.conf`][protocol]: short OOK pulses are one bits, long
-//! pulses are zero bits, and every frame ends with a delimiter pulse followed
-//! by a long gap.
+//! pulses are zero bits, and frames may end with the stop bit or an additional
+//! delimiter pulse followed by a long gap.
 //!
 //! ```text
 //! cargo run --release --example restaurant_pager -- \
@@ -64,7 +64,7 @@ use rustyline::{Cmd, Context, Editor, Event, Helper, KeyEvent};
 mod common;
 use common::{FRAME_BITS, LONG_US, RESET_US, ROW_GAP_US, SHORT_US};
 #[cfg(feature = "soapysdr")]
-use common::{PagerMessage, encode_message, parse_system_id};
+use common::{PagerMessage, PagerTxTiming, encode_message, parse_system_id};
 
 #[cfg(feature = "soapysdr")]
 const RX_CHANNEL: usize = 0;
@@ -99,6 +99,7 @@ struct FileOpt {
 }
 
 #[cfg(feature = "soapysdr")]
+/// Receive with SoapySDR and optionally transmit from an interactive prompt.
 #[derive(clap::Args, Debug)]
 struct SoapyOpt {
     /// RF center frequency in Hz.
@@ -136,6 +137,9 @@ struct SoapyOpt {
     #[arg(long, default_value_t = 8)]
     tx_repeats: usize,
 
+    #[command(flatten)]
+    tx_timing: PagerTxTiming,
+
     /// SoapySDR transmit channel.
     #[arg(long, default_value_t = 0)]
     tx_channel: usize,
@@ -163,11 +167,8 @@ struct DecodedTransmission {
 impl DecodedTransmission {
     /// Interpret a generic PWM frame as a restaurant-pager message.
     fn from_frame(frame: PwmFrame, sample_rate: u32) -> Option<Self> {
-        if frame.len() != FRAME_BITS || frame.bits().last() != Some(&1) {
-            return None;
-        }
-        let raw = frame
-            .bits()
+        let bits = restaurant_payload_bits(frame.bits())?;
+        let raw = bits
             .iter()
             .fold(0_u32, |value, &bit| (value << 1) | u32::from(bit));
         Some(Self {
@@ -200,6 +201,20 @@ impl DecodedTransmission {
             0x0f => "Sync",
             _ => "Unknown",
         }
+    }
+}
+
+/// Return the 25 payload bits from data- or delimiter-terminated frames.
+fn restaurant_payload_bits(bits: &[u8]) -> Option<&[u8]> {
+    match bits {
+        bits if bits.len() == FRAME_BITS && bits.last() == Some(&1) => Some(bits),
+        bits if bits.len() == FRAME_BITS + 1
+            && bits[FRAME_BITS - 1] == 1
+            && bits.last() == Some(&1) =>
+        {
+            Some(&bits[..FRAME_BITS])
+        }
+        _ => None,
     }
 }
 
@@ -702,14 +717,14 @@ fn add_interactive_transmitter(
 
     let (packets, packet_stream) = new_nocopy_stream();
     let (encoder, envelope) = PwmEncoder::builder(
-        us_to_samples(opt.sample_rate, SHORT_US),
-        us_to_samples(opt.sample_rate, LONG_US),
-        us_to_samples(opt.sample_rate, ROW_GAP_US),
-        us_to_samples(opt.sample_rate, RESET_US),
+        us_to_samples(opt.sample_rate, soapy.tx_timing.tx_short_us),
+        us_to_samples(opt.sample_rate, soapy.tx_timing.tx_long_us),
+        us_to_samples(opt.sample_rate, soapy.tx_timing.tx_frame_gap_us),
+        us_to_samples(opt.sample_rate, soapy.tx_timing.tx_reset_gap_us),
     )
     .repeats(soapy.tx_repeats)
     .max_frame_bits(FRAME_BITS)
-    .gap_pulse(PwmGapPulse::Delimiter)
+    .gap_pulse(soapy.tx_timing.tx_gap_pulse.into())
     .build(packet_stream)?;
     let encoder_control = encoder.control();
 
@@ -823,9 +838,10 @@ fn main() -> Result<()> {
             us_to_samples(opt.sample_rate, ROW_GAP_US),
             us_to_samples(opt.sample_rate, RESET_US),
         )
-        .frame_bits(Some(FRAME_BITS))
+        .frame_bits(None)
+        .max_frame_bits(FRAME_BITS + 1)
         .min_repeats(opt.repeats)
-        .gap_pulse(PwmGapPulse::Delimiter)
+        .gap_pulse(PwmGapPulse::Data)
         .build(prev)?,
     ];
     graph.add(Box::new(RestaurantPagerPrinter::new(
@@ -865,6 +881,128 @@ mod tests {
         assert_eq!(decoded.pager(), 11);
         assert_eq!(decoded.function(), 0x0d);
         assert_eq!(decoded.function_name(), "Buzz");
+    }
+
+    /// Verify both supported physical frame endings normalize to one payload.
+    #[test]
+    fn accepts_data_and_delimiter_terminated_frames() {
+        let raw = (0xf9bf_u32 << 9) | (11 << 5) | (0x0d << 1) | 1;
+        let payload = (0..FRAME_BITS)
+            .rev()
+            .map(|shift| ((raw >> shift) & 1) as u8)
+            .collect::<Vec<_>>();
+        assert_eq!(restaurant_payload_bits(&payload), Some(payload.as_slice()));
+
+        let mut delimited = payload.clone();
+        delimited.push(1);
+        assert_eq!(
+            restaurant_payload_bits(&delimited),
+            Some(payload.as_slice())
+        );
+
+        let mut bad_stop = payload.clone();
+        bad_stop[FRAME_BITS - 1] = 0;
+        assert_eq!(restaurant_payload_bits(&bad_stop), None);
+        bad_stop.push(1);
+        assert_eq!(restaurant_payload_bits(&bad_stop), None);
+
+        let mut bad_delimiter = payload.clone();
+        bad_delimiter.push(0);
+        assert_eq!(restaurant_payload_bits(&bad_delimiter), None);
+        assert_eq!(restaurant_payload_bits(&payload[..FRAME_BITS - 1]), None);
+    }
+
+    /// Verify default TX framing crosses the receiver thresholds with 25 pulses.
+    #[cfg(feature = "soapysdr")]
+    #[test]
+    fn default_transmit_timing_round_trips() -> Result<()> {
+        let timing = PagerTxTiming::default();
+        let message = PagerMessage {
+            pager: 11,
+            function: 0x0d,
+        };
+        let (_raw, bits) = encode_message(0xf9bf, &message);
+        let repeats = 3;
+        let (input, input_read) = new_nocopy_stream();
+        input.push(bits, &[]);
+        drop(input);
+        let (mut encoder, envelope) = PwmEncoder::builder(
+            timing.tx_short_us as usize,
+            timing.tx_long_us as usize,
+            timing.tx_frame_gap_us as usize,
+            timing.tx_reset_gap_us as usize,
+        )
+        .repeats(repeats)
+        .max_frame_bits(FRAME_BITS)
+        .gap_pulse(timing.tx_gap_pulse.into())
+        .build(input_read)?;
+
+        let mut samples = Vec::new();
+        loop {
+            let ret = encoder.work()?;
+            let (buffer, _) = envelope.read_buf()?;
+            samples.extend_from_slice(buffer.slice());
+            let count = buffer.len();
+            buffer.consume(count);
+            if matches!(ret, BlockRet::EOF) {
+                break;
+            }
+        }
+
+        let mut high_runs = 0;
+        let mut long_low_runs = Vec::new();
+        let mut offset = 0;
+        while offset < samples.len() {
+            let high = samples[offset] > 0.5;
+            let start = offset;
+            while offset < samples.len() && (samples[offset] > 0.5) == high {
+                offset += 1;
+            }
+            if high {
+                high_runs += 1;
+            } else if offset - start > timing.tx_long_us as usize {
+                long_low_runs.push(offset - start);
+            }
+        }
+        assert_eq!(high_runs, FRAME_BITS * repeats);
+        assert_eq!(
+            long_low_runs,
+            vec![
+                timing.tx_frame_gap_us as usize,
+                timing.tx_frame_gap_us as usize,
+                timing.tx_reset_gap_us as usize,
+            ]
+        );
+
+        let (mut source, input) = rustradio::blocks::VectorSource::new(samples);
+        assert!(matches!(source.work()?, BlockRet::EOF));
+        drop(source);
+        let (mut decoder, output) = PwmDecoder::builder(
+            0.5,
+            SHORT_US as usize,
+            LONG_US as usize,
+            ROW_GAP_US as usize,
+            RESET_US as usize,
+        )
+        .frame_bits(None)
+        .max_frame_bits(FRAME_BITS + 1)
+        .min_repeats(repeats)
+        .gap_pulse(PwmGapPulse::Data)
+        .build(input)?;
+        loop {
+            if matches!(decoder.work()?, BlockRet::EOF) {
+                break;
+            }
+        }
+        let frame = output.pop().expect("default transmission should decode").0;
+        assert!(output.pop().is_none());
+        let decoded = DecodedTransmission::from_frame(frame, 1_000_000)
+            .expect("restaurant payload should be valid");
+        assert_eq!(decoded.system_id(), 0xf9bf);
+        assert_eq!(decoded.pager(), 11);
+        assert_eq!(decoded.function(), 0x0d);
+        assert_eq!(decoded.repeats, repeats);
+        Ok(())
     }
 
     /// Verify interactive commands and messages are distinguished.

@@ -18,17 +18,14 @@
 use anyhow::{Result, ensure};
 use clap::Parser;
 
-use rustradio::blocks::{Map, PwmEncoder, PwmGapPulse, SoapySdrSink};
+use rustradio::blocks::{Map, PwmEncoder, SoapySdrSink};
 use rustradio::graph::{Graph, GraphRunner};
 use rustradio::stream::{Tag, TagValue, new_nocopy_stream};
 use rustradio::{Complex, Float, parse_frequency, parse_verbosity};
 
 #[path = "restaurant_pager/common.rs"]
 mod common;
-use common::{
-    FRAME_BITS, LONG_US, PagerMessage, RESET_US, ROW_GAP_US, SHORT_US, encode_message,
-    parse_system_id,
-};
+use common::{FRAME_BITS, PagerMessage, PagerTxTiming, encode_message, parse_system_id};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -72,6 +69,9 @@ struct Opt {
     /// Number of identical frames sent for each message.
     #[arg(long, default_value_t = 8)]
     repeats: usize,
+
+    #[command(flatten)]
+    tx_timing: PagerTxTiming,
 
     /// SoapySDR transmit channel.
     #[arg(long, default_value_t = 0)]
@@ -137,10 +137,10 @@ fn main() -> Result<()> {
     );
     ensure!(opt.repeats > 0, "repeat count must be greater than zero");
 
-    let short = us_to_samples(opt.sample_rate, SHORT_US)?;
-    let long = us_to_samples(opt.sample_rate, LONG_US)?;
-    let frame_gap = us_to_samples(opt.sample_rate, ROW_GAP_US)?;
-    let reset_gap = us_to_samples(opt.sample_rate, RESET_US)?;
+    let short = us_to_samples(opt.sample_rate, opt.tx_timing.tx_short_us)?;
+    let long = us_to_samples(opt.sample_rate, opt.tx_timing.tx_long_us)?;
+    let frame_gap = us_to_samples(opt.sample_rate, opt.tx_timing.tx_frame_gap_us)?;
+    let reset_gap = us_to_samples(opt.sample_rate, opt.tx_timing.tx_reset_gap_us)?;
 
     let (packets, packet_stream) = new_nocopy_stream();
     for message in &opt.message {
@@ -171,7 +171,7 @@ fn main() -> Result<()> {
     let (encoder, envelope) = PwmEncoder::builder(short, long, frame_gap, reset_gap)
         .repeats(opt.repeats)
         .max_frame_bits(FRAME_BITS)
-        .gap_pulse(PwmGapPulse::Delimiter)
+        .gap_pulse(opt.tx_timing.tx_gap_pulse.into())
         .build(packet_stream)?;
     graph.add(Box::new(encoder));
     let amplitude = opt.amplitude;
@@ -188,10 +188,16 @@ fn main() -> Result<()> {
     graph.add(Box::new(sink.build(samples)?));
 
     println!(
-        "Transmitting {} message(s), {} frame(s) each at {} Hz",
+        "Transmitting {} message(s), {} frame(s) each at {} Hz; \
+         PWM short={} us long={} us frame_gap={} us reset_gap={} us gap_pulse={:?}",
         opt.message.len(),
         opt.repeats,
         opt.frequency,
+        opt.tx_timing.tx_short_us,
+        opt.tx_timing.tx_long_us,
+        opt.tx_timing.tx_frame_gap_us,
+        opt.tx_timing.tx_reset_gap_us,
+        opt.tx_timing.tx_gap_pulse,
     );
     graph.run()?;
     println!("Transmission complete");

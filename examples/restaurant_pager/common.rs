@@ -2,12 +2,91 @@
 
 pub const SHORT_US: u32 = 204;
 pub const LONG_US: u32 = 636;
+#[allow(dead_code)]
 pub const ROW_GAP_US: u32 = 880;
+#[allow(dead_code)]
 pub const RESET_US: u32 = 7_312;
 pub const FRAME_BITS: usize = 25;
 
 #[cfg(feature = "soapysdr")]
+const TX_FRAME_GAP_US: u32 = 1_000;
+#[cfg(feature = "soapysdr")]
+const TX_RESET_GAP_US: u32 = 8_000;
+
+#[cfg(feature = "soapysdr")]
 use std::str::FromStr;
+
+/// Parse a positive microsecond duration for transmit timing options.
+#[cfg(feature = "soapysdr")]
+fn parse_positive_micros(value: &str) -> std::result::Result<u32, String> {
+    let micros = value
+        .parse::<u32>()
+        .map_err(|error| format!("invalid duration {value:?}: {error}"))?;
+    if micros == 0 {
+        return Err("duration must be greater than zero".to_string());
+    }
+    Ok(micros)
+}
+
+/// How the transmitter handles the pulse immediately before a frame gap.
+#[cfg(feature = "soapysdr")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, clap::ValueEnum)]
+pub enum PagerTxGapPulse {
+    /// The final encoded bit is the last pulse in the frame.
+    #[default]
+    Data,
+
+    /// Add a short delimiter pulse after the encoded bits.
+    Delimiter,
+}
+
+#[cfg(feature = "soapysdr")]
+impl From<PagerTxGapPulse> for rustradio::blocks::PwmGapPulse {
+    fn from(value: PagerTxGapPulse) -> Self {
+        match value {
+            PagerTxGapPulse::Data => Self::Data,
+            PagerTxGapPulse::Delimiter => Self::Delimiter,
+        }
+    }
+}
+
+/// Startup-only PWM timing and framing options shared by both transmitters.
+#[cfg(feature = "soapysdr")]
+#[derive(Clone, Debug, Eq, PartialEq, clap::Args)]
+pub struct PagerTxTiming {
+    /// Width of a short transmitted high pulse in microseconds.
+    #[arg(long, value_parser = parse_positive_micros, default_value_t = SHORT_US)]
+    pub tx_short_us: u32,
+
+    /// Width of a long transmitted high pulse in microseconds.
+    #[arg(long, value_parser = parse_positive_micros, default_value_t = LONG_US)]
+    pub tx_long_us: u32,
+
+    /// Low gap between repeated frames in microseconds.
+    #[arg(long, value_parser = parse_positive_micros, default_value_t = TX_FRAME_GAP_US)]
+    pub tx_frame_gap_us: u32,
+
+    /// Final low gap ending a transmission in microseconds.
+    #[arg(long, value_parser = parse_positive_micros, default_value_t = TX_RESET_GAP_US)]
+    pub tx_reset_gap_us: u32,
+
+    /// Whether the pulse immediately before the frame gap is data or a delimiter.
+    #[arg(long, value_enum, default_value = "data")]
+    pub tx_gap_pulse: PagerTxGapPulse,
+}
+
+#[cfg(feature = "soapysdr")]
+impl Default for PagerTxTiming {
+    fn default() -> Self {
+        Self {
+            tx_short_us: SHORT_US,
+            tx_long_us: LONG_US,
+            tx_frame_gap_us: TX_FRAME_GAP_US,
+            tx_reset_gap_us: TX_RESET_GAP_US,
+            tx_gap_pulse: PagerTxGapPulse::Data,
+        }
+    }
+}
 
 /// One pager number and function requested for transmission.
 #[cfg(feature = "soapysdr")]
@@ -101,6 +180,47 @@ pub fn encode_message(system_id: u16, message: &PagerMessage) -> (u32, Vec<u8>) 
 #[cfg(all(test, feature = "soapysdr"))]
 mod tests {
     use super::*;
+    use clap::Parser;
+
+    #[derive(Debug, Parser)]
+    struct TimingOpt {
+        #[command(flatten)]
+        timing: PagerTxTiming,
+    }
+
+    /// Verify transmit defaults are compatible with rtl_433's gap thresholds.
+    #[test]
+    fn parses_transmit_timing_defaults_and_overrides() {
+        let defaults = TimingOpt::try_parse_from(["test"]).expect("default timing");
+        assert_eq!(defaults.timing, PagerTxTiming::default());
+        assert_eq!(defaults.timing.tx_short_us, 204);
+        assert_eq!(defaults.timing.tx_long_us, 636);
+        assert_eq!(defaults.timing.tx_frame_gap_us, 1_000);
+        assert_eq!(defaults.timing.tx_reset_gap_us, 8_000);
+        assert_eq!(defaults.timing.tx_gap_pulse, PagerTxGapPulse::Data);
+
+        let custom = TimingOpt::try_parse_from([
+            "test",
+            "--tx-short-us",
+            "250",
+            "--tx-long-us",
+            "750",
+            "--tx-frame-gap-us",
+            "6800",
+            "--tx-reset-gap-us",
+            "10000",
+            "--tx-gap-pulse",
+            "delimiter",
+        ])
+        .expect("custom timing");
+        assert_eq!(custom.timing.tx_short_us, 250);
+        assert_eq!(custom.timing.tx_long_us, 750);
+        assert_eq!(custom.timing.tx_frame_gap_us, 6_800);
+        assert_eq!(custom.timing.tx_reset_gap_us, 10_000);
+        assert_eq!(custom.timing.tx_gap_pulse, PagerTxGapPulse::Delimiter);
+
+        assert!(TimingOpt::try_parse_from(["test", "--tx-short-us", "0"]).is_err());
+    }
 
     /// Verify the default, named, decimal, and hexadecimal message forms.
     #[test]
