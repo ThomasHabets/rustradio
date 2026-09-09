@@ -29,6 +29,7 @@ pub struct FftStream {
     size: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<Float>>,
     threaded: bool,
+    scratch: Vec<Complex>,
     #[rustradio(in)]
     src: ReadStream<Complex>,
     #[rustradio(out)]
@@ -42,6 +43,7 @@ impl FftStream {
         assert_ne!(size, 0, "FFT size must be nonzero");
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
+        let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()];
         let (dst, dr) = crate::stream::new_stream();
         assert!(
             size <= dst.free(),
@@ -52,6 +54,7 @@ impl FftStream {
             Self {
                 size,
                 fft,
+                scratch,
                 src,
                 dst,
                 threaded: false,
@@ -88,13 +91,13 @@ impl Block for FftStream {
         // requires input also be scratch space, and therefore mutable.
         if self.threaded {
             use rayon::prelude::*;
-            oo.par_chunks_exact_mut(self.size).for_each(|chunk| {
-                self.fft.process(chunk);
-            });
+            oo[..len].par_chunks_exact_mut(self.size).for_each_init(
+                || vec![Complex::default(); self.fft.get_inplace_scratch_len()],
+                |scratch, chunk| self.fft.process_with_scratch(chunk, scratch),
+            );
         } else {
-            oo.chunks_exact_mut(self.size).for_each(|chunk| {
-                self.fft.process(chunk);
-            });
+            self.fft
+                .process_with_scratch(&mut oo[..len], &mut self.scratch);
         }
         let mut tags = Vec::with_capacity((len / self.size) * 2);
         for pos in (0..len).step_by(self.size) {

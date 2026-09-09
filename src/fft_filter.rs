@@ -137,6 +137,7 @@ pub mod rr_rustfft {
         taps_fft: Vec<Complex>,
         fft: Arc<dyn rustfft::Fft<Float>>,
         ifft: Arc<dyn rustfft::Fft<Float>>,
+        scratch: Vec<Complex>,
     }
     impl RustFftEngine {
         /// Create new rustfft engine, given taps.
@@ -148,9 +149,14 @@ pub mod rr_rustfft {
             let mut planner = rustfft::FftPlanner::new();
             let fft = planner.plan_fft_forward(fft_size);
             let ifft = planner.plan_fft_inverse(fft_size);
+            let mut scratch = vec![
+                Complex::default();
+                fft.get_inplace_scratch_len()
+                    .max(ifft.get_inplace_scratch_len())
+            ];
             let mut taps_fft = taps.clone();
             taps_fft.resize(fft_size, Complex::default());
-            fft.process(&mut taps_fft);
+            fft.process_with_scratch(&mut taps_fft, &mut scratch);
             // Normalization is actually the square root of this
             // expression, but since we'll do two FFTs we can just skip
             // the square root here and do it just once here in setup.
@@ -163,6 +169,7 @@ pub mod rr_rustfft {
             Self {
                 fft,
                 ifft,
+                scratch,
                 taps_fft,
                 tap_len: taps.len(),
             }
@@ -170,9 +177,9 @@ pub mod rr_rustfft {
     }
     impl Engine for RustFftEngine {
         fn run(&mut self, i: &mut [Complex]) {
-            self.fft.process(i);
+            self.fft.process_with_scratch(i, &mut self.scratch);
             sum_vec(i, &self.taps_fft);
-            self.ifft.process(i);
+            self.ifft.process_with_scratch(i, &mut self.scratch);
         }
         fn tap_len(&self) -> usize {
             self.tap_len

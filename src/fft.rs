@@ -6,16 +6,34 @@ use crate::{Complex, Error, Float, Result};
 
 /// Run FFT on message.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new)]
+#[rustradio(crate)]
 pub struct Fft {
     #[rustradio(in)]
     src: NCReadStream<Vec<Complex>>,
     #[rustradio(out)]
     dst: NCWriteStream<Vec<Complex>>,
     fft: Arc<dyn rustfft::Fft<Float>>,
+    scratch: Vec<Complex>,
 }
 
 impl Fft {
+    /// Construct an FFT block with reusable working storage.
+    pub fn new(
+        src: NCReadStream<Vec<Complex>>,
+        fft: Arc<dyn rustfft::Fft<Float>>,
+    ) -> (Self, NCReadStream<Vec<Complex>>) {
+        let (dst, out) = crate::stream::new_nocopy_stream();
+        let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()];
+        (
+            Self {
+                src,
+                dst,
+                fft,
+                scratch,
+            },
+            out,
+        )
+    }
     /// Create an FFT block from the size of the FFT.
     pub fn from_fft_size(
         prev: NCReadStream<Vec<Complex>>,
@@ -29,7 +47,7 @@ impl Fft {
         Ok(Self::new(prev, fft))
     }
     fn process_one(&mut self, mut v: Vec<Complex>) -> Vec<Complex> {
-        self.fft.process(&mut v);
+        self.fft.process_with_scratch(&mut v, &mut self.scratch);
         v
     }
 }
