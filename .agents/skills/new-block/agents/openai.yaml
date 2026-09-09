@@ -1,0 +1,4 @@
+interface:
+  display_name: "New Block"
+  short_description: "Add RustRadio blocks with repo conventions"
+  default_prompt: "Use $new-block to add a RustRadio block correctly."
