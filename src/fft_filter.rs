@@ -11,6 +11,7 @@ use crate::Result;
 use log::trace;
 
 use crate::block::{Block, BlockRet};
+use crate::fir::AlgebraicOps;
 use crate::stream::{ReadStream, Tag, WriteStream};
 use crate::{Complex, Float};
 
@@ -290,7 +291,9 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
     #[cfg(feature = "volk")]
     volk::volk_32fc_x2_multiply_32fc_inplace(left, &right);
     #[cfg(not(feature = "volk"))]
-    left.iter_mut().zip(right.iter()).for_each(|(x, y)| *x *= y);
+    left.iter_mut()
+        .zip(right.iter())
+        .for_each(|(x, y)| *x = x.algebraic_mul(*y));
 }
 
 impl<T: Engine> Block for FftFilter<T> {
@@ -341,7 +344,7 @@ impl<T: Engine> Block for FftFilter<T> {
 
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {
-                self.buf[i] += t;
+                self.buf[i] = self.buf[i].algebraic_add(*t);
             }
 
             // Output.
