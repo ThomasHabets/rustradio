@@ -1,6 +1,8 @@
 //! Quadrature demod, the core of an FM demodulator.
 
 use crate::block::{Block, BlockRet};
+#[allow(unused_imports)]
+use crate::fir::AlgebraicOps;
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float, Result};
 
@@ -69,7 +71,7 @@ impl Block for QuadratureDemod {
             #[cfg(not(feature = "volk"))]
             {
                 for t in 0..n1 {
-                    self.tmp[t] = i[t].conj() * i[t + 1];
+                    self.tmp[t] = i[t].conj().algebraic_mul(i[t + 1]);
                 }
             }
 
@@ -77,7 +79,9 @@ impl Block for QuadratureDemod {
             #[cfg(feature = "fast-math")]
             {
                 for (i, item) in o.iter_mut().enumerate().take(n1) {
-                    *item = self.gain * fast_math::atan2(self.tmp[i].im, self.tmp[i].re);
+                    *item = self
+                        .gain
+                        .algebraic_mul(fast_math::atan2(self.tmp[i].im, self.tmp[i].re));
                 }
                 if false {
                     // Maybe this can be faster in some circumstances, but not yet in my
@@ -89,7 +93,7 @@ impl Block for QuadratureDemod {
                     o.par_iter_mut()
                         .zip(self.tmp.par_iter())
                         .for_each(|(a, b)| {
-                            *a = self.gain * fast_math::atan2(b.im, b.re);
+                            *a = self.gain.algebraic_mul(fast_math::atan2(b.im, b.re));
                         });
                 }
             }
@@ -104,7 +108,7 @@ impl Block for QuadratureDemod {
 
                 #[cfg(not(feature = "volk"))]
                 o.iter_mut().zip(self.tmp.iter()).for_each(|(a, b)| {
-                    *a = self.gain * b.im.atan2(b.re);
+                    *a = self.gain.algebraic_mul(b.im.atan2(b.re));
                 });
             }
             inp.consume(n1);
