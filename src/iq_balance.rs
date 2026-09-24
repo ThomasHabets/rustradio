@@ -101,4 +101,36 @@ mod tests {
         assert!(last.im.abs() < 0.01, "unexpected residual Q DC: {last:?}");
         Ok(())
     }
+
+    #[test]
+    fn removes_dc_offset_quickly_with_huge_alpha() -> crate::Result<()> {
+        let src = ReadStream::from_slice(&[Complex::new(1.0, -2.0); 8]);
+        let (mut b, out) = IqBalance::with_alpha(src, 0.99);
+        b.work()?;
+        let (o, _) = out.read_buf()?;
+        let s = o.slice();
+        let last = s.last().copied().unwrap();
+        assert!(last.re.abs() < 0.01, "unexpected residual I DC: {last:?}");
+        assert!(last.im.abs() < 0.01, "unexpected residual Q DC: {last:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn keeps_dc_offset_quickly_with_small_alpha() -> crate::Result<()> {
+        let src = ReadStream::from_slice(&[Complex::new(1.0, -2.0); 8]);
+        let (mut b, out) = IqBalance::with_alpha(src, 0.0000001);
+        b.work()?;
+        let (o, _) = out.read_buf()?;
+        let s = o.slice();
+        let last = s.last().copied().unwrap();
+        assert!(
+            last.re.abs() > 0.01,
+            "unexpected non-residual I DC: {last:?}"
+        );
+        assert!(
+            last.im.abs() > 0.01,
+            "unexpected non-residual Q DC: {last:?}"
+        );
+        Ok(())
+    }
 }
