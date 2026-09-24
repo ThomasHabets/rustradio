@@ -4,6 +4,7 @@
 //! * <https://en.wikipedia.org/wiki/Blind_equalization>
 
 use crate::block::{Block, BlockRet};
+use crate::fir::AlgebraicOps;
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float, Result};
 
@@ -67,7 +68,13 @@ impl Block for CmaEqualizer {
             let window = &is[i..i + self.taps.len()];
 
             // Generate the output sample.
-            let output_sample: Complex = self.taps.iter().zip(window).map(|(&t, &s)| t * s).sum();
+            let output_sample = self
+                .taps
+                .iter()
+                .zip(window)
+                .fold(Complex::default(), |acc, (&tap, &sample)| {
+                    acc.algebraic_add(tap.algebraic_mul(sample))
+                });
             os[i] = output_sample;
 
             // Compute the error signal (e = |y|^2 - R)
@@ -98,6 +105,29 @@ impl Block for CmaEqualizer {
 mod tests {
     use super::*;
     use crate::block::Block;
+
+    #[test]
+    fn complex_dot_product() -> Result<()> {
+        let input: Vec<_> = (0..97)
+            .map(|i| Complex::new((i as Float * 0.37).sin(), (i as Float * 0.19).cos()))
+            .collect();
+        let taps: Vec<_> = (0..31)
+            .map(|i| Complex::new((i as Float * 0.23).cos(), (i as Float * 0.41).sin()))
+            .collect();
+        let expected: Vec<Complex> = input
+            .windows(taps.len())
+            .map(|window| taps.iter().zip(window).map(|(t, s)| t * s).sum())
+            .collect();
+        let (mut b, out) = CmaEqualizer::new(taps.len(), 1.0, 0.0, ReadStream::from_slice(&input));
+        b.taps = taps;
+        assert!(matches!(b.work()?, BlockRet::Again));
+        let (output, _) = out.read_buf()?;
+        assert_eq!(output.len(), expected.len());
+        for (got, want) in output.iter().zip(expected) {
+            assert!((*got - want).norm() < 1e-4, "got {got}, want {want}");
+        }
+        Ok(())
+    }
 
     #[test]
     fn output_window_slides() -> Result<()> {
