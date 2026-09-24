@@ -273,6 +273,12 @@ pub type Float = f32;
 /// Complex (I/Q) data.
 pub type Complex = num_complex::Complex<Float>;
 
+/// TODO: make pub?
+#[inline(always)]
+pub(crate) fn algebraic_mul_complex_float(c: Complex, rhs: Float) -> Complex {
+    Complex::new(c.re.algebraic_mul(rhs), c.im.algebraic_mul(rhs))
+}
+
 pub(crate) static NEXT_STREAM_ID: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(1);
 
