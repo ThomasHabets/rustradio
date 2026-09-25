@@ -104,7 +104,7 @@ impl Block for QuadratureDemod {
                 //
                 // https://mazzo.li/posts/vectorized-atan2.html
                 #[cfg(feature = "volk")]
-                volk::volk_32fc_s32f_atan2_32f(&mut out.slice()[..n1], &self.tmp[..n1], self.gain);
+                volk::volk_32fc_s32f_atan2_32f(o, &self.tmp[..n1], 1.0 / self.gain);
 
                 #[cfg(not(feature = "volk"))]
                 o.iter_mut().zip(self.tmp.iter()).for_each(|(a, b)| {
@@ -173,6 +173,30 @@ mod tests {
     use super::*;
     use crate::blocks::{SignalSourceComplex, VectorSource};
     use crate::tests::assert_almost_equal_float;
+
+    #[test]
+    fn gain_scales_phase_difference() -> Result<()> {
+        for gain in [0.0, 0.25, 2.0, -3.0, Float::MIN_POSITIVE / 16.0] {
+            let input = [
+                Complex::new(1.0, 0.0),
+                Complex::new(0.0, 1.0),
+                Complex::new(-1.0, 0.0),
+            ];
+            let (mut block, out) = QuadratureDemod::new(ReadStream::from_slice(&input), gain);
+            block.work()?;
+            let (output, _) = out.read_buf()?;
+            assert_eq!(output.len(), 2);
+            for &sample in output.iter() {
+                let expected = gain * std::f32::consts::FRAC_PI_2;
+                let tolerance = 1e-4 * expected.abs().max(Float::MIN_POSITIVE);
+                assert!(
+                    (sample - expected).abs() <= tolerance,
+                    "gain {gain}: {sample}"
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn fill_out() -> Result<()> {
