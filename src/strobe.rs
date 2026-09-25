@@ -23,7 +23,7 @@ impl<T: Send + Sync + Clone> Block for Strobe<T> {
             None => {}
             // TODO: because returning Pending sleeps for a bit, it won't be
             // exactly on target. Should Pending take an Option<Duration>?
-            Some(last) if now < last + self.period => return Ok(BlockRet::Pending),
+            Some(last) if now.duration_since(last) < self.period => return Ok(BlockRet::Pending),
             Some(_) => {}
         }
         if self.dst.remaining() == 0 {
@@ -34,5 +34,20 @@ impl<T: Send + Sync + Clone> Block for Strobe<T> {
         self.dst.push(self.data.clone(), &[]);
         self.last = Some(now);
         Ok(BlockRet::Pending)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maximal_period_does_not_overflow() -> Result<()> {
+        let (mut block, out) = Strobe::<u8>::new(std::time::Duration::MAX, 42u8);
+        assert!(matches!(block.work()?, BlockRet::Pending));
+        assert_eq!(out.pop().unwrap().0, 42);
+        assert!(matches!(block.work()?, BlockRet::Pending));
+        assert!(out.pop().is_none());
+        Ok(())
     }
 }
