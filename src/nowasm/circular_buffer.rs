@@ -415,13 +415,20 @@ impl<T> Buffer<T> {
     ///
     /// Returns free samples.
     #[cfg(feature = "async")]
-    pub async fn wait_for_write_async(&self, _need: usize) -> usize {
-        // TODO: implement properly.
-        let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
-        tokio::select! {
-            _ = sleep => self.state.lock.lock().unwrap().free(),
-            _ = self.state.acvw.notified() => self.state.lock.lock().unwrap().free(),
-        }
+    pub async fn wait_for_write_async(&self, need: usize) -> usize {
+        tokio::time::timeout(ASYNC_SLEEP_TIME, async {
+            loop {
+                {
+                    let n = self.state.lock.lock().unwrap().free();
+                    if n >= need {
+                        return n;
+                    }
+                }
+                self.state.acvw.notified().await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| self.state.lock.lock().unwrap().free())
     }
 
     /// Wait for ability to read `need` samples.
@@ -447,13 +454,20 @@ impl<T> Buffer<T> {
     ///
     /// Returns number of available samples.
     #[cfg(feature = "async")]
-    pub async fn wait_for_read_async(&self, _need: usize) -> usize {
-        // TODO: loop or something.
-        let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
-        tokio::select! {
-            _ = sleep => self.state.lock.lock().unwrap().used,
-            _ = self.state.acvr.notified() => self.state.lock.lock().unwrap().used,
-        }
+    pub async fn wait_for_read_async(&self, need: usize) -> usize {
+        tokio::time::timeout(ASYNC_SLEEP_TIME, async {
+            loop {
+                {
+                    let n = self.state.lock.lock().unwrap().used;
+                    if n >= need {
+                        return n;
+                    }
+                }
+                self.state.acvr.notified().await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| self.state.lock.lock().unwrap().used)
     }
 }
 
