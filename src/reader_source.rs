@@ -15,6 +15,7 @@ fn reader_thread<R: Read + Send + 'static>(
         let n = match reader.read(&mut buf) {
             Ok(n) => n,
             Err(e) => match e.kind() {
+                std::io::ErrorKind::Interrupted => continue,
                 std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => {
                     // TODO: sleep?
                     continue;
@@ -109,6 +110,24 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retries_interrupted_reads() -> Result<()> {
+        struct InterruptedOnce(bool);
+        impl Read for InterruptedOnce {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                if std::mem::replace(&mut self.0, false) {
+                    Err(std::io::ErrorKind::Interrupted.into())
+                } else {
+                    Ok(0)
+                }
+            }
+        }
+        let (tx, rx) = std::sync::mpsc::sync_channel(2);
+        reader_thread(InterruptedOnce(true), tx);
+        assert!(rx.recv().unwrap()?.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn reader_source() -> Result<()> {
