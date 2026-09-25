@@ -419,8 +419,8 @@ impl<T> Buffer<T> {
         // TODO: implement properly.
         let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
-            _ = sleep => 0,
-            _ = self.state.acvw.notified() => 1,
+            _ = sleep => self.state.lock.lock().unwrap().free(),
+            _ = self.state.acvw.notified() => self.state.lock.lock().unwrap().free(),
         }
     }
 
@@ -451,8 +451,8 @@ impl<T> Buffer<T> {
         // TODO: loop or something.
         let sleep = tokio::time::sleep(ASYNC_SLEEP_TIME);
         tokio::select! {
-            _ = sleep => 0,
-            _ = self.state.acvr.notified() => 1,
+            _ = sleep => self.state.lock.lock().unwrap().used,
+            _ = self.state.acvr.notified() => self.state.lock.lock().unwrap().used,
         }
     }
 }
@@ -618,6 +618,35 @@ impl<T: Copy> Buffer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_read_wait_reports_buffered_samples() -> Result<()> {
+        let buffer = Arc::new(Buffer::<u8>::new(4096)?);
+        let mut writer = buffer.clone().write_buf()?;
+        writer.fill_from_slice(&[1, 2, 3]);
+        writer.produce(3, &[]);
+        // notify_waiters above leaves no permit: exercise the timeout path.
+        assert_eq!(buffer.wait_for_read_async(2).await, 3);
+        buffer.state.acvr.notify_one();
+        assert_eq!(buffer.wait_for_read_async(2).await, 3);
+        let input = crate::stream::ReadStream::from_slice(&[1u8, 2, 3]);
+        assert!(!input.wait_for_read_async(2).await);
+        Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_write_wait_reports_free_samples() -> Result<()> {
+        let buffer = Arc::new(Buffer::<u8>::new(4096)?);
+        let mut writer = buffer.clone().write_buf()?;
+        writer.fill_from_slice(&[1, 2, 3]);
+        writer.produce(3, &[]);
+        assert_eq!(buffer.wait_for_write_async(2).await, 4093);
+        buffer.clone().read_buf()?.0.consume(1);
+        assert_eq!(buffer.wait_for_write_async(2).await, 4094);
+        Ok(())
+    }
     use crate::Float;
     use crate::stream::TagValue;
 
