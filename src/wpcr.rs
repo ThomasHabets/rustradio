@@ -176,7 +176,7 @@ impl Wpcr {
 
         // Extract symbols.
         let mut syms =
-            Vec::with_capacity((samples.len() as Float / samples_per_symbol) as usize + 10);
+            Vec::with_capacity((samples.len() as Float * samples_per_symbol) as usize + 10);
         for s in samples {
             if clock_phase >= 1.0 {
                 clock_phase -= 1.0;
@@ -242,6 +242,22 @@ fn find_best_bin(data: &[Complex]) -> Option<usize> {
 mod tests {
     use super::*;
     use crate::stream::new_nocopy_stream;
+
+    #[test]
+    fn low_symbol_rate_does_not_overallocate_output() {
+        let (_tx, rx) = new_nocopy_stream();
+        let (block, _out) = Wpcr::new(rx);
+        let samples: Vec<Float> = (0..8193)
+            .map(|n| if (n / 128) % 2 == 0 { -1.0 } else { 1.0 })
+            .collect();
+        let (symbols, _) = block.process_one(&samples).expect("periodic signal");
+        assert_eq!(symbols.len(), 64);
+        assert!(
+            symbols.capacity() <= samples.len(),
+            "capacity {}",
+            symbols.capacity()
+        );
+    }
 
     #[test]
     fn frequency_uses_transition_fft_length() {
