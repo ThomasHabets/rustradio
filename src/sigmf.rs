@@ -561,6 +561,9 @@ where
     T: Sample<Type = T> + std::fmt::Debug + Type,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        if self.repeat.done() {
+            return Ok(BlockRet::EOF);
+        }
         let sample_size = T::size();
         if u64::try_from(self.buf.len())? + self.left < u64::try_from(sample_size)? {
             if self.repeat.again() {
@@ -613,6 +616,21 @@ where
 mod tests {
     use super::*;
     use crate::block::Block;
+
+    #[test]
+    fn zero_repeats_produces_nothing() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let base = dir.path().join("samples");
+        let meta = serde_json::to_string(&SigMF::new("rf32_le".into()))?;
+        std::fs::write(base_append(&base, "-meta"), meta)?;
+        std::fs::write(base_append(&base, "-data"), 1.0_f32.to_le_bytes())?;
+        let (mut source, out) = SigMFSource::<Float>::builder(base)
+            .repeat(Repeat::finite(0))
+            .build()?;
+        assert!(matches!(source.work()?, BlockRet::EOF));
+        assert!(out.read_buf()?.0.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn source_partial_tail_makes_progress_to_eof() -> Result<()> {
