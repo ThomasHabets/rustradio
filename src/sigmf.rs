@@ -573,6 +573,7 @@ where
                 self.buf.clear();
                 self.file.seek(std::io::SeekFrom::Start(self.range.0))?;
                 self.left = self.range.1;
+                return Ok(BlockRet::Again);
             } else {
                 return Ok(BlockRet::EOF);
             }
@@ -616,6 +617,41 @@ where
 mod tests {
     use super::*;
     use crate::block::Block;
+
+    #[test]
+    fn repeated_recording_preserves_samples() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let base = dir.path().join("repeat");
+        let meta = serde_json::to_string(&SigMF::new("rf32_le".into()))?;
+        std::fs::write(base_append(&base, "-meta"), meta)?;
+        std::fs::write(base_append(&base, "-data"), 1.0_f32.to_le_bytes())?;
+        let (mut source, out) = SigMFSource::<Float>::builder(base)
+            .repeat(Repeat::finite(3))
+            .build()?;
+        for _ in 0..5 {
+            assert!(!matches!(source.work()?, BlockRet::EOF));
+        }
+        assert!(matches!(source.work()?, BlockRet::EOF));
+        assert_eq!(out.read_buf()?.0.slice(), &[1.0, 1.0, 1.0]);
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_empty_recording_reaches_eof() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let base = dir.path().join("empty");
+        let meta = serde_json::to_string(&SigMF::new("rf32_le".into()))?;
+        std::fs::write(base_append(&base, "-meta"), meta)?;
+        std::fs::write(base_append(&base, "-data"), [])?;
+        let (mut source, out) = SigMFSource::<Float>::builder(base)
+            .repeat(Repeat::finite(3))
+            .build()?;
+        assert!(matches!(source.work()?, BlockRet::Again));
+        assert!(matches!(source.work()?, BlockRet::Again));
+        assert!(matches!(source.work()?, BlockRet::EOF));
+        assert!(out.read_buf()?.0.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn zero_repeats_produces_nothing() -> Result<()> {
