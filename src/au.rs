@@ -141,7 +141,7 @@ impl Block for AuEncode {
         }
         let n = std::cmp::min(i.len(), o.len() / ss);
         if n == 0 {
-            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            return Ok(BlockRet::WaitForStream(&self.dst, ss));
         }
 
         for j in 0..n {
@@ -281,5 +281,28 @@ impl Block for AuDecode {
             }
         }
         Ok(BlockRet::Again)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encoder_waits_for_a_complete_sample() -> Result<()> {
+        let (mut encoder, out) =
+            AuEncode::new(ReadStream::from_slice(&[0.5]), Encoding::Pcm16, 48000, 1);
+        encoder.work()?;
+        let mut buffer = encoder.dst.write_buf()?;
+        let n = buffer.len() - 1;
+        buffer.slice()[..n].fill(0);
+        buffer.produce(n, &[]);
+        assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 2)));
+        let (buffer, _) = out.read_buf()?;
+        let n = buffer.len();
+        buffer.consume(n);
+        assert!(matches!(encoder.work()?, BlockRet::Again));
+        assert_eq!(out.read_buf()?.0.slice(), &16383_i16.to_be_bytes());
+        Ok(())
     }
 }
