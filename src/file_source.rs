@@ -123,11 +123,10 @@ where
             }
             if self.buf.is_empty() && n.is_multiple_of(sample_size) {
                 // Fast path when reading only whole samples.
-                o.fill_from_iter(
-                    buffer
-                        .chunks_exact(sample_size)
-                        .map(|d| T::parse(d).unwrap()),
-                );
+                let chunks = buffer[..n].chunks_exact(sample_size);
+                for (sample, bytes) in o.slice().iter_mut().zip(chunks) {
+                    *sample = T::parse(bytes)?;
+                }
                 trace!("FileSource: Produced {} in fast path", n / sample_size);
                 o.produce(n / sample_size, &[]);
                 return Ok(BlockRet::Again);
@@ -160,6 +159,50 @@ where
 mod tests {
     use super::*;
     use crate::{Complex, Float};
+
+    #[derive(Clone, Copy, Debug, Default)]
+    struct NonzeroByte(u8);
+
+    impl Sample for NonzeroByte {
+        type Type = Self;
+        fn size() -> usize {
+            1
+        }
+        fn parse(data: &[u8]) -> Result<Self> {
+            if data == [0] {
+                return Err(Error::msg("zero is not a valid sample"));
+            }
+            Ok(Self(data[0]))
+        }
+        fn serialize(&self) -> Vec<u8> {
+            vec![self.0]
+        }
+    }
+
+    #[test]
+    fn fast_path_parses_only_bytes_read() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("samples");
+        std::fs::write(&path, [7])?;
+        let (mut source, out) = FileSource::<NonzeroByte>::new(path)?;
+        assert!(matches!(source.work()?, BlockRet::Again));
+        let (output, _) = out.read_buf()?;
+        assert_eq!(output.len(), 1);
+        assert_eq!(output.slice()[0].0, 7);
+        Ok(())
+    }
+
+    #[test]
+    fn fast_path_returns_parse_errors() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("samples");
+        std::fs::write(&path, [7, 0])?;
+        let (mut source, out) = FileSource::<NonzeroByte>::new(path)?;
+        let error = source.work().unwrap_err();
+        assert!(error.to_string().contains("zero is not a valid sample"));
+        assert!(out.read_buf()?.0.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn zero_repeats_produces_nothing() -> Result<()> {
