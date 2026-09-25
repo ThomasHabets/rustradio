@@ -162,7 +162,7 @@ impl Wpcr {
         };
 
         // Translate frequency and phase.
-        let samples_per_symbol = bin as Float / samples.len() as Float;
+        let samples_per_symbol = bin as Float / fft.len() as Float;
         let mut clock_phase = {
             let t = 0.5 + d[bin].arg() / (std::f64::consts::PI * 2.0) as Float;
             if t > 0.5 { t } else { t + 1.0 }
@@ -236,4 +236,23 @@ fn find_best_bin(data: &[Complex]) -> Option<usize> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stream::new_nocopy_stream;
+
+    #[test]
+    fn frequency_uses_transition_fft_length() {
+        let (_tx, rx) = new_nocopy_stream();
+        let (block, _out) = Wpcr::builder(rx).samp_rate(4800.0).build();
+        // 64 transition samples give an exact FFT bin at 1/4 cycles/sample.
+        let samples: Vec<Float> = (0..65)
+            .map(|n| if (n / 4) % 2 == 0 { -1.0 } else { 1.0 })
+            .collect();
+        let (_, tags) = block.process_one(&samples).expect("periodic signal");
+        let frequency = tags.iter().find(|tag| tag.key() == "frequency").unwrap();
+        assert_eq!(frequency.val(), &TagValue::Float(1200.0));
+    }
 }
