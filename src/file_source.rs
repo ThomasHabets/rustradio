@@ -89,6 +89,9 @@ where
     T: Sample<Type = T> + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        if self.repeat.done() {
+            return Ok(BlockRet::EOF);
+        }
         let mut o = self.dst.write_buf()?;
         let sample_size = T::size();
         let have = self.buf.len() / sample_size;
@@ -157,6 +160,19 @@ where
 mod tests {
     use super::*;
     use crate::{Complex, Float};
+
+    #[test]
+    fn zero_repeats_produces_nothing() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("samples");
+        std::fs::write(&path, [1u8, 2, 3])?;
+        let (mut source, out) = FileSource::<u8>::builder(path)
+            .repeat(Repeat::finite(0))
+            .build()?;
+        assert!(matches!(source.work()?, BlockRet::EOF));
+        assert!(out.read_buf()?.0.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn source_dst_full() -> Result<()> {
