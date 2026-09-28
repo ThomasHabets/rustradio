@@ -147,9 +147,6 @@ impl Block for SymbolSync {
                 }
                 opos += 1;
                 self.next_sym_middle += self.clock;
-                if opos == olen {
-                    break;
-                }
             }
             let sign = *sample > 0.0;
             if sign != self.last_sign {
@@ -207,6 +204,9 @@ impl Block for SymbolSync {
                 self.last_sym_boundary_pos -= step_back;
                 self.next_sym_middle -= step_back;
             }
+            if opos == olen {
+                break;
+            }
         }
         input.consume(n);
         o.produce(opos, &[]);
@@ -238,6 +238,27 @@ mod tests {
 
         assert!(matches![b.work()?, BlockRet::Again]);
         assert_eq!(out.read_buf()?.0.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn full_output_still_advances_stream_position() -> Result<()> {
+        let src = ReadStream::from_slice(&[0.0; 4]);
+        let (mut block, _output) = SymbolSync::new(
+            src,
+            4.0,
+            1.0,
+            Box::new(TedZeroCrossing::new()),
+            Box::new(IirFilter::new(&[1.0])),
+        );
+        let mut output = block.dst.write_buf()?;
+        let available = output.len() - 1;
+        output.slice()[..available].fill(0.0);
+        output.produce(available, &[]);
+
+        block.work()?;
+
+        assert_eq!(block.stream_pos, 3.0);
         Ok(())
     }
 }
