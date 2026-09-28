@@ -115,9 +115,6 @@ impl Block for ZeroCrossing {
                 }
                 opos += 1;
                 self.last_cross += self.clock;
-                if opos == max_out {
-                    break;
-                }
             }
 
             let sign = *sample > 0.0;
@@ -135,6 +132,9 @@ impl Block for ZeroCrossing {
                 self.counter -= step_back;
                 self.last_cross -= step_back as f32;
             }
+            if opos == max_out {
+                break;
+            }
         }
         input.consume(n);
         o.produce(opos, &[]);
@@ -142,5 +142,25 @@ impl Block for ZeroCrossing {
             s.produce(opos, &[]);
         }
         Ok(BlockRet::Again)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+
+    #[test]
+    fn full_output_still_updates_crossing_state() -> Result<()> {
+        let (mut block, _output) = ZeroCrossing::new(ReadStream::from_slice(&[1.0; 4]), 4.0, 0.0);
+        let mut output = block.dst.write_buf()?;
+        let available = output.len() - 1;
+        output.slice()[..available].fill(0.0);
+        output.produce(available, &[]);
+
+        block.work()?;
+
+        assert_eq!(block.counter, 3);
+        Ok(())
     }
 }
