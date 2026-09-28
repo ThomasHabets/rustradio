@@ -209,7 +209,13 @@ fn read_raw_packet<R: Read>(reader: &mut R, max_packet_len: usize) -> Result<Opt
     let mut len = [0u8; 4];
 
     // Dip toe into stream, and if not EOF then read rest of packet.
-    match reader.read(&mut len[..1]) {
+    let first = loop {
+        match reader.read(&mut len[..1]) {
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => break result,
+        }
+    };
+    match first {
         Ok(0) => return Ok(None), // This is a clean EOF between packets.
         Ok(1) => reader
             .read_exact(&mut len[1..])
@@ -561,7 +567,13 @@ pub mod asynchronous {
         let mut len = [0u8; 4];
 
         // Dip toe looking for EOF, then read rest of packet.
-        match reader.read(&mut len[..1]).await {
+        let first = loop {
+            match reader.read(&mut len[..1]).await {
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                result => break result,
+            }
+        };
+        match first {
             Ok(0) => return Ok(None), // This is clean EOF.
             Ok(1) => {
                 reader
@@ -722,6 +734,37 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
+
+    struct InterruptedOnce<R> {
+        reader: R,
+        interrupted: bool,
+    }
+
+    impl<R: std::io::Read> std::io::Read for InterruptedOnce<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.interrupted {
+                self.interrupted = false;
+                return Err(std::io::ErrorKind::Interrupted.into());
+            }
+            self.reader.read(buf)
+        }
+    }
+
+    #[test]
+    fn sync_retries_interrupted_header_read() -> Result<()> {
+        let mut bytes = Vec::new();
+        SyncWriter::new(&mut bytes).write_version()?;
+        let reader = InterruptedOnce {
+            reader: Cursor::new(bytes),
+            interrupted: true,
+        };
+        let mut reader = SyncReader::new(reader);
+        assert_eq!(
+            reader.read_packet()?,
+            Some(Packet::Version(PROTOCOL_VERSION))
+        );
+        Ok(())
+    }
 
     #[test]
     fn sync_roundtrip() -> Result<()> {
