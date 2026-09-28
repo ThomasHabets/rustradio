@@ -484,7 +484,7 @@ impl Repeat {
     /// Register a repeat being done, and return true if we should continue.
     #[must_use]
     pub fn again(&mut self) -> bool {
-        self.count += 1;
+        self.count = self.count.saturating_add(1);
         match self.repeater {
             Repeater::Finite(0) => {
                 log::error!(
@@ -999,5 +999,15 @@ pub mod tests {
         assert!(!r.again());
         assert_eq!(3, r.count());
         assert!(r.done());
+    }
+
+    #[test]
+    fn repeat_does_not_wrap_at_maximum() {
+        let mut r = Repeat {
+            repeater: Repeater::Finite(u64::MAX),
+            count: u64::MAX,
+        };
+        assert!(!r.again());
+        assert_eq!(r.count(), u64::MAX);
     }
 }
