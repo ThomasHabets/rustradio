@@ -600,12 +600,13 @@ where
             // be because of a short read.
             return Ok(BlockRet::Pending);
         }
-        o.fill_from_iter(
-            self.buf
-                .chunks_exact(sample_size)
-                .take(samples)
-                .map(|d| T::parse(d).expect("failed to parse a sample")),
-        );
+        let parsed = self
+            .buf
+            .chunks_exact(sample_size)
+            .take(samples)
+            .map(T::parse)
+            .collect::<Result<Vec<_>>>()?;
+        o.fill_from_iter(parsed);
         // TODO: add tags just like FileSource.
         o.produce(samples, &[]);
         self.buf.drain(..(samples * sample_size));
@@ -617,6 +618,34 @@ where
 mod tests {
     use super::*;
     use crate::block::Block;
+
+    #[derive(Clone, Copy, Debug, Default)]
+    struct RejectZero(u8);
+
+    impl Sample for RejectZero {
+        type Type = Self;
+
+        fn size() -> usize {
+            1
+        }
+
+        fn parse(data: &[u8]) -> Result<Self> {
+            if data == [0] {
+                return Err(Error::msg("zero is not a valid sample"));
+            }
+            Ok(Self(data[0]))
+        }
+
+        fn serialize(&self) -> Vec<u8> {
+            vec![self.0]
+        }
+    }
+
+    impl Type for RejectZero {
+        fn type_string() -> &'static str {
+            "rzero"
+        }
+    }
 
     #[test]
     fn repeated_recording_preserves_samples() -> Result<()> {
@@ -700,6 +729,20 @@ mod tests {
 
         assert!(matches!(src.work()?, BlockRet::Pending));
         assert!(out.read_buf()?.0.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn source_propagates_sample_parse_errors() -> Result<()> {
+        let tmpd = tempfile::tempdir()?;
+        let base = tmpd.path().join("invalid-sample");
+        let meta = serde_json::to_string(&SigMF::new("rzero_le".into()))?;
+        std::fs::write(base_append(&base, "-meta"), meta)?;
+        std::fs::write(base_append(&base, "-data"), [0])?;
+
+        let (mut source, _out) = SigMFSource::<RejectZero>::builder(base).build()?;
+        let error = source.work().unwrap_err();
+        assert!(error.to_string().contains("zero is not a valid sample"));
         Ok(())
     }
 }
