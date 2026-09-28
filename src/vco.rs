@@ -25,13 +25,22 @@ pub struct Vco {
 
 impl Vco {
     fn process_sync(&mut self, a: Float) -> Complex {
-        self.phase += self.k * f64::from(a);
-        if self.phase > MX {
-            self.phase -= MX;
-        }
-        if self.phase < -MX {
-            self.phase += MX;
-        }
+        self.phase = (self.phase + self.k * f64::from(a)).rem_euclid(MX);
         Complex::new(self.phase.sin() as Float, self.phase.cos() as Float)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+    use crate::stream::ReadStream;
+
+    #[test]
+    fn large_phase_steps_remain_normalized() -> crate::Result<()> {
+        let (mut vco, _output) = Vco::new(ReadStream::from_slice(&[1.0]), MX * 1_000_000.0);
+        vco.work()?;
+        assert!((0.0..MX).contains(&vco.phase));
+        Ok(())
     }
 }
