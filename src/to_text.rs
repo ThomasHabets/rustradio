@@ -54,7 +54,7 @@ impl<T> ToText<T> {
 
 impl<T> BlockEOF for ToText<T> {
     fn eof(&mut self) -> bool {
-        self.srcs.iter().all(super::stream::ReadStream::eof)
+        self.srcs.iter().any(super::stream::ReadStream::eof)
     }
 }
 
@@ -100,5 +100,22 @@ impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
             }
         };
         Ok(BlockRet::WaitForStream(&self.srcs[cur_block], 1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::block::Block;
+
+    #[test]
+    fn eof_when_one_input_closes() -> crate::Result<()> {
+        let (mut block, _output) = ToText::new(vec![
+            ReadStream::from_slice(&[]),
+            ReadStream::from_slice(&[1u8]),
+        ]);
+        assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
+        assert!(BlockEOF::eof(&mut block));
+        Ok(())
     }
 }
