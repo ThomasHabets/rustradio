@@ -33,7 +33,10 @@ where
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             if !self.buf.is_empty() {
-                let rc = self.writer.write(&self.buf)?;
+                let rc = match self.writer.write(&self.buf) {
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    result => result?,
+                };
                 if rc == 0 {
                     return Err(
                         std::io::Error::new(std::io::ErrorKind::WriteZero, "WriterSink").into(),
@@ -85,6 +88,36 @@ mod tests {
         fn flush(&mut self) -> std::result::Result<(), std::io::Error> {
             self.cur.lock().unwrap().flush()
         }
+    }
+
+    #[test]
+    fn retries_interrupted_writes() -> Result<()> {
+        struct InterruptedWriter {
+            first: bool,
+            output: Fake,
+        }
+        impl Write for InterruptedWriter {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                if std::mem::take(&mut self.first) {
+                    return Err(std::io::ErrorKind::Interrupted.into());
+                }
+                self.output.write(data)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                self.output.flush()
+            }
+        }
+        let output = Fake::default();
+        let mut sink = WriterSink::new(
+            ReadStream::from_slice(b"hello"),
+            InterruptedWriter {
+                first: true,
+                output: output.clone(),
+            },
+        );
+        sink.work()?;
+        assert_eq!(output.cur.lock().unwrap().get_ref(), b"hello");
+        Ok(())
     }
 
     #[test]
