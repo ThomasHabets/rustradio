@@ -19,6 +19,9 @@ impl<T: Sample> Block for StreamChunks<T> {
         if self.size == 0 {
             return Err(Error::msg("StreamChunks has size 0"));
         }
+        if self.size > self.src.total_size() {
+            return Err(Error::msg("StreamChunks size exceeds capacity"));
+        }
         loop {
             let output_space = self.dst.remaining();
             if output_space == 0 {
@@ -48,6 +51,14 @@ mod tests {
     use super::*;
     use crate::Complex;
     use crate::blocks::VectorSource;
+
+    #[test]
+    fn rejects_chunks_larger_than_input_capacity() {
+        let (_tx, rx) = crate::stream::new_stream::<u32>();
+        let size = rx.total_size() + 1;
+        let (mut block, _out) = StreamChunks::new(rx, size);
+        assert!(block.work().unwrap_err().to_string().contains("capacity"));
+    }
 
     #[test]
     fn even() -> Result<()> {
