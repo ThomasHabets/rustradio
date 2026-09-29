@@ -42,7 +42,9 @@ impl<T: Sample> Delay<T> {
     /// Change the delay.
     pub fn set_delay(&mut self, delay: usize) {
         if delay > self.delay {
-            self.current_delay += delay - self.delay;
+            let cancel_skip = self.skip.min(delay - self.delay);
+            self.skip -= cancel_skip;
+            self.current_delay += delay - self.delay - cancel_skip;
         } else {
             let reduce = self.delay - delay;
             let cdskip = std::cmp::min(self.current_delay, reduce);
@@ -116,6 +118,23 @@ mod tests {
     use super::*;
 
     // TODO: test tag propagation.
+
+    #[test]
+    fn restoring_delay_cancels_pending_skip() -> Result<()> {
+        let (tx, rx) = crate::stream::new_stream();
+        let (mut delay, out) = Delay::new(rx, 2);
+        delay.work()?;
+        out.read_buf()?.0.consume(2);
+
+        delay.set_delay(0);
+        delay.set_delay(2);
+        let mut input = tx.write_buf()?;
+        input.fill_from_slice(&[1u32, 2, 3]);
+        input.produce(3, &[]);
+        delay.work()?;
+        assert_eq!(out.read_buf()?.0.slice(), &[1, 2, 3]);
+        Ok(())
+    }
 
     #[test]
     fn delay_zero() -> Result<()> {
