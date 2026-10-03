@@ -23,6 +23,8 @@ use crate::graph::{CancellationToken, GraphRunner};
 #[derive(Default)]
 pub struct WasmGraph {
     blocks: Vec<Box<dyn Block>>,
+    // Names are captured when blocks are added, outside the work loop.
+    block_names: Vec<String>,
 }
 
 impl WasmGraph {
@@ -36,7 +38,7 @@ impl WasmGraph {
             let mut done = true;
             let mut need_more = false;
             for (n, b) in self.blocks.iter_mut().enumerate() {
-                let name = b.block_name().to_owned();
+                let name = &self.block_names[n];
                 trace!("Running graph node {name}");
                 if eof[n] {
                     continue;
@@ -84,6 +86,7 @@ impl WasmGraph {
 
 impl GraphRunner for WasmGraph {
     fn add(&mut self, b: Box<dyn Block + Send>) {
+        self.block_names.push(b.block_name().to_owned());
         self.blocks.push(b);
     }
     fn run(&mut self) -> crate::Result<()> {

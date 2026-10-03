@@ -70,6 +70,8 @@ pub struct Graph {
     spent_time: Option<std::time::Duration>,
     spent_cpu_time: Option<std::time::Duration>,
     blocks: Vec<Box<dyn Block>>,
+    // Names are captured when blocks are added, outside the work loop.
+    block_names: Vec<String>,
     cancel_token: CancellationToken,
     times: Vec<std::time::Duration>,
     cpu_times: Vec<std::time::Duration>,
@@ -83,6 +85,7 @@ impl Graph {
             spent_time: None,
             spent_cpu_time: None,
             blocks: Vec::new(),
+            block_names: Vec::new(),
             times: Vec::new(),
             cpu_times: Vec::new(),
             cancel_token: CancellationToken::new(),
@@ -92,6 +95,7 @@ impl Graph {
 
 impl GraphRunner for Graph {
     fn add(&mut self, b: Box<dyn Block + Send>) {
+        self.block_names.push(b.block_name().to_owned());
         self.blocks.push(b);
     }
 
@@ -114,7 +118,7 @@ impl GraphRunner for Graph {
                 if eof[n] {
                     continue;
                 }
-                let name = b.block_name().to_owned();
+                let name = &self.block_names[n];
                 let st = Instant::now();
                 let st_cpu = get_cpu_time();
                 let ret = b
@@ -126,7 +130,7 @@ impl GraphRunner for Graph {
                 match ret {
                     BlockRet::Again => {
                         // Block did something.
-                        //trace!("… {} was not starved", b.block_name());
+                        //trace!("… {name} was not starved");
                         done = false;
                         all_idle = false;
                     }
@@ -190,12 +194,7 @@ impl GraphRunner for Graph {
             .copied()
             .sum::<std::time::Duration>()
             .as_secs_f64();
-        let ml = self
-            .blocks
-            .iter()
-            .map(|b| b.block_name().len())
-            .max()
-            .unwrap(); // unwrap: can only fail if block list is empty.
+        let ml = self.block_names.iter().map(String::len).max().unwrap(); // unwrap: can only fail if block list is empty.
         let ml = std::cmp::max(ml, "Elapsed seconds".len());
         let elapsed = elapsed.as_secs_f64();
 
@@ -209,11 +208,11 @@ impl GraphRunner for Graph {
             width = ml
         );
         s.push_str(&dashes);
-        for (n, b) in self.blocks.iter().enumerate() {
+        for (n, name) in self.block_names.iter().enumerate() {
             let _ = writeln!(
                 s,
                 "{:<width$} {:secw$.secd$} {:>pw$.pd$}% {:secw$.secd$} {:>pw$.pd$}% {:5.1}",
-                b.block_name(),
+                name,
                 self.times[n].as_secs_f32(),
                 100.0 * self.times[n].as_secs_f64() / total,
                 self.cpu_times[n].as_secs_f32(),
