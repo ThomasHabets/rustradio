@@ -123,3 +123,62 @@ fn bench_fir_filter(b: &mut Bencher) {
         }
     });
 }
+
+fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
+    use rustradio::stream::{Tag, TagValue};
+    use std::borrow::Cow;
+
+    let samples = vec![1u32; 8192];
+    let tags: Vec<_> = if tagged {
+        (0..samples.len())
+            .step_by(256)
+            .map(|pos| Tag::new(pos, "marker", TagValue::U64(pos as u64)))
+            .collect()
+    } else {
+        vec![]
+    };
+    let (writer, reader) = new_stream();
+    let (mut block, output): (Box<dyn Block>, _) = if tag_aware {
+        let (block, output) = Map::new(reader, "increment", |sample, tags| {
+            (sample + 1, Cow::Borrowed(tags))
+        });
+        (Box::new(block), output)
+    } else {
+        let (block, output) = AddConst::new(reader, 1u32);
+        (Box::new(block), output)
+    };
+    b.bytes = (samples.len() * std::mem::size_of::<u32>()) as u64;
+    b.iter(|| {
+        let mut window = writer.write_buf().unwrap();
+        window.fill_from_slice(&samples);
+        window.produce(samples.len(), &tags);
+        assert!(matches!(
+            block.work().unwrap(),
+            BlockRet::WaitForStream(_, 1)
+        ));
+        let (window, tags) = output.read_buf().unwrap();
+        std::hint::black_box(window.slice());
+        std::hint::black_box(tags);
+        window.consume(samples.len());
+    });
+}
+
+#[bench]
+fn bench_sync_plain_untagged(b: &mut Bencher) {
+    bench_sync(b, false, false);
+}
+
+#[bench]
+fn bench_sync_plain_tagged(b: &mut Bencher) {
+    bench_sync(b, true, false);
+}
+
+#[bench]
+fn bench_sync_tag_aware_untagged(b: &mut Bencher) {
+    bench_sync(b, false, true);
+}
+
+#[bench]
+fn bench_sync_tag_aware_tagged(b: &mut Bencher) {
+    bench_sync(b, true, true);
+}

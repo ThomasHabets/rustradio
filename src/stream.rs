@@ -204,6 +204,9 @@ impl<T: Default + Copy> ReadStream<T> {
     /// Return a `BufferReader` allowing you to read from the stream, and
     /// "consume" from it.
     ///
+    /// Tags are returned in ascending position order, preserving the order of
+    /// tags at the same position.
+    ///
     /// See [`WriteStream::write_buf`] for details about the refcount checks.
     pub fn read_buf(&self) -> Result<(crate::sys::BufferReader<T>, Vec<Tag>)> {
         let refcount = Arc::strong_count(&self.circ);

@@ -454,10 +454,69 @@ impl<'a> Parsed<'a> {
         } else {
             quote! { #first.iter().take(n)#(.zip(#rest.iter()))* }
         };
+        let write_samples = quote! {
+            for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
+                (#(*#out_names),*) = (#(#out_names_samp),*);
+            }
+        };
+        let first_tags = &in_tag_names[0];
+        let process = if matches!(self.attrs.sync, SyncBlock::Value) {
+            quote! {
+                let it = #it.map(|(#(#in_names),*)| self.process_sync(#(*#in_names),*));
+                #write_samples
+                // Only the first input's tags are forwarded, once per batch.
+                // read_buf() returns tags sorted by position.
+                let mut #first_tags = #first_tags;
+                #first_tags.truncate(#first_tags.partition_point(|tag| tag.pos() < n));
+                #(let _ = &#in_tag_names;)*
+                #(#in_names.consume(n);)*
+                #(#out_names.produce(n, &#first_tags);)*
+            }
+        } else {
+            let tag_iters: Vec<syn::Ident> = in_tag_names
+                .iter()
+                .map(|name| syn::parse_str(&format!("{name}_iter")).unwrap())
+                .collect();
+            let process_sample = quote! {
+                let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
+                #(for tag in #out_tag_names_tmp.iter() {
+                    #out_tag_names.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
+                })*
+                (#(#out_names),*)
+            };
+            quote! {
+                #(let mut #out_tag_names = Vec::new();)*
+                // Select the tag-free path once per batch, outside the sample loop.
+                if true #(&& #in_tag_names.is_empty())* {
+                    let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
+                        #(let #in_tag_names: &[#path::stream::Tag] = &[];)*
+                        #process_sample
+                    });
+                    #write_samples
+                } else {
+                    #(let mut #tag_iters = #in_tag_names.into_iter().peekable();)*
+                    // Reuse each sample's tag storage, moving tags out of the batch.
+                    #(let mut #in_tag_names = Vec::new();)*
+                    let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
+                        #(
+                            #in_tag_names.clear();
+                            while #tag_iters.peek().is_some_and(|tag| tag.pos() == pos) {
+                                let mut tag = #tag_iters.next().expect("peeked tag");
+                                tag.set_pos(0);
+                                #in_tag_names.push(tag);
+                            }
+                        )*
+                        #process_sample
+                    });
+                    #write_samples
+                }
+                #(#in_names.consume(n);)*
+                #(#out_names.produce(n, &#out_tag_names);)*
+            }
+        };
         Some(quote! {
             impl #impl_generics #path::block::Block for #name #ty_generics #where_clause {
                 fn work(&mut self) -> #path::Result<#path::block::BlockRet> {
-                    let empty = vec![];
                     loop {
                         #(let #in_names = self.#in_names.read_buf()?;)*
                         #(let #in_tag_names = #in_names.1;)*
@@ -479,36 +538,7 @@ impl<'a> Parsed<'a> {
                         let n = [#(#out_names.len()),*].iter().fold(n, |min, &x|min.min(x));
                         assert_ne!(n, 0, "Output stream len 0, but we already checked that.");
 
-                        #(let mut #out_tag_names = Vec::new();)*
-                        let empty_tags = true #(&&#in_tag_names.is_empty())*;
-                        let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                            let (#(#in_tag_names),*) = if empty_tags {
-                                // Fast path for input without tags.
-                                // There may be opportunity to deduplicate some of
-                                // the next couple of lines with the !empty_tags
-                                // case.
-                                (#({
-                                    let _ = &#in_tag_names;
-                                    std::borrow::Cow::Borrowed(&empty)
-                                }),*)
-                            } else {
-                                // TODO: This tag filtering is quite expensive.
-                                (#(std::borrow::Cow::Owned(#in_tag_names.iter()
-                                  .filter(|t| t.pos() == pos)
-                                  .map(|t| #path::stream::Tag::new(0, t.key().to_string(), t.val().clone()))
-                                  .collect::<Vec<_>>())),*)
-                            };
-                            let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
-                            #(for tag in #out_tag_names_tmp.iter() {
-                                #out_tag_names.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
-                            })*
-                            (#(#out_names),*)
-                        });
-                        for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
-                            (#(*#out_names),*) = (#(#out_names_samp),*);
-                        }
-                        #(#in_names.consume(n);)*
-                        #(#out_names.produce(n, &#out_tag_names);)*
+                        #process
                     }
                 }
             }
