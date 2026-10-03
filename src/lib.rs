@@ -262,6 +262,7 @@ pub mod graph;
 #[cfg(not(feature = "wasm"))]
 pub mod mtgraph;
 pub mod stream;
+mod stream_tags;
 pub mod window;
 
 #[cfg(feature = "async")]

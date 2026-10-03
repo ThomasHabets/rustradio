@@ -1,13 +1,13 @@
 //! This module contains wasm versions of various code.
 //!
 //! It must fail gracefully when used in a web worker.
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 use wasm_bindgen::prelude::*;
 
-use crate::stream::{Tag, TagPos};
+use crate::stream::Tag;
+use crate::stream_tags::StreamTags;
 use crate::{Error, Result};
 
 pub mod wasm_graph;
@@ -93,7 +93,7 @@ struct BufferState<T> {
     used: usize,
     // Only the range described by rpos/used is initialized.
     stream: Vec<T>,
-    tags: BTreeMap<TagPos, Vec<Tag>>,
+    tags: StreamTags,
 
     // Extra accounting to ensure that we never read uninitialized content.
     #[cfg(debug_assertions)]
@@ -121,7 +121,7 @@ impl<T: Default> BufferState<T> {
             wpos: 0,
             used: 0,
             stream,
-            tags: BTreeMap::default(),
+            tags: StreamTags::default(),
 
             #[cfg(debug_assertions)]
             initialized: vec![false; size],
@@ -188,15 +188,13 @@ impl<T> Buffer<T> {
             l.used
         );
         let capacity = l.capacity();
+        #[cfg(debug_assertions)]
         for i in 0..n {
             let pos = (l.rpos + i) % capacity;
-            #[cfg(debug_assertions)]
-            {
-                debug_assert!(l.initialized[pos]);
-                l.initialized[pos] = false;
-            }
-            l.tags.remove(&pos);
+            debug_assert!(l.initialized[pos]);
+            l.initialized[pos] = false;
         }
+        l.tags.consume(n);
         l.rpos = (l.rpos + n) % capacity;
         l.used -= n;
     }
@@ -255,11 +253,7 @@ impl<T: Copy> Buffer<T> {
                 l.initialized[pos] = true;
             }
         }
-        for tag in tags {
-            let pos = (tag.pos() + wpos) % capacity;
-            let tag = Tag::new(pos, tag.key(), tag.val().clone());
-            l.tags.entry(pos).or_default().push(tag);
-        }
+        l.tags.produce(samples.len(), tags);
         l.wpos = (wpos + samples.len()) % capacity;
         l.used += samples.len();
     }
@@ -277,18 +271,8 @@ impl<T: Copy> Buffer<T> {
             }
             stream.push(s.stream[pos]);
         }
-        let mut tags = Vec::with_capacity(s.tags.len());
-        for (n, ts) in &s.tags {
-            let relative_pos = (*n + capacity - start) % capacity;
-            if relative_pos >= used {
-                continue;
-            }
-            for tag in ts {
-                tags.push(Tag::new(relative_pos, tag.key(), tag.val().clone()));
-            }
-        }
+        let tags = s.tags.read();
         drop(s);
-        tags.sort_by_key(Tag::pos);
         Ok((BufferReader::new(self, stream), tags))
     }
 }

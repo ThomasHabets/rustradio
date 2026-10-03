@@ -4,7 +4,6 @@
 // TODO:
 // * Make Circ typed?
 
-use std::collections::BTreeMap;
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -12,7 +11,8 @@ use libc::{MAP_FAILED, MAP_FIXED, MAP_SHARED, PROT_READ, PROT_WRITE};
 use libc::{c_uchar, c_void, size_t};
 use log::error;
 
-use crate::stream::{Tag, TagPos};
+use crate::stream::Tag;
+use crate::stream_tags::StreamTags;
 use crate::{Error, Result};
 
 const SYNC_SLEEP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
@@ -178,7 +178,7 @@ struct BufferState {
     used: usize,        // In samples.
     circ_len: usize,    // In bytes.
     member_size: usize, // In bytes.
-    tags: BTreeMap<TagPos, Vec<Tag>>,
+    tags: StreamTags,
 }
 
 impl BufferState {
@@ -360,7 +360,7 @@ impl<T> Buffer<T> {
                     used: 0,
                     circ_len: size,
                     member_size: std::mem::size_of::<T>(),
-                    tags: BTreeMap::new(),
+                    tags: StreamTags::default(),
                 }),
                 cv: Condvar::new(),
                 #[cfg(feature = "async")]
@@ -484,8 +484,6 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the read buffer.
     pub(in crate::nowasm::circular_buffer) fn consume(&self, n: usize) {
-        use std::ops::Bound::{Excluded, Included};
-
         if n == 0 {
             return;
         }
@@ -498,27 +496,7 @@ impl<T: Copy> Buffer<T> {
         );
         let newpos = (s.rpos + n) % s.capacity();
 
-        let keys: Vec<TagPos> = if newpos > s.rpos {
-            s.tags
-                .range((Included(s.rpos), Excluded(newpos)))
-                .map(|(k, _)| *k)
-                .collect()
-        } else {
-            let mut t: Vec<TagPos> = s
-                .tags
-                .range((Included(s.rpos), Excluded(s.capacity())))
-                .map(|(k, _)| *k)
-                .collect();
-            t.extend(
-                s.tags
-                    .range((Included(0), Excluded(newpos)))
-                    .map(|(k, _)| *k),
-            );
-            t
-        };
-        for k in keys {
-            s.tags.remove(&k);
-        }
+        s.tags.consume(n);
         s.rpos = newpos;
         s.used -= n;
         self.state.cv.notify_all();
@@ -530,15 +508,6 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the write buffer.
     pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
-        #[cfg(debug_assertions)]
-        {
-            for t in tags {
-                assert!(
-                    t.pos() < n,
-                    "block producing tags with indexes out of range. tag={t:?}, limit={n}"
-                );
-            }
-        }
         if n == 0 {
             if !tags.is_empty() {
                 error!("produce() called on a stream with 0 entries, but non-empty tags: {tags:?}");
@@ -558,11 +527,7 @@ impl<T: Copy> Buffer<T> {
             s.write_capacity(),
             n
         );
-        for tag in tags {
-            let pos = (tag.pos() + s.wpos) % s.capacity();
-            let tag = Tag::new(pos, tag.key(), tag.val().clone());
-            s.tags.entry(pos).or_default().push(tag);
-        }
+        s.tags.produce(n, tags);
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
         self.state.cv.notify_all();
@@ -586,34 +551,8 @@ impl<T: Copy> Buffer<T> {
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let s = self.state.lock.lock().unwrap();
         let (start, end) = s.read_range();
-        let mut tags = Vec::with_capacity(s.tags.len());
-
-        // TODO: range scan the tags.
-        for (n, ts) in &s.tags {
-            let modded_n: usize = *n % s.capacity();
-            if end < s.capacity() && start < s.capacity() {
-                // Start and end are both in first half.
-                if modded_n < start || modded_n >= end {
-                    continue;
-                }
-            } else {
-                // Start and end can't both be in the second half, and
-                // end has to be higher than start.
-                assert!(start < s.capacity());
-                if modded_n >= (end % s.capacity()) && modded_n < start {
-                    continue;
-                }
-            }
-            for tag in ts {
-                tags.push(Tag::new(
-                    (tag.pos() + s.capacity() - start) % s.capacity(),
-                    tag.key(),
-                    tag.val().clone(),
-                ));
-            }
-        }
+        let tags = s.tags.read();
         drop(s);
-        tags.sort_by_key(Tag::pos);
         Ok((BufferReader::new(self, start, end), tags))
     }
 

@@ -211,3 +211,47 @@ fn bench_serialize_samples(b: &mut Bencher) {
 fn bench_serialize_samples_into(b: &mut Bencher) {
     bench_serialize(b, true);
 }
+
+fn bench_stream_tags(b: &mut Bencher, stride: usize, reverse: bool) {
+    use rustradio::stream::{Tag, TagValue};
+
+    let samples = vec![0u32; 8192];
+    let end = if stride == 0 { 0 } else { samples.len() };
+    let mut tags: Vec<_> = (0..end)
+        .step_by(stride.max(1))
+        .map(|pos| Tag::new(pos, "marker", TagValue::U64(pos as u64)))
+        .collect();
+    if reverse {
+        tags.reverse();
+    }
+    let (writer, reader) = new_stream();
+    b.bytes = (samples.len() * std::mem::size_of::<u32>()) as u64;
+    b.iter(|| {
+        let mut window = writer.write_buf().unwrap();
+        window.fill_from_slice(&samples);
+        window.produce(samples.len(), &tags);
+        let (window, tags) = reader.read_buf().unwrap();
+        std::hint::black_box(tags);
+        window.consume(samples.len());
+    });
+}
+
+#[bench]
+fn bench_stream_tags_sparse(b: &mut Bencher) {
+    bench_stream_tags(b, 256, false);
+}
+
+#[bench]
+fn bench_stream_tags_dense(b: &mut Bencher) {
+    bench_stream_tags(b, 1, false);
+}
+
+#[bench]
+fn bench_stream_tags_reversed(b: &mut Bencher) {
+    bench_stream_tags(b, 1, true);
+}
+
+#[bench]
+fn bench_stream_tags_none(b: &mut Bencher) {
+    bench_stream_tags(b, 0, false);
+}
