@@ -30,6 +30,8 @@ pub struct PduWriter<T: Send + Sync + 'static> {
     dir: PathBuf,
     #[rustradio(default)]
     files_written: usize,
+    #[rustradio(default)]
+    buf: Vec<u8>,
 }
 
 impl<T: Send + Sync + 'static> Drop for PduWriter<T> {
@@ -59,11 +61,12 @@ impl<T: Sample> Block for PduWriter<T> {
                 .write(true)
                 .create_new(true)
                 .open(full)?;
-            let mut v = Vec::with_capacity(T::size() * packet.len());
-            for s in &packet {
-                v.extend(&s.serialize());
+            self.buf.clear();
+            self.buf.reserve(T::size() * packet.len());
+            for sample in &packet {
+                sample.serialize_into(&mut self.buf);
             }
-            f.write_all(&v)?;
+            f.write_all(&self.buf)?;
             self.files_written += 1;
         }
     }

@@ -728,6 +728,14 @@ pub trait Sample: std::fmt::Debug + Copy + Default + Send + Sync + 'static {
     /// Serialize one sample.
     #[must_use]
     fn serialize(&self) -> Vec<u8>;
+
+    /// Append one sample's serialized bytes to an existing buffer.
+    ///
+    /// Override this to avoid allocating a temporary vector. The default
+    /// preserves compatibility with sample types implementing only `serialize`.
+    fn serialize_into(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.serialize());
+    }
 }
 
 impl Sample for Complex {
@@ -747,10 +755,13 @@ impl Sample for Complex {
         Ok(Complex::new(i, q))
     }
     fn serialize(&self) -> Vec<u8> {
-        let mut ret = Vec::new();
-        ret.extend(Float::to_le_bytes(self.re));
-        ret.extend(Float::to_le_bytes(self.im));
+        let mut ret = Vec::with_capacity(Self::size());
+        self.serialize_into(&mut ret);
         ret
+    }
+    fn serialize_into(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.re.to_le_bytes());
+        out.extend_from_slice(&self.im.to_le_bytes());
     }
 }
 
@@ -771,6 +782,9 @@ impl Sample for Float {
     fn serialize(&self) -> Vec<u8> {
         Float::to_le_bytes(*self).to_vec()
     }
+    fn serialize_into(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
 }
 
 impl Sample for u8 {
@@ -789,6 +803,9 @@ impl Sample for u8 {
     }
     fn serialize(&self) -> Vec<u8> {
         vec![*self]
+    }
+    fn serialize_into(&self, out: &mut Vec<u8>) {
+        out.push(*self);
     }
 }
 
@@ -809,6 +826,9 @@ impl Sample for u32 {
     fn serialize(&self) -> Vec<u8> {
         u32::to_le_bytes(*self).to_vec()
     }
+    fn serialize_into(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
 }
 
 impl Sample for i32 {
@@ -827,6 +847,9 @@ impl Sample for i32 {
     }
     fn serialize(&self) -> Vec<u8> {
         i32::to_le_bytes(*self).to_vec()
+    }
+    fn serialize_into(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
     }
 }
 

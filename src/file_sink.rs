@@ -66,6 +66,7 @@ impl<T: Sample> FileSinkBuilder<T> {
 #[rustradio(crate)]
 pub struct FileSink<T: Sample> {
     f: BufWriter<std::fs::File>,
+    buf: Vec<u8>,
     #[rustradio(in)]
     src: ReadStream<T>,
     filename: std::path::PathBuf,
@@ -107,6 +108,7 @@ impl<T: Sample> FileSink<T> {
         );
         Ok(Self {
             f,
+            buf: Vec::new(),
             src,
             filename,
             flush: false,
@@ -142,12 +144,13 @@ where
         if n == 0 {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
-        let mut v = Vec::with_capacity(T::size() * n);
-        i.iter().for_each(|s: &T| {
-            v.extend(&s.serialize());
-        });
+        self.buf.clear();
+        self.buf.reserve(T::size() * n);
+        for sample in i.iter() {
+            sample.serialize_into(&mut self.buf);
+        }
         self.f
-            .write_all(&v)
+            .write_all(&self.buf)
             .map_err(|e| Error::file_io(e, &self.filename))?;
         if self.flush {
             self.flush()?;
@@ -206,6 +209,7 @@ impl<T> NoCopyFileSinkBuilder<T> {
 #[rustradio(crate)]
 pub struct NoCopyFileSink<T> {
     f: BufWriter<std::fs::File>,
+    buf: Vec<u8>,
     #[rustradio(in)]
     src: NCReadStream<T>,
     filename: std::path::PathBuf,
@@ -243,6 +247,7 @@ impl<T> NoCopyFileSink<T> {
         );
         Ok(Self {
             f,
+            buf: Vec::new(),
             src,
             filename,
             flush: false,
@@ -280,10 +285,12 @@ where
         if let Some((s, _tags)) = self.src.pop() {
             // TODO: write tags.
             //let s2 = format!["{:?}", s].into();
-            let mut v = s.serialize();
-            v.push(10); // Newline.
+            self.buf.clear();
+            self.buf.reserve(T::size() + 1);
+            s.serialize_into(&mut self.buf);
+            self.buf.push(10); // Newline.
             self.f
-                .write_all(&v)
+                .write_all(&self.buf)
                 .map_err(|e| Error::file_io(e, &self.filename))?;
             if self.flush {
                 self.flush()?;

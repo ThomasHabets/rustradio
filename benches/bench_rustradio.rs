@@ -182,3 +182,32 @@ fn bench_sync_tag_aware_untagged(b: &mut Bencher) {
 fn bench_sync_tag_aware_tagged(b: &mut Bencher) {
     bench_sync(b, true, true);
 }
+
+fn bench_serialize(b: &mut Bencher, append: bool) {
+    use rustradio::Sample;
+
+    let samples = vec![Complex::new(1.25, -2.5); 8192];
+    let mut bytes = Vec::with_capacity(samples.len() * Complex::size());
+    b.bytes = bytes.capacity() as u64;
+    b.iter(|| {
+        bytes.clear();
+        for sample in std::hint::black_box(&samples) {
+            if append {
+                sample.serialize_into(&mut bytes);
+            } else {
+                bytes.extend_from_slice(&sample.serialize());
+            }
+        }
+        std::hint::black_box(&bytes);
+    });
+}
+
+#[bench]
+fn bench_serialize_samples(b: &mut Bencher) {
+    bench_serialize(b, false);
+}
+
+#[bench]
+fn bench_serialize_samples_into(b: &mut Bencher) {
+    bench_serialize(b, true);
+}

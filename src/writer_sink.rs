@@ -53,8 +53,9 @@ where
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
-            for s in i.iter().map(|x| x.serialize()) {
-                self.buf.extend(s);
+            self.buf.reserve(T::size() * i.len());
+            for sample in i.iter() {
+                sample.serialize_into(&mut self.buf);
             }
             let n = i.len();
             i.consume(n);
