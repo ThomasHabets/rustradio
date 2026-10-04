@@ -298,47 +298,42 @@ fn sum_vec(left: &mut [Complex], right: &[Complex]) {
 
 impl<T: Engine> Block for FftFilter<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        // TODO: multithread this.
+        let mut output = self.dst.write_buf()?;
+        if output.len() < self.nsamples {
+            return Ok(BlockRet::WaitForStream(&self.dst, self.nsamples));
+        }
+        // Keep one snapshot for all FFT rounds that fit. In particular, WASM
+        // read_buf() copies the unread window, so checking it out per round
+        // would repeatedly copy the unprocessed suffix.
+        let (input, tags) = self.src.read_buf()?;
+        let mut tags = tags.into_iter().peekable();
+        let mut output_tags = Vec::new();
+        let mut consumed = 0;
+        let mut produced = 0;
+        let output_len = output.len();
+        let wait_for_output;
         loop {
-            let mut o = self.dst.write_buf()?;
-            if self.nsamples > o.len() {
-                /*
-                trace!(
-                    "FftFilter: Need {} output space, only have {}",
-                    self.nsamples,
-                    o.len()
-                );
-                */
-                return Ok(BlockRet::WaitForStream(&self.dst, self.nsamples));
+            if output_len - produced < self.nsamples {
+                wait_for_output = true;
+                break;
             }
-            let (input, tags) = self.src.read_buf()?;
-            // Read so that self.buf contains exactly self.nsamples samples.
-            let add = std::cmp::min(input.len(), self.nsamples - self.buf.len());
+            let add = (input.len() - consumed).min(self.nsamples - self.buf.len());
             let tag_offset = self.buf.len();
-            self.buf.extend(input.iter().take(add).copied());
-            self.tags.extend(
-                tags.into_iter()
-                    .filter(|t| t.pos() < add)
-                    .map(|t| Tag::new(t.pos() + tag_offset, t.key(), t.val().clone())),
-            );
-            input.consume(add);
-            if self.buf.len() < self.nsamples {
-                /*
-                trace!(
-                    "FftFilter: Need {} input samples, only have {}, {add}",
-                    self.nsamples,
-                    self.buf.len()
-                );
-                */
-                return Ok(BlockRet::WaitForStream(
-                    &self.src,
-                    self.nsamples - self.buf.len(),
-                ));
+            self.buf
+                .extend_from_slice(&input.slice()[consumed..consumed + add]);
+            // Tags are ordered. Move each consumed tag exactly once, retaining
+            // tags for an incomplete round until its output is ready.
+            while tags.peek().is_some_and(|tag| tag.pos() < consumed + add) {
+                let mut tag = tags.next().unwrap();
+                tag.set_pos(tag.pos() - consumed + tag_offset);
+                self.tags.push(tag);
             }
-            //trace!("FftFilter: ok, running");
-            debug_assert_eq!(self.buf.len(), self.nsamples);
+            consumed += add;
+            if self.buf.len() < self.nsamples {
+                wait_for_output = false;
+                break;
+            }
 
-            // Run FFT.
             self.buf.resize(self.fft_size, Complex::default());
             self.engine.run(&mut self.buf);
 
@@ -346,21 +341,25 @@ impl<T: Engine> Block for FftFilter<T> {
             for (i, t) in self.tail.iter().enumerate() {
                 self.buf[i] = self.buf[i].algebraic_add(*t);
             }
+            output.slice()[produced..produced + self.nsamples]
+                .copy_from_slice(&self.buf[..self.nsamples]);
+            output_tags.extend(self.tags.drain(..).map(|mut tag| {
+                tag.set_pos(tag.pos() + produced);
+                tag
+            }));
+            produced += self.nsamples;
 
-            // Output.
-            // TODO: needless copy?
-            o.fill_from_slice(&self.buf[..self.nsamples]);
-            o.produce(self.nsamples, &self.tags);
-
-            // Stash tail.
-            for i in 0..self.tail.len() {
-                self.tail[i] = self.buf[self.nsamples + i];
-            }
-
-            // Clear buffer. Per above performance comment.
+            self.tail
+                .copy_from_slice(&self.buf[self.nsamples..self.fft_size]);
             self.buf.clear();
-            self.tags.clear();
         }
+        input.consume(consumed);
+        output.produce(produced, &output_tags);
+        Ok(if wait_for_output {
+            BlockRet::WaitForStream(&self.dst, self.nsamples)
+        } else {
+            BlockRet::WaitForStream(&self.src, self.nsamples - self.buf.len())
+        })
     }
 }
 
@@ -580,6 +579,163 @@ mod tests {
             ]
         );
         assert_eq!(out.len(), 2048);
+        Ok(())
+    }
+
+    #[test]
+    fn batched_rounds_preserve_partial_input_and_tags() -> Result<()> {
+        use crate::stream::{StreamWait, new_stream};
+        let samples: Vec<_> = (0..20)
+            .map(|i| Complex::new(i as Float - 7.0, i as Float * 0.25))
+            .collect();
+        let taps = [
+            Complex::new(0.5, 0.25),
+            Complex::new(-0.25, 0.5),
+            Complex::new(0.125, -0.25),
+        ];
+        let (writer, reader) = new_stream();
+        let input_id = reader.id();
+        let (mut filter, out) = FftFilter::new(reader, taps);
+        assert_eq!(filter.nsamples, 5);
+        let all_tags = [0, 2, 3, 4, 5, 10, 15, 16, 17, 19]
+            .map(|pos| Tag::new(pos, "sample", TagValue::U64(pos as u64)));
+        let mut actual = Vec::new();
+        let mut actual_tags = Vec::new();
+        // First retain an incomplete round; then run three rounds and retain
+        // another partial round; finally complete it in a subsequent call.
+        for (start, end, expected_output, need) in [(0, 3, 0, 2), (3, 17, 15, 3), (17, 20, 5, 5)] {
+            let tags: Vec<_> = all_tags
+                .iter()
+                .filter(|tag| (start..end).contains(&tag.pos()))
+                .cloned()
+                .map(|mut tag| {
+                    tag.set_pos(tag.pos() - start);
+                    tag
+                })
+                .collect();
+            let mut window = writer.write_buf()?;
+            window.fill_from_slice(&samples[start..end]);
+            window.produce(end - start, &tags);
+            assert!(matches!(filter.work()?, BlockRet::WaitForStream(stream, n)
+                if stream.id() == input_id && n == need));
+            let (window, tags) = out.read_buf()?;
+            assert_eq!(window.len(), expected_output);
+            actual_tags.extend(tags.into_iter().map(|mut tag| {
+                tag.set_pos(tag.pos() + actual.len());
+                tag
+            }));
+            actual.extend_from_slice(window.slice());
+            window.consume(expected_output);
+        }
+        assert_eq!(actual_tags, all_tags);
+        for (i, value) in actual.iter().enumerate() {
+            let expected: Complex = taps
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j <= i)
+                .map(|(j, tap)| samples[i - j] * tap)
+                .sum();
+            assert!(
+                (*value - expected).norm() < 0.0001,
+                "sample {i}: {value} != {expected}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn batched_rounds_respect_output_backpressure() -> Result<()> {
+        use crate::stream::{StreamWait, new_stream};
+        let samples: Vec<_> = (0..17).map(|i| Complex::new(i as Float, 0.0)).collect();
+        let (writer, reader) = new_stream();
+        let input_id = reader.id();
+        let (mut filter, out) = FftFilter::new(
+            reader,
+            [
+                Complex::new(1.0, 0.0),
+                Complex::default(),
+                Complex::default(),
+            ],
+        );
+        let output_id = out.id();
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&samples);
+        window.produce(
+            samples.len(),
+            &[
+                Tag::new(9, "before", TagValue::Bool(true)),
+                Tag::new(10, "after", TagValue::Bool(true)),
+                Tag::new(16, "partial", TagValue::Bool(true)),
+            ],
+        );
+        let mut window = filter.dst.write_buf()?;
+        let prefix = window.len() - 12;
+        window.slice()[..prefix].fill(Complex::default());
+        window.produce(prefix, &[]);
+        assert!(matches!(filter.work()?, BlockRet::WaitForStream(stream, 5)
+            if stream.id() == output_id));
+        assert!(filter.buf.is_empty());
+        let (window, tags) = filter.src.read_buf()?;
+        assert_eq!(window.slice(), &samples[10..]);
+        assert_eq!(tags[0].pos(), 0);
+        drop(window);
+        let (window, tags) = out.read_buf()?;
+        assert_eq!(window.len(), prefix + 10);
+        for (actual, expected) in window.slice()[prefix..].iter().zip(&samples[..10]) {
+            assert!((*actual - *expected).norm() < 0.0001);
+        }
+        assert_eq!(tags, [Tag::new(prefix + 9, "before", TagValue::Bool(true))]);
+        window.consume(prefix + 10);
+        assert!(matches!(filter.work()?, BlockRet::WaitForStream(stream, 3)
+            if stream.id() == input_id));
+        let (window, tags) = out.read_buf()?;
+        assert_eq!(window.len(), 5);
+        assert_eq!(tags, [Tag::new(0, "after", TagValue::Bool(true))]);
+        assert_eq!(filter.buf, samples[15..]);
+        assert_eq!(filter.tags, [Tag::new(1, "partial", TagValue::Bool(true))]);
+        Ok(())
+    }
+
+    #[test]
+    fn work_uses_one_input_snapshot() -> Result<()> {
+        use crate::stream::new_stream;
+        // Simulate an upstream block producing while this batch is running.
+        // The newly arrived data must remain for the next checkout/work call.
+        struct ProducingEngine {
+            writer: WriteStream<Complex>,
+            produced: bool,
+        }
+        impl Engine for ProducingEngine {
+            fn tap_len(&self) -> usize {
+                3
+            }
+            fn run(&mut self, _: &mut [Complex]) {
+                if !self.produced {
+                    let mut window = self.writer.write_buf().unwrap();
+                    window.slice()[..5].fill(Complex::default());
+                    window.produce(5, &[]);
+                    self.produced = true;
+                }
+            }
+        }
+        let (writer, reader) = new_stream();
+        let mut window = writer.write_buf()?;
+        window.slice()[..5].fill(Complex::default());
+        window.produce(5, &[]);
+        let (mut filter, out) = FftFilter::new_engine(
+            reader,
+            ProducingEngine {
+                writer,
+                produced: false,
+            },
+        );
+        filter.work()?;
+        let (window, _) = out.read_buf()?;
+        assert_eq!(window.len(), 5);
+        window.consume(5);
+        filter.work()?;
+        let (window, _) = out.read_buf()?;
+        assert_eq!(window.len(), 5);
         Ok(())
     }
 
