@@ -319,3 +319,100 @@ fn bench_wasm_window_iter_fill(b: &mut Bencher) {
 fn bench_wasm_window_wrapped(b: &mut Bencher) {
     bench_wasm_window(b, 8192, 0, true);
 }
+
+// Compare the complete FFT round used by FftFilter: forward transform,
+// multiplication by precomputed taps, and inverse transform. Select engines
+// explicitly so enabling FFTW does not change the RustFFT measurements.
+// Run both with: cargo +nightly bench -F fftw --bench bench_rustradio bench_fft_backend
+fn bench_fft_backend<E: rustradio::fft_filter::Engine>(
+    b: &mut Bencher,
+    transition_width: f32,
+    fft_size: usize,
+    make_engine: impl FnOnce(Vec<Complex>) -> E,
+) {
+    let taps = rustradio::fir::low_pass_complex(
+        1024000.0,
+        50000.0,
+        transition_width,
+        &WindowType::Hamming,
+    );
+    assert_eq!(2 * taps.len().next_power_of_two(), fft_size);
+    let count = fft_size - taps.len();
+    let mut input = vec![Complex::default(); fft_size];
+    for (i, sample) in input[..count].iter_mut().enumerate() {
+        *sample = Complex::new((i % 31) as f32 / 31.0, (i % 17) as f32 / 17.0);
+    }
+    // Reuse plans, transformed taps, and the input allocation, as FftFilter does.
+    // Engine::run retains each backend's actual scratch/allocation behavior.
+    let mut engine = make_engine(taps);
+    let mut work = input.clone();
+    b.bytes = (count * std::mem::size_of::<Complex>()) as u64;
+    b.iter(|| {
+        work.copy_from_slice(std::hint::black_box(&input));
+        engine.run(&mut work);
+        std::hint::black_box(&work);
+    });
+}
+
+#[bench]
+fn bench_fft_backend_rustfft_512(b: &mut Bencher) {
+    bench_fft_backend(
+        b,
+        10000.0,
+        512,
+        rustradio::fft_filter::rr_rustfft::RustFftEngine::new,
+    );
+}
+
+#[bench]
+fn bench_fft_backend_rustfft_2048(b: &mut Bencher) {
+    bench_fft_backend(
+        b,
+        2500.0,
+        2048,
+        rustradio::fft_filter::rr_rustfft::RustFftEngine::new,
+    );
+}
+
+#[bench]
+fn bench_fft_backend_rustfft_8192(b: &mut Bencher) {
+    bench_fft_backend(
+        b,
+        625.0,
+        8192,
+        rustradio::fft_filter::rr_rustfft::RustFftEngine::new,
+    );
+}
+
+#[cfg(feature = "fftw")]
+#[bench]
+fn bench_fft_backend_fftw_512(b: &mut Bencher) {
+    bench_fft_backend(
+        b,
+        10000.0,
+        512,
+        rustradio::fft_filter::rr_fftw::FftwEngine::new,
+    );
+}
+
+#[cfg(feature = "fftw")]
+#[bench]
+fn bench_fft_backend_fftw_2048(b: &mut Bencher) {
+    bench_fft_backend(
+        b,
+        2500.0,
+        2048,
+        rustradio::fft_filter::rr_fftw::FftwEngine::new,
+    );
+}
+
+#[cfg(feature = "fftw")]
+#[bench]
+fn bench_fft_backend_fftw_8192(b: &mut Bencher) {
+    bench_fft_backend(
+        b,
+        625.0,
+        8192,
+        rustradio::fft_filter::rr_fftw::FftwEngine::new,
+    );
+}
