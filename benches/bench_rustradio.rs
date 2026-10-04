@@ -78,8 +78,8 @@ fn bench_fft_filter(b: &mut Bencher) {
         // Fill input buffer.
         {
             let free = sw.free();
-            let o = sw.write_buf().unwrap();
-            //o.slice()[..input.len()].clone_from_slice(&input);
+            let mut o = sw.write_buf().unwrap();
+            o.slice().fill(Complex::default());
             o.produce(free, &[]);
         }
         // Empty output buffer.
@@ -104,8 +104,8 @@ fn bench_fir_filter(b: &mut Bencher) {
         // Fill input buffer.
         {
             let free = sw.free();
-            let o = sw.write_buf().unwrap();
-            //o.slice()[..input.len()].clone_from_slice(&input);
+            let mut o = sw.write_buf().unwrap();
+            o.slice().fill(Complex::default());
             o.produce(free, &[]);
         }
         // Empty output buffer.
@@ -150,7 +150,7 @@ fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
     b.bytes = (samples.len() * std::mem::size_of::<u32>()) as u64;
     b.iter(|| {
         let mut window = writer.write_buf().unwrap();
-        window.fill_from_slice(&samples);
+        window.fill_from_slice(&samples[..]);
         window.produce(samples.len(), &tags);
         assert!(matches!(
             block.work().unwrap(),
@@ -228,7 +228,7 @@ fn bench_stream_tags(b: &mut Bencher, stride: usize, reverse: bool) {
     b.bytes = (samples.len() * std::mem::size_of::<u32>()) as u64;
     b.iter(|| {
         let mut window = writer.write_buf().unwrap();
-        window.fill_from_slice(&samples);
+        window.fill_from_slice(&samples[..]);
         window.produce(samples.len(), &tags);
         let (window, tags) = reader.read_buf().unwrap();
         std::hint::black_box(tags);
@@ -254,4 +254,68 @@ fn bench_stream_tags_reversed(b: &mut Bencher) {
 #[bench]
 fn bench_stream_tags_none(b: &mut Bencher) {
     bench_stream_tags(b, 0, false);
+}
+
+#[cfg(feature = "wasm")]
+fn bench_wasm_window(b: &mut Bencher, count: usize, fill: u8, wrapped: bool) {
+    let buffer = std::sync::Arc::new(rustradio::sys::Buffer::<u32>::new(65536).unwrap());
+    let samples = vec![42u32; count];
+    b.bytes = (count * std::mem::size_of::<u32>()) as u64;
+    b.iter(|| {
+        if wrapped {
+            let capacity = buffer.total_size();
+            let padding = capacity - count / 2;
+            let mut writer = buffer.clone().write_buf().unwrap();
+            writer.slice()[..padding].fill(0);
+            writer.produce(padding, &[]);
+            buffer.consume(padding);
+        }
+        let mut writer = buffer.clone().write_buf().unwrap();
+        match fill {
+            0 => writer.slice()[..count].copy_from_slice(&samples),
+            1 => writer.fill_from_slice(&samples[..]),
+            _ => writer.fill_from_iter(samples.iter().copied()),
+        }
+        writer.produce(count, &[]);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        std::hint::black_box(reader.slice());
+        reader.consume(count);
+        if wrapped {
+            let remaining = buffer.total_size() - count / 2;
+            let mut writer = buffer.clone().write_buf().unwrap();
+            writer.slice()[..remaining].fill(0);
+            writer.produce(remaining, &[]);
+            buffer.consume(remaining);
+        }
+    });
+}
+
+#[cfg(feature = "wasm")]
+#[bench]
+fn bench_wasm_window_slice_small(b: &mut Bencher) {
+    bench_wasm_window(b, 64, 0, false);
+}
+
+#[cfg(feature = "wasm")]
+#[bench]
+fn bench_wasm_window_slice_large(b: &mut Bencher) {
+    bench_wasm_window(b, 8192, 0, false);
+}
+
+#[cfg(feature = "wasm")]
+#[bench]
+fn bench_wasm_window_slice_fill(b: &mut Bencher) {
+    bench_wasm_window(b, 8192, 1, false);
+}
+
+#[cfg(feature = "wasm")]
+#[bench]
+fn bench_wasm_window_iter_fill(b: &mut Bencher) {
+    bench_wasm_window(b, 8192, 2, false);
+}
+
+#[cfg(feature = "wasm")]
+#[bench]
+fn bench_wasm_window_wrapped(b: &mut Bencher) {
+    bench_wasm_window(b, 8192, 0, true);
 }

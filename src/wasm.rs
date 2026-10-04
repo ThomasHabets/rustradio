@@ -63,37 +63,20 @@ impl Instant {
     }
 }
 
-// The stream in BufferState is not actually shared. Producing initializes
-// values in it, and consuming drops those values and marks the slots free by
-// advancing rpos/used.
-//
-// This is not as performant as the circular buffer for non-WASM, but it does
-// work.
-//
-// Originally this used `Vec<Option<T>>`, but that uses twice the buffer space
-// and was marginally slower. (an AX.25 decode test went from ~60% CPU to ~55%).
-//
-// It should be possible to not copy to and from the readers and writers, but it
-// requires more careful lifetime and pointer handling.
-//
-// The main requirement making this complex is that the users of these buffers
-// need linear `&[T]` to work with, and a block needing to write two elements can
-// get stuck if we keep giving it just one elements of space.
-//
-// We can't do `VecDeque` because it doesn't give us a linear buffer.
-//
-// We can't "just" rotate the buffer when needed. Well, we can, but:
-// 1. We need to make sure there are no readers or writers outstanding, and
-// 2. every rotation means copying all the elements, which is what we wanted to
-//    avoid in the first place. Though to be fair, one less copy.
+// WASM cannot double-map the ring into a linear slice. Readers and writers
+// therefore own linear scratch buffers and copy across at most two ring slices.
+// The single writer reuses a full-sized, initialized buffer; reader snapshots
+// reuse capacity when returned. Scratch storage never aliases the sample ring.
 #[derive(Debug)]
 struct BufferState<T> {
     rpos: usize,
     wpos: usize,
     used: usize,
-    // Only the range described by rpos/used is initialized.
+    // Only the range described by rpos/used contains produced samples.
     stream: Vec<T>,
     tags: StreamTags,
+    write_cache: Option<Vec<T>>,
+    read_cache: Vec<T>,
 
     // Extra accounting to ensure that we never read uninitialized content.
     #[cfg(debug_assertions)]
@@ -122,6 +105,8 @@ impl<T: Default> BufferState<T> {
             used: 0,
             stream,
             tags: StreamTags::default(),
+            write_cache: Some(std::iter::repeat_with(T::default).take(size).collect()),
+            read_cache: Vec::new(),
 
             #[cfg(debug_assertions)]
             initialized: vec![false; size],
@@ -130,16 +115,42 @@ impl<T: Default> BufferState<T> {
 }
 
 impl<T> BufferState<T> {
-    // Return write range, in samples.
-    #[must_use]
-    fn write_range(&self) -> (usize, usize) {
-        //eprintln!("Write range: {} {}", self.rpos, self.wpos);
-        (self.wpos, self.wpos + self.free())
+    fn ranges(
+        &self,
+        start: usize,
+        count: usize,
+    ) -> (std::ops::Range<usize>, std::ops::Range<usize>) {
+        let first = count.min(self.capacity() - start);
+        (start..start + first, 0..count - first)
     }
-    // Read range, in samples
-    #[must_use]
-    fn read_range(&self) -> (usize, usize) {
-        (self.rpos, self.rpos + self.used)
+
+    fn consume(&mut self, count: usize) {
+        assert!(
+            count <= self.used,
+            "trying to consume {count}, but only have {}",
+            self.used
+        );
+        if count == 0 {
+            return;
+        }
+        #[cfg(debug_assertions)]
+        {
+            let (first, second) = self.ranges(self.rpos, count);
+            debug_assert!(self.initialized[first.clone()].iter().all(|value| *value));
+            debug_assert!(self.initialized[second.clone()].iter().all(|value| *value));
+            self.initialized[first].fill(false);
+            self.initialized[second].fill(false);
+        }
+        self.tags.consume(count);
+        self.rpos = (self.rpos + count) % self.capacity();
+        self.used -= count;
+    }
+
+    fn recycle_reader(&mut self, mut stream: Vec<T>) {
+        if stream.capacity() >= self.read_cache.capacity() {
+            stream.clear();
+            self.read_cache = stream;
+        }
     }
 
     #[must_use]
@@ -181,22 +192,7 @@ impl<T> Buffer<T> {
         self.state.lock().unwrap().free()
     }
     pub fn consume(&self, n: usize) {
-        let mut l = self.state.lock().unwrap();
-        assert!(
-            n <= l.used,
-            "trying to consume {n}, but only have {}",
-            l.used
-        );
-        let capacity = l.capacity();
-        #[cfg(debug_assertions)]
-        for i in 0..n {
-            let pos = (l.rpos + i) % capacity;
-            debug_assert!(l.initialized[pos]);
-            l.initialized[pos] = false;
-        }
-        l.tags.consume(n);
-        l.rpos = (l.rpos + n) % capacity;
-        l.used -= n;
+        self.state.lock().unwrap().consume(n);
     }
     pub fn total_size(&self) -> usize {
         self.state.lock().unwrap().capacity()
@@ -220,59 +216,71 @@ impl<T> Buffer<T> {
         self.wait_for_read(_need)
     }
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
-        let l = self.state.lock().unwrap();
-        let (start, end) = l.write_range();
-        drop(l);
-        Ok(BufferWriter::new(self, end - start))
+        let mut state = self.state.lock().unwrap();
+        let len = state.free();
+        let stream = state
+            .write_cache
+            .take()
+            .ok_or_else(|| Error::msg("write_buf() called with an outstanding write buffer"))?;
+        drop(state);
+        Ok(BufferWriter {
+            parent: self,
+            len,
+            prepared: 0,
+            stream: Some(stream),
+        })
     }
 }
 
-// Produce and creating a read buf inherently requires copying.
-impl<T: Copy> Buffer<T> {
-    pub fn produce(&self, samples: &[T], tags: &[Tag]) {
+impl<T: Copy> BufferState<T> {
+    fn produce(&mut self, samples: &[T], tags: &[Tag]) {
         if samples.is_empty() {
             debug_assert!(tags.is_empty());
             return;
         }
-        let mut l = self.state.lock().unwrap();
         assert!(
-            samples.len() <= l.free(),
+            samples.len() <= self.free(),
             "tried to produce {}, but only {} is free out of {}",
             samples.len(),
-            l.free(),
-            l.capacity()
+            self.free(),
+            self.capacity()
         );
-        let capacity = l.capacity();
-        let wpos = l.wpos;
-        for (i, sample) in samples.iter().copied().enumerate() {
-            let pos = (wpos + i) % capacity;
-            l.stream[pos] = sample;
-            #[cfg(debug_assertions)]
-            {
-                debug_assert!(!l.initialized[pos]);
-                l.initialized[pos] = true;
-            }
+        let (first, second) = self.ranges(self.wpos, samples.len());
+        let split = first.len();
+        #[cfg(debug_assertions)]
+        {
+            debug_assert!(self.initialized[first.clone()].iter().all(|value| !*value));
+            debug_assert!(self.initialized[second.clone()].iter().all(|value| !*value));
+            self.initialized[first.clone()].fill(true);
+            self.initialized[second.clone()].fill(true);
         }
-        l.tags.produce(samples.len(), tags);
-        l.wpos = (wpos + samples.len()) % capacity;
-        l.used += samples.len();
+        self.stream[first].copy_from_slice(&samples[..split]);
+        self.stream[second].copy_from_slice(&samples[split..]);
+        self.tags.produce(samples.len(), tags);
+        self.wpos = (self.wpos + samples.len()) % self.capacity();
+        self.used += samples.len();
     }
+}
+
+impl<T: Copy> Buffer<T> {
+    pub fn produce(&self, samples: &[T], tags: &[Tag]) {
+        self.state.lock().unwrap().produce(samples, tags);
+    }
+
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let s = self.state.lock().unwrap();
-        let (start, end) = s.read_range();
-        let used = end - start;
-        let capacity = s.capacity();
-        let mut stream = Vec::with_capacity(used);
-        for i in 0..used {
-            let pos = (start + i) % capacity;
-            #[cfg(debug_assertions)]
-            {
-                debug_assert!(s.initialized[pos]);
-            }
-            stream.push(s.stream[pos]);
+        let mut state = self.state.lock().unwrap();
+        let (first, second) = state.ranges(state.rpos, state.used);
+        #[cfg(debug_assertions)]
+        {
+            debug_assert!(state.initialized[first.clone()].iter().all(|value| *value));
+            debug_assert!(state.initialized[second.clone()].iter().all(|value| *value));
         }
-        let tags = s.tags.read();
-        drop(s);
+        let mut stream = std::mem::take(&mut state.read_cache);
+        stream.reserve(state.used);
+        stream.extend_from_slice(&state.stream[first]);
+        stream.extend_from_slice(&state.stream[second]);
+        let tags = state.tags.read();
+        drop(state);
         Ok((BufferReader::new(self, stream), tags))
     }
 }
@@ -299,13 +307,15 @@ impl<T> BufferReader<T> {
     }
 
     /// We're done with the buffer. Consume `n` samples.
-    pub fn consume(self, n: usize) {
+    pub fn consume(mut self, n: usize) {
         assert!(
             n <= self.stream.len(),
             "trying to consume {n}, but read buffer only has {}",
             self.stream.len()
         );
-        self.parent.consume(n);
+        let mut state = self.parent.state.lock().unwrap();
+        state.consume(n);
+        state.recycle_reader(std::mem::take(&mut self.stream));
     }
 
     /// len convenience function.
@@ -320,92 +330,91 @@ impl<T> BufferReader<T> {
         self.len() == 0
     }
 }
+impl<T> Drop for BufferReader<T> {
+    fn drop(&mut self) {
+        if self.stream.capacity() != 0
+            && let Ok(mut state) = self.parent.state.lock()
+        {
+            state.recycle_reader(std::mem::take(&mut self.stream));
+        }
+    }
+}
+
 pub struct BufferWriter<T> {
     parent: Arc<Buffer<T>>,
     len: usize,
-    stream: Vec<T>,
+    prepared: usize,
+    // None after the storage has been returned to the parent.
+    stream: Option<Vec<T>>,
 }
+
 impl<T> BufferWriter<T> {
-    #[must_use]
-    fn new(parent: Arc<Buffer<T>>, len: usize) -> BufferWriter<T> {
-        Self {
-            parent,
-            len,
-            stream: Vec::new(),
+    /// Copy from an iterator, stopping at the end of the write window.
+    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
+        self.prepared = 0;
+        let stream = self.stream.as_mut().expect("writer storage");
+        for (place, item) in stream[..self.len].iter_mut().zip(src) {
+            *place = item;
+            self.prepared += 1;
         }
     }
-    /// Shortcut to save typing for the common operation of copying
-    /// from an iterator.
-    pub fn fill_from_slice(&mut self, src: impl Into<Vec<T>>) {
-        let src = src.into();
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Return the slice to write to. Unwritten slots may retain previous values.
+    #[must_use]
+    pub fn slice(&mut self) -> &mut [T] {
+        self.prepared = self.len;
+        &mut self.stream.as_mut().expect("writer storage")[..self.len]
+    }
+}
+
+impl<T: Copy> BufferWriter<T> {
+    /// Copy samples into the existing write window.
+    pub fn fill_from_slice(&mut self, src: &[T]) {
         assert!(
             src.len() <= self.len,
             "trying to write {} samples into a {} sample buffer",
             src.len(),
             self.len
         );
-        self.stream = src;
-    }
-    /// Shortcut to save typing for the common operation of copying
-    /// from an iterator.
-    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
-        self.stream = src.into_iter().take(self.len).collect();
+        self.stream.as_mut().expect("writer storage")[..src.len()].copy_from_slice(src);
+        self.prepared = src.len();
     }
 
-    /// len convenience function.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    /// is_empty convenience function.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
-impl<T: Default> BufferWriter<T> {
-    /// Return the slice to write to.
-    #[must_use]
-    pub fn slice(&mut self) -> &mut [T] {
-        if self.stream.len() < self.len {
-            self.stream.resize_with(self.len, T::default);
-        }
-        debug_assert_eq!(
-            self.stream.len(),
-            self.len(),
-            "Why would the stream len ever be larger than len?"
-        );
-        self.stream.as_mut_slice()
-    }
-}
-
-// Produce on a Writer needs Copy because the parent buffer will copy from here
-// into the main buffer.
-impl<T: Copy> BufferWriter<T> {
-    /// Having written into the write buffer, now tell the buffer
-    /// we're done. Also here are the tags, with positions relative to
-    /// start of buffer.
-    ///
-    // Tags inherently need to be copied in, because they need to be added to
-    // the underlying stream.
-    pub fn produce(self, n: usize, tags: &[Tag]) {
+    /// Commit writes and tags, whose positions are relative to this window.
+    pub fn produce(mut self, n: usize, tags: &[Tag]) {
         assert!(
             n <= self.len,
             "trying to produce {n} samples from a {} sample buffer",
             self.len
         );
-        if n == 0 {
-            debug_assert!(tags.is_empty(), "produced 0 samples with nonzero tags");
-            return;
-        }
         assert!(
-            n <= self.stream.len(),
+            n <= self.prepared,
             "trying to produce {n} samples, but only {} samples were written",
-            self.stream.len()
+            self.prepared
         );
-        self.parent.produce(&self.stream[..n], tags);
+        let mut state = self.parent.state.lock().unwrap();
+        state.produce(&self.stream.as_ref().expect("writer storage")[..n], tags);
+        state.write_cache = self.stream.take();
+    }
+}
+
+impl<T> Drop for BufferWriter<T> {
+    fn drop(&mut self) {
+        if let Some(stream) = self.stream.take()
+            && let Ok(mut state) = self.parent.state.lock()
+        {
+            state.write_cache = Some(stream);
+        }
     }
 }
 
@@ -417,4 +426,158 @@ pub mod export {
     pub type Buffer<T> = super::Buffer<T>;
     pub type BufferReader<T> = super::BufferReader<T>;
     pub type BufferWriter<T> = super::BufferWriter<T>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    fn buffer() -> Arc<Buffer<u32>> {
+        Arc::new(Buffer::new(64).unwrap())
+    }
+
+    #[test]
+    fn writer_storage_is_initialized_once_and_reused_for_smaller_windows() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        #[derive(Clone, Copy)]
+        struct Sample(u32);
+        impl Default for Sample {
+            fn default() -> Self {
+                CALLS.fetch_add(1, Ordering::Relaxed);
+                Self(0)
+            }
+        }
+        let buffer = Arc::new(Buffer::<Sample>::new(64).unwrap());
+        assert_eq!(CALLS.load(Ordering::Relaxed), 32);
+        let mut writer = buffer.clone().write_buf().unwrap();
+        let allocation = writer.slice().as_ptr();
+        writer.slice()[..8].fill(Sample(42));
+        writer.produce(8, &[]);
+        let mut writer = buffer.clone().write_buf().unwrap();
+        assert_eq!(writer.len(), 8);
+        assert_eq!(writer.slice().len(), 8);
+        assert_eq!(writer.slice().as_ptr(), allocation);
+        drop(writer);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert!(reader.iter().all(|sample| sample.0 == 42));
+        reader.consume(8);
+        let mut writer = buffer.clone().write_buf().unwrap();
+        assert_eq!(writer.slice().len(), 16);
+        assert_eq!(writer.slice().as_ptr(), allocation);
+        assert_eq!(CALLS.load(Ordering::Relaxed), 32);
+    }
+
+    #[test]
+    fn second_writer_is_rejected_and_drop_returns_storage_without_producing() {
+        let buffer = buffer();
+        let mut writer = buffer.clone().write_buf().unwrap();
+        let allocation = writer.slice().as_ptr();
+        writer.slice()[0] = 99;
+        assert!(buffer.clone().write_buf().is_err());
+        drop(writer);
+        assert!(buffer.is_empty());
+        let mut writer = buffer.clone().write_buf().unwrap();
+        assert_eq!(writer.slice().as_ptr(), allocation);
+        writer.produce(0, &[]);
+        assert!(buffer.clone().write_buf().is_ok());
+    }
+
+    #[test]
+    fn read_snapshots_and_writer_copies_preserve_values_across_wraparound() {
+        let buffer = buffer();
+        buffer.produce(&[0; 14], &[]);
+        buffer.consume(14);
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.fill_from_slice(&[11, 12, 13, 14, 15]);
+        writer.produce(5, &[]);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert_eq!(reader.slice(), [11, 12, 13, 14, 15]);
+        let allocation = reader.slice().as_ptr();
+        drop(reader);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert_eq!(reader.slice().as_ptr(), allocation);
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.fill_from_iter([16, 17]);
+        writer.produce(2, &[]);
+        // An outstanding reader owns a snapshot, independent of subsequent writes.
+        assert_eq!(reader.slice(), [11, 12, 13, 14, 15]);
+        reader.consume(3);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert_eq!(reader.slice(), [14, 15, 16, 17]);
+        reader.consume(4);
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn fill_helpers_replace_the_prepared_prefix_and_retain_the_allocation() {
+        let buffer = buffer();
+        let mut writer = buffer.clone().write_buf().unwrap();
+        let allocation = writer.slice().as_ptr();
+        writer.fill_from_slice(&[1, 2, 3, 4]);
+        writer.fill_from_iter([5, 6]);
+        assert_eq!(writer.prepared, 2);
+        assert_eq!(writer.stream.as_ref().unwrap().as_ptr(), allocation);
+        writer.produce(2, &[]);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert_eq!(reader.slice(), [5, 6]);
+        reader.consume(2);
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.fill_from_iter(0..100);
+        assert_eq!(writer.prepared, 16);
+        writer.fill_from_slice(&[7]);
+        assert_eq!(writer.prepared, 1);
+        writer.produce(1, &[]);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert_eq!(reader.slice(), [7]);
+        reader.consume(1);
+    }
+
+    #[test]
+    fn reused_storage_does_not_allow_producing_an_unprepared_prefix() {
+        let buffer = buffer();
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.slice().fill(42);
+        drop(writer);
+        let writer = buffer.clone().write_buf().unwrap();
+        assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(1, &[]))).is_err());
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.fill_from_iter([1, 2]);
+        assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(3, &[]))).is_err());
+        assert!(buffer.is_empty());
+        assert!(buffer.clone().write_buf().is_ok());
+    }
+
+    #[test]
+    fn reader_drop_reuses_storage_without_consuming() {
+        let buffer = buffer();
+        buffer.produce(&[1, 2, 3, 4], &[]);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let allocation = reader.slice().as_ptr();
+        drop(reader);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert_eq!(reader.slice(), [1, 2, 3, 4]);
+        assert_eq!(reader.slice().as_ptr(), allocation);
+        reader.consume(0);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert_eq!(reader.slice().as_ptr(), allocation);
+        reader.consume(4);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        assert!(reader.is_empty());
+        reader.consume(0);
+    }
+
+    #[test]
+    fn recycling_skips_poisoned_state_during_unwinding() {
+        let buffer = buffer();
+        buffer.produce(&[1], &[]);
+        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.fill_from_slice(&[2]);
+        let tags = [Tag::new(1, "invalid", crate::stream::TagValue::Bool(true))];
+        assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(1, &tags))).is_err());
+        assert!(buffer.state.is_poisoned());
+        drop(reader);
+    }
 }
