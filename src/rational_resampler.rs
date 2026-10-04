@@ -1,7 +1,6 @@
 //! Resample by a fractional amount.
-/*
-* Unlike the rational resampler in GNURadio, this one doesn't filter.
- */
+//!
+//! Unlike the rational resampler in GNURadio, this one doesn't filter.
 use crate::{Error, Result, Sample};
 
 use crate::block::{Block, BlockEOF, BlockRet};
@@ -95,6 +94,15 @@ impl<T: Sample> RationalResamplerBuilderBoth<T> {
 ///
 /// This can be used to easily convert from any sample rate to any other. Just
 /// set decimation to the current rate, and interpolation to the new rate.
+///
+/// The interpolation and decimation will be reduced to relative primes, so it's
+/// prefectly fine to set decimation to e.g. 50k and interpolation to 44100.
+///
+/// This block does not filter. If decimation is greater than interpolation,
+/// then it needs to have already been filtered, to avoid aliasing.
+///
+/// TODO: add filtering to this block, as a FIR runs at the output rate and may
+/// thus be faster than filtering before this block.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct RationalResampler<T: Sample> {
