@@ -67,6 +67,7 @@ fn e2e_ax25_decoding() {
             909,
         ),
         ("ax25-9600-wpcr", "aprs-9600-50k.c32", 50000, vec![], 1),
+        ("ax25-9600-rx", "aprs-9600-50k.c32", 50000, vec![], 1),
     ] {
         let temp_dir = tempdir().unwrap();
         let testfile = Path::new("tests/testdata").join(filename);

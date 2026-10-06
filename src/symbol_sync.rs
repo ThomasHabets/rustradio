@@ -76,7 +76,8 @@ impl SymbolSync {
         mut clock_filter: Box<dyn ClampedFilter<Float>>,
     ) -> (Self, ReadStream<Float>) {
         assert!(sps > 1.0);
-        clock_filter.fill(sps);
+        // The filter tracks deviation from sps, not the absolute period.
+        clock_filter.fill(0.0);
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
@@ -224,6 +225,32 @@ mod tests {
     use super::*;
     use crate::block::Block;
     use crate::iir_filter::IirFilter;
+
+    #[test]
+    fn nominal_period_does_not_start_with_clock_deviation() -> Result<()> {
+        let samples: Vec<_> = (0..80)
+            .map(|i| if (i / 4) % 2 == 0 { -1.0 } else { 1.0 })
+            .collect();
+        let (mut block, output) = SymbolSync::new(
+            ReadStream::from_slice(&samples),
+            4.0,
+            0.1,
+            Box::new(TedZeroCrossing::new()),
+            Box::new(IirFilter::new(&[0.0001, 0.9999])),
+        );
+        let clock = block.out_clock().unwrap();
+
+        assert!(matches!(block.work()?, BlockRet::Again));
+        let (symbols, _) = output.read_buf()?;
+        assert_eq!(symbols.len(), 20);
+        for (i, symbol) in symbols.iter().enumerate() {
+            assert_eq!(*symbol, if i % 2 == 0 { -1.0 } else { 1.0 });
+        }
+        let (periods, _) = clock.read_buf()?;
+        assert_eq!(periods.len(), symbols.len());
+        assert!(periods.iter().all(|period| *period == 4.0));
+        Ok(())
+    }
 
     #[test]
     fn starts_at_middle_of_first_symbol() -> Result<()> {
