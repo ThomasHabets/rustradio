@@ -81,7 +81,7 @@ fn e2e_ax25_decoding() {
                 &format!("{}", testfile.as_path().display()),
                 "-o",
                 &format!("{}", temp_dir.path().display()),
-                "--sample_rate",
+                "--sample-rate",
                 &sample_rate.to_string(),
             ]
             .iter()

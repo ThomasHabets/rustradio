@@ -20,7 +20,7 @@ struct Opt {
 #[derive(clap::Args)]
 struct CreateOpts {
     /// Sample rate.
-    #[arg(long, value_parser = parse_float_with_underscores)]
+    #[arg(long, value_parser = rustradio::parse_frequency)]
     sample_rate: f64,
 
     /// Data type.

@@ -27,8 +27,8 @@ struct Opt {
     #[arg(short, default_value = "0")]
     verbose: usize,
 
-    #[arg(long = "sample_rate", default_value = "50000")]
-    samp_rate: u32,
+    #[arg(long, value_parser = rustradio::parse_frequency, default_value = "50k")]
+    sample_rate: f64,
 
     #[arg(short, help = "Read I/Q from file")]
     read: String,
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     let mut g = Graph::new();
 
     // TODO: this is a complete mess.
-    let samp_rate = opt.samp_rate as Float;
+    let samp_rate = opt.sample_rate as Float;
     let new_samp_rate = 50_000.0;
     let freq1 = 1200.0;
     let freq2 = 2200.0;
@@ -153,6 +153,6 @@ fn main() -> Result<()> {
 }
 /* ---- Emacs variables ----
  * Local variables:
- * compile-command: "cargo run --example il2p-1200-rx -- -r ../il2p-50k-1s.c32 --sample_rate 50000 -o ../packets"
+ * compile-command: "cargo run --example il2p-1200-rx -- -r ../il2p-50k-1s.c32 --sample-rate 50000 -o ../packets"
  * End:
  */

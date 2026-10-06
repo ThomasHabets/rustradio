@@ -26,8 +26,8 @@ struct Opt {
     #[arg(long = "freq", value_parser=parse_frequency, default_value = "100m")]
     freq: f64,
 
-    #[arg(long, value_parser=parse_frequency, default_value = "300000")]
-    samp_rate: f64,
+    #[arg(long, value_parser=parse_frequency, default_value = "300k")]
+    sample_rate: f64,
 
     #[arg(long = "gain", default_value = "0.3")]
     gain: f64,
@@ -150,7 +150,7 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        SoapySdrSource::builder(&dev, opt.freq, opt.samp_rate)
+        SoapySdrSource::builder(&dev, opt.freq, opt.sample_rate)
             .igain(opt.gain)?
             .gps_coordinates(opt.gps_coordinates)
             .build()?,
@@ -160,7 +160,7 @@ fn main() -> Result<()> {
                 global: sigmf::Global {
                     core_version: sigmf::VERSION.to_string(),
                     core_datatype: "cf32".to_string(),
-                    core_sample_rate: Some(opt.samp_rate),
+                    core_sample_rate: Some(opt.sample_rate),
                     core_recorder: Some("RustRadio".to_string()),
                     // TODO:
                     // * author

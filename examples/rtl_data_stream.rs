@@ -25,12 +25,12 @@ struct Opt {
     freq: u64,
 
     /// Sample rate.
-    #[arg(long, short, default_value_t = 250_000)]
-    sample_rate: u32,
+    #[arg(long, value_parser = rustradio::parse_frequency, short, default_value = "250k")]
+    sample_rate: f64,
 
     /// Sample rate.
-    #[arg(long, short, default_value_t = 50_000)]
-    downsample_rate: u32,
+    #[arg(long, short, value_parser = rustradio::parse_frequency, default_value = "50k")]
+    downsample_rate: f64,
 
     /// Verbosity of debug messages.
     #[arg(short, default_value = "0")]
@@ -176,7 +176,7 @@ fn run(opt: Opt) -> Result<()> {
         bail!("--packet-bytes must be at least 2");
     }
 
-    let samp_rate = opt.sample_rate;
+    let samp_rate = opt.sample_rate as u32;
     let samp_rate_2 = opt.downsample_rate;
     let stdout = std::io::BufWriter::new(std::io::stdout());
     let mut writer = SyncWriter::new(stdout);

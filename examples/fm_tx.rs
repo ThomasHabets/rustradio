@@ -43,8 +43,8 @@ struct Opt {
     audio_rate: usize,
 
     /// Sample rate on RF side.
-    #[arg(long, default_value_t = 480000)]
-    sample_rate: usize,
+    #[arg(long, value_parser = rustradio::parse_frequency, default_value = "480k")]
+    sample_rate: f64,
 
     /// List SDR devices.
     #[arg(long)]
@@ -83,21 +83,17 @@ fn main() -> Result<()> {
         AuDecode::new(prev, opt.audio_rate as u32),
         RationalResampler::builder()
             .deci(opt.audio_rate)
-            .interp(opt.sample_rate)
+            .interp(opt.sample_rate as usize)
             .build(prev)?,
         Vco::new(
             prev,
-            2.0 * std::f64::consts::PI * opt.deviation as f64 / opt.sample_rate as f64
+            2.0 * std::f64::consts::PI * opt.deviation as f64 / opt.sample_rate
         ),
     ];
     g.add(Box::new(
-        SoapySdrSink::builder(
-            &dev,
-            (1_000_000.0 * opt.freq).into(),
-            opt.sample_rate as f64,
-        )
-        .ogain(opt.ogain.into())?
-        .build(prev)?,
+        SoapySdrSink::builder(&dev, (1_000_000.0 * opt.freq).into(), opt.sample_rate)
+            .ogain(opt.ogain.into())?
+            .build(prev)?,
     ));
 
     let cancel = g.cancel_token();

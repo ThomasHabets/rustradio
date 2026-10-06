@@ -28,8 +28,8 @@ struct Opt {
     #[arg(long = "rtlsdr")]
     rtlsdr: bool,
 
-    #[arg(long = "sample_rate", short, default_value = "50000")]
-    samp_rate: Float,
+    #[arg(long, value_parser = rustradio::parse_frequency, short, default_value = "50k")]
+    sample_rate: f64,
 
     #[arg(long = "out", short)]
     output: PathBuf,
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let samp_rate = opt.samp_rate;
+    let samp_rate = opt.sample_rate as Float;
     let mut g = Graph::new();
 
     // Source.

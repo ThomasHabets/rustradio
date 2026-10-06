@@ -5,7 +5,7 @@ complex I/Q saved to a file.
 
 ```no_run
 $ mkdir captured
-$ ./ax25-1200-rx -r captured.c32 --samp_rate 50000 -o captured
+$ ./ax25-1200-rx -r captured.c32 --sample-rate 50000 -o captured
 […]
 $ ./ax25-1200-rx --rtlsdr -o captured -v 2
 […]
@@ -74,8 +74,8 @@ struct Opt {
     #[arg(long = "clock-file", help = "File to write clock sync data to")]
     clock_file: Option<PathBuf>,
 
-    #[arg(long = "sample_rate")]
-    samp_rate: Option<u32>,
+    #[arg(long, value_parser = rustradio::parse_frequency)]
+    sample_rate: Option<f64>,
 
     #[arg(short = 'r', help = "Read I/Q from file")]
     read: Option<std::path::PathBuf>,
@@ -104,8 +104,8 @@ fn get_complex_input(
 ) -> Result<(ReadStream<Complex>, f32)> {
     if let Some(ref read) = opt.read {
         let mut b = SigMFSource::builder(read.clone());
-        if let Some(s) = opt.samp_rate {
-            b = b.sample_rate(s as f64);
+        if let Some(s) = opt.sample_rate {
+            b = b.sample_rate(s);
         }
         let (b, prev) = b.build()?;
         let samp_rate = b
@@ -119,13 +119,13 @@ fn get_complex_input(
         #[cfg(feature = "rtlsdr")]
         {
             let samp = opt
-                .samp_rate
+                .sample_rate
                 .ok_or(Error::msg("Sample rate must be provided for RTLSDR input"))?;
             return Ok((
                 blockchain![
                     g,
                     prev,
-                    RtlSdrSource::new(opt.freq, samp, opt.gain)?,
+                    RtlSdrSource::new(opt.freq, samp as u32, opt.gain)?,
                     RtlSdrDecode::new(prev),
                 ],
                 samp as f32,
@@ -146,13 +146,14 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
                 FileSource::new(read)?,
                 AuDecode::new(
                     prev,
-                    opt.samp_rate.expect("audio source requires --sample_rate")
+                    opt.sample_rate
+                        .expect("audio source requires --sample-rate") as u32
                 ),
             ];
             // TODO: AuDecode should be providing the bitrate.
             return Ok((
                 prev,
-                opt.samp_rate.ok_or(Error::msg(
+                opt.sample_rate.ok_or(Error::msg(
                     "audio input requires providing a sample rate, for now",
                 ))? as f32,
             ));
@@ -337,6 +338,6 @@ fn main() -> Result<()> {
 }
 /* ---- Emacs variables ----
  * Local variables:
- * compile-command: "cargo run --example ax25-1200-rx -- -r ../aprs-50k.c32 --sample_rate 50000 -o ../packets"
+ * compile-command: "cargo run --example ax25-1200-rx -- -r ../aprs-50k.c32 --sample-rate 50000 -o ../packets"
  * End:
  */

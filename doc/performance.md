@@ -74,7 +74,7 @@ cargo +nightly flamegraph \
     -- \
     -a \
     -r cd/cd_tracks_01.au \
-    --sample_rate 44100 \
+    --sample-rate 44100 \
     -o tmp
 ```
 

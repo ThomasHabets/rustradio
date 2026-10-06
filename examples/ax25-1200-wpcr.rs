@@ -24,8 +24,8 @@ struct Opt {
     #[arg(short = 'r')]
     read: String,
 
-    #[arg(long = "sample_rate", default_value = "50000")]
-    sample_rate: Float,
+    #[arg(long, value_parser = rustradio::parse_frequency, default_value = "50k")]
+    sample_rate: f64,
 
     #[arg(short, long = "out")]
     output: PathBuf,
@@ -54,7 +54,7 @@ fn main() -> Result<()> {
         .init()
         .unwrap();
 
-    let samp_rate = opt.sample_rate;
+    let samp_rate = opt.sample_rate as Float;
     let mut g: Box<dyn rustradio::graph::GraphRunner> = if opt.multithreaded {
         Box::new(rustradio::mtgraph::MTGraph::new())
     } else {
@@ -124,7 +124,9 @@ fn main() -> Result<()> {
         StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50),
         // Symbol sync.
         Midpointer::new(prev),
-        Wpcr::builder(prev).samp_rate(opt.sample_rate).build(),
+        Wpcr::builder(prev)
+            .samp_rate(opt.sample_rate as Float)
+            .build(),
         PduToStream::new(prev),
         BinarySlicer::new(prev),
         // Delay xor, aka NRZI decode.

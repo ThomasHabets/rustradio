@@ -30,8 +30,8 @@ struct Opt {
     #[arg(long = "rtlsdr")]
     rtlsdr: bool,
 
-    #[arg(long = "sample_rate", default_value = "300000")]
-    samp_rate: u32,
+    #[arg(long, value_parser = rustradio::parse_frequency, default_value = "300k")]
+    sample_rate: f64,
 
     #[arg(short)]
     read: Option<String>,
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
 
     let (prev, samp_rate) = if let Some(read) = opt.read {
         let prev = blockchain![g, prev, FileSource::new(&read)?];
-        (prev, opt.samp_rate as Float)
+        (prev, opt.sample_rate as Float)
     } else if opt.rtlsdr {
         #[cfg(feature = "rtlsdr")]
         {
@@ -75,11 +75,11 @@ fn main() -> Result<()> {
             let prev = blockchain![
                 g,
                 prev,
-                RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?,
+                RtlSdrSource::new(opt.freq, opt.sample_rate as u32, opt.gain)?,
                 RtlSdrDecode::new(prev),
             ];
             // Decode.
-            (prev, opt.samp_rate as Float)
+            (prev, opt.sample_rate as Float)
         }
         #[cfg(not(feature = "rtlsdr"))]
         panic!("rtlsdr feature not enabled")
