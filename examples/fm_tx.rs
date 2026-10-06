@@ -19,7 +19,7 @@ use rustradio::mtgraph::MTGraph;
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
 struct Opt {
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     /// soapysdr driver string.

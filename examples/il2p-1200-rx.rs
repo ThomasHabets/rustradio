@@ -24,7 +24,7 @@ struct Opt {
     #[arg(long = "out", short, help = "Directory to write packets to")]
     _output: Option<PathBuf>,
 
-    #[arg(short, default_value = "0")]
+    #[arg(short, value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     #[arg(long, value_parser = rustradio::parse_frequency, default_value = "50k")]

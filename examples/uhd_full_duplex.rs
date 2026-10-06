@@ -56,8 +56,8 @@ struct Opt {
     time_source: Option<String>,
 
     /// Logging verbosity.
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    verbose: u8,
+    #[arg(short, long, value_parser = rustradio::parse_verbosity, default_value = "error")]
+    verbose: usize,
 }
 
 fn main() -> Result<()> {
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
         .module(module_path!())
         .module("rustradio")
         .quiet(false)
-        .verbosity(opt.verbose as usize)
+        .verbosity(opt.verbose)
         .timestamp(stderrlog::Timestamp::Second)
         .init()?;
 

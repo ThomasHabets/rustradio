@@ -33,7 +33,7 @@ struct Opt {
     downsample_rate: f64,
 
     /// Verbosity of debug messages.
-    #[arg(short, default_value = "0")]
+    #[arg(short, value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     /// Input gain, if reading from RTL SDR.

@@ -30,7 +30,7 @@ struct Opt {
     #[arg(long = "gain", default_value_t = 0.2)]
     gain: f32,
 
-    #[arg(short, default_value = "0")]
+    #[arg(short, value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     #[arg(long = "volume", default_value_t = 1.0)]

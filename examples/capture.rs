@@ -32,7 +32,7 @@ struct Opt {
     #[arg(long = "gain", default_value = "0.3")]
     gain: f64,
 
-    #[arg(short, default_value = "0")]
+    #[arg(short, value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     /// Set time source.

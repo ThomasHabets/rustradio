@@ -30,7 +30,7 @@ struct Opt {
     #[arg(short, long = "out")]
     output: PathBuf,
 
-    #[arg(short, default_value = "0")]
+    #[arg(short, value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     #[arg(long = "threshold", default_value = "0.0001")]

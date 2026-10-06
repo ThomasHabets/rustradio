@@ -7,7 +7,7 @@ complex I/Q saved to a file.
 $ mkdir captured
 $ ./ax25-1200-rx -r captured.c32 --sample-rate 50000 -o captured
 […]
-$ ./ax25-1200-rx --rtlsdr -o captured -v 2
+$ ./ax25-1200-rx --rtlsdr -o captured -v info
 […]
 ```
 
@@ -62,7 +62,7 @@ struct Opt {
     #[arg(long = "gain", default_value = "20")]
     gain: i32,
 
-    #[arg(short = 'v', default_value = "0")]
+    #[arg(short = 'v', value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     #[arg(long)]

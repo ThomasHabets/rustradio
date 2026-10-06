@@ -24,7 +24,7 @@ struct Opt {
     #[arg(long = "freq", default_value = "144800000")]
     freq: u64,
 
-    #[arg(short, default_value = "0")]
+    #[arg(short, value_parser = rustradio::parse_verbosity, default_value = "error")]
     verbose: usize,
 
     #[arg(long = "rtlsdr")]
