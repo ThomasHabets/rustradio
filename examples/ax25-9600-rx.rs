@@ -5,7 +5,7 @@ complex I/Q saved to a file.
 
 ```no_run
 $ mkdir captured
-$ ./ax25-9600-rx -r captured.c32 --samp_rate 50000 -o captured
+$ ./ax25-9600-rx -r captured.c32 --sample-rate 50000 -o captured
 […]
 $ ./ax25-9600-rx --rtlsdr -o captured -v 2
 […]
@@ -49,8 +49,8 @@ struct Opt {
     #[arg(long = "clock-file", help = "File to write clock sync data to")]
     clock_file: Option<PathBuf>,
 
-    #[arg(long = "sample_rate", default_value = "300000")]
-    samp_rate: u32,
+    #[arg(long, value_parser=rustradio::parse_frequency, default_value = "300k")]
+    sample_rate: f64,
 
     #[arg(short)]
     read: Option<String>,
@@ -85,7 +85,7 @@ fn main() -> Result<()> {
                 g,
                 prev,
                 FileSource::new(&read)?,
-                AuDecode::new(prev, opt.samp_rate),
+                AuDecode::new(prev, opt.sample_rate as u32),
             ];
 
             /*
@@ -98,7 +98,7 @@ fn main() -> Result<()> {
             )?));
              */
 
-            (prev, opt.samp_rate as Float)
+            (prev, opt.sample_rate as Float)
         } else {
             panic!("Audio can only be read from file")
         }
@@ -112,7 +112,7 @@ fn main() -> Result<()> {
                 blockchain![
                     g,
                     prev,
-                    RtlSdrSource::new(opt.freq, opt.samp_rate, opt.gain)?,
+                    RtlSdrSource::new(opt.freq, opt.sample_rate as u32, opt.gain)?,
                     RtlSdrDecode::new(prev),
                 ]
             }
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
         } else {
             panic!("Need to provide either --rtlsdr or -r")
         };
-        let samp_rate = opt.samp_rate as Float;
+        let samp_rate = opt.sample_rate as Float;
 
         /*
                 let (t, prev, b) = Tee::new(prev);
@@ -221,6 +221,6 @@ fn main() -> Result<()> {
 }
 /* ---- Emacs variables ----
  * Local variables:
- * compile-command: "cargo run --example ax25-9600-rx -- -r data/aprs-9600-50k.c32 --sample_rate 50000 -o tmp/"
+ * compile-command: "cargo run --example ax25-9600-rx -- -r data/aprs-9600-50k.c32 --sample-rate 50000 -o tmp/"
  * End:
  */
