@@ -416,3 +416,66 @@ fn bench_fft_backend_fftw_8192(b: &mut Bencher) {
         rustradio::fft_filter::rr_fftw::FftwEngine::new,
     );
 }
+
+fn bench_stream_to_pdu(b: &mut Bencher, burst_len: usize, metadata: bool) {
+    use rustradio::stream::{Tag, TagValue};
+    const N: usize = 65_536;
+    let samples = vec![Complex::new(1.0, -0.5); N];
+    let mut tags = Vec::new();
+    let stride = if burst_len == N { N } else { 256 };
+    if burst_len != 0 {
+        for start in (0..N).step_by(stride) {
+            tags.push(Tag::new(start, "burst", TagValue::Bool(true)));
+            tags.push(Tag::new(
+                start + burst_len - 1,
+                "burst",
+                TagValue::Bool(false),
+            ));
+        }
+    }
+    if metadata {
+        for pos in (0..N).step_by(8) {
+            tags.push(Tag::new(pos, "metadata", TagValue::U64(pos as u64)));
+        }
+    }
+    tags.sort_by_key(Tag::pos);
+    let expected = if burst_len == 0 { 0 } else { N / stride };
+    let (writer, reader) = new_stream();
+    let (mut block, output) = StreamToPdu::new(reader, "burst", N, 1);
+    b.bytes = (N * std::mem::size_of::<Complex>()) as u64;
+    b.iter(|| {
+        let mut window = writer.write_buf().unwrap();
+        window.fill_from_slice(&samples);
+        window.produce(N, &tags);
+        assert!(matches!(
+            block.work().unwrap(),
+            BlockRet::WaitForStream(_, 1)
+        ));
+        let mut count = 0;
+        while let Some(pdu) = output.pop() {
+            std::hint::black_box(pdu);
+            count += 1;
+        }
+        assert_eq!(count, expected);
+    });
+}
+
+#[bench]
+fn bench_stream_to_pdu_inactive(b: &mut Bencher) {
+    bench_stream_to_pdu(b, 0, false);
+}
+
+#[bench]
+fn bench_stream_to_pdu_long_burst(b: &mut Bencher) {
+    bench_stream_to_pdu(b, 65_536, false);
+}
+
+#[bench]
+fn bench_stream_to_pdu_short_bursts(b: &mut Bencher) {
+    bench_stream_to_pdu(b, 128, false);
+}
+
+#[bench]
+fn bench_stream_to_pdu_metadata(b: &mut Bencher) {
+    bench_stream_to_pdu(b, 128, true);
+}

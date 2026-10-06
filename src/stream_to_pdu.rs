@@ -1,10 +1,8 @@
 //! Stream to PDU.
-use std::collections::HashMap;
-
-use log::{debug, trace};
+use log::debug;
 
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagPos, TagValue};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
 use crate::{Result, Sample};
 
 #[derive(Default)]
@@ -13,16 +11,6 @@ enum State<T: Sample> {
     Unsync,
     Packet(Vec<T>, Vec<Tag>),
     Tail(Vec<T>, Vec<Tag>, usize),
-}
-
-impl<T: Sample> State<T> {
-    fn len(&self) -> usize {
-        match self {
-            State::Unsync => 0,
-            State::Packet(p, _) => p.len(),
-            State::Tail(p, _, _) => p.len(),
-        }
-    }
 }
 
 impl<T: Sample> std::fmt::Debug for State<T> {
@@ -47,7 +35,13 @@ impl<T: Sample> std::fmt::Debug for State<T> {
 /// The sample with the `false` tag is not included, unless `tail` is greater
 /// than zero.
 ///
-/// Samples between bursts are discarded.
+/// Samples between bursts are discarded. Repeated start markers within a burst
+/// do not restart it, and burst markers within the tail are ignored.
+/// Other tags on included samples are forwarded with positions relative to the
+/// PDU. Tags with the configured burst key are removed.
+///
+/// Bursts exceeding `max_size`, including their tail, are discarded. Incomplete
+/// bursts or tails at end of input are not emitted.
 ///
 /// ## Example
 ///
@@ -79,8 +73,6 @@ pub struct StreamToPdu<T: Sample> {
     tag: String,
     state: State<T>,
 
-    // Count how many samples are left of the tail.
-    // `None` means that we are not currently inside the tail.
     max_size: usize,
     tail: usize,
 }
@@ -108,8 +100,7 @@ impl<T: Sample> StreamToPdu<T> {
     }
 
     /// Burst has arrived. File it.
-    fn file_burst(&mut self, v: impl Into<Vec<T>>, tags: Vec<Tag>) {
-        let v = v.into();
+    fn file_burst(&self, v: Vec<T>, tags: Vec<Tag>) {
         if v.len() > self.max_size {
             return;
         }
@@ -120,161 +111,169 @@ impl<T: Sample> StreamToPdu<T> {
         );
         // TODO: record stream pos.
         self.dst.push(v, tags);
-        self.state = State::Unsync;
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BurstTag {
-    None,
     Start,
     End,
     Both,
 }
 
-// If a given tag exists at the given position, return Some(that bool). Else
-// return None.
-fn get_tag_val_bool(tags: &HashMap<(TagPos, &str), Vec<&Tag>>, pos: TagPos, key: &str) -> BurstTag {
-    let mut i = 0;
-    if let Some(ts) = tags.get(&(pos, key)) {
-        for tag in ts {
+// Find the next marker relevant to the current state. Bound the search by the
+// span we can consume so tags beyond a size limit are not repeatedly scanned.
+fn next_burst_tag(tags: &[Tag], key: &str, start: bool, limit: usize) -> Option<(usize, BurstTag)> {
+    let (mut index, tag) = tags
+        .iter()
+        .enumerate()
+        .take_while(|(_, tag)| tag.pos() < limit)
+        .find(|(_, tag)| tag.key() == key && tag.val() == &TagValue::Bool(start))?;
+    let pos = tag.pos();
+    while index > 0 && tags[index - 1].pos() == pos {
+        index -= 1;
+    }
+    let mut starts = false;
+    let mut ends = false;
+    for tag in tags[index..].iter().take_while(|tag| tag.pos() == pos) {
+        if tag.key() == key {
             match tag.val() {
-                TagValue::Bool(true) => i |= 1,
-                TagValue::Bool(false) => i |= 2,
-                _ => {} // ignore non-bool tag.
+                TagValue::Bool(true) => starts = true,
+                TagValue::Bool(false) => ends = true,
+                _ => {}
             }
         }
     }
-    match i {
-        0 => BurstTag::None,
-        1 => BurstTag::Start,
-        2 => BurstTag::End,
-        3 => BurstTag::Both,
-        other => panic!("impossible value {other}"),
-    }
+    let marker = match (starts, ends) {
+        (true, true) => BurstTag::Both,
+        (true, false) => BurstTag::Start,
+        (false, true) => BurstTag::End,
+        (false, false) => unreachable!("matched a Boolean burst tag"),
+    };
+    Some((pos, marker))
 }
 
-fn tags_pos_adjust(pos: usize, intags: Option<&Vec<Tag>>) -> Vec<Tag> {
-    intags
-        .map(|v| {
-            v.iter()
-                .map(|e| Tag::new(pos, e.key(), e.val().clone()))
-                .collect()
-        })
-        .unwrap_or_default()
+// Move only tags whose samples are included. The iterator also discards tags
+// from skipped spans and control markers, without cloning their payloads.
+fn append_span<T: Sample>(
+    packet: &mut Vec<T>,
+    packet_tags: &mut Vec<Tag>,
+    input: &[T],
+    tags: &mut std::vec::IntoIter<Tag>,
+    key: &str,
+    start: usize,
+    end: usize,
+) {
+    let offset = packet.len();
+    while tags.as_slice().first().is_some_and(|tag| tag.pos() < end) {
+        let mut tag = tags.next().unwrap();
+        if tag.pos() >= start && tag.key() != key {
+            tag.set_pos(tag.pos() - start + offset);
+            packet_tags.push(tag);
+        }
+    }
+    packet.extend_from_slice(&input[start..end]);
 }
 
 impl<T: Sample> Block for StreamToPdu<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let output_space = self.dst.remaining();
+        let mut output_space = self.dst.remaining();
         if output_space == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
         let (input, intags) = self.src.read_buf()?;
-        if input.is_empty() {
-            return Ok(BlockRet::WaitForStream(&self.src, 1));
-        }
-
-        // TODO: we actually only care about one single tag,
-        // and I think we should drop the rest no matter what.
-        let tags = {
-            let mut tags: HashMap<(usize, &str), Vec<&Tag>> = HashMap::new();
-            for e in &intags {
-                tags.entry((e.pos(), e.key())).or_default().push(e);
-            }
-            tags
-        };
-        let other_tags = {
-            let mut tags: HashMap<usize, Vec<Tag>> = HashMap::new();
-            for e in &intags {
-                if e.key() != self.tag {
-                    tags.entry(e.pos()).or_default().push(e.clone());
-                }
-            }
-            tags
-        };
-        trace!("StreamToPdu: tags: {tags:?}");
-
-        for (i, sample) in input.iter().enumerate() {
-            let tagvalue = get_tag_val_bool(&tags, i as TagPos, &self.tag);
-
-            // eprintln!("State: {:?} & {tagvalue:?}", self.state);
-            self.state = match (&mut self.state, tagvalue) {
-                (State::Unsync, BurstTag::None | BurstTag::End) => State::Unsync,
-                (State::Unsync, BurstTag::Start) => State::Packet(
-                    vec![*sample],
-                    tags_pos_adjust(0, other_tags.get(&(i as TagPos))),
-                ),
-                (State::Unsync, BurstTag::Both) => {
-                    if self.tail > 0 {
-                        State::Tail(
-                            vec![*sample],
-                            tags_pos_adjust(0, other_tags.get(&(i as TagPos))),
-                            self.tail - 1,
-                        )
+        let samples = input.slice();
+        let mut tags = intags.into_iter();
+        let mut pos = 0;
+        while pos < samples.len() {
+            // Move the packet state once per span rather than once per sample.
+            match std::mem::take(&mut self.state) {
+                State::Unsync => {
+                    let Some((start, marker)) =
+                        next_burst_tag(tags.as_slice(), &self.tag, true, samples.len())
+                    else {
+                        pos = samples.len();
+                        break;
+                    };
+                    pos = start;
+                    if marker == BurstTag::Both {
+                        if self.tail == 0 {
+                            self.file_burst(Vec::new(), Vec::new());
+                            output_space -= 1;
+                            pos += 1;
+                        } else {
+                            self.state = State::Tail(Vec::new(), Vec::new(), self.tail);
+                        }
                     } else {
-                        // TODO: is this needed?
-                        self.file_burst(vec![], vec![]);
-                        State::Unsync
+                        self.state = State::Packet(Vec::new(), Vec::new());
                     }
                 }
-                (State::Packet(p, tags), BurstTag::Start | BurstTag::None) => {
-                    // Should we reset the burst on Start? Make sure it's consistent with
-                    // Packet/Both and Tail/Start/Both.
-                    let mut p = std::mem::take(p);
-                    let mut tags = std::mem::take(tags);
-                    tags.extend(tags_pos_adjust(p.len(), other_tags.get(&(i as TagPos))));
-                    p.push(*sample);
-                    State::Packet(p, tags)
-                }
-
-                // Should we reset the burst on `Both`? Make sure it's consistent with
-                // Packet/Start and Tail/Start/Both.
-                (State::Packet(p, tags), BurstTag::Both | BurstTag::End) => {
-                    let mut tail = self.tail;
-                    let mut p = std::mem::take(p);
-                    let mut tags = std::mem::take(tags);
-                    if tail > 0 {
-                        tags.extend(tags_pos_adjust(p.len(), other_tags.get(&(i as TagPos))));
-                        p.push(*sample);
-                        tail -= 1;
-                    }
-                    if tail > 0 {
-                        State::Tail(p, tags, tail)
+                State::Packet(mut packet, mut packet_tags) => {
+                    let remaining = self.max_size - packet.len();
+                    let limit = pos + (samples.len() - pos).min(remaining.saturating_add(1));
+                    let marker = next_burst_tag(tags.as_slice(), &self.tag, false, limit);
+                    let end = marker.map_or(limit, |(end, _)| end);
+                    if end == pos {
+                        if self.tail == 0 {
+                            self.file_burst(packet, packet_tags);
+                            output_space -= 1;
+                            pos += 1;
+                        } else {
+                            self.state = State::Tail(packet, packet_tags, self.tail);
+                        }
+                    } else if end - pos > remaining {
+                        // Drop the oversized packet without copying the span.
+                        // The sample that exceeds max_size is consumed too.
+                        pos += remaining + 1;
                     } else {
-                        self.file_burst(p, tags);
-                        State::Unsync
+                        append_span(
+                            &mut packet,
+                            &mut packet_tags,
+                            samples,
+                            &mut tags,
+                            &self.tag,
+                            pos,
+                            end,
+                        );
+                        pos = end;
+                        self.state = State::Packet(packet, packet_tags);
                     }
                 }
-
-                // Ignore burst tags while in tail. (see sync with above)
-                (State::Tail(p, tags, tail), _) => {
-                    //let mut p = std::mem::take(p);
-                    if *tail > 0 {
-                        tags.extend(tags_pos_adjust(p.len(), other_tags.get(&(i as TagPos))));
-                        p.push(*sample);
-                        *tail -= 1;
-                    }
-                    if *tail == 0 {
-                        let p = std::mem::take(p);
-                        let tags = std::mem::take(tags);
-                        self.file_burst(p, tags);
-                        State::Unsync
+                State::Tail(mut packet, mut packet_tags, remaining_tail) => {
+                    let count = remaining_tail.min(samples.len() - pos);
+                    let remaining = self.max_size - packet.len();
+                    if count > remaining {
+                        pos += remaining + 1;
                     } else {
-                        State::Tail(std::mem::take(p), std::mem::take(tags), *tail)
+                        append_span(
+                            &mut packet,
+                            &mut packet_tags,
+                            samples,
+                            &mut tags,
+                            &self.tag,
+                            pos,
+                            pos + count,
+                        );
+                        pos += count;
+                        if count == remaining_tail {
+                            self.file_burst(packet, packet_tags);
+                            output_space -= 1;
+                        } else {
+                            self.state = State::Tail(packet, packet_tags, remaining_tail - count);
+                        }
                     }
                 }
-            };
-            if self.state.len() > self.max_size {
-                self.state = State::Unsync;
             }
-            if self.dst.remaining() == 0 {
-                input.consume(i + 1);
+            // Discard tags on excluded end samples and skipped/oversized spans.
+            while tags.as_slice().first().is_some_and(|tag| tag.pos() < pos) {
+                tags.next();
+            }
+            if output_space == 0 {
+                input.consume(pos);
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
         }
-        let n = input.len();
-        input.consume(n);
+        input.consume(pos);
         Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }
@@ -284,6 +283,235 @@ mod tests {
     use super::*;
     use crate::Complex;
     use crate::blocks::VectorSource;
+
+    fn feed(writer: &crate::stream::WriteStream<u8>, samples: &[u8], tags: &[Tag]) -> Result<()> {
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(samples);
+        window.produce(samples.len(), tags);
+        Ok(())
+    }
+
+    fn marker(pos: usize, value: bool) -> Tag {
+        Tag::new(pos, "burst", TagValue::Bool(value))
+    }
+
+    fn metadata(pos: usize, value: u64) -> Tag {
+        Tag::new(pos, "metadata", TagValue::U64(value))
+    }
+
+    #[test]
+    fn ordered_spans_preserve_metadata_and_ignore_repeated_starts() -> Result<()> {
+        for reversed in [false, true] {
+            let (writer, reader) = crate::stream::new_stream();
+            let (mut block, out) = StreamToPdu::new(reader, "burst", 30, 2);
+            let mut tags = vec![
+                metadata(0, 0),
+                marker(3, true),
+                metadata(3, 1),
+                metadata(3, 2),
+                metadata(4, 3),
+                metadata(4, 4),
+                Tag::new(5, "burst", TagValue::U64(1)),
+                marker(6, true),
+                marker(9, reversed),
+                marker(9, !reversed),
+                metadata(9, 5),
+                marker(10, true),
+                metadata(10, 6),
+                metadata(11, 7),
+                marker(12, true),
+                marker(15, false),
+                metadata(16, 8),
+                metadata(17, 9),
+            ];
+            tags.sort_by_key(Tag::pos);
+            feed(&writer, &(0..30).collect::<Vec<_>>(), &tags)?;
+            block.work()?;
+            assert_eq!(
+                out.pop(),
+                Some((
+                    (3..11).collect(),
+                    vec![
+                        metadata(0, 1),
+                        metadata(0, 2),
+                        metadata(1, 3),
+                        metadata(1, 4),
+                        metadata(6, 5),
+                        metadata(7, 6),
+                    ]
+                ))
+            );
+            assert_eq!(out.pop(), Some(((12..17).collect(), vec![metadata(4, 8)])));
+            assert!(out.pop().is_none());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn spans_and_tail_cross_input_windows() -> Result<()> {
+        let (writer, reader) = crate::stream::new_stream();
+        let (mut block, out) = StreamToPdu::new(reader, "burst", 20, 4);
+        feed(
+            &writer,
+            &[0, 1, 2, 3, 4, 5],
+            &[marker(2, true), metadata(3, 1)],
+        )?;
+        block.work()?;
+        assert!(out.pop().is_none());
+        feed(
+            &writer,
+            &[6, 7, 8, 9],
+            &[marker(2, false), metadata(2, 2), metadata(3, 3)],
+        )?;
+        block.work()?;
+        assert!(out.pop().is_none());
+        feed(
+            &writer,
+            &[10, 11, 12, 13],
+            &[
+                marker(0, true),
+                metadata(0, 4),
+                metadata(1, 5),
+                metadata(2, 6),
+            ],
+        )?;
+        block.work()?;
+        assert_eq!(
+            out.pop(),
+            Some((
+                (2..12).collect(),
+                vec![
+                    metadata(1, 1),
+                    metadata(6, 2),
+                    metadata(7, 3),
+                    metadata(8, 4),
+                    metadata(9, 5),
+                ]
+            ))
+        );
+        assert!(out.pop().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn simultaneous_markers_complete_at_eof_and_before_next_burst() -> Result<()> {
+        for samples in [vec![42], vec![42, 43]] {
+            for reversed in [false, true] {
+                let (writer, reader) = crate::stream::new_stream();
+                let (mut block, out) = StreamToPdu::new(reader, "burst", 1, 1);
+                let tags: Vec<_> = (0..samples.len())
+                    .flat_map(|pos| {
+                        [
+                            marker(pos, reversed),
+                            marker(pos, !reversed),
+                            metadata(pos, pos as u64),
+                        ]
+                    })
+                    .collect();
+                feed(&writer, &samples, &tags)?;
+                drop(writer);
+                block.work()?;
+                for (pos, sample) in samples.iter().enumerate() {
+                    assert_eq!(
+                        out.pop(),
+                        Some((vec![*sample], vec![metadata(0, pos as u64)]))
+                    );
+                }
+                assert!(out.pop().is_none());
+                assert!(matches!(block.state, State::Unsync));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn size_limit_resumes_after_the_offending_sample() -> Result<()> {
+        let (writer, reader) = crate::stream::new_stream();
+        let (mut block, out) = StreamToPdu::new(reader, "burst", 3, 0);
+        feed(
+            &writer,
+            &(0..14).collect::<Vec<_>>(),
+            &[
+                marker(0, true),
+                marker(3, true),
+                marker(4, true),
+                metadata(4, 1),
+                marker(7, false),
+                metadata(7, 2),
+                marker(8, true),
+                marker(10, false),
+                metadata(10, 3),
+            ],
+        )?;
+        block.work()?;
+        assert_eq!(out.pop(), Some((vec![4, 5, 6], vec![metadata(0, 1)])));
+        assert_eq!(out.pop(), Some((vec![8, 9], vec![])));
+        assert!(out.pop().is_none());
+
+        let (writer, reader) = crate::stream::new_stream();
+        let (mut block, out) = StreamToPdu::new(reader, "burst", 0, 0);
+        feed(
+            &writer,
+            &[0, 1, 2],
+            &[
+                marker(0, true),
+                marker(1, true),
+                marker(1, false),
+                metadata(1, 1),
+            ],
+        )?;
+        block.work()?;
+        assert_eq!(out.pop(), Some((vec![], vec![])));
+        assert!(out.pop().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn full_output_preserves_input_and_resumes_between_bursts() -> Result<()> {
+        use crate::stream::StreamWait;
+        let (writer, reader) = crate::stream::new_stream();
+        let (mut block, out) = StreamToPdu::new(reader, "burst", 10, 1);
+        feed(
+            &writer,
+            &(0..10).collect::<Vec<_>>(),
+            &[
+                marker(1, true),
+                marker(3, false),
+                metadata(3, 1),
+                marker(4, true),
+                metadata(4, 2),
+                marker(6, false),
+            ],
+        )?;
+        let input_id = block.src.id();
+        let output_id = block.dst.id();
+        let capacity = block.dst.remaining();
+        for _ in 0..capacity {
+            block.dst.push(vec![], vec![]);
+        }
+        assert!(matches!(block.work()?, BlockRet::WaitForStream(stream, 1)
+            if stream.id() == output_id));
+        let (window, _) = block.src.read_buf()?;
+        assert_eq!(window.len(), 10);
+        drop(window);
+        assert_eq!(out.pop(), Some((vec![], vec![])));
+        assert!(matches!(block.work()?, BlockRet::WaitForStream(stream, 1)
+            if stream.id() == output_id));
+        let (window, tags) = block.src.read_buf()?;
+        assert_eq!(window.slice(), &[4, 5, 6, 7, 8, 9]);
+        assert_eq!(tags[0], marker(0, true));
+        drop(window);
+        for _ in 1..capacity {
+            assert_eq!(out.pop(), Some((vec![], vec![])));
+        }
+        assert_eq!(out.pop(), Some((vec![1, 2, 3], vec![metadata(2, 1)])));
+        assert!(out.pop().is_none());
+        assert!(matches!(block.work()?, BlockRet::WaitForStream(stream, 1)
+            if stream.id() == input_id));
+        assert_eq!(out.pop(), Some((vec![4, 5, 6], vec![metadata(0, 2)])));
+        assert!(out.pop().is_none());
+        Ok(())
+    }
 
     #[test]
     fn no_pdu() -> Result<()> {
