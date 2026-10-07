@@ -30,6 +30,8 @@ jobs:
       run: rustup install nightly
     - name: Rustup install nightly clippy
       run: rustup component add --toolchain nightly clippy
+    - name: Rustup install wasm32
+      run: rustup target add wasm32-unknown-unknown
     - name: cargo install
       run: cargo install --locked cargo-deny tickbox
     - name: apt-get update
@@ -48,6 +50,8 @@ jobs:
       run: rustup install nightly
     - name: Rustup install nightly clippy
       run: rustup component add --toolchain nightly clippy
+    - name: Rustup install wasm32
+      run: rustup target add wasm32-unknown-unknown
     - name: cargo install
       run: cargo install --locked tickbox
     - name: apt-get update
