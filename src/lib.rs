@@ -175,6 +175,8 @@ pub mod hilbert;
 pub mod iir_filter;
 pub mod il2p_deframer;
 pub mod iq_balance;
+#[cfg(feature = "unstable")]
+pub mod iq_stream;
 pub mod kiss;
 pub mod morse_encode;
 pub mod multiply;

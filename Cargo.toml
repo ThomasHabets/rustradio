@@ -36,7 +36,6 @@ itertools = "0.13"
 tar = "0.4"
 sha2 = "0.10"
 thiserror = "2.0"
-tokio = { version = "1.44", optional = true, features = ["full"] }
 async-trait = "0.1"
 nix = { version = "0.30.1", optional = true, features = ["term"] }
 pipewire = { version = "0.8.0", optional = true }
@@ -44,6 +43,8 @@ volk = { version = "0.2", optional = true }
 web-sys = { version = "0.3.77", features = ["Performance", "Window"], optional = true }
 wasm-bindgen = { version = "0.2.100", optional = true }
 async-channel = { version = "2.5.0", default-features = false, optional=true }
+prost = { version = "0.14", optional = true, features = ["no-recursion-limit"] }
+prost-types = { version = "0.14", optional = true }
 uhd = { version = "0.4.1", optional=true }
 # System fftw has been many times faster for me than not. Maybe because the C
 # code is not compiled with the right options, like -march=native?
@@ -88,6 +89,14 @@ tokio-unstable = ["tokio/tracing"]
 volk = ["dep:volk"]
 uhd = ["dep:uhd"]
 wasm = ["dep:web-sys", "dep:wasm-bindgen", "dep:async-channel"]
+unstable = ["dep:prost", "dep:prost-types", "dep:async-channel", "dep:tonic", "dep:axum", "dep:futures-util", "dep:tokio-stream", "dep:tokio"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.44", optional = true, features = ["full"] }
+tonic = { version = "0.14", optional = true, features = ["transport", "router", "tls-ring", "tls-native-roots"] }
+axum = { version = "0.8", optional = true, features = ["ws", "http2"] }
+futures-util = { version = "0.3", optional = true, features = ["sink"] }
+tokio-stream = { version = "0.1", optional = true }
 
 [[example]]
 name = "bell202"
@@ -170,3 +179,11 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)
 
 [patch.crates-io]
 # uhd = { path = "../uhd-rust/uhd" }
+
+[[example]]
+name = "iq_stream"
+required-features = ["unstable"]
+
+[[example]]
+name = "iq_waterfall"
+required-features = ["unstable"]
