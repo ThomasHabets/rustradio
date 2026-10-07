@@ -1,0 +1,442 @@
+syntax = "proto3";
+
+// Version the package when stream semantics change incompatibly. Removed field
+// numbers/names must be reserved rather than reused. Proto3 does not enforce the
+// validation rules in these comments: implementations must check them.
+package rustradio.iq.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// One RPC carries one unidirectional real or complex sample stream. Reverse
+// messages carry negotiation, credits, completion, and cancellation.
+// See doc/iq-streaming.md for the full validation and state-machine rules.
+// Upload means client -> server; download means server -> client. Use separate
+// RPCs for opposing sample streams. Native peers use gRPC; the browser WebSocket
+// adapter carries one serialized envelope per binary WebSocket message.
+service IqStreaming {
+  // The client opens the session, the server accepts its fixed description,
+  // then the sample source sends credit-limited frames followed by End.
+  // Completion requires the destination acknowledgement and final server
+  // Complete, followed by successful transport completion. A disconnect alone
+  // is never an implicit End or a successful file transfer.
+  // Record outgoing phase/grant changes before awaiting transport writes:
+  // opposite-direction responses may arrive before a write completes.
+  rpc Stream(stream ClientMessage) returns (stream ServerMessage);
+}
+
+// The first client message must be Open. Other messages depend on direction.
+// Exactly one body is required. Reject missing/unknown bodies, messages in the
+// wrong phase or direction, and additional Open messages within this session.
+message ClientMessage {
+  oneof body {
+    // Proposes the operation and policies; does not permit sending samples yet.
+    Open open = 1;
+    // Legal only after Started has granted upload credit.
+    Frame frame = 2;                  // Upload only.
+    // The first download credit also confirms acceptance of Started.
+    FlowControl flow_control = 3;     // Download only.
+    End end = 4;                      // Upload only.
+    Complete complete = 5;            // Download receiver acknowledgement.
+    // May interrupt negotiation, an active transfer, or upload finalization
+    // after End. Nothing follows client Complete; accepted writes are not undone.
+    Cancel cancel = 6;
+    // Reports a local source/sink error, e.g. a download's file write failed.
+    // Legal after Open and before client End/Complete or any terminal response.
+    Failure failure = 7;
+  }
+}
+
+// Started is the first successful response. Failure may precede Started or
+// terminate an active session. Successful sessions have one final server Complete.
+message ServerMessage {
+  oneof body {
+    Started started = 1;
+    Frame frame = 2;                  // Download only.
+    FlowControl flow_control = 3;     // Upload only.
+    End end = 4;                      // Download only.
+    Complete complete = 5;            // Final success, in either direction.
+    Failure failure = 6;
+  }
+}
+
+// Required: limits, explicit non-UNSPECIFIED policies, and one operation.
+// The format and rate selected here/at Started cannot change during the RPC.
+message Open {
+  uint32 protocol_version = 1;         // Must be 1.
+  Limits limits = 2;                  // Requested upper bounds, not a grant.
+  LossPolicy loss_policy = 3;
+  CompletionMode completion_mode = 4;
+  oneof operation {
+    Upload upload = 5;
+    Download download = 6;
+  }
+}
+
+// The client is the sample source. Unsupported formats or metadata kinds must
+// be rejected before the client starts sending data; no silent conversion.
+message Upload {
+  // Nonempty opaque resource ID, such as a graph input or recording destination;
+  // it is not an arbitrary filesystem path on the server.
+  string destination = 1;             // Server-defined resource identifier.
+  StreamDescription description = 2;  // Fixed; server accepts or rejects it.
+}
+
+// The server is the sample source. It must choose a compatible description or
+// reject the request, rather than send a format the receiver cannot process.
+message Download {
+  string source = 1;                  // Server-defined resource identifier.
+  // Nonempty set of exact (component_type, byte_order, layout) combinations.
+  // The source adapter defines conversion; this list does not request resampling.
+  repeated Encoding accepted_encodings = 2;
+  // Set of supported kinds, including kinds used inside structured values and
+  // description properties. An empty set permits only streams without values.
+  repeated TagKind accepted_tag_kinds = 3;
+  // Enables End.tags, which have no associated sample to put into a graph buffer.
+  bool accept_terminal_tags = 4;
+  // Exact, versioned OpaqueValue.type_url identifiers this destination accepts.
+  // Nonempty entries, no duplicates or wildcard; empty means no opaque codecs.
+  // Store/forward destinations list codecs they agree to preserve without decode.
+  repeated string accepted_opaque_codecs = 5;
+  // True only if the destination can preserve Tag.source_id without dropping it.
+  bool accept_tag_source_ids = 6;
+}
+
+// Accepts the session exactly once. For uploads the description must match the
+// proposal; for downloads its encoding/kinds must satisfy receiver capabilities.
+// Description equality follows the document's value/presence rules, including
+// same-kind NaN equality; do not compare serialized bytes or ordinary float ==.
+// Upload may proceed using initial_credit. Download must wait for the client's
+// initial FlowControl before sending either frames or End.
+message Started {
+  StreamDescription description = 1;
+  Limits limits = 2;                  // Positive, no greater than requested.
+  LossPolicy loss_policy = 3;         // Exact echo of Open; no downgrade.
+  CompletionMode completion_mode = 4; // Exact echo of Open; no downgrade.
+  FlowControl initial_credit = 5;     // Present for upload; absent for download.
+}
+
+// Gap handling is fixed for the session. Neither policy permits an unknown
+// loss count or silently compressing the stream's sample positions.
+enum LossPolicy {
+  // Invalid in Open and Started; choose a policy explicitly.
+  LOSS_POLICY_UNSPECIFIED = 0;
+  // Pause a pausable producer. An unpausable source overflow fails the stream
+  // with DATA_LOSS; receiving a Gap is an error under this policy.
+  LOSS_POLICY_LOSSLESS = 1;
+  // Permit exact, explicitly reported losses of unsent samples and their tags.
+  // The receiver must expose gaps to its application rather than hide them.
+  LOSS_POLICY_ALLOW_GAPS = 2;
+}
+
+// Defines what the receiver promises before acknowledging End. Credits return
+// bounded buffer capacity; they never promise durable storage or completion.
+enum CompletionMode {
+  COMPLETION_MODE_UNSPECIFIED = 0;
+  // May mean acceptance into bounded graph buffers; it does not prove that all
+  // subsequent DSP completed or that a file survived a crash. File sinks finish
+  // their dataset and metadata and close successfully, without promising fsync.
+  COMPLETION_MODE_ACCEPTED = 1;         // Destination accepted all data/metadata.
+  // Only a file destination can make this promise. Synchronize its samples,
+  // metadata and final publication before acknowledging. Reject unsupported mode.
+  COMPLETION_MODE_DURABLE = 2;          // File destination synchronized them.
+}
+
+// Both fields must be positive. Started may reduce Open's requested limits.
+// Recommended defaults: 256 KiB and eight frames. Version-1 ceilings: 1 MiB
+// and 64 frames. A full grant bounds outstanding framed storage by their product,
+// plus bounded transport/copy overhead; it does not allocate the whole window.
+message Limits {
+  // Encoded Frame size, not just samples.len(); excludes the outer envelope.
+  // A sample and all its tags must fit together. Smaller chunks are encouraged
+  // for live latency; the limit is a ceiling rather than a required chunk size.
+  uint32 max_frame_bytes = 1;          // Encoded Frame, including samples/tags.
+  uint32 max_in_flight_frames = 2;     // Credit window bound, including gaps.
+}
+
+// Immutable session metadata. One real or complex channel; use separate sessions
+// for multiple channels. All required fields must be present.
+message StreamDescription {
+  Encoding encoding = 1;
+  double sample_rate_hz = 2;          // Finite and strictly positive; immutable.
+  // Set of every kind this source may use, including nested values, properties,
+  // and terminal metadata. Sending an undeclared kind is an error.
+  repeated TagKind tag_kinds = 3;      // All possible kinds, including nested ones.
+  // Must be true if End.tags can be nonempty, including for an empty recording.
+  bool uses_terminal_tags = 4;
+  // Nominal sample n time is this anchor + n / sample_rate_hz. Optional because
+  // some sources have no UTC clock; capture/time tags can provide better anchors.
+  google.protobuf.Timestamp sample_zero_time = 5; // Optional nominal UTC anchor.
+  // Maps wire sample zero to an original dataset index. Absent means unknown;
+  // present zero means known origin zero. Wire counters still start at zero.
+  optional uint64 source_sample_offset = 6; // First item in the original source.
+  string source_id = 7;               // Informational identifier, not a resume token.
+  repeated Property properties = 8;   // Immutable descriptive metadata.
+  // Set of every versioned opaque codec this source may emit, including nested
+  // values and properties. Nonempty entries, unique; empty if OPAQUE is unused.
+  // Requires TAG_KIND_OPAQUE; download declaration must be an accepted subset.
+  repeated string opaque_codecs = 9;
+  // Must be true if any ordinary/terminal tag may contain source_id. Downloads
+  // require accept_tag_source_ids; upload sinks check their own capabilities.
+  bool uses_tag_source_ids = 10;
+}
+
+// Exactly one channel, with no padding. REAL packs x[0], x[1], ...; COMPLEX
+// packs I[0], Q[0], I[1], Q[1], ... . Layout is required and immutable.
+// No implicit scaling: integers are counts and floats are raw values. Transport
+// implementations should support FLOAT32/LITTLE_ENDIAN in both layouts.
+// A resource offers only formats it can actually consume/produce; a typed graph
+// port need not accept both layouts. Adapters must define any layout conversion.
+message Encoding {
+  ComponentType component_type = 1;
+  ByteOrder byte_order = 2;
+  SampleLayout layout = 3;
+}
+
+// REAL has one component per sample; COMPLEX has two, real then imaginary.
+// UNSPECIFIED is invalid, including when the field is omitted.
+enum SampleLayout {
+  SAMPLE_LAYOUT_UNSPECIFIED = 0;
+  SAMPLE_LAYOUT_REAL = 1;
+  SAMPLE_LAYOUT_COMPLEX = 2;
+}
+
+// One scalar component; bytes per sample are component size multiplied by
+// one for REAL or two for COMPLEX. Both layouts use the same component types.
+// Floats are IEEE 754 binary32/binary64; signed integers are two's complement.
+enum ComponentType {
+  COMPONENT_TYPE_UNSPECIFIED = 0;
+  COMPONENT_TYPE_FLOAT32 = 1;
+  COMPONENT_TYPE_FLOAT64 = 2;
+  COMPONENT_TYPE_INT8 = 3;
+  COMPONENT_TYPE_UINT8 = 4;
+  COMPONENT_TYPE_INT16 = 5;
+  COMPONENT_TYPE_UINT16 = 6;
+  COMPONENT_TYPE_INT32 = 7;
+  COMPONENT_TYPE_UINT32 = 8;
+  COMPONENT_TYPE_INT64 = 9;
+  COMPONENT_TYPE_UINT64 = 10;
+}
+
+enum ByteOrder {
+  BYTE_ORDER_UNSPECIFIED = 0;
+  BYTE_ORDER_LITTLE_ENDIAN = 1;
+  BYTE_ORDER_BIG_ENDIAN = 2;
+  BYTE_ORDER_NOT_APPLICABLE = 3;        // Required for 8-bit components only.
+}
+
+// Descriptive metadata, including future SigMF global JSON. Keys are nonempty
+// and unique within the description. Properties cannot override encoding/rate.
+message Property {
+  string key = 1;                     // Unique within StreamDescription.properties.
+  TagValue value = 2;
+}
+
+// Exactly one body is required. Both chunks and gaps consume one frame credit
+// and advance sequence by one. Validate a whole frame before publishing any
+// associated samples/tags. No reorder buffer or retransmission is defined.
+message Frame {
+  // Frame counter, distinct from the sample cursor. Must equal the next expected
+  // sequence and be strictly below the receiver's last granted send_limit.
+  uint64 sequence = 1;                // Starts at zero, increments by one.
+  oneof body {
+    SampleChunk chunk = 2;
+    Gap gap = 3;
+  }
+}
+
+// A contiguous range of retained samples with all tags starting in that range.
+// Chunk boundaries have no DSP meaning and need not align to FFTs or bursts.
+message SampleChunk {
+  // Must equal the current sample cursor; undeclared jumps are invalid.
+  uint64 first_sample = 1;            // Absolute index within this stream.
+  uint32 sample_count = 2;            // Positive; whole samples, per layout.
+  // Preserve the declared encoding and byte order. This is packed sample data,
+  // not a repeated protobuf scalar array. Check length arithmetic for overflow.
+  bytes samples = 3;                  // Exactly sample_count * bytes_per_sample.
+  // Every index is in [first_sample, first_sample + sample_count). Equal-position
+  // tags keep source order and may repeat keys; no late tags for previous chunks.
+  repeated Tag tags = 4;              // Sorted; stable ties; at most 4096 per chunk.
+}
+
+// Legal only in ALLOW_GAPS. Advance the sample cursor by the exact lost count
+// without supplying sample bytes or inventing replacement samples. Coalesce
+// unsent adjacent losses while waiting for credit; a Gap also requires credit.
+// A pending final loss must be sent before End, even with no retained samples.
+message Gap {
+  uint64 first_sample = 1;            // Must equal the current sample cursor.
+  uint64 sample_count = 2;            // Positive, exact known number lost.
+  string reason = 3;                  // Diagnostic; no implicit receiver action.
+  // Samples and any associated tags are missing. Gap contains no tag payloads.
+}
+
+// Positions are absolute sample indices in this session, independent of
+// transport chunks and local buffer windows. Rebase when inserting into local
+// buffers; do not confuse them with source_sample_offset or scalar-component
+// indices within a complex pair. REAL advances once per scalar; COMPLEX once
+// per I/Q pair. A tag is metadata at its start position, not a separate data stream.
+message Tag {
+  uint64 sample_index = 1;            // Within the containing chunk, or at End.
+  string key = 2;                     // Nonempty UTF-8; duplicates are allowed.
+  // Must be present with its oneof set, even when the value is false or zero.
+  TagValue value = 3;
+  // Tag provenance, distinct from StreamDescription.source_id. Requires declared
+  // uses_tag_source_ids. Absence is valid; do not synthesize from a block name.
+  optional string source_id = 4;      // Optional GNU Radio tag provenance.
+}
+
+// Presence matters: false, zero, and an empty string/bytes are valid values.
+// Unknown/unset kinds must not silently become a default value.
+// Required basic kinds are FLOAT32, BOOL, INT64, UINT64, STRING. Others require
+// declared support. All nested values also count toward the description's kinds.
+// At most 32 nested TagValue levels and 16384 total TagValue nodes per envelope;
+// count dictionary keys/values too. Byte limits apply before decoder allocation.
+message TagValue {
+  oneof kind {
+    float float32_value = 1;
+    double float64_value = 2;
+    bool bool_value = 3;
+    // Keep signedness and the full 64-bit value. JavaScript bindings must use
+    // BigInt/an equivalent exact representation rather than Number.
+    sint64 int64_value = 4;
+    uint64 uint64_value = 5;
+    string string_value = 6;
+    bytes bytes_value = 7;
+    // Symbols and ordinary strings are distinct. GNU Radio PMT symbols use this
+    // field; any STRING-to-symbol adapter conversion must be explicitly enabled.
+    string symbol_value = 8;
+    ComplexValue complex_value = 9;
+    // Lists and tuples preserve order but remain distinct kinds for PMT mapping.
+    SequenceValue list_value = 10;
+    SequenceValue tuple_value = 11;
+    PairValue pair_value = 12;
+    DictionaryValue dictionary_value = 13;
+    NilValue nil_value = 14;
+    // Required for SigMF metadata passthrough; retaining JSON text avoids rounding
+    // large JSON integers through a protobuf Struct/double representation.
+    string json_value = 15;           // One valid JSON value, retained as text.
+    OpaqueValue opaque_value = 16;
+  }
+}
+
+// These numbers intentionally match TagValue's oneof field numbers.
+// These are capability/declaration identifiers, not a second discriminator
+// stored with every value. Unspecified/unknown kinds are invalid in these sets.
+enum TagKind {
+  TAG_KIND_UNSPECIFIED = 0;
+  TAG_KIND_FLOAT32 = 1;
+  TAG_KIND_FLOAT64 = 2;
+  TAG_KIND_BOOL = 3;
+  TAG_KIND_INT64 = 4;
+  TAG_KIND_UINT64 = 5;
+  TAG_KIND_STRING = 6;
+  TAG_KIND_BYTES = 7;
+  TAG_KIND_SYMBOL = 8;
+  TAG_KIND_COMPLEX = 9;
+  TAG_KIND_LIST = 10;
+  TAG_KIND_TUPLE = 11;
+  TAG_KIND_PAIR = 12;
+  TAG_KIND_DICTIONARY = 13;
+  TAG_KIND_NIL = 14;
+  TAG_KIND_JSON = 15;
+  TAG_KIND_OPAQUE = 16;
+}
+
+// A complex metadata value; this is unrelated to the packed sample encoding.
+message ComplexValue {
+  double real = 1;
+  double imaginary = 2;
+}
+
+// An empty sequence is valid; every element must have its kind explicitly set.
+message SequenceValue {
+  repeated TagValue values = 1;
+}
+
+// Both members must be present, including when either member is NIL.
+message PairValue {
+  TagValue first = 1;
+  TagValue second = 2;
+}
+
+// Empty dictionaries are valid. Equality of keys compares their allowed kind
+// and exact content, not serialized protobuf bytes; STRING and SYMBOL differ.
+message DictionaryValue {
+  repeated DictionaryEntry entries = 1; // Preserve order; duplicate keys invalid.
+}
+
+message DictionaryEntry {
+  TagValue key = 1;                   // BOOL/INT64/UINT64/STRING/SYMBOL/BYTES/NIL.
+  TagValue value = 2;
+}
+
+// Explicit NIL metadata, distinct from an empty SequenceValue or a missing kind.
+message NilValue {}
+
+// Transporting an opaque codec is not a promise that a graph can interpret it.
+// Its exact versioned type_url must have been declared and accepted at handshake.
+// Destinations may explicitly accept preservation of an uninterpreted codec.
+// Never fetch a type_url automatically; it is an identifier, not a download URL.
+message OpaqueValue {
+  string type_url = 1;                // Identifies a separately specified codec.
+  bytes data = 2;                     // Never an in-memory PMT/Rust object image.
+}
+
+// Fixed-window cumulative credit, issued by the sample receiver. Let W be
+// max_in_flight_frames. Initial send_limit = W. Return one slot only after its
+// frame was accepted by the destination and its receiver frame storage released;
+// retire frames in sequence order. New limits may be batched or delayed.
+// Sender validates: previous_limit <= send_limit, W <= send_limit, and
+//   send_limit - W <= submitted_frames (avoid an overflowing submitted + W).
+// Frames require sequence < send_limit; controls never spend credit. This is
+// capacity, not DSP completion, durability, or authorization to retransmit.
+// Record submission before writing, since replies can race write completion.
+// Receivers likewise record a grant before writing its FlowControl/Started.
+message FlowControl {
+  // Exclusive permission boundary: with W=8, 8 permits frames 0..7. Releasing
+  // frames 0..2 allows a grant of 11, permitting through frame 10. Thus
+  // send_limit - W is the exclusive boundary of returned slots.
+  uint64 send_limit = 1;              // Sender may send sequence < send_limit.
+}
+
+// Sent once by the sample source after its last frame. It spends no credit, even
+// if the frame window is exhausted. No subsequent frames are permitted. End is
+// a source fence, not destination acceptance; wait for Complete before success.
+// Record End as sent before awaiting its write, so a racing Complete is legal.
+message End {
+  // Must equal the next expected frame sequence; zero for a stream with no frames.
+  uint64 next_sequence = 1;           // Exclusive end of the frame sequence.
+  // Must equal the cursor after all chunks and gaps; zero for an empty stream.
+  uint64 next_sample = 2;             // Exclusive end, including declared gaps.
+  // Only when uses_terminal_tags was declared. Indices must equal next_sample;
+  // these describe an EOF boundary, not a nonexistent sample. Enables empty
+  // recording metadata and zero-length SigMF annotations at EOF. Stable ties.
+  repeated Tag tags = 3;              // Indices == next_sample; at most 4096 tags.
+}
+
+// Sent only after the destination has handled all frames and End metadata.
+// Upload: server sends this and finishes successfully. Download: client sends
+// this, server echoes it, then finishes. All fields must match End/Started.
+// Final server Complete still requires gRPC OK or normal WebSocket completion;
+// losing that acknowledgement leaves the caller uncertain about completion.
+message Complete {
+  uint64 next_sequence = 1;           // Must match End.
+  uint64 next_sample = 2;             // Must match End.
+  CompletionMode completion_mode = 3; // Must match Started.
+}
+
+// Aborts rather than finishing the stream; accepted data is not rolled back.
+// Native gRPC cancellation is also valid. Do not retry partial uploads blindly.
+message Cancel {
+  string reason = 1;
+}
+
+// Terminal application error from either peer. After sending Failure, send no
+// more application messages. A server receiving client Failure terminates the
+// RPC with the corresponding status (or returns its own simultaneous failure).
+// Native gRPC trailers carry the matching status and are authoritative. The
+// WebSocket adapter sends Failure before closing where possible. Receiving End
+// before Failure does not make the transfer successful.
+message Failure {
+  uint32 grpc_status_code = 1;        // A standard non-OK gRPC status, 1..16.
+  string message = 2;
+}
