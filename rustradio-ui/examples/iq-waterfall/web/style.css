@@ -1,0 +1,19 @@
+:root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+body { margin: 0; background: light-dark(#f5f7fa, #111820); color: light-dark(#182432, #e7edf5); }
+main { max-width: 1200px; margin: auto; padding: 24px; }
+header p { margin-bottom: 0; color: light-dark(#506174, #a1b0c2); }
+h1 { margin-top: 8px; }
+.connection { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+label { display: flex; flex-direction: column; gap: 6px; }
+input, select, button { font: inherit; border-radius: 6px; padding: 8px 10px; }
+#host, #source { width: 180px; }
+#port { width: 90px; }
+.tls { flex-direction: row; align-items: center; padding-bottom: 8px; }
+.buttons { display: flex; gap: 8px; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+.help { font-size: 0.9rem; color: light-dark(#506174, #a1b0c2); }
+#status { min-height: 1.5em; }
+#waterfall { margin: 20px 0; }
+details { margin-top: 24px; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 250px; overflow: auto; font-size: 0.8rem; }

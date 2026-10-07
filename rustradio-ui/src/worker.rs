@@ -19,7 +19,11 @@ thread_local! {
 pub mod complex_sink;
 pub mod float_pdu_sink;
 pub mod float_sink;
+#[cfg(feature = "unstable")]
+pub mod iq_stream;
 pub mod source;
+#[cfg(feature = "unstable")]
+pub use iq_stream::IqStreamSource;
 
 pub use complex_sink::ComplexSink;
 pub use float_pdu_sink::FloatPduSink;

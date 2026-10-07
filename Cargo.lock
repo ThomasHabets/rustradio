@@ -2759,7 +2759,7 @@ dependencies = [
  "rayon",
  "rtlsdr",
  "rustfft",
- "rustradio_macros 0.18.4",
+ "rustradio_macros",
  "rustyline",
  "serde",
  "serde_json",
@@ -2779,32 +2779,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustradio"
-version = "0.18.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4345250f0688b8e4e0a0b18ebece404e0fc5f80f81213d55e8536ac31417a9a7"
-dependencies = [
- "async-channel",
- "async-trait",
- "fast-math",
- "itertools 0.13.0",
- "libc",
- "log",
- "num-complex",
- "rayon",
- "rustfft",
- "rustradio_macros 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "rustradio-ui"
 version = "0.1.24"
 dependencies = [
@@ -2812,8 +2786,9 @@ dependencies = [
  "js-sys",
  "log",
  "num-complex",
- "rustradio 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustradio_macros 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prost",
+ "rustradio",
+ "rustradio_macros",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -2830,20 +2805,8 @@ dependencies = [
  "itertools 0.14.0",
  "proc-macro2",
  "quote",
- "rustradio 0.18.4",
- "rustradio_macros_code 0.18.4",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "rustradio_macros"
-version = "0.18.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0aca2cd19578bcefafaeafaa502ed26ff942aafda5f408b172d3eff898bffbc"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustradio_macros_code 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustradio",
+ "rustradio_macros_code",
  "syn 2.0.118",
 ]
 
@@ -2853,18 +2816,7 @@ version = "0.18.4"
 dependencies = [
  "proc-macro2",
  "quote",
- "rustradio 0.18.4",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "rustradio_macros_code"
-version = "0.18.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59e4240d182bb581cc84ce9a1b17a769d4c2ae1489f170310c15331d1ea743ab"
-dependencies = [
- "proc-macro2",
- "quote",
+ "rustradio",
  "syn 2.0.118",
 ]
 

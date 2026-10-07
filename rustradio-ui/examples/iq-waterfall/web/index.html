@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RustRadio I/Q Waterfall</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header><p>RustRadio WASM · experimental</p><h1>I/Q Waterfall</h1></header>
+    <section class="connection" aria-label="Stream connection">
+      <label>Host <input id="host" value="127.0.0.1" autocomplete="off" disabled></label>
+      <label>Port <input id="port" type="number" min="1" max="65535" value="50051" disabled></label>
+      <label>Source identifier <input id="source" value="iq" autocomplete="off" disabled></label>
+      <label>Sink mode <select id="loss-policy" disabled>
+        <option value="lossless">Blocking (lossless)</option>
+        <option value="gaps">Nonblocking (allow gaps)</option>
+      </select></label>
+      <label class="tls"><input id="tls" type="checkbox" disabled> Secure connection (TLS)</label>
+      <div class="buttons"><button id="connect" disabled>Connect</button><button id="disconnect" disabled>Disconnect</button></div>
+    </section>
+    <p class="help">Connect to a complex float32 I/Q sink. Sample rate comes from the stream. Select the sink's blocking mode.</p>
+    <p id="status" role="status" aria-live="polite">Starting worker…</p>
+    <section id="waterfall" aria-label="Waterfall display">Loading waterfall…</section>
+    <details><summary>Log</summary><pre id="log-output">Awaiting logs…</pre></details>
+  </main>
+  <script type="module" src="wasm-mod.js"></script>
+</body>
+</html>

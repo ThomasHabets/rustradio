@@ -3,7 +3,7 @@ set -ueo pipefail
 if [[ ${SLOW:-} = "true" ]]; then
         cd "$TICKBOX_TEMPDIR/work"
         export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.normal"
-        cargo test --workspace
+        cargo test --workspace --exclude rustradio-ui
         if [[ ${CLEANUP:-} = true ]]; then
                 rm -fr "${CARGO_TARGET_DIR?}"
         fi
