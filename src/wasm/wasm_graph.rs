@@ -22,7 +22,7 @@ use crate::graph::{CancellationToken, GraphRunner};
 /// Possibly this could be merged with the rustradio `AsyncGraph`.
 #[derive(Default)]
 pub struct WasmGraph {
-    blocks: Vec<Box<dyn Block>>,
+    blocks: Vec<Option<Box<dyn Block>>>,
     // Names are captured when blocks are added, outside the work loop.
     block_names: Vec<String>,
 }
@@ -32,22 +32,21 @@ impl WasmGraph {
         Self::default()
     }
     pub async fn run_async(&mut self, rx: async_channel::Receiver<()>) -> crate::Result<()> {
-        let mut eof = vec![false; self.blocks.len()];
         let rx = Box::pin(rx);
         loop {
             let mut done = true;
             let mut need_more = false;
-            for (n, b) in self.blocks.iter_mut().enumerate() {
+            let mut dropped_block = false;
+            for (n, slot) in self.blocks.iter_mut().enumerate() {
+                let Some(b) = slot.as_mut() else { continue };
+                let mut finished = false;
                 let name = &self.block_names[n];
                 trace!("Running graph node {name}");
-                if eof[n] {
-                    continue;
-                }
                 let ret = b.work()?;
                 trace!("graph node {name} work ended");
                 match ret {
                     BlockRet::EOF => {
-                        eof[n] = true;
+                        finished = true;
                         info!("Block({name}): EOF");
                     }
                     BlockRet::Again => done = false,
@@ -55,7 +54,7 @@ impl WasmGraph {
                     BlockRet::WaitForStream(s, _) => {
                         let closed = s.closed();
                         if b.eof() && closed {
-                            eof[n] = true;
+                            finished = true;
                         }
                     }
                     BlockRet::Pending => {
@@ -64,12 +63,17 @@ impl WasmGraph {
                         done = false;
                     }
                 }
+                if finished {
+                    slot.take();
+                    done = false;
+                    dropped_block = true;
+                }
             }
             if done {
                 info!("Wasm graph: All done");
                 return Ok(());
             }
-            if need_more {
+            if need_more && !dropped_block {
                 trace!("Graph: About to wait for more somethings");
                 if let Err(e) = rx.recv().await {
                     info!("Graph: recv error: {e:?}");
@@ -87,7 +91,7 @@ impl WasmGraph {
 impl GraphRunner for WasmGraph {
     fn add(&mut self, b: Box<dyn Block + Send>) {
         self.block_names.push(b.block_name().to_owned());
-        self.blocks.push(b);
+        self.blocks.push(Some(b));
     }
     fn run(&mut self) -> crate::Result<()> {
         todo!()
@@ -97,5 +101,64 @@ impl GraphRunner for WasmGraph {
     }
     fn cancel_token(&self) -> CancellationToken {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stream::ReadStream;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    use std::task::{Context, Poll, Wake, Waker};
+    struct Noop;
+    impl Wake for Noop {
+        fn wake(self: Arc<Self>) {}
+    }
+
+    #[derive(rustradio_macros::Block)]
+    #[rustradio(crate)]
+    struct ClosingSink {
+        #[rustradio(in)]
+        src: ReadStream<f32>,
+        finished: Arc<AtomicBool>,
+    }
+    impl Block for ClosingSink {
+        fn work(&mut self) -> crate::Result<BlockRet<'_>> {
+            if self.src.eof() {
+                self.finished.store(true, Ordering::SeqCst);
+                return Ok(BlockRet::EOF);
+            }
+            let (input, _) = self.src.read_buf()?;
+            if input.is_empty() {
+                return Ok(BlockRet::Pending);
+            }
+            let n = input.len();
+            input.consume(n);
+            Ok(BlockRet::Again)
+        }
+    }
+    #[test]
+    fn completed_source_closes_output_before_graph_finishes() -> crate::Result<()> {
+        let (source, input) = crate::vector_source::VectorSource::new(vec![1.0f32]);
+        let finished = Arc::new(AtomicBool::new(false));
+        let mut graph = WasmGraph::new();
+        graph.add(Box::new(ClosingSink {
+            src: input,
+            finished: finished.clone(),
+        }));
+        graph.add(Box::new(source));
+        let (_poke, wake) = async_channel::bounded(1);
+        let mut run = Box::pin(graph.run_async(wake));
+        let waker = Waker::from(Arc::new(Noop));
+        let mut cx = Context::from_waker(&waker);
+        assert!(matches!(
+            std::future::Future::poll(run.as_mut(), &mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(finished.load(Ordering::SeqCst));
+        Ok(())
     }
 }

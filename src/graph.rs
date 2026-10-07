@@ -69,7 +69,7 @@ g.run()?;
 pub struct Graph {
     spent_time: Option<std::time::Duration>,
     spent_cpu_time: Option<std::time::Duration>,
-    blocks: Vec<Box<dyn Block>>,
+    blocks: Vec<Option<Box<dyn Block>>>,
     // Names are captured when blocks are added, outside the work loop.
     block_names: Vec<String>,
     cancel_token: CancellationToken,
@@ -96,10 +96,9 @@ impl Graph {
 impl GraphRunner for Graph {
     fn add(&mut self, b: Box<dyn Block + Send>) {
         self.block_names.push(b.block_name().to_owned());
-        self.blocks.push(b);
+        self.blocks.push(Some(b));
     }
 
-    // TODO: fix this so that Drop is run for blocks that EOF.
     fn run(&mut self) -> Result<()> {
         let st = Instant::now();
         let start_run_cpu = get_cpu_time();
@@ -107,17 +106,15 @@ impl GraphRunner for Graph {
             .resize(self.blocks.len(), std::time::Duration::default());
         self.cpu_times
             .resize(self.blocks.len(), std::time::Duration::default());
-        let mut eof = vec![false; self.blocks.len()];
         loop {
             let mut done = true;
             let mut all_idle = true;
             if self.cancel_token.is_canceled() {
                 break;
             }
-            for (n, b) in self.blocks.iter_mut().enumerate() {
-                if eof[n] {
-                    continue;
-                }
+            for (n, slot) in self.blocks.iter_mut().enumerate() {
+                let Some(b) = slot.as_mut() else { continue };
+                let mut finished = false;
                 let name = &self.block_names[n];
                 let st = Instant::now();
                 let st_cpu = get_cpu_time();
@@ -140,16 +137,17 @@ impl GraphRunner for Graph {
                     BlockRet::WaitForStream(stream, _need) => {
                         let closed = stream.closed();
                         if b.eof() || closed {
-                            // TODO: This doesn't actually drop the block. Maybe
-                            // self.blocks needs to contain `Option`s?
-                            eof[n] = true;
+                            finished = true;
                         }
                     }
                     BlockRet::EOF => {
-                        eof[n] = true;
+                        finished = true;
                     }
                 }
-                if eof[n] {
+                if finished {
+                    slot.take();
+                    // Closing a completed block can wake an earlier block.
+                    done = false;
                     info!("{name} EOF, exiting");
                 }
             }
@@ -365,3 +363,51 @@ mod tests {
 }
 /* vim: textwidth=80
  */
+
+#[cfg(all(test, not(feature = "wasm")))]
+mod eof_tests {
+    use super::*;
+    /// This sink needs actual stream closure to perform its final action.
+    #[derive(rustradio_macros::Block)]
+    #[rustradio(crate, noeof)]
+    struct ClosingSink {
+        #[rustradio(in)]
+        src: crate::stream::ReadStream<f32>,
+        finished: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    }
+    impl crate::block::BlockEOF for ClosingSink {
+        fn eof(&mut self) -> bool {
+            false
+        }
+    }
+    impl Block for ClosingSink {
+        fn work(&mut self) -> Result<BlockRet<'_>> {
+            if self.src.eof() {
+                self.finished
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                return Ok(BlockRet::EOF);
+            }
+            let (input, _) = self.src.read_buf()?;
+            if input.is_empty() {
+                return Ok(BlockRet::Pending);
+            }
+            let n = input.len();
+            input.consume(n);
+            Ok(BlockRet::Again)
+        }
+    }
+    #[test]
+    fn completed_source_closes_stream_before_graph_returns() -> Result<()> {
+        let (source, stream) = crate::vector_source::VectorSource::new(vec![1.0f32]);
+        let finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut graph = Graph::new();
+        graph.add(Box::new(ClosingSink {
+            src: stream,
+            finished: finished.clone(),
+        }));
+        graph.add(Box::new(source));
+        graph.run()?;
+        assert!(finished.load(std::sync::atomic::Ordering::SeqCst));
+        Ok(())
+    }
+}
