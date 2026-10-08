@@ -52,6 +52,8 @@ pub use crate::sigmf::SigMFSource;
 pub use crate::signal_source::{SignalSourceComplex, SignalSourceFloat};
 pub use crate::single_pole_iir_filter::SinglePoleIirFilter;
 pub use crate::skip::Skip;
+#[cfg(feature = "unstable")]
+pub use crate::stream_align::{StreamAlign, StreamAlignBuilder};
 pub use crate::stream_chunks::StreamChunks;
 pub use crate::stream_to_pdu::StreamToPdu;
 pub use crate::strobe::Strobe;

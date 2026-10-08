@@ -197,6 +197,8 @@ pub mod sigmf;
 pub mod signal_source;
 pub mod single_pole_iir_filter;
 pub mod skip;
+#[cfg(feature = "unstable")]
+pub mod stream_align;
 pub mod stream_chunks;
 pub mod stream_to_pdu;
 pub mod strobe;
