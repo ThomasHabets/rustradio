@@ -43,7 +43,7 @@ const TIME_SINK_HTML: &str = r#"
     <button data-role="y-apply" type="button">Apply</button>
     <button data-role="y-zoom-in" type="button">Zoom In</button>
     <button data-role="y-zoom-out" type="button">Zoom Out</button>
-    <button data-role="y-auto" type="button">Autoscale On</button>
+    <button data-role="y-auto" type="button">Autoscale Off</button>
     <label class="rr-time-sink-control-field">
       <span>Trigger</span>
       <select data-role="trigger-mode">
@@ -100,7 +100,8 @@ pub struct TimeSinkOptions {
     /// Samples retained per series, or the capture length in trigger mode.
     pub max_points: usize,
 
-    /// Fixed range is the opposite of auto scale.
+    /// Initial fixed Y range, defaulting to -1..1. Set to None to start with
+    /// autoscaling enabled; the Autoscale button can toggle it at runtime.
     pub fixed_range: Option<(f32, f32)>,
 }
 
@@ -114,7 +115,7 @@ impl Default for TimeSinkOptions {
             y_label: "Amplitude".into(),
             sample_rate: 1.0,
             max_points: DEFAULT_MAX_GRAPH_POINTS,
-            fixed_range: None,
+            fixed_range: Some((-1.0, 1.0)),
         }
     }
 }
@@ -1486,6 +1487,13 @@ mod browser_tests {
             },
         )
         .unwrap();
+        let autoscale = role::<HtmlButtonElement>(&root, "y-auto").unwrap();
+        assert_eq!(autoscale.text_content().as_deref(), Some("Autoscale Off"));
+        assert!(!sink.inner.borrow().auto_scale);
+        autoscale.click();
+        assert!(sink.inner.borrow().auto_scale);
+        assert_eq!(autoscale.text_content().as_deref(), Some("Autoscale On"));
+        autoscale.click();
         sink.set_trigger(Some(TimeSinkTrigger {
             level: 0.,
             edge: TriggerEdge::Rising,
