@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::time::Duration;
 
 use log::debug;
 use rustradio::Float;
@@ -56,6 +57,10 @@ const TIME_SINK_HTML: &str = r#"
       <span>Trigger level</span>
       <input data-role="trigger-level" type="number" step="any" value="0.1" disabled>
     </label>
+    <label class="rr-time-sink-control-field">
+      <span>Trigger delay</span>
+      <input data-role="trigger-delay" type="text" value="0ms" placeholder="1ms" disabled>
+    </label>
     <button data-role="pause" type="button">Pause</button>
   </div>
 </div>
@@ -81,8 +86,9 @@ pub enum TriggerEdge {
     Falling,
 }
 
-/// Level trigger on the first input. The crossing sample starts the capture;
-/// `TimeSinkOptions::max_points` determines its length. No pretrigger data is kept.
+/// Level trigger on the first input. `TimeSinkOptions::max_points` determines
+/// the capture length. `TimeSink::set_trigger_delay` reserves part of that window
+/// for samples preceding the crossing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimeSinkTrigger {
     /// Finite amplitude at which to trigger.
@@ -183,6 +189,8 @@ impl TimeSink {
             trigger_mode: role::<HtmlSelectElement>(root, "trigger-mode")?,
             trigger_level_input: role::<HtmlInputElement>(root, "trigger-level")?,
             trigger_level: DEFAULT_TRIGGER_LEVEL,
+            trigger_delay_input: role::<HtmlInputElement>(root, "trigger-delay")?,
+            trigger_delay: Duration::ZERO,
             y_min,
             y_max,
             auto_scale: options.fixed_range.is_none(),
@@ -207,7 +215,8 @@ impl TimeSink {
     /// have equal lengths in each update. Their count must remain fixed until
     /// clear() or a trigger configuration change. Invalid updates change no state.
     /// A completed capture stays visible while waiting and while its replacement
-    /// fills. The first capture is drawn progressively from its crossing sample.
+    /// fills. The first capture is drawn progressively, including any requested
+    /// pretrigger history.
     #[allow(clippy::needless_pass_by_value)]
     pub fn update(&self, streams: Vec<TaggedVec<Float>>) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
@@ -236,13 +245,35 @@ impl TimeSink {
         self.inner.borrow().data.trigger
     }
 
+    /// Set the time shown before a trigger crossing, rounded to the nearest
+    /// sample. The default is zero. The delay must leave at least one sample
+    /// for the crossing within `max_points`. Changing it clears and rearms the
+    /// display, including while paused. Detection waits for the history to fill.
+    pub fn set_trigger_delay(&self, delay: Duration) -> rustradio::Result<()> {
+        let mut inner = self.inner.borrow_mut();
+        let trigger = inner.data.trigger;
+        dom_result(
+            inner.configure_trigger_settings(trigger, delay),
+            "setting time sink trigger delay",
+        )
+    }
+
+    /// Return the requested pretrigger duration, before rounding to samples.
+    pub fn trigger_delay(&self) -> Duration {
+        self.inner.borrow().trigger_delay
+    }
+
     /// Set the sample rate used to convert sample indexes into seconds.
     ///
-    /// This will affect the X axis labels.
+    /// This affects the X axis labels and the number of pretrigger samples.
+    /// A delay that no longer fits the window is rejected without changing state.
     pub fn set_sample_rate(&self, sample_rate: f64) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
-        inner.set_sample_rate(sample_rate);
-        let result = if inner.paused {
+        let reset = dom_result(
+            inner.set_sample_rate(sample_rate),
+            "setting time sink sample rate",
+        )?;
+        let result = if inner.paused && !reset {
             inner.sync_controls()
         } else {
             inner.draw()
@@ -325,11 +356,12 @@ impl TimeSink {
             }
         })?;
 
-        let controls: [Element; 2] = {
+        let controls: [Element; 3] = {
             let inner = self.inner.borrow();
             [
                 inner.trigger_mode.clone().unchecked_into(),
                 inner.trigger_level_input.clone().unchecked_into(),
+                inner.trigger_delay_input.clone().unchecked_into(),
             ]
         };
         for element in controls {
@@ -451,6 +483,8 @@ impl GraphSeries {
 struct TimeData {
     series: Vec<GraphSeries>,
     capture: Vec<GraphSeries>,
+    history: Vec<GraphSeries>,
+    pretrigger: usize,
     max_points: usize,
     trigger: Option<TimeSinkTrigger>,
     previous: Option<Float>,
@@ -463,6 +497,8 @@ impl TimeData {
         Self {
             series: Vec::new(),
             capture: Vec::new(),
+            history: Vec::new(),
+            pretrigger: 0,
             max_points: max_points.max(1),
             trigger: None,
             previous: None,
@@ -474,6 +510,7 @@ impl TimeData {
     fn clear(&mut self) {
         self.series.clear();
         self.capture.clear();
+        self.history.clear();
         self.previous = None;
         self.remaining = None;
         self.series_count = None;
@@ -500,6 +537,69 @@ impl TimeData {
         self.clear();
         Ok(true)
     }
+    /// Set bounded history retention and rearm only when its size changes.
+    fn set_pretrigger(&mut self, samples: usize) -> rustradio::Result<bool> {
+        if samples >= self.max_points {
+            return Err(rustradio::Error::msg(
+                "trigger delay must leave room for the crossing sample",
+            ));
+        }
+        if samples == self.pretrigger {
+            return Ok(false);
+        }
+        self.pretrigger = samples;
+        self.clear();
+        Ok(true)
+    }
+
+    /// Retain only the newest pretrigger span, including tags. Large updates
+    /// skip samples that would immediately fall out of the history buffer.
+    fn remember(&mut self, streams: &[TaggedVec<Float>], start: usize, end: usize) {
+        if self.pretrigger == 0 || start == end {
+            return;
+        }
+        if self.history.is_empty() {
+            self.history = (0..streams.len())
+                .map(|_| GraphSeries::new(self.pretrigger))
+                .collect();
+        }
+        for (history, stream) in self.history.iter_mut().zip(streams) {
+            let retained_start = start.max(end.saturating_sub(self.pretrigger));
+            if end - start >= self.pretrigger {
+                history.samples.clear();
+                history.tags.clear();
+            }
+            let offset = history.samples.len();
+            history
+                .samples
+                .extend(stream.data[retained_start..end].iter().copied());
+            history.tags.extend(
+                stream
+                    .tags
+                    .iter()
+                    .filter(|tag| tag.pos() >= retained_start && tag.pos() < end)
+                    .map(|tag| {
+                        Tag::new(
+                            offset + tag.pos() - retained_start,
+                            tag.key(),
+                            tag.val().clone(),
+                        )
+                    }),
+            );
+            let excess = history.samples.len().saturating_sub(self.pretrigger);
+            history.samples.drain(..excess);
+            // Keep positions relative to the bounded history on 32-bit WASM,
+            // rather than accumulating an absolute index for a long session.
+            history.tags.retain_mut(|tag| {
+                if tag.pos() < excess {
+                    return false;
+                }
+                tag.set_pos(tag.pos() - excess);
+                true
+            });
+        }
+    }
+
     /// Append samples and report whether visible data changed. Trigger updates
     /// are validated together before any detector or capture state is modified.
     fn append_streams(&mut self, streams: &[TaggedVec<Float>]) -> rustradio::Result<bool> {
@@ -536,16 +636,35 @@ impl TimeData {
         let mut changed = false;
         while cursor < count {
             if self.remaining.is_none() {
-                let sample = first.data[cursor];
-                let crossed = sample.is_finite()
-                    && self.previous.is_some_and(|previous| match trigger.edge {
-                        TriggerEdge::Rising => previous < trigger.level && sample >= trigger.level,
-                        TriggerEdge::Falling => previous > trigger.level && sample <= trigger.level,
-                    });
-                self.previous = sample.is_finite().then_some(sample);
-                if !crossed {
+                let waiting_start = cursor;
+                let available = self
+                    .history
+                    .first()
+                    .map_or(0, |history| history.samples.len());
+                // Search series zero, then retain the skipped span in bulk.
+                // Early crossings are ignored until the requested history exists.
+                while cursor < count {
+                    let sample = first.data[cursor];
+                    let crossed = sample.is_finite()
+                        && self.previous.is_some_and(|previous| match trigger.edge {
+                            TriggerEdge::Rising => {
+                                previous < trigger.level && sample >= trigger.level
+                            }
+                            TriggerEdge::Falling => {
+                                previous > trigger.level && sample <= trigger.level
+                            }
+                        });
+                    self.previous = sample.is_finite().then_some(sample);
+                    if crossed
+                        && available.saturating_add(cursor - waiting_start) >= self.pretrigger
+                    {
+                        break;
+                    }
                     cursor += 1;
-                    continue;
+                }
+                self.remember(streams, waiting_start, cursor);
+                if cursor == count {
+                    break;
                 }
                 // Reuse the bounded capture buffers on subsequent triggers.
                 if self.capture.is_empty() {
@@ -558,7 +677,16 @@ impl TimeData {
                         series.tags.clear();
                     }
                 }
-                self.remaining = Some(self.max_points);
+                for (capture, history) in self.capture.iter_mut().zip(&self.history) {
+                    capture.samples.extend(history.samples.iter().copied());
+                    capture.tags.extend(
+                        history
+                            .tags
+                            .iter()
+                            .map(|tag| Tag::new(tag.pos(), tag.key(), tag.val().clone())),
+                    );
+                }
+                self.remaining = Some(self.max_points - self.pretrigger);
             }
             // Edge detection uses series zero only. Copy the same selected span
             // into every series and ignore further crossings during acquisition.
@@ -579,6 +707,7 @@ impl TimeData {
                         }),
                 );
             }
+            self.remember(streams, cursor, end);
             let last = first.data[end - 1];
             self.previous = last.is_finite().then_some(last);
             let left = remaining - (end - cursor);
@@ -612,6 +741,8 @@ struct Inner {
     trigger_mode: HtmlSelectElement,
     trigger_level_input: HtmlInputElement,
     trigger_level: Float,
+    trigger_delay_input: HtmlInputElement,
+    trigger_delay: Duration,
     y_min: f32,
     y_max: f32,
 
@@ -626,24 +757,47 @@ struct Inner {
 }
 
 impl Inner {
-    /// Validate and apply configuration through the same path for UI and API.
+    /// Apply an API trigger edit while retaining the pretrigger duration.
     fn configure_trigger(&mut self, trigger: Option<TimeSinkTrigger>) -> Result<(), JsValue> {
+        self.configure_trigger_settings(trigger, self.trigger_delay)
+    }
+
+    /// Validate the complete configuration before changing detector history.
+    /// UI edits and both public setters share this path.
+    fn configure_trigger_settings(
+        &mut self,
+        trigger: Option<TimeSinkTrigger>,
+        delay: Duration,
+    ) -> Result<(), JsValue> {
+        let samples = delay_samples(delay, self.sample_rate, self.data.max_points)
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
         let changed = self
             .data
             .set_trigger(trigger)
             .map_err(|err| JsValue::from_str(&err.to_string()))?;
+        // delay_samples already validated the history size, so this cannot fail
+        // after the trigger setting has been changed.
+        let delayed = self
+            .data
+            .set_pretrigger(samples)
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
+        let duration_changed = self.trigger_delay != delay;
+        self.trigger_delay = delay;
         if let Some(trigger) = trigger {
             self.trigger_level = trigger.level;
         }
+        if duration_changed && !changed && !delayed {
+            self.data.clear();
+        }
         self.sync_inputs = true;
-        if changed {
+        if changed || delayed || duration_changed {
             self.draw()
         } else {
             self.sync_controls()
         }
     }
 
-    /// Read an edited edge/level pair and apply it atomically.
+    /// Read the edited edge, level, and duration and apply them atomically.
     fn apply_trigger_controls(&mut self) -> Result<(), JsValue> {
         let trigger = match self.trigger_mode.value().as_str() {
             "off" => None,
@@ -656,14 +810,25 @@ impl Inner {
                 },
             }),
         };
-        self.configure_trigger(trigger)
+        let delay = parse_trigger_delay(&self.trigger_delay_input.value())
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
+        self.configure_trigger_settings(trigger, delay)
     }
 
-    /// Store a positive finite sample rate, ignoring invalid values.
-    fn set_sample_rate(&mut self, sample_rate: f64) {
-        if sample_rate.is_finite() && sample_rate > 0.0 {
-            self.sample_rate = sample_rate;
+    /// Recompute history at a new rate, rejecting delays that no longer fit.
+    /// Invalid rates retain the existing rate, matching the previous API.
+    fn set_sample_rate(&mut self, sample_rate: f64) -> Result<bool, JsValue> {
+        if !sample_rate.is_finite() || sample_rate <= 0.0 {
+            return Ok(false);
         }
+        let samples = delay_samples(self.trigger_delay, sample_rate, self.data.max_points)
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
+        let reset = self
+            .data
+            .set_pretrigger(samples)
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
+        self.sample_rate = sample_rate;
+        Ok(reset)
     }
 
     /// Draw the full canvas, including axes, controls, autoscale, and traces.
@@ -871,6 +1036,11 @@ impl Inner {
         self.trigger_level_input
             .set_value(&self.trigger_level.to_string());
         self.trigger_level_input
+            .set_disabled(self.data.trigger.is_none());
+
+        self.trigger_delay_input
+            .set_value(&format!("{}ms", self.trigger_delay.as_secs_f64() * 1000.0));
+        self.trigger_delay_input
             .set_disabled(self.data.trigger.is_none());
 
         self.y_min_input.set_value(&format!("{}", self.y_min));
@@ -1251,6 +1421,47 @@ fn format_tick(value: f64) -> String {
     }
 }
 
+/// Parse a nonnegative pretrigger duration with an explicit time unit.
+/// Seconds, milliseconds, microseconds, and nanoseconds need no new dependency.
+fn parse_trigger_delay(value: &str) -> rustradio::Result<Duration> {
+    let value = value.trim();
+    for (unit, scale) in [
+        ("ms", 1e-3),
+        ("us", 1e-6),
+        ("µs", 1e-6),
+        ("ns", 1e-9),
+        ("s", 1.0),
+    ] {
+        if let Some(number) = value.strip_suffix(unit) {
+            let number = number.trim().parse::<f64>().map_err(|_| {
+                rustradio::Error::msg("invalid trigger delay; use a duration such as 1ms")
+            })?;
+            return Duration::try_from_secs_f64(number * scale).map_err(|_| {
+                rustradio::Error::msg("trigger delay must be finite and nonnegative")
+            });
+        }
+    }
+    Err(rustradio::Error::msg(
+        "trigger delay requires a unit, such as 1ms",
+    ))
+}
+
+/// Quantize a duration to the nearest sample and validate before allocation.
+fn delay_samples(delay: Duration, sample_rate: f64, max_points: usize) -> rustradio::Result<usize> {
+    let rate = if sample_rate.is_finite() && sample_rate > 0.0 {
+        sample_rate
+    } else {
+        1.0
+    };
+    let samples = (delay.as_secs_f64() * rate).round();
+    if !samples.is_finite() || samples >= max_points as f64 {
+        return Err(rustradio::Error::msg(
+            "trigger delay must leave room for the crossing sample",
+        ));
+    }
+    Ok(samples as usize)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1276,6 +1487,138 @@ mod tests {
             .iter()
             .copied()
             .collect()
+    }
+
+    #[test]
+    fn delay_units_and_window_validation() {
+        for text in ["1ms", "0.001s", "1000us", "1000000ns", " 1 ms ", "1000µs"] {
+            assert_eq!(parse_trigger_delay(text).unwrap(), Duration::from_millis(1));
+        }
+        for invalid in ["1", "", "-1ms", "NaNms", "infms", "1minute"] {
+            assert!(parse_trigger_delay(invalid).is_err(), "{invalid}");
+        }
+        assert_eq!(
+            delay_samples(Duration::from_millis(1), 200_000., 10_000).unwrap(),
+            200
+        );
+        assert_eq!(
+            delay_samples(Duration::from_micros(600), 1_000., 4).unwrap(),
+            1
+        );
+        assert!(delay_samples(Duration::from_millis(4), 1_000., 4).is_err());
+        assert!(delay_samples(Duration::MAX, f64::MAX, 4).is_err());
+    }
+
+    #[test]
+    fn pretrigger_spans_updates_and_preserves_aligned_tags() {
+        let mut data = triggered(5, TriggerEdge::Rising);
+        data.set_pretrigger(2).unwrap();
+        let mut first = stream(&[-4., -3., -2.]);
+        first.tags = vec![
+            Tag::new(0, "discard", TagValue::Bool(true)),
+            Tag::new(2, "before", TagValue::Bool(true)),
+        ];
+        data.append_streams(&[first, stream(&[4., 3., 2.])])
+            .unwrap();
+        let mut edge = stream(&[-1., 0., 1.]);
+        edge.tags = vec![
+            Tag::new(0, "last-before", TagValue::Bool(true)),
+            Tag::new(1, "edge", TagValue::Bool(true)),
+        ];
+        data.append_streams(&[edge, stream(&[1., 0., -1.])])
+            .unwrap();
+        assert_eq!(samples(&data, 0), [-2., -1., 0., 1.]);
+        assert_eq!(samples(&data, 1), [2., 1., 0., -1.]);
+        assert_eq!(
+            data.visible_series()[0]
+                .tags
+                .iter()
+                .map(|tag| (tag.pos(), tag.key()))
+                .collect::<Vec<_>>(),
+            [(0, "before"), (1, "last-before"), (2, "edge")]
+        );
+        data.append_streams(&[stream(&[2., 3.]), stream(&[-2., -3.])])
+            .unwrap();
+        assert_eq!(samples(&data, 0), [-2., -1., 0., 1., 2.]);
+        assert_eq!(data.remaining, None);
+        assert_eq!(data.history[0].samples.len(), 2);
+        assert_eq!(
+            data.history[0].samples.iter().copied().collect::<Vec<_>>(),
+            [2., 3.]
+        );
+        assert!(data.history[0].tags.is_empty());
+    }
+
+    #[test]
+    fn pretrigger_waits_for_history_and_reuses_active_capture_tail() {
+        let mut data = triggered(4, TriggerEdge::Rising);
+        data.set_pretrigger(2).unwrap();
+        // This first edge has only one preceding sample and is not armed yet.
+        assert!(!data.append_streams(&[stream(&[-1., 0.])]).unwrap());
+        assert!(data.visible_series().is_empty());
+        data.append_streams(&[stream(&[-2., -1., 0., 1., -1., 2.])])
+            .unwrap();
+        // The first capture finishes and the next edge uses history collected
+        // during acquisition. Its partial replacement stays behind the display.
+        assert_eq!(samples(&data, 0), [-2., -1., 0., 1.]);
+        assert_eq!(
+            data.capture[0].samples.iter().copied().collect::<Vec<_>>(),
+            [1., -1., 2.]
+        );
+        data.append_streams(&[stream(&[3.])]).unwrap();
+        assert_eq!(samples(&data, 0), [1., -1., 2., 3.]);
+    }
+
+    #[test]
+    fn history_tags_survive_small_steps_and_trim_large_updates() {
+        let mut data = triggered(4, TriggerEdge::Rising);
+        data.set_pretrigger(3).unwrap();
+        for index in 0..6 {
+            let mut input = stream(&[-1.]);
+            input
+                .tags
+                .push(Tag::new(0, "history", TagValue::U64(index)));
+            data.append_streams(&[input]).unwrap();
+        }
+        data.append_streams(&[stream(&[0.])]).unwrap();
+        assert_eq!(
+            data.series[0]
+                .tags
+                .iter()
+                .map(|tag| (tag.pos(), tag.val().clone()))
+                .collect::<Vec<_>>(),
+            [
+                (0, TagValue::U64(3)),
+                (1, TagValue::U64(4)),
+                (2, TagValue::U64(5))
+            ]
+        );
+        data.clear();
+        let mut input = stream(&[-1.; 100]);
+        input.tags = (0..100)
+            .map(|pos| Tag::new(pos, "history", TagValue::U64(pos as u64)))
+            .collect();
+        data.append_streams(&[input]).unwrap();
+        assert_eq!(data.history[0].samples.len(), 3);
+        assert_eq!(data.history[0].tags.len(), 3);
+        data.append_streams(&[stream(&[0.])]).unwrap();
+        assert_eq!(data.series[0].tags[0].val(), &TagValue::U64(97));
+    }
+
+    #[test]
+    fn pretrigger_changes_rearm_without_mutating_on_invalid_settings() {
+        let mut data = triggered(4, TriggerEdge::Rising);
+        data.set_pretrigger(2).unwrap();
+        data.append_streams(&[stream(&[-2., -1., 0.])]).unwrap();
+        assert!(data.set_pretrigger(4).is_err());
+        assert_eq!(samples(&data, 0), [-2., -1., 0.]);
+        assert_eq!(data.pretrigger, 2);
+        assert!(!data.set_pretrigger(2).unwrap());
+        assert!(data.set_pretrigger(1).unwrap());
+        assert!(data.visible_series().is_empty());
+        assert!(data.history.is_empty());
+        data.clear();
+        assert_eq!(data.pretrigger, 1);
     }
 
     #[test]
@@ -1471,6 +1814,85 @@ mod browser_tests {
     // The experimental socket tests select browser execution when enabled.
     #[cfg(not(feature = "unstable"))]
     wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn duration_control_and_rate_changes_preserve_valid_configuration() {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let root = document.create_element("div").unwrap();
+        document.body().unwrap().append_child(&root).unwrap();
+        let sink = TimeSink::mount(
+            &root,
+            TimeSinkOptions {
+                max_points: 5,
+                sample_rate: 1000.,
+                ..TimeSinkOptions::default()
+            },
+        )
+        .unwrap();
+        let delay = role::<HtmlInputElement>(&root, "trigger-delay").unwrap();
+        assert!(delay.disabled());
+        sink.set_trigger(Some(TimeSinkTrigger {
+            level: 0.,
+            edge: TriggerEdge::Rising,
+        }))
+        .unwrap();
+        assert!(!delay.disabled());
+        delay.set_value("2ms");
+        delay
+            .dispatch_event(&Event::new("change").unwrap())
+            .unwrap();
+        assert_eq!(sink.trigger_delay(), Duration::from_millis(2));
+        sink.update(vec![TaggedVec {
+            data: vec![-3., -2., -1.],
+            tags: vec![],
+        }])
+        .unwrap();
+        sink.update(vec![TaggedVec {
+            data: vec![0., 1.],
+            tags: vec![],
+        }])
+        .unwrap();
+        sink.update(vec![TaggedVec {
+            data: vec![2.],
+            tags: vec![],
+        }])
+        .unwrap();
+        assert_eq!(
+            sink.inner.borrow().data.visible_series()[0]
+                .samples
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            [-2., -1., 0., 1., 2.]
+        );
+        let canvas = role::<HtmlCanvasElement>(&root, "canvas").unwrap();
+        let captured = canvas.to_data_url().unwrap();
+        for invalid in ["5ms", "-1ms", "1"] {
+            delay.set_value(invalid);
+            delay
+                .dispatch_event(&Event::new("change").unwrap())
+                .unwrap();
+            assert_eq!(sink.trigger_delay(), Duration::from_millis(2));
+            assert_eq!(delay.value(), "2ms");
+            assert!(canvas.to_data_url().unwrap() == captured);
+        }
+        sink.set_paused(true).unwrap();
+        sink.set_sample_rate(2000.).unwrap();
+        assert_eq!(sink.inner.borrow().data.pretrigger, 4);
+        assert!(sink.inner.borrow().data.visible_series().is_empty());
+        assert!(sink.set_sample_rate(3000.).is_err());
+        assert_eq!(sink.inner.borrow().sample_rate, 2000.);
+        assert!(sink.set_trigger_delay(Duration::from_millis(3)).is_err());
+        assert_eq!(sink.trigger_delay(), Duration::from_millis(2));
+        sink.set_trigger_delay(Duration::from_millis(1)).unwrap();
+        assert_eq!(delay.value(), "1ms");
+        assert_eq!(sink.inner.borrow().data.pretrigger, 2);
+        sink.clear().unwrap();
+        assert_eq!(sink.trigger_delay(), Duration::from_millis(1));
+        sink.set_trigger(None).unwrap();
+        assert!(delay.disabled());
+        root.remove();
+    }
 
     #[wasm_bindgen_test]
     fn controls_follow_the_page_color_scheme() {
