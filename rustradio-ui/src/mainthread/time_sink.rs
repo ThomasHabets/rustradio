@@ -1323,6 +1323,8 @@ fn draw_axes(
     ctx.set_fill_style_str(text);
     ctx.set_font("12px sans-serif");
 
+    // Scale only labels: trace coordinates and sample clocks remain in seconds.
+    let (time_scale, time_label) = time_axis_units(x_min, x_max);
     let x_ticks = nice_ticks(x_min, x_max, AXIS_TICK_COUNT);
     ctx.set_text_align("center");
     ctx.set_text_baseline("top");
@@ -1333,7 +1335,7 @@ fn draw_axes(
         ctx.move_to(x, plot_bottom);
         ctx.line_to(x, plot_bottom + 4.0);
         ctx.stroke();
-        ctx.fill_text(&format_tick(*tick), x, plot_bottom + 6.0)?;
+        ctx.fill_text(&format_tick(*tick * time_scale), x, plot_bottom + 6.0)?;
     }
 
     let y_ticks = nice_ticks(y_min, y_max, AXIS_TICK_COUNT);
@@ -1351,7 +1353,7 @@ fn draw_axes(
 
     ctx.set_text_align("center");
     ctx.set_text_baseline("top");
-    ctx.fill_text("Time (s)", plot_left + plot_width / 2.0, plot_bottom + 20.0)?;
+    ctx.fill_text(time_label, plot_left + plot_width / 2.0, plot_bottom + 20.0)?;
 
     ctx.save();
     ctx.translate(plot_left - 40.0, plot_top + plot_height / 2.0)?;
@@ -1362,6 +1364,16 @@ fn draw_axes(
     ctx.restore();
 
     Ok(())
+}
+
+/// Choose units from the visible span, including rolling windows whose
+/// absolute stream time has already passed one second.
+fn time_axis_units(min: f64, max: f64) -> (f64, &'static str) {
+    if max - min < 1.0 {
+        (1000.0, "Time (ms)")
+    } else {
+        (1.0, "Time (s)")
+    }
 }
 
 /// Generate human-friendly tick values for an axis range.
@@ -1487,6 +1499,15 @@ mod tests {
             .iter()
             .copied()
             .collect()
+    }
+
+    #[test]
+    fn axis_uses_milliseconds_only_for_spans_below_a_second() {
+        assert_eq!(time_axis_units(0., 0.05), (1000., "Time (ms)"));
+        assert_eq!(time_axis_units(10., 10.05), (1000., "Time (ms)"));
+        assert_eq!(time_axis_units(0., 0.999), (1000., "Time (ms)"));
+        assert_eq!(time_axis_units(0., 1.), (1., "Time (s)"));
+        assert_eq!(time_axis_units(10., 12.), (1., "Time (s)"));
     }
 
     #[test]
@@ -1814,6 +1835,57 @@ mod browser_tests {
     // The experimental socket tests select browser execution when enabled.
     #[cfg(not(feature = "unstable"))]
     wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn axis_labels_and_ticks_switch_units_together() {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let root = document.create_element("div").unwrap();
+        root.set_id("time-sink-axis-test");
+        document.body().unwrap().append_child(&root).unwrap();
+        let sink = TimeSink::mount(
+            &root,
+            TimeSinkOptions {
+                max_points: 51,
+                sample_rate: 1000.,
+                ..TimeSinkOptions::default()
+            },
+        )
+        .unwrap();
+        // Observe the actual text sent to this canvas without affecting other
+        // sinks or changing the trace coordinate calculations.
+        js_sys::eval(
+            r#"(() => {
+            const context = document.querySelector('#time-sink-axis-test canvas').getContext('2d');
+            const original = context.fillText;
+            context.recordedLabels = [];
+            context.fillText = function(text, ...args) {
+                this.recordedLabels.push(text);
+                return original.call(this, text, ...args);
+            };
+        })()"#,
+        )
+        .unwrap();
+        sink.update(vec![TaggedVec {
+            data: vec![0.; 51],
+            tags: vec![],
+        }])
+        .unwrap();
+        let labels = || {
+            js_sys::Array::from(&js_sys::eval(r#"document.querySelector('#time-sink-axis-test canvas').getContext('2d').recordedLabels"#).unwrap()).iter().map(|value| value.as_string().unwrap()).collect::<Vec<_>>()
+        };
+        assert!(labels().iter().any(|label| label == "Time (ms)"));
+        assert!(labels().iter().any(|label| label == "50.00"));
+        js_sys::eval(r#"document.querySelector('#time-sink-axis-test canvas').getContext('2d').recordedLabels = []"#).unwrap();
+        sink.set_sample_rate(50.).unwrap();
+        assert!(labels().iter().any(|label| label == "Time (s)"));
+        let observed = labels();
+        assert!(
+            observed.iter().any(|label| label == "1.000"),
+            "{observed:?}"
+        );
+        assert!(!labels().iter().any(|label| label == "Time (ms)"));
+        root.remove();
+    }
 
     #[wasm_bindgen_test]
     fn duration_control_and_rate_changes_preserve_valid_configuration() {

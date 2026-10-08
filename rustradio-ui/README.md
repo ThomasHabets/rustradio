@@ -56,3 +56,6 @@ the delay must leave room for at least the crossing sample. Detection arms once
 the history is full. Changing the delay clears and rearms the display; `clear()`
 retains it. Sample-rate changes recompute the history length and reject a delay
 that no longer fits the window.
+
+The X axis uses milliseconds when the displayed span is shorter than one second;
+longer spans use seconds. This changes tick labels and the unit label together.
