@@ -48,7 +48,9 @@
   display: flex;
   gap: 0.4rem;
   align-items: end;
-  color-scheme: light dark;
+  /* Follow the page's selected theme, including an explicit light override
+   * when the operating system prefers dark colors. */
+  color-scheme: inherit;
   color: var(--text, CanvasText);
 }
 

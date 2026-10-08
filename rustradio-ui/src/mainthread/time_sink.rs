@@ -1472,6 +1472,43 @@ mod browser_tests {
     #[cfg(not(feature = "unstable"))]
     wasm_bindgen_test_configure!(run_in_browser);
 
+    #[wasm_bindgen_test]
+    fn controls_follow_the_page_color_scheme() {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let style = document.create_element("style").unwrap();
+        style.set_text_content(Some(include_str!("../../assets/rustradio.css")));
+        document.body().unwrap().append_child(&style).unwrap();
+        let root = document.create_element("div").unwrap();
+        root.set_id("time-sink-color-test");
+        document.body().unwrap().append_child(&root).unwrap();
+        let _sink = TimeSink::mount(&root, TimeSinkOptions::default()).unwrap();
+        // Exercise runtime overrides with an OS dark preference too: native
+        // text colors must follow the page, rather than reverting to OS colors.
+        for (scheme, background, foreground) in [
+            ("dark", "rgb(0, 0, 0)", "rgb(255, 255, 255)"),
+            ("light", "rgb(255, 255, 255)", "rgb(0, 0, 0)"),
+            ("dark", "rgb(0, 0, 0)", "rgb(255, 255, 255)"),
+        ] {
+            root.set_attribute(
+                "style",
+                &format!("color-scheme: {scheme}; --surface: {background}"),
+            )
+            .unwrap();
+            let colors = js_sys::eval(r#"Array.from(document.querySelectorAll('#time-sink-color-test button, #time-sink-color-test input, #time-sink-color-test select')).map(element => {
+                const style = getComputedStyle(element);
+                return [style.colorScheme, style.backgroundColor, style.color];
+            })"#).unwrap();
+            for colors in js_sys::Array::from(&colors).iter() {
+                let colors = js_sys::Array::from(&colors);
+                assert_eq!(colors.get(0).as_string().unwrap(), scheme);
+                assert_eq!(colors.get(1).as_string().unwrap(), background);
+                assert_eq!(colors.get(2).as_string().unwrap(), foreground);
+            }
+        }
+        root.remove();
+        style.remove();
+    }
+
     #[wasm_bindgen_test(async)]
     async fn theme_changes_redraw_a_paused_capture() {
         let window = web_sys::window().unwrap();
@@ -1561,9 +1598,6 @@ mod browser_tests {
             root.scroll_width() <= root.client_width(),
             "controls overflow narrow panel"
         );
-        // Run this test with both light and dark browser preferences. The CSS
-        // must pick readable native colors even without application variables.
-        assert_eq!(js_sys::eval(r#"getComputedStyle(document.querySelector('[data-role="trigger-mode"]')).colorScheme"#).unwrap().as_string().unwrap(), "light dark");
         assert_eq!(level.value(), "0.1");
         mode.set_value("rising");
         mode.dispatch_event(&Event::new("change").unwrap()).unwrap();
