@@ -8,7 +8,7 @@ use rustradio::stream::Tag;
 use wasm_bindgen::prelude::*;
 use web_sys::{
     CanvasRenderingContext2d, Element, Event, HtmlButtonElement, HtmlCanvasElement,
-    HtmlInputElement,
+    HtmlInputElement, HtmlSelectElement,
 };
 
 use crate::TaggedVec;
@@ -44,6 +44,18 @@ const TIME_SINK_HTML: &str = r#"
     <button data-role="y-zoom-in" type="button">Zoom In</button>
     <button data-role="y-zoom-out" type="button">Zoom Out</button>
     <button data-role="y-auto" type="button">Autoscale On</button>
+    <label class="rr-time-sink-control-field">
+      <span>Trigger</span>
+      <select data-role="trigger-mode">
+        <option value="off">Free running</option>
+        <option value="rising">Rising</option>
+        <option value="falling">Falling</option>
+      </select>
+    </label>
+    <label class="rr-time-sink-control-field">
+      <span>Trigger level</span>
+      <input data-role="trigger-level" type="number" step="any" value="0" disabled>
+    </label>
     <button data-role="pause" type="button">Pause</button>
   </div>
 </div>
@@ -59,6 +71,25 @@ const AXIS_MARGIN_TOP: f64 = 12.0;
 const AXIS_MARGIN_BOTTOM: f64 = 30.0;
 const AXIS_TICK_COUNT: usize = 6;
 
+/// Direction in which the first input must cross the trigger level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TriggerEdge {
+    /// Previous sample is below the level and the current sample reaches it.
+    Rising,
+    /// Previous sample is above the level and the current sample reaches it.
+    Falling,
+}
+
+/// Level trigger on the first input. The crossing sample starts the capture;
+/// `TimeSinkOptions::max_points` determines its length. No pretrigger data is kept.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimeSinkTrigger {
+    /// Finite amplitude at which to trigger.
+    pub level: Float,
+    /// Select rising or falling crossings.
+    pub edge: TriggerEdge,
+}
+
 /// Options for the time sink.
 #[derive(Debug, Clone)]
 pub struct TimeSinkOptions {
@@ -66,6 +97,7 @@ pub struct TimeSinkOptions {
     pub subtitle: String,
     pub y_label: String,
     pub sample_rate: f64,
+    /// Samples retained per series, or the capture length in trigger mode.
     pub max_points: usize,
 
     /// Fixed range is the opposite of auto scale.
@@ -145,13 +177,15 @@ impl TimeSink {
             y_zoom_out_button: role::<HtmlButtonElement>(root, "y-zoom-out")?,
             y_auto_button: role::<HtmlButtonElement>(root, "y-auto")?,
             pause_button: role::<HtmlButtonElement>(root, "pause")?,
-            series: Vec::new(),
+            data: TimeData::new(options.max_points.max(1)),
+            trigger_mode: role::<HtmlSelectElement>(root, "trigger-mode")?,
+            trigger_level_input: role::<HtmlInputElement>(root, "trigger-level")?,
+            trigger_level: 0.0,
             y_min,
             y_max,
             auto_scale: options.fixed_range.is_none(),
             paused: false,
             sample_rate: options.sample_rate,
-            max_points: options.max_points.max(1),
             y_label: options.y_label,
             sync_inputs: true,
             callbacks: Vec::new(),
@@ -166,17 +200,36 @@ impl TimeSink {
     /// Add new tagged float streams to the sink and redraw unless paused.
     ///
     /// In order to graph a complex signal, first split it into two Float
-    /// streams.
+    /// streams. With triggering enabled, all series must be already aligned and
+    /// have equal lengths in each update. Their count must remain fixed until
+    /// clear() or a trigger configuration change. Invalid updates change no state.
+    /// A completed capture stays visible until the next crossing on series zero.
     #[allow(clippy::needless_pass_by_value)]
     pub fn update(&self, streams: Vec<TaggedVec<Float>>) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
-        inner.append_streams(&streams);
-        let result = if inner.paused {
+        let changed = inner.data.append_streams(&streams)?;
+        let result = if inner.paused || !changed {
             inner.sync_controls()
         } else {
             inner.draw()
         };
         dom_result(result, "updating time sink")
+    }
+
+    /// Set or disable level triggering. `None` selects the default free-running
+    /// mode. Changing settings clears the display and rearms detection, including
+    /// while paused; identical settings leave the current capture intact.
+    /// Nonfinite levels are rejected without changing the configuration.
+    pub fn set_trigger(&self, trigger: Option<TimeSinkTrigger>) -> rustradio::Result<()> {
+        dom_result(
+            self.inner.borrow_mut().configure_trigger(trigger),
+            "setting time sink trigger",
+        )
+    }
+
+    /// Return the current trigger, or `None` for free-running mode.
+    pub fn trigger(&self) -> Option<TimeSinkTrigger> {
+        self.inner.borrow().data.trigger
     }
 
     /// Set the sample rate used to convert sample indexes into seconds.
@@ -214,7 +267,7 @@ impl TimeSink {
     /// Drop all buffered series data and redraw the empty sink.
     pub fn clear(&self) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
-        inner.series.clear();
+        inner.data.clear();
         dom_result(inner.draw(), "clearing time sink")
     }
 
@@ -268,6 +321,28 @@ impl TimeSink {
             }
         })?;
 
+        let controls: [Element; 2] = {
+            let inner = self.inner.borrow();
+            [
+                inner.trigger_mode.clone().unchecked_into(),
+                inner.trigger_level_input.clone().unchecked_into(),
+            ]
+        };
+        for element in controls {
+            let state = self.inner.clone();
+            let handler = Closure::<dyn FnMut(Event)>::new(move |_| {
+                let mut inner = state.borrow_mut();
+                if let Err(err) = inner.apply_trigger_controls() {
+                    log::error!("time sink trigger failed: {err:?}");
+                    // Restore valid controls after a rejected edit.
+                    inner.sync_inputs = true;
+                    let _ = inner.sync_controls();
+                }
+            });
+            element.add_event_listener_with_callback("change", handler.as_ref().unchecked_ref())?;
+            self.inner.borrow_mut().callbacks.push(handler);
+        }
+
         let inner = self.inner.clone();
         let handler = Closure::<dyn FnMut(Event)>::new(move |_event: Event| {
             if let Err(err) = inner.borrow_mut().draw() {
@@ -318,6 +393,139 @@ impl GraphSeries {
     }
 }
 
+// Buffering is independent of DOM handles so edge detection and capture ranges
+// can be tested natively. `remaining` is Some only while a capture is filling;
+// waiting retains the previous completed window until a new crossing replaces it.
+struct TimeData {
+    series: Vec<GraphSeries>,
+    max_points: usize,
+    trigger: Option<TimeSinkTrigger>,
+    previous: Option<Float>,
+    remaining: Option<usize>,
+    series_count: Option<usize>,
+}
+impl TimeData {
+    /// Start in the existing free-running mode with bounded sample retention.
+    fn new(max_points: usize) -> Self {
+        Self {
+            series: Vec::new(),
+            max_points: max_points.max(1),
+            trigger: None,
+            previous: None,
+            remaining: None,
+            series_count: None,
+        }
+    }
+    /// Forget captures and detector history, retaining the selected trigger.
+    fn clear(&mut self) {
+        self.series.clear();
+        self.previous = None;
+        self.remaining = None;
+        self.series_count = None;
+    }
+    /// Reject invalid settings before touching state; report whether a reset
+    /// occurred so the caller can clear the canvas even when rendering is paused.
+    fn set_trigger(&mut self, trigger: Option<TimeSinkTrigger>) -> rustradio::Result<bool> {
+        if trigger.is_some_and(|trigger| !trigger.level.is_finite()) {
+            return Err(rustradio::Error::msg("trigger level must be finite"));
+        }
+        if self.trigger == trigger {
+            return Ok(false);
+        }
+        self.trigger = trigger;
+        self.clear();
+        Ok(true)
+    }
+    /// Append samples and report whether visible data changed. Trigger updates
+    /// are validated together before any detector or capture state is modified.
+    fn append_streams(&mut self, streams: &[TaggedVec<Float>]) -> rustradio::Result<bool> {
+        let Some(first) = streams.first() else {
+            return Ok(false);
+        };
+        let Some(trigger) = self.trigger else {
+            let mut changed = false;
+            for (index, stream) in streams.iter().enumerate() {
+                if self.series.len() <= index {
+                    self.series
+                        .push(GraphSeries::new(stream.data.len().min(self.max_points)));
+                }
+                self.series[index].append_stream(stream, self.max_points);
+                changed |= !stream.data.is_empty();
+            }
+            return Ok(changed);
+        };
+        let count = first.data.len();
+        if streams.iter().any(|stream| stream.data.len() != count)
+            || self
+                .series_count
+                .is_some_and(|previous| previous != streams.len())
+        {
+            return Err(rustradio::Error::msg(
+                "trigger updates require aligned, equally sized series with a fixed count",
+            ));
+        }
+        if count == 0 {
+            return Ok(false);
+        }
+        self.series_count = Some(streams.len());
+        let mut cursor = 0;
+        let mut changed = false;
+        while cursor < count {
+            if self.remaining.is_none() {
+                let sample = first.data[cursor];
+                let crossed = sample.is_finite()
+                    && self.previous.is_some_and(|previous| match trigger.edge {
+                        TriggerEdge::Rising => previous < trigger.level && sample >= trigger.level,
+                        TriggerEdge::Falling => previous > trigger.level && sample <= trigger.level,
+                    });
+                self.previous = sample.is_finite().then_some(sample);
+                if !crossed {
+                    cursor += 1;
+                    continue;
+                }
+                // Reuse the bounded capture buffers on subsequent triggers.
+                if self.series.is_empty() {
+                    self.series = (0..streams.len())
+                        .map(|_| GraphSeries::new(self.max_points))
+                        .collect();
+                } else {
+                    for series in &mut self.series {
+                        series.samples.clear();
+                        series.tags.clear();
+                    }
+                }
+                self.remaining = Some(self.max_points);
+            }
+            // Edge detection uses series zero only. Copy the same selected span
+            // into every series and ignore further crossings during acquisition.
+            let remaining = self.remaining.expect("capture started");
+            let end = cursor + remaining.min(count - cursor);
+            for (series, stream) in self.series.iter_mut().zip(streams) {
+                let offset = series.samples.len();
+                series
+                    .samples
+                    .extend(stream.data[cursor..end].iter().copied());
+                series.tags.extend(
+                    stream
+                        .tags
+                        .iter()
+                        .filter(|tag| tag.pos() >= cursor && tag.pos() < end)
+                        .map(|tag| {
+                            Tag::new(offset + tag.pos() - cursor, tag.key(), tag.val().clone())
+                        }),
+                );
+            }
+            let last = first.data[end - 1];
+            self.previous = last.is_finite().then_some(last);
+            let left = remaining - (end - cursor);
+            self.remaining = (left > 0).then_some(left);
+            cursor = end;
+            changed = true;
+        }
+        Ok(changed)
+    }
+}
+
 struct Inner {
     canvas: HtmlCanvasElement,
     ctx: CanvasRenderingContext2d,
@@ -328,7 +536,10 @@ struct Inner {
     y_zoom_out_button: HtmlButtonElement,
     y_auto_button: HtmlButtonElement,
     pause_button: HtmlButtonElement,
-    series: Vec<GraphSeries>,
+    data: TimeData,
+    trigger_mode: HtmlSelectElement,
+    trigger_level_input: HtmlInputElement,
+    trigger_level: Float,
     y_min: f32,
     y_max: f32,
 
@@ -336,28 +547,49 @@ struct Inner {
     auto_scale: bool,
     paused: bool,
     sample_rate: f64,
-    max_points: usize,
     y_label: String,
     sync_inputs: bool,
     callbacks: Vec<Closure<dyn FnMut(Event)>>,
 }
 
 impl Inner {
+    /// Validate and apply configuration through the same path for UI and API.
+    fn configure_trigger(&mut self, trigger: Option<TimeSinkTrigger>) -> Result<(), JsValue> {
+        let changed = self
+            .data
+            .set_trigger(trigger)
+            .map_err(|err| JsValue::from_str(&err.to_string()))?;
+        if let Some(trigger) = trigger {
+            self.trigger_level = trigger.level;
+        }
+        self.sync_inputs = true;
+        if changed {
+            self.draw()
+        } else {
+            self.sync_controls()
+        }
+    }
+
+    /// Read an edited edge/level pair and apply it atomically.
+    fn apply_trigger_controls(&mut self) -> Result<(), JsValue> {
+        let trigger = match self.trigger_mode.value().as_str() {
+            "off" => None,
+            mode => Some(TimeSinkTrigger {
+                level: Self::parse_y_input(&self.trigger_level_input, "Trigger level")?,
+                edge: match mode {
+                    "rising" => TriggerEdge::Rising,
+                    "falling" => TriggerEdge::Falling,
+                    _ => return Err(JsValue::from_str("invalid trigger mode")),
+                },
+            }),
+        };
+        self.configure_trigger(trigger)
+    }
+
     /// Store a positive finite sample rate, ignoring invalid values.
     fn set_sample_rate(&mut self, sample_rate: f64) {
         if sample_rate.is_finite() && sample_rate > 0.0 {
             self.sample_rate = sample_rate;
-        }
-    }
-
-    /// Append all streams from one update, creating series as needed.
-    fn append_streams(&mut self, streams: &[TaggedVec<Float>]) {
-        for (idx, stream) in streams.iter().enumerate() {
-            if self.series.len() <= idx {
-                self.series
-                    .push(GraphSeries::new(stream.data.len().min(self.max_points)));
-            }
-            self.series[idx].append_stream(stream, self.max_points);
         }
     }
 
@@ -402,8 +634,18 @@ impl Inner {
         let Some((x_min, x_max)) = self.time_range() else {
             self.ctx.set_fill_style_str(text);
             self.ctx.set_font("12px sans-serif");
-            self.ctx
-                .fill_text("Waiting for float data...", 12.0, 20.0)?;
+            // Axis labels change these canvas settings during a capture.
+            self.ctx.set_text_align("left");
+            self.ctx.set_text_baseline("alphabetic");
+            self.ctx.fill_text(
+                if self.data.trigger.is_some() {
+                    "Waiting for trigger..."
+                } else {
+                    "Waiting for float data..."
+                },
+                12.0,
+                20.0,
+            )?;
             return Ok(());
         };
 
@@ -434,7 +676,7 @@ impl Inner {
             .ceil()
             .max(1.0) as u64;
 
-        for (idx, series) in self.series.iter().enumerate() {
+        for (idx, series) in self.data.series.iter().enumerate() {
             draw_series(
                 &self.ctx,
                 series,
@@ -458,7 +700,7 @@ impl Inner {
     fn data_range(&self) -> Option<(f32, f32)> {
         let mut min = f32::INFINITY;
         let mut max = f32::NEG_INFINITY;
-        for series in &self.series {
+        for series in &self.data.series {
             for &sample in &series.samples {
                 if sample < min {
                     min = sample;
@@ -477,9 +719,18 @@ impl Inner {
 
     /// Compute the earliest and latest buffered sample time in seconds.
     fn time_range(&self) -> Option<(f64, f64)> {
+        let sample_rate = if self.sample_rate.is_finite() && self.sample_rate > 0.0 {
+            self.sample_rate
+        } else {
+            1.0
+        };
+        if self.data.trigger.is_some() && !self.data.series.is_empty() {
+            // A partial capture uses the full window so its X scale stays fixed.
+            return Some((0.0, (self.data.max_points - 1).max(1) as f64 / sample_rate));
+        }
         let mut min_idx: Option<u64> = None;
         let mut max_idx: Option<u64> = None;
-        for series in &self.series {
+        for series in &self.data.series {
             let len = series.samples.len() as u64;
             if len == 0 {
                 continue;
@@ -489,11 +740,6 @@ impl Inner {
             min_idx = Some(min_idx.map_or(series_min, |v| v.min(series_min)));
             max_idx = Some(max_idx.map_or(series_max, |v| v.max(series_max)));
         }
-        let sample_rate = if self.sample_rate > 0.0 {
-            self.sample_rate
-        } else {
-            1.0
-        };
         match (min_idx, max_idx) {
             (Some(min_idx), Some(max_idx)) => {
                 let min_t = min_idx as f64 / sample_rate;
@@ -524,12 +770,27 @@ impl Inner {
         self.draw()
     }
 
-    /// Mirror internal pause/autoscale/Y-range state into generated controls.
+    /// Mirror pause, axes, autoscale, and trigger state into generated controls.
     fn sync_controls(&mut self) -> Result<(), JsValue> {
         if !self.sync_inputs {
             return Ok(());
         }
         self.sync_inputs = false;
+        self.trigger_mode.set_value(match self.data.trigger {
+            None => "off",
+            Some(TimeSinkTrigger {
+                edge: TriggerEdge::Rising,
+                ..
+            }) => "rising",
+            Some(TimeSinkTrigger {
+                edge: TriggerEdge::Falling,
+                ..
+            }) => "falling",
+        });
+        self.trigger_level_input
+            .set_value(&self.trigger_level.to_string());
+        self.trigger_level_input
+            .set_disabled(self.data.trigger.is_none());
 
         self.y_min_input.set_value(&format!("{}", self.y_min));
         self.y_max_input.set_value(&format!("{}", self.y_max));
@@ -906,5 +1167,307 @@ fn format_tick(value: f64) -> String {
         format!("{value:.3}")
     } else {
         format!("{value:.4}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustradio::stream::TagValue;
+
+    fn stream(samples: &[Float]) -> TaggedVec<Float> {
+        TaggedVec {
+            data: samples.to_vec(),
+            tags: Vec::new(),
+        }
+    }
+
+    fn triggered(points: usize, edge: TriggerEdge) -> TimeData {
+        let mut data = TimeData::new(points);
+        data.set_trigger(Some(TimeSinkTrigger { level: 0.0, edge }))
+            .unwrap();
+        data
+    }
+
+    fn samples(data: &TimeData, index: usize) -> Vec<Float> {
+        data.series[index].samples.iter().copied().collect()
+    }
+
+    #[test]
+    fn free_running_retains_latest_samples_independently() {
+        let mut data = TimeData::new(3);
+        data.append_streams(&[stream(&[0., 1., 2., 3.]), stream(&[9.])])
+            .unwrap();
+        data.append_streams(&[stream(&[4.]), stream(&[8., 7.])])
+            .unwrap();
+        assert_eq!(samples(&data, 0), [2., 3., 4.]);
+        assert_eq!(samples(&data, 1), [9., 8., 7.]);
+        assert_eq!(data.series[0].start_index, 2);
+        assert!(!data.append_streams(&[]).unwrap());
+    }
+
+    #[test]
+    fn crossing_spans_updates_and_capture_holds_until_next_trigger() {
+        let mut data = triggered(3, TriggerEdge::Rising);
+        assert!(!data.append_streams(&[stream(&[1., 0., -1.])]).unwrap());
+        assert!(data.series.is_empty());
+        assert!(data.append_streams(&[stream(&[0., 2.])]).unwrap());
+        assert_eq!(samples(&data, 0), [0., 2.]);
+        assert_eq!(data.remaining, Some(1));
+        data.append_streams(&[stream(&[3., 4., -1.])]).unwrap();
+        assert_eq!(samples(&data, 0), [0., 2., 3.]);
+        assert_eq!(data.remaining, None);
+        assert!(!data.append_streams(&[stream(&[-2.])]).unwrap());
+        assert_eq!(samples(&data, 0), [0., 2., 3.]);
+        data.append_streams(&[stream(&[1.])]).unwrap();
+        assert_eq!(samples(&data, 0), [1.]);
+    }
+
+    #[test]
+    fn falling_edge_ignores_crossings_during_capture() {
+        let mut data = triggered(4, TriggerEdge::Falling);
+        data.append_streams(&[stream(&[1., 0., 1., -1., 2.])])
+            .unwrap();
+        assert_eq!(samples(&data, 0), [0., 1., -1., 2.]);
+        assert_eq!(data.remaining, None);
+        // The final captured sample is also the history for the next edge.
+        data.append_streams(&[stream(&[0.])]).unwrap();
+        assert_eq!(samples(&data, 0), [0.]);
+        assert_eq!(data.remaining, Some(3));
+    }
+
+    #[test]
+    fn one_update_can_complete_and_retrigger_multiple_times() {
+        let mut data = triggered(2, TriggerEdge::Rising);
+        data.append_streams(&[stream(&[-1., 0., 1., -1., 2., 3., -1., 4.])])
+            .unwrap();
+        assert_eq!(samples(&data, 0), [4.]);
+        assert_eq!(data.remaining, Some(1));
+        let mut single = triggered(1, TriggerEdge::Rising);
+        single
+            .append_streams(&[stream(&[-1., 1., -1., 2.])])
+            .unwrap();
+        assert_eq!(samples(&single, 0), [2.]);
+        assert_eq!(single.remaining, None);
+    }
+
+    #[test]
+    fn all_series_capture_same_range_and_translate_tags() {
+        let mut data = triggered(3, TriggerEdge::Rising);
+        let mut first = stream(&[-1., 0., 1.]);
+        first.tags = (0..3)
+            .map(|pos| Tag::new(pos, "tag", TagValue::U64(pos as u64)))
+            .collect();
+        data.append_streams(&[first, stream(&[9., 10., 11.])])
+            .unwrap();
+        let mut next = stream(&[2., 3., -1., 4.]);
+        next.tags = vec![
+            Tag::new(0, "end", TagValue::Bool(true)),
+            Tag::new(3, "next", TagValue::Bool(true)),
+        ];
+        data.append_streams(&[next, stream(&[12., 13., 14., 15.])])
+            .unwrap();
+        assert_eq!(samples(&data, 0), [4.]);
+        assert_eq!(samples(&data, 1), [15.]);
+        assert_eq!(data.series[0].tags.len(), 1);
+        assert_eq!(data.series[0].tags[0].key(), "next");
+        assert_eq!(data.series[0].tags[0].pos(), 0);
+        // A fresh capture can keep tags across two batches.
+        data.clear();
+        let mut first = stream(&[-1., 0., 1.]);
+        first.tags = vec![
+            Tag::new(0, "skip", TagValue::Bool(true)),
+            Tag::new(2, "keep", TagValue::Bool(true)),
+        ];
+        data.append_streams(&[first]).unwrap();
+        let mut last = stream(&[2., 3.]);
+        last.tags = vec![
+            Tag::new(0, "last", TagValue::Bool(true)),
+            Tag::new(1, "skip", TagValue::Bool(true)),
+        ];
+        data.append_streams(&[last]).unwrap();
+        assert_eq!(samples(&data, 0), [0., 1., 2.]);
+        assert_eq!(
+            data.series[0]
+                .tags
+                .iter()
+                .map(|t| (t.pos(), t.key()))
+                .collect::<Vec<_>>(),
+            [(1, "keep"), (2, "last")]
+        );
+    }
+
+    #[test]
+    fn invalid_batch_does_not_mutate_capture_or_detector() {
+        let mut data = triggered(3, TriggerEdge::Rising);
+        assert!(data.append_streams(&[stream(&[-1.]), stream(&[])]).is_err());
+        assert_eq!(data.series_count, None);
+        assert_eq!(data.previous, None);
+        data.append_streams(&[stream(&[-1., 0.]), stream(&[8., 9.])])
+            .unwrap();
+        assert!(data.append_streams(&[stream(&[-1.])]).is_err());
+        assert!(
+            data.append_streams(&[stream(&[-1., 1.]), stream(&[0.])])
+                .is_err()
+        );
+        assert_eq!(data.previous, Some(0.));
+        assert_eq!(data.remaining, Some(2));
+        assert_eq!(samples(&data, 0), [0.]);
+        data.append_streams(&[stream(&[2., 3.]), stream(&[10., 11.])])
+            .unwrap();
+        assert_eq!(samples(&data, 1), [9., 10., 11.]);
+        data.clear();
+        data.append_streams(&[stream(&[-1., 0.])]).unwrap();
+        assert_eq!(data.series_count, Some(1));
+    }
+
+    #[test]
+    fn nonfinite_samples_break_edge_history() {
+        let mut data = triggered(2, TriggerEdge::Rising);
+        assert!(
+            !data
+                .append_streams(&[stream(&[-1., Float::NAN, 1., -1., Float::INFINITY, 1.])])
+                .unwrap()
+        );
+        data.append_streams(&[stream(&[-1., 0.])]).unwrap();
+        assert_eq!(samples(&data, 0), [0.]);
+    }
+
+    #[test]
+    fn configuration_validation_and_reset() {
+        let mut data = triggered(2, TriggerEdge::Rising);
+        data.append_streams(&[stream(&[-1., 0.])]).unwrap();
+        let trigger = data.trigger;
+        assert!(!data.set_trigger(trigger).unwrap());
+        assert_eq!(samples(&data, 0), [0.]);
+        for level in [Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {
+            assert!(
+                data.set_trigger(Some(TimeSinkTrigger {
+                    level,
+                    edge: TriggerEdge::Falling
+                }))
+                .is_err()
+            );
+            assert_eq!(data.trigger, trigger);
+            assert_eq!(samples(&data, 0), [0.]);
+        }
+        data.clear();
+        assert_eq!(data.trigger, trigger);
+        assert_eq!(data.previous, None);
+        assert_eq!(data.remaining, None);
+        assert!(data.set_trigger(None).unwrap());
+        data.append_streams(&[stream(&[2., 3., 4.])]).unwrap();
+        assert_eq!(samples(&data, 0), [3., 4.]);
+    }
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod browser_tests {
+    use super::*;
+    use wasm_bindgen_test::*;
+
+    // The experimental socket tests select browser execution when enabled.
+    #[cfg(not(feature = "unstable"))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn controls_and_paused_capture() {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let style = document.create_element("style").unwrap();
+        style.set_text_content(Some(include_str!("../../assets/rustradio.css")));
+        document.body().unwrap().append_child(&style).unwrap();
+        let root = document.create_element("div").unwrap();
+        root.set_attribute("style", "width: 320px").unwrap();
+        document.body().unwrap().append_child(&root).unwrap();
+        let sink = TimeSink::mount(
+            &root,
+            TimeSinkOptions {
+                max_points: 3,
+                sample_rate: 2.0,
+                fixed_range: Some((-2.0, 5.0)),
+                ..TimeSinkOptions::default()
+            },
+        )
+        .unwrap();
+        let mode = role::<HtmlSelectElement>(&root, "trigger-mode").unwrap();
+        let level = role::<HtmlInputElement>(&root, "trigger-level").unwrap();
+        let canvas = role::<HtmlCanvasElement>(&root, "canvas").unwrap();
+        assert_eq!(sink.trigger(), None);
+        assert!(level.disabled());
+        assert!(
+            root.scroll_width() <= root.client_width(),
+            "controls overflow narrow panel"
+        );
+        // Run this test with both light and dark browser preferences. The CSS
+        // must pick readable native colors even without application variables.
+        assert_eq!(js_sys::eval(r#"getComputedStyle(document.querySelector('[data-role="trigger-mode"]')).colorScheme"#).unwrap().as_string().unwrap(), "light dark");
+        mode.set_value("rising");
+        mode.dispatch_event(&Event::new("change").unwrap()).unwrap();
+        assert_eq!(
+            sink.trigger(),
+            Some(TimeSinkTrigger {
+                level: 0.,
+                edge: TriggerEdge::Rising
+            })
+        );
+        assert!(!level.disabled());
+        let snapshot = || canvas.to_data_url().unwrap();
+        let waiting = snapshot();
+        sink.update(vec![TaggedVec {
+            data: vec![1., -1.],
+            tags: vec![],
+        }])
+        .unwrap();
+        assert!(snapshot() == waiting, "waiting canvas changed");
+        sink.set_paused(true).unwrap();
+        sink.update(vec![TaggedVec {
+            data: vec![0., 1.],
+            tags: vec![],
+        }])
+        .unwrap();
+        assert!(snapshot() == waiting, "waiting canvas changed");
+        assert_eq!(sink.inner.borrow().time_range(), Some((0., 1.)));
+        sink.set_paused(false).unwrap();
+        assert!(snapshot() != waiting, "capture was not drawn");
+        sink.update(vec![TaggedVec {
+            data: vec![2.],
+            tags: vec![],
+        }])
+        .unwrap();
+        let completed = snapshot();
+        sink.update(vec![TaggedVec {
+            data: vec![3., 4.],
+            tags: vec![],
+        }])
+        .unwrap();
+        assert!(snapshot() == completed, "completed capture changed");
+        sink.set_paused(true).unwrap();
+        sink.set_trigger(Some(TimeSinkTrigger {
+            level: 2.,
+            edge: TriggerEdge::Falling,
+        }))
+        .unwrap();
+        assert_eq!(mode.value(), "falling");
+        assert_eq!(level.value(), "2");
+        assert!(snapshot() == waiting, "waiting canvas changed");
+        level.set_value("3");
+        level
+            .dispatch_event(&Event::new("change").unwrap())
+            .unwrap();
+        assert_eq!(sink.trigger().unwrap().level, 3.);
+        level.set_value("");
+        level
+            .dispatch_event(&Event::new("change").unwrap())
+            .unwrap();
+        assert_eq!(sink.trigger().unwrap().level, 3.);
+        assert_eq!(level.value(), "3");
+        sink.clear().unwrap();
+        assert_eq!(sink.trigger().unwrap().level, 3.);
+        mode.set_value("off");
+        mode.dispatch_event(&Event::new("change").unwrap()).unwrap();
+        assert_eq!(sink.trigger(), None);
+        assert!(level.disabled());
+        root.remove();
+        style.remove();
     }
 }

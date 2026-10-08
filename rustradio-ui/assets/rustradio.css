@@ -39,6 +39,44 @@
  * Time sink
  */
 
+.rr-time-sink-header,
+.rr-time-sink-controls {
+  flex-wrap: wrap;
+}
+
+.rr-time-sink-controls {
+  display: flex;
+  gap: 0.4rem;
+  align-items: end;
+  color-scheme: light dark;
+  color: var(--text, CanvasText);
+}
+
+.rr-time-sink-control-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.rr-time-sink-control-field input {
+  width: 6rem;
+}
+
+.rr-time-sink-controls input,
+.rr-time-sink-controls select,
+.rr-time-sink-controls button {
+  color: var(--text, CanvasText);
+  background: var(--surface, Canvas);
+  border: 1px solid var(--border-strong, GrayText);
+  border-radius: 4px;
+  padding: 0.25rem 0.4rem;
+  font: inherit;
+}
+
+.rr-time-sink-controls :disabled {
+  opacity: 0.6;
+}
+
 .rr-time-sink-canvas {
   display: block;
   width: 100%;

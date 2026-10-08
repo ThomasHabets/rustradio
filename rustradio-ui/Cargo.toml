@@ -34,6 +34,7 @@ web-sys = { version = "=0.3.102", features = [
         "WorkerOptions",
         "HtmlButtonElement",
         "HtmlInputElement",
+        "HtmlSelectElement", # time sink trigger mode.
         "ImageData",
         "CanvasRenderingContext2d",
         "MediaQueryList", # check if dark mode.
