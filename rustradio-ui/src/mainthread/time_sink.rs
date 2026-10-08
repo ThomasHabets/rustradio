@@ -8,7 +8,7 @@ use rustradio::stream::Tag;
 use wasm_bindgen::prelude::*;
 use web_sys::{
     CanvasRenderingContext2d, Element, Event, HtmlButtonElement, HtmlCanvasElement,
-    HtmlInputElement, HtmlSelectElement,
+    HtmlInputElement, HtmlSelectElement, MutationObserver, MutationObserverInit,
 };
 
 use crate::TaggedVec;
@@ -189,6 +189,7 @@ impl TimeSink {
             y_label: options.y_label,
             sync_inputs: true,
             callbacks: Vec::new(),
+            theme_observer: None,
         }));
 
         let sink = Self { inner };
@@ -354,7 +355,54 @@ impl TimeSink {
         window.add_event_listener_with_callback("resize", handler.as_ref().unchecked_ref())?;
         self.inner.borrow_mut().callbacks.push(handler);
 
+        // Redraw stored samples even when paused or waiting for a trigger;
+        // CSS alone cannot recolor the pixels already painted on a canvas.
+        if let Some(media) = window.match_media("(prefers-color-scheme: dark)")? {
+            let inner = Rc::downgrade(&self.inner);
+            let handler = Closure::<dyn FnMut(Event)>::new(move |_| {
+                if let Some(inner) = inner.upgrade()
+                    && let Err(err) = inner.borrow_mut().draw()
+                {
+                    log::error!("time sink theme redraw failed: {err:?}");
+                }
+            });
+            media.add_event_listener_with_callback("change", handler.as_ref().unchecked_ref())?;
+            self.inner.borrow_mut().callbacks.push(handler);
+        }
+        // Applications may override the system preference with data-theme on
+        // the document root. Observe that choice without requiring new samples.
+        if let Some(root) = window.document().and_then(|doc| doc.document_element()) {
+            let inner = Rc::downgrade(&self.inner);
+            let callback = Closure::<dyn FnMut()>::new(move || {
+                if let Some(inner) = inner.upgrade()
+                    && let Err(err) = inner.borrow_mut().draw()
+                {
+                    log::error!("time sink theme redraw failed: {err:?}");
+                }
+            });
+            let observer = MutationObserver::new(callback.as_ref().unchecked_ref())?;
+            let options = MutationObserverInit::new();
+            options.set_attributes(true);
+            options.set_attribute_filter(&js_sys::Array::of1(&JsValue::from_str("data-theme")));
+            observer.observe_with_options(&root, &options)?;
+            self.inner.borrow_mut().theme_observer = Some(ThemeObserver {
+                observer,
+                _callback: callback,
+            });
+        }
+
         Ok(())
+    }
+}
+
+/// Keep the observer callback alive and detach it when its owner is dropped.
+struct ThemeObserver {
+    observer: MutationObserver,
+    _callback: Closure<dyn FnMut()>,
+}
+impl Drop for ThemeObserver {
+    fn drop(&mut self) {
+        self.observer.disconnect();
     }
 }
 
@@ -572,6 +620,7 @@ struct Inner {
     y_label: String,
     sync_inputs: bool,
     callbacks: Vec<Closure<dyn FnMut(Event)>>,
+    theme_observer: Option<ThemeObserver>,
 }
 
 impl Inner {
@@ -619,9 +668,17 @@ impl Inner {
     fn draw(&mut self) -> Result<(), JsValue> {
         let (width, height) = resize_canvas_to_display_size(&self.canvas)?;
         let window = web_sys::window().ok_or(JsValue::from_str("no window"))?;
-        let is_dark = window
-            .match_media("(prefers-color-scheme: dark)")?
-            .is_some_and(|m| m.matches());
+        let page_theme = window
+            .document()
+            .and_then(|doc| doc.document_element())
+            .and_then(|root| root.get_attribute("data-theme"));
+        let is_dark = match page_theme.as_deref() {
+            Some("light") => false,
+            Some("dark") => true,
+            _ => window
+                .match_media("(prefers-color-scheme: dark)")?
+                .is_some_and(|m| m.matches()),
+        };
         let bg = if is_dark { "#0b0b0b" } else { "#ffffff" };
         let axis = if is_dark { "#666" } else { "#888" };
         let text = if is_dark { "#ddd" } else { "#222" };
@@ -1412,6 +1469,60 @@ mod browser_tests {
     // The experimental socket tests select browser execution when enabled.
     #[cfg(not(feature = "unstable"))]
     wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test(async)]
+    async fn theme_changes_redraw_a_paused_capture() {
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+        let page = document.document_element().unwrap();
+        let previous_theme = page.get_attribute("data-theme");
+        let root = document.create_element("div").unwrap();
+        document.body().unwrap().append_child(&root).unwrap();
+        let sink = TimeSink::mount(
+            &root,
+            TimeSinkOptions {
+                max_points: 3,
+                ..TimeSinkOptions::default()
+            },
+        )
+        .unwrap();
+        sink.set_trigger(Some(TimeSinkTrigger {
+            level: 0.,
+            edge: TriggerEdge::Rising,
+        }))
+        .unwrap();
+        sink.update(vec![TaggedVec {
+            data: vec![-1., 0., 0.5, 1.],
+            tags: vec![],
+        }])
+        .unwrap();
+        sink.set_paused(true).unwrap();
+        for (theme, background) in [("dark", 11), ("light", 255)] {
+            page.set_attribute("data-theme", theme).unwrap();
+            // Attribute observers run at the next microtask checkpoint.
+            wasm_bindgen_futures::JsFuture::from(js_sys::Promise::resolve(&JsValue::UNDEFINED))
+                .await
+                .unwrap();
+            let inner = sink.inner.borrow();
+            let pixel = inner.ctx.get_image_data(5., 5., 1., 1.).unwrap().data();
+            assert_eq!(&pixel.0[..3], &[background; 3]);
+            assert_eq!(
+                inner.data.visible_series()[0]
+                    .samples
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                [0., 0.5, 1.]
+            );
+            assert!(sink.paused());
+        }
+        if let Some(theme) = previous_theme {
+            page.set_attribute("data-theme", &theme).unwrap();
+        } else {
+            page.remove_attribute("data-theme").unwrap();
+        }
+        root.remove();
+    }
 
     #[wasm_bindgen_test]
     fn controls_and_paused_capture() {

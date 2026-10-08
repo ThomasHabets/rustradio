@@ -38,6 +38,8 @@ web-sys = { version = "=0.3.102", features = [
         "ImageData",
         "CanvasRenderingContext2d",
         "MediaQueryList", # check if dark mode.
+        "MutationObserver", # redraw a held time capture on page theme changes.
+        "MutationObserverInit",
         "DomTokenList", # `class_list()`
 ] }
 
