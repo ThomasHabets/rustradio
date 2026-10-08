@@ -54,7 +54,7 @@ const TIME_SINK_HTML: &str = r#"
     </label>
     <label class="rr-time-sink-control-field">
       <span>Trigger level</span>
-      <input data-role="trigger-level" type="number" step="any" value="0" disabled>
+      <input data-role="trigger-level" type="number" step="any" value="0.1" disabled>
     </label>
     <button data-role="pause" type="button">Pause</button>
   </div>
@@ -65,6 +65,7 @@ const TIME_SINK_HTML: &str = r#"
 "#;
 
 const DEFAULT_MAX_GRAPH_POINTS: usize = 10_000;
+const DEFAULT_TRIGGER_LEVEL: Float = 0.1;
 const AXIS_MARGIN_LEFT: f64 = 56.0;
 const AXIS_MARGIN_RIGHT: f64 = 12.0;
 const AXIS_MARGIN_TOP: f64 = 12.0;
@@ -181,7 +182,7 @@ impl TimeSink {
             data: TimeData::new(options.max_points.max(1)),
             trigger_mode: role::<HtmlSelectElement>(root, "trigger-mode")?,
             trigger_level_input: role::<HtmlInputElement>(root, "trigger-level")?,
-            trigger_level: 0.0,
+            trigger_level: DEFAULT_TRIGGER_LEVEL,
             y_min,
             y_max,
             auto_scale: options.fixed_range.is_none(),
@@ -1563,8 +1564,16 @@ mod browser_tests {
         // Run this test with both light and dark browser preferences. The CSS
         // must pick readable native colors even without application variables.
         assert_eq!(js_sys::eval(r#"getComputedStyle(document.querySelector('[data-role="trigger-mode"]')).colorScheme"#).unwrap().as_string().unwrap(), "light dark");
+        assert_eq!(level.value(), "0.1");
         mode.set_value("rising");
         mode.dispatch_event(&Event::new("change").unwrap()).unwrap();
+        assert_eq!(sink.trigger().unwrap().level, 0.1);
+        // Use zero for the capture boundary checks below, after verifying that
+        // selecting a mode uses the default level without another control edit.
+        level.set_value("0");
+        level
+            .dispatch_event(&Event::new("change").unwrap())
+            .unwrap();
         assert_eq!(
             sink.trigger(),
             Some(TimeSinkTrigger {
