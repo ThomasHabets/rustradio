@@ -76,6 +76,9 @@ pub(super) struct Session {
     // A separate, constant-size accumulator for dropped samples. Queue this gap
     // before retaining new samples so the receiver's sample cursor stays exact.
     pub lost: Option<proto::Gap>,
+    // Set per connection, including reconnects; cleared only after retaining
+    // the first sample chunk so gaps cannot discard the sink identification.
+    pub identity_pending: bool,
     pub end_sent: bool,
 }
 impl Resource {
@@ -151,6 +154,12 @@ impl<T: IqSample> IqStreamSinkBuilder<T> {
 /// overflow drops newly arriving samples and their tags, leaving queued samples
 /// intact. After a gap, receivers must regard persistent tag state as unknown.
 /// The two reserved local gap keys cannot be used as ordinary input tags.
+///
+/// Each connection's first retained sample carries string tags identifying the
+/// sender: `rustradio.software` ("rustradio"), `rustradio.version` (crate version),
+/// and `rustradio.git_version` (build-time Git version, omitted if empty). These
+/// precede input tags at the same position and count toward the frame byte limit.
+/// Empty streams carry no identification tags.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct IqStreamSink<T: IqSample> {
@@ -256,11 +265,14 @@ impl<T: IqSample> IqStreamSink<T> {
                     sample.serialize_into(&mut samples);
                 }
                 advance(first, n as u64)?;
-                let wire_tags = tags
-                    .iter()
-                    .take_while(|t| t.pos() < n)
-                    .map(|t| tag_to_wire(t, first))
-                    .collect::<Result<Vec<_>>>()?;
+                let mut wire_tags = if session.identity_pending {
+                    identity_tags(first, env!("GIT_VERSION"))
+                } else {
+                    Vec::new()
+                };
+                for tag in tags.iter().take_while(|t| t.pos() < n) {
+                    wire_tags.push(tag_to_wire(tag, first)?);
+                }
                 // Account for all protobuf overhead. A sample and its tags are
                 // indivisible, so find the largest fitting prefix by byte size.
                 let fits = |count: usize| {
@@ -309,6 +321,7 @@ impl<T: IqSample> IqStreamSink<T> {
                         tags,
                     }));
                 session.cursor = end;
+                session.identity_pending = false;
                 n
             }
         } else {
@@ -355,4 +368,54 @@ fn varint_size(n: u64) -> usize {
 }
 fn scalar_size(n: u64) -> usize {
     if n == 0 { 0 } else { 1 + varint_size(n) }
+}
+
+// Ordinary sample tags keep identification visible to graph and file adapters.
+// Take the Git value explicitly so the empty build-version case is testable.
+pub(super) fn identity_tags(sample_index: u64, git_version: &str) -> Vec<proto::Tag> {
+    [
+        ("rustradio.software", "rustradio"),
+        ("rustradio.version", env!("CARGO_PKG_VERSION")),
+        ("rustradio.git_version", git_version),
+    ]
+    .into_iter()
+    .filter(|(_, value)| !value.is_empty())
+    .map(|(key, value)| proto::Tag {
+        sample_index,
+        key: key.into(),
+        value: Some(proto::TagValue {
+            kind: Some(proto::tag_value::Kind::StringValue(value.into())),
+        }),
+        source_id: None,
+    })
+    .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identification_omits_empty_git_version() {
+        let tags = identity_tags(42, "");
+        assert_eq!(tags.len(), 2);
+        for (tag, (key, value)) in tags.iter().zip([
+            ("rustradio.software", "rustradio"),
+            ("rustradio.version", env!("CARGO_PKG_VERSION")),
+        ]) {
+            assert_eq!(tag.sample_index, 42);
+            assert_eq!(tag.key, key);
+            assert_eq!(
+                tag.value.as_ref().unwrap().kind,
+                Some(proto::tag_value::Kind::StringValue(value.into()))
+            );
+        }
+        let tags = identity_tags(42, "revision");
+        assert_eq!(tags.len(), 3);
+        assert_eq!(tags[2].key, "rustradio.git_version");
+        assert_eq!(
+            tags[2].value.as_ref().unwrap().kind,
+            Some(proto::tag_value::Kind::StringValue("revision".into()))
+        );
+    }
 }

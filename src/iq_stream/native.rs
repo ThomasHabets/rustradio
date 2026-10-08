@@ -206,6 +206,7 @@ impl IqServer {
             cursor: 0,
             queue: Default::default(),
             lost: None,
+            identity_pending: true,
             end_sent: false,
         });
         drop(state);
@@ -624,10 +625,12 @@ mod tests {
     async fn blocking_sink_preserves_input_when_queue_is_full() -> crate::Result<()> {
         let server = IqServer::new();
         let (write, read) = new_stream::<f32>();
-        let mut options = StreamOptions::default();
-        options.limits = proto::Limits {
-            max_frame_bytes: 128,
-            max_in_flight_frames: 1,
+        let options = StreamOptions {
+            limits: proto::Limits {
+                max_frame_bytes: 256,
+                max_in_flight_frames: 1,
+            },
+            ..Default::default()
         };
         let mut sink = IqStreamSink::builder(read, &server, "test", 48000.0)
             .limits(options.limits.clone())
@@ -659,7 +662,7 @@ mod tests {
         let (write, read) = new_stream::<f32>();
         let options = StreamOptions {
             limits: proto::Limits {
-                max_frame_bytes: 128,
+                max_frame_bytes: 256,
                 max_in_flight_frames: 1,
             },
             loss_policy: proto::LossPolicy::AllowGaps,
@@ -728,6 +731,75 @@ mod tests {
         drop(connection);
         let (_, started) = server.open(open::<f32>(&options, "test")).unwrap();
         assert_eq!(started.description.unwrap().source_sample_offset, Some(10));
+        Ok(())
+    }
+    #[tokio::test]
+    async fn sink_identification_is_once_per_connection_and_fits_frame() -> crate::Result<()> {
+        let server = IqServer::new();
+        let (write, read) = new_stream::<f32>();
+        let options = StreamOptions {
+            limits: proto::Limits {
+                max_frame_bytes: 256,
+                max_in_flight_frames: 1,
+            },
+            ..Default::default()
+        };
+        let mut sink = IqStreamSink::builder(read, &server, "test", 48000.0)
+            .limits(options.limits.clone())
+            .build()?;
+        // Reconnect after two chunks. Identification is independent of the
+        // graph's absolute sample position and appears once in each session.
+        for _ in 0..2 {
+            let (connection, _) = server.open(open::<f32>(&options, "test")).unwrap();
+            for chunk_index in 0..2 {
+                credit(&connection, chunk_index + 1).unwrap();
+                let mut input = write.write_buf()?;
+                input.slice()[..2].fill(1.0);
+                input.produce(2, &[Tag::new(0, "input", TagValue::Bool(true))]);
+                assert!(matches!(sink.work()?, BlockRet::Again));
+                let message = connection.next().await.unwrap();
+                let proto::server_message::Body::Frame(frame) = message.body.unwrap() else {
+                    panic!("expected frame");
+                };
+                assert!(frame.encoded_len() <= options.limits.max_frame_bytes as usize);
+                let proto::frame::Body::Chunk(chunk) = frame.body.unwrap() else {
+                    panic!("expected chunk");
+                };
+                assert_eq!(chunk.first_sample, chunk_index * 2);
+                assert_eq!(chunk.sample_count, 2);
+                let mut expected = if chunk_index == 0 {
+                    super::super::sink::identity_tags(0, env!("GIT_VERSION"))
+                } else {
+                    vec![]
+                };
+                expected.push(super::super::tag_to_wire(
+                    &Tag::new(0, "input", TagValue::Bool(true)),
+                    chunk.first_sample,
+                )?);
+                assert_eq!(chunk.tags, expected);
+            }
+            drop(connection);
+        }
+        Ok(())
+    }
+    #[tokio::test]
+    async fn identification_cannot_exceed_negotiated_frame_limit() -> crate::Result<()> {
+        let server = IqServer::new();
+        let (write, read) = new_stream::<f32>();
+        let options = StreamOptions {
+            limits: proto::Limits {
+                max_frame_bytes: 64,
+                max_in_flight_frames: 1,
+            },
+            ..Default::default()
+        };
+        let mut sink = IqStreamSink::builder(read, &server, "test", 48000.0).build()?;
+        let (connection, _) = server.open(open::<f32>(&options, "test")).unwrap();
+        let mut input = write.write_buf()?;
+        input.slice()[0] = 1.0;
+        input.produce(1, &[]);
+        assert!(sink.work().is_err());
+        assert_eq!(connection.resource.lock().position, 0);
         Ok(())
     }
     struct WsClient(tokio::net::TcpStream);
@@ -916,7 +988,27 @@ mod tests {
         .map_err(|_| err("roundtrip timed out"))??;
         let (buffer, received_tags) = out_a.read_buf()?;
         assert_eq!(buffer.slice(), &[1.0, 2.0, 3.0]);
-        assert_eq!(received_tags, tags);
+        let mut expected = vec![
+            Tag::new(
+                0,
+                "rustradio.software",
+                TagValue::String("rustradio".into()),
+            ),
+            Tag::new(
+                0,
+                "rustradio.version",
+                TagValue::String(env!("CARGO_PKG_VERSION").into()),
+            ),
+        ];
+        if !env!("GIT_VERSION").is_empty() {
+            expected.push(Tag::new(
+                0,
+                "rustradio.git_version",
+                TagValue::String(env!("GIT_VERSION").into()),
+            ));
+        }
+        expected.extend(tags);
+        assert_eq!(received_tags, expected);
         buffer.consume(3);
         let (buffer, _) = out_b.read_buf()?;
         assert_eq!(
