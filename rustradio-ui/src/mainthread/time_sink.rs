@@ -203,7 +203,8 @@ impl TimeSink {
     /// streams. With triggering enabled, all series must be already aligned and
     /// have equal lengths in each update. Their count must remain fixed until
     /// clear() or a trigger configuration change. Invalid updates change no state.
-    /// A completed capture stays visible until the next crossing on series zero.
+    /// A completed capture stays visible while waiting and while its replacement
+    /// fills. The first capture is drawn progressively from its crossing sample.
     #[allow(clippy::needless_pass_by_value)]
     pub fn update(&self, streams: Vec<TaggedVec<Float>>) -> rustradio::Result<()> {
         let mut inner = self.inner.borrow_mut();
@@ -395,9 +396,11 @@ impl GraphSeries {
 
 // Buffering is independent of DOM handles so edge detection and capture ranges
 // can be tested natively. `remaining` is Some only while a capture is filling;
-// waiting retains the previous completed window until a new crossing replaces it.
+// waiting retains the previous completed window. Acquisition uses a separate
+// buffer so a new partial capture cannot erase the completed waveform.
 struct TimeData {
     series: Vec<GraphSeries>,
+    capture: Vec<GraphSeries>,
     max_points: usize,
     trigger: Option<TimeSinkTrigger>,
     previous: Option<Float>,
@@ -409,6 +412,7 @@ impl TimeData {
     fn new(max_points: usize) -> Self {
         Self {
             series: Vec::new(),
+            capture: Vec::new(),
             max_points: max_points.max(1),
             trigger: None,
             previous: None,
@@ -419,9 +423,19 @@ impl TimeData {
     /// Forget captures and detector history, retaining the selected trigger.
     fn clear(&mut self) {
         self.series.clear();
+        self.capture.clear();
         self.previous = None;
         self.remaining = None;
         self.series_count = None;
+    }
+    /// Keep the latest complete waveform visible while its replacement fills.
+    /// Before the first completion, show the initial capture progressively.
+    fn visible_series(&self) -> &[GraphSeries] {
+        if self.trigger.is_some() && self.series.is_empty() {
+            &self.capture
+        } else {
+            &self.series
+        }
     }
     /// Reject invalid settings before touching state; report whether a reset
     /// occurred so the caller can clear the canvas even when rendering is paused.
@@ -484,12 +498,12 @@ impl TimeData {
                     continue;
                 }
                 // Reuse the bounded capture buffers on subsequent triggers.
-                if self.series.is_empty() {
-                    self.series = (0..streams.len())
+                if self.capture.is_empty() {
+                    self.capture = (0..streams.len())
                         .map(|_| GraphSeries::new(self.max_points))
                         .collect();
                 } else {
-                    for series in &mut self.series {
+                    for series in &mut self.capture {
                         series.samples.clear();
                         series.tags.clear();
                     }
@@ -500,7 +514,7 @@ impl TimeData {
             // into every series and ignore further crossings during acquisition.
             let remaining = self.remaining.expect("capture started");
             let end = cursor + remaining.min(count - cursor);
-            for (series, stream) in self.series.iter_mut().zip(streams) {
+            for (series, stream) in self.capture.iter_mut().zip(streams) {
                 let offset = series.samples.len();
                 series
                     .samples
@@ -520,7 +534,15 @@ impl TimeData {
             let left = remaining - (end - cursor);
             self.remaining = (left > 0).then_some(left);
             cursor = end;
-            changed = true;
+            if left == 0 {
+                // Publish a whole window atomically. Later triggers in this
+                // update may start filling the spare buffer, but leave this
+                // completed capture (including its tags) available to draw.
+                std::mem::swap(&mut self.series, &mut self.capture);
+                changed = true;
+            } else if self.series.is_empty() {
+                changed = true;
+            }
         }
         Ok(changed)
     }
@@ -676,7 +698,7 @@ impl Inner {
             .ceil()
             .max(1.0) as u64;
 
-        for (idx, series) in self.data.series.iter().enumerate() {
+        for (idx, series) in self.data.visible_series().iter().enumerate() {
             draw_series(
                 &self.ctx,
                 series,
@@ -700,7 +722,7 @@ impl Inner {
     fn data_range(&self) -> Option<(f32, f32)> {
         let mut min = f32::INFINITY;
         let mut max = f32::NEG_INFINITY;
-        for series in &self.data.series {
+        for series in self.data.visible_series() {
             for &sample in &series.samples {
                 if sample < min {
                     min = sample;
@@ -724,13 +746,13 @@ impl Inner {
         } else {
             1.0
         };
-        if self.data.trigger.is_some() && !self.data.series.is_empty() {
+        if self.data.trigger.is_some() && !self.data.visible_series().is_empty() {
             // A partial capture uses the full window so its X scale stays fixed.
             return Some((0.0, (self.data.max_points - 1).max(1) as f64 / sample_rate));
         }
         let mut min_idx: Option<u64> = None;
         let mut max_idx: Option<u64> = None;
-        for series in &self.data.series {
+        for series in self.data.visible_series() {
             let len = series.samples.len() as u64;
             if len == 0 {
                 continue;
@@ -1190,7 +1212,11 @@ mod tests {
     }
 
     fn samples(data: &TimeData, index: usize) -> Vec<Float> {
-        data.series[index].samples.iter().copied().collect()
+        data.visible_series()[index]
+            .samples
+            .iter()
+            .copied()
+            .collect()
     }
 
     #[test]
@@ -1219,8 +1245,10 @@ mod tests {
         assert_eq!(data.remaining, None);
         assert!(!data.append_streams(&[stream(&[-2.])]).unwrap());
         assert_eq!(samples(&data, 0), [0., 2., 3.]);
-        data.append_streams(&[stream(&[1.])]).unwrap();
-        assert_eq!(samples(&data, 0), [1.]);
+        assert!(!data.append_streams(&[stream(&[1.])]).unwrap());
+        assert_eq!(samples(&data, 0), [0., 2., 3.]);
+        assert!(data.append_streams(&[stream(&[5., 6.])]).unwrap());
+        assert_eq!(samples(&data, 0), [1., 5., 6.]);
     }
 
     #[test]
@@ -1232,7 +1260,11 @@ mod tests {
         assert_eq!(data.remaining, None);
         // The final captured sample is also the history for the next edge.
         data.append_streams(&[stream(&[0.])]).unwrap();
-        assert_eq!(samples(&data, 0), [0.]);
+        assert_eq!(samples(&data, 0), [0., 1., -1., 2.]);
+        assert_eq!(
+            data.capture[0].samples.iter().copied().collect::<Vec<_>>(),
+            [0.]
+        );
         assert_eq!(data.remaining, Some(3));
     }
 
@@ -1241,8 +1273,14 @@ mod tests {
         let mut data = triggered(2, TriggerEdge::Rising);
         data.append_streams(&[stream(&[-1., 0., 1., -1., 2., 3., -1., 4.])])
             .unwrap();
-        assert_eq!(samples(&data, 0), [4.]);
+        // A trailing trigger must not replace the last complete window with
+        // a single point at the end of an input update.
+        assert_eq!(samples(&data, 0), [2., 3.]);
         assert_eq!(data.remaining, Some(1));
+        assert!(!data.append_streams(&[]).unwrap());
+        assert_eq!(samples(&data, 0), [2., 3.]);
+        assert!(data.append_streams(&[stream(&[5.])]).unwrap());
+        assert_eq!(samples(&data, 0), [4., 5.]);
         let mut single = triggered(1, TriggerEdge::Rising);
         single
             .append_streams(&[stream(&[-1., 1., -1., 2.])])
@@ -1267,8 +1305,13 @@ mod tests {
         ];
         data.append_streams(&[next, stream(&[12., 13., 14., 15.])])
             .unwrap();
-        assert_eq!(samples(&data, 0), [4.]);
-        assert_eq!(samples(&data, 1), [15.]);
+        assert_eq!(samples(&data, 0), [0., 1., 2.]);
+        assert_eq!(samples(&data, 1), [10., 11., 12.]);
+        assert_eq!(data.series[0].tags.len(), 3);
+        data.append_streams(&[stream(&[5., 6.]), stream(&[16., 17.])])
+            .unwrap();
+        assert_eq!(samples(&data, 0), [4., 5., 6.]);
+        assert_eq!(samples(&data, 1), [15., 16., 17.]);
         assert_eq!(data.series[0].tags.len(), 1);
         assert_eq!(data.series[0].tags[0].key(), "next");
         assert_eq!(data.series[0].tags[0].pos(), 0);
@@ -1441,6 +1484,31 @@ mod browser_tests {
         }])
         .unwrap();
         assert!(snapshot() == completed, "completed capture changed");
+        // A retrigger spanning updates keeps the entire displayed window in
+        // place, including when another UI action requests a redraw.
+        sink.update(vec![TaggedVec {
+            data: vec![-1., 0., 4.],
+            tags: vec![],
+        }])
+        .unwrap();
+        assert!(
+            snapshot() == completed,
+            "partial replacement erased capture"
+        );
+        sink.draw().unwrap();
+        assert!(
+            snapshot() == completed,
+            "redraw exposed partial replacement"
+        );
+        sink.update(vec![TaggedVec {
+            data: vec![5.],
+            tags: vec![],
+        }])
+        .unwrap();
+        assert!(
+            snapshot() != completed,
+            "new completed capture was not drawn"
+        );
         sink.set_paused(true).unwrap();
         sink.set_trigger(Some(TimeSinkTrigger {
             level: 2.,

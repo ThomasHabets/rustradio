@@ -36,8 +36,10 @@ sink.set_trigger(Some(TimeSinkTrigger {
 The first input triggers all displayed series. A rising edge crosses from below
 its level to that level or above; falling reverses that comparison. The capture
 starts at the crossing sample, fills `TimeSinkOptions::max_points` samples, and
-holds until another crossing starts a new capture. Crossings during capture are
-ignored. No trace is drawn before the first crossing.
+holds while waiting for another crossing and while the replacement capture fills.
+The new waveform replaces it when the full window is ready. The first capture is
+drawn progressively; no trace is drawn before its crossing. Crossings during
+capture are ignored.
 
 Trigger updates must contain equally sized, already aligned series with a fixed
 series count. `clear()` rearms detection and allows a new count, keeping the
