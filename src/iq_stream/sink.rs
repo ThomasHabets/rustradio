@@ -159,7 +159,9 @@ impl<T: IqSample> IqStreamSinkBuilder<T> {
 /// sender: `rustradio.software` ("rustradio"), `rustradio.version` (crate version),
 /// and `rustradio.git_version` (build-time Git version, omitted if empty). These
 /// precede input tags at the same position and count toward the frame byte limit.
-/// Empty streams carry no identification tags.
+/// `rustradio.iq.absolute_sample_index` carries that sample's absolute sink
+/// position as a uint64, including samples discarded while disconnected or
+/// overflowing. Empty streams carry no identification tags.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct IqStreamSink<T: IqSample> {
@@ -224,6 +226,9 @@ impl<T: IqSample> IqStreamSink<T> {
             }
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
+        // Capture before borrowing the session: this is the absolute position
+        // of the current input, including samples lost before this connection.
+        let absolute_position = state.position;
         let n = if let Some(session) = state.active.as_mut() {
             if session.end_sent {
                 return Err(err("IQ input after End"));
@@ -266,7 +271,7 @@ impl<T: IqSample> IqStreamSink<T> {
                 }
                 advance(first, n as u64)?;
                 let mut wire_tags = if session.identity_pending {
-                    identity_tags(first, env!("GIT_VERSION"))
+                    identity_tags(first, absolute_position, env!("GIT_VERSION"))
                 } else {
                     Vec::new()
                 };
@@ -372,8 +377,12 @@ fn scalar_size(n: u64) -> usize {
 
 // Ordinary sample tags keep identification visible to graph and file adapters.
 // Take the Git value explicitly so the empty build-version case is testable.
-pub(super) fn identity_tags(sample_index: u64, git_version: &str) -> Vec<proto::Tag> {
-    [
+pub(super) fn identity_tags(
+    sample_index: u64,
+    absolute_position: u64,
+    git_version: &str,
+) -> Vec<proto::Tag> {
+    let mut tags: Vec<_> = [
         ("rustradio.software", "rustradio"),
         ("rustradio.version", env!("CARGO_PKG_VERSION")),
         ("rustradio.git_version", git_version),
@@ -388,7 +397,16 @@ pub(super) fn identity_tags(sample_index: u64, git_version: &str) -> Vec<proto::
         }),
         source_id: None,
     })
-    .collect()
+    .collect();
+    tags.push(proto::Tag {
+        sample_index,
+        key: super::ABSOLUTE_SAMPLE_INDEX.into(),
+        value: Some(proto::TagValue {
+            kind: Some(proto::tag_value::Kind::Uint64Value(absolute_position)),
+        }),
+        source_id: None,
+    });
+    tags
 }
 
 #[cfg(test)]
@@ -397,8 +415,8 @@ mod tests {
 
     #[test]
     fn identification_omits_empty_git_version() {
-        let tags = identity_tags(42, "");
-        assert_eq!(tags.len(), 2);
+        let tags = identity_tags(42, u64::MAX, "");
+        assert_eq!(tags.len(), 3);
         for (tag, (key, value)) in tags.iter().zip([
             ("rustradio.software", "rustradio"),
             ("rustradio.version", env!("CARGO_PKG_VERSION")),
@@ -410,8 +428,14 @@ mod tests {
                 Some(proto::tag_value::Kind::StringValue(value.into()))
             );
         }
-        let tags = identity_tags(42, "revision");
-        assert_eq!(tags.len(), 3);
+        assert_eq!(tags[2].sample_index, 42);
+        assert_eq!(tags[2].key, super::super::ABSOLUTE_SAMPLE_INDEX);
+        assert_eq!(
+            tags[2].value.as_ref().unwrap().kind,
+            Some(proto::tag_value::Kind::Uint64Value(u64::MAX))
+        );
+        let tags = identity_tags(42, u64::MAX, "revision");
+        assert_eq!(tags.len(), 4);
         assert_eq!(tags[2].key, "rustradio.git_version");
         assert_eq!(
             tags[2].value.as_ref().unwrap().kind,

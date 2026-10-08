@@ -31,6 +31,9 @@ use crate::{Complex, Error, Float, Result, Sample};
 
 /// Gap count attached to the first retained sample after a discontinuity.
 pub const GAP_SAMPLES: &str = "rustradio.iq.gap_samples";
+/// Absolute sink sample position on the first retained sample of a connection.
+/// Includes samples discarded while disconnected or after overflow.
+pub const ABSOLUTE_SAMPLE_INDEX: &str = "rustradio.iq.absolute_sample_index";
 /// Session sample index of the first retained sample after a discontinuity.
 pub const SAMPLE_INDEX: &str = "rustradio.iq.sample_index";
 /// The two reserved tags signal that persistent tag state is unknown after loss.

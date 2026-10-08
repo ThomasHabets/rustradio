@@ -729,8 +729,31 @@ mod tests {
         let (connection, started) = server.open(open::<f32>(&options, "test")).unwrap();
         assert_eq!(started.description.unwrap().source_sample_offset, Some(10));
         drop(connection);
-        let (_, started) = server.open(open::<f32>(&options, "test")).unwrap();
+        let (connection, started) = server.open(open::<f32>(&options, "test")).unwrap();
         assert_eq!(started.description.unwrap().source_sample_offset, Some(10));
+        let mut input = write.write_buf()?;
+        input.slice()[0] = 1.0;
+        input.produce(1, &[]);
+        sink.work()?;
+        credit(&connection, 8).unwrap();
+        let proto::server_message::Body::Frame(frame) =
+            connection.next().await.unwrap().body.unwrap()
+        else {
+            panic!("expected frame");
+        };
+        let proto::frame::Body::Chunk(chunk) = frame.body.unwrap() else {
+            panic!("expected chunk");
+        };
+        let position = chunk
+            .tags
+            .iter()
+            .find(|tag| tag.key == super::super::ABSOLUTE_SAMPLE_INDEX)
+            .unwrap();
+        assert_eq!(position.sample_index, 0);
+        assert_eq!(
+            position.value.as_ref().unwrap().kind,
+            Some(proto::tag_value::Kind::Uint64Value(10))
+        );
         Ok(())
     }
     #[tokio::test]
@@ -749,7 +772,7 @@ mod tests {
             .build()?;
         // Reconnect after two chunks. Identification is independent of the
         // graph's absolute sample position and appears once in each session.
-        for _ in 0..2 {
+        for connection_index in 0..2 {
             let (connection, _) = server.open(open::<f32>(&options, "test")).unwrap();
             for chunk_index in 0..2 {
                 credit(&connection, chunk_index + 1).unwrap();
@@ -768,7 +791,7 @@ mod tests {
                 assert_eq!(chunk.first_sample, chunk_index * 2);
                 assert_eq!(chunk.sample_count, 2);
                 let mut expected = if chunk_index == 0 {
-                    super::super::sink::identity_tags(0, env!("GIT_VERSION"))
+                    super::super::sink::identity_tags(0, connection_index * 4, env!("GIT_VERSION"))
                 } else {
                     vec![]
                 };
@@ -1007,6 +1030,11 @@ mod tests {
                 TagValue::String(env!("GIT_VERSION").into()),
             ));
         }
+        expected.push(Tag::new(
+            0,
+            super::super::ABSOLUTE_SAMPLE_INDEX,
+            TagValue::U64(0),
+        ));
         expected.extend(tags);
         assert_eq!(received_tags, expected);
         buffer.consume(3);
