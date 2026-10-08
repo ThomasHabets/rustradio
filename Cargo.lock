@@ -2764,7 +2764,7 @@ dependencies = [
 
 [[package]]
 name = "rustradio"
-version = "0.18.7"
+version = "0.18.8"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -2792,7 +2792,7 @@ dependencies = [
  "rayon",
  "rtlsdr",
  "rustfft",
- "rustradio_macros 0.18.7",
+ "rustradio_macros 0.18.8",
  "rustyline",
  "serde",
  "serde_json",
@@ -2845,13 +2845,13 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros"
-version = "0.18.7"
+version = "0.18.8"
 dependencies = [
  "itertools 0.14.0",
  "proc-macro2",
  "quote",
- "rustradio 0.18.7",
- "rustradio_macros_code 0.18.7",
+ "rustradio 0.18.8",
+ "rustradio_macros_code 0.18.8",
  "syn 2.0.118",
 ]
 
@@ -2868,11 +2868,11 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros_code"
-version = "0.18.7"
+version = "0.18.8"
 dependencies = [
  "proc-macro2",
  "quote",
- "rustradio 0.18.7",
+ "rustradio 0.18.8",
  "syn 2.0.118",
 ]
 
