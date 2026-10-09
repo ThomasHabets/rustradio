@@ -8,6 +8,8 @@ description: Build or modify a WASM application using rustradio-ui, including wo
 Build the browser application around the existing `rustradio-ui` components.
 Every application must support **light and dark mode**. Prefer
 **`rustradio::blockchain!`** for graph construction to minimize repetitive code.
+Every application must verify at startup that its **HTML and WASM come from the
+same application version**.
 
 ## Read the closest working example
 
@@ -154,6 +156,30 @@ crate's `crate` option.
   hosted scripts/WASM or other fetched assets must satisfy the page's cross-origin
   isolation rules. A deployment CSP must permit the chosen connection endpoint.
 
+## Require matching HTML and WASM versions
+
+All applications must check the HTML version against the compiled WASM version
+on the main thread before starting the worker or initializing application
+controls. This catches stale cached assets and mixed deployments.
+
+- Embed the application's Git version in the packaged HTML, for example
+  `<html data-git-version="GIT_VERSION_NOT_SET">`, replacing the placeholder
+  during packaging. Compile the same version into the WASM through `build.rs`
+  and `cargo:rustc-env=GIT_VERSION=...`, then read it with `env!("GIT_VERSION")`.
+  Use the application's version, rather than the `rustradio-ui` crate version.
+- Generate both values from the same source state, for example with
+  `git describe --tags --dirty --always`. Ensure Git version changes refresh the
+  compiled value even when Cargo reuses previous build output.
+- Read `data-git-version` from the HTML in the WASM startup code and compare it
+  with the compiled version. If the value is missing, still a placeholder, or
+  differs, show a visible error and stop initialization. For a mismatch, include
+  both versions and suggest reloading or clearing cached assets.
+- Follow [ruwasm's HTML](../../../../ruwasm/web/index.html),
+  [packaging script](../../../../ruwasm/build-local.sh),
+  [build script](../../../../ruwasm/build.rs), and the version check in
+  [main-thread setup](../../../../ruwasm/src/mainthread.rs) as a concrete example.
+  Implement the check locally; do not require the sibling repository at runtime.
+
 ## Validate the application
 
 Run checks from the application directory so its toolchain and `.cargo` settings
@@ -182,6 +208,8 @@ Serve the packaged app with the required headers and check it in a real browser:
 
 - `crossOriginIsolated` and shared memory are available; worker reaches Ready;
   no bootstrap errors, panics, or unexpected console errors occur.
+- Matching HTML/WASM versions allow startup. A deliberately mismatched version
+  or a missing HTML version shows an error and prevents worker startup.
 - Start, streaming, Stop, failure, and reconnect work as applicable. Use a
   deterministic signal to check plot content and sample-rate/frequency axes.
 - Light and dark mode work at load and during theme changes, with readable
