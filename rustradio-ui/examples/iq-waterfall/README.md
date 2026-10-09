@@ -20,6 +20,13 @@ needed by the shared-memory worker. Build output is in `web-dist/`.
 `./build-local.sh release` builds an optimized version. The script enables
 `unstable`; direct Cargo or wasm-pack builds must enable it too.
 
+The packaging script embeds the same Git version in the HTML and WASM. Startup
+checks these versions before enabling controls or starting the worker. Missing
+or mismatched versions produce a visible error; rebuild the package or reload
+and clear cached assets if an old version is being served. Direct WASM builds
+alone do not replace the HTML version placeholder; use `build-local.sh` to
+produce a complete package.
+
 For a test stream, run this from the repository root:
 
 ```sh

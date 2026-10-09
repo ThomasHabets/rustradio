@@ -125,7 +125,28 @@ async fn worker_msg(message: WorkerToMain) -> Result<(), JsValue> {
     Ok(())
 }
 
+/// Reject stale or incompletely packaged HTML before starting the worker.
+fn check_html_version() -> Result<(), JsValue> {
+    let html_version = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.document_element())
+        .and_then(|html| html.get_attribute("data-git-version"));
+    if html_version.as_deref().is_some_and(|version| {
+        !version.is_empty() && version != "GIT_VERSION_NOT_SET" && version == env!("GIT_VERSION")
+    }) {
+        return Ok(());
+    }
+    let message = format!(
+        "Application version mismatch. HTML: {}; WASM: {}. Reload the page or clear cached assets.",
+        html_version.as_deref().unwrap_or("missing"),
+        env!("GIT_VERSION")
+    );
+    status(&message)?;
+    Err(JsValue::from_str(&message))
+}
+
 pub(crate) fn setup() -> Result<(), JsValue> {
+    check_html_version()?;
     let waterfall = WaterfallSink::mount_by_id(
         "waterfall",
         WaterfallSinkOptions {

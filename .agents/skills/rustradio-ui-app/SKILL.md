@@ -27,10 +27,6 @@ skill. Read the relevant example before choosing APIs or copying build settings.
   message, worker, source, and sink APIs. Inspect
   [shared assets](../../../rustradio-ui/assets) before replacing bootstrap or
   component styles.
-- [../ruwasm](../../../../ruwasm), if available: a secondary reference for larger
-  graph composition, file inputs, and browser smoke testing. Prefer the current
-  examples when APIs differ. Its older WebSocket bridge and `DATA_STREAM.md` are
-  not the IqStream protocol. Do not depend on this sibling repository at runtime.
 
 For a new application inside this repository, follow the examples' standalone
 Cargo workspace layout. Use local crate paths or patches consistently when
@@ -115,6 +111,11 @@ crate's `crate` option.
 - For IqStream applications, enable `unstable` in both crates, use the negotiated
   sample rate and encoding, and match the native sink's blocking/loss policy.
   Keep the WebSocket client in the worker, as in iq-waterfall.
+- For file inputs, read bounded slices in response to worker requests rather
+  than loading the whole file. Track a separate byte offset for each stream,
+  reset offsets on file selection, and resolve requests that arrived while the
+  chooser was open. Select one input source per session so live and file samples
+  cannot interleave. Report EOF explicitly and cancel pending reads on Stop.
 
 ## Require light and dark mode
 
@@ -174,11 +175,11 @@ controls. This catches stale cached assets and mixed deployments.
   with the compiled version. If the value is missing, still a placeholder, or
   differs, show a visible error and stop initialization. For a mismatch, include
   both versions and suggest reloading or clearing cached assets.
-- Follow [ruwasm's HTML](../../../../ruwasm/web/index.html),
-  [packaging script](../../../../ruwasm/build-local.sh),
-  [build script](../../../../ruwasm/build.rs), and the version check in
-  [main-thread setup](../../../../ruwasm/src/mainthread.rs) as a concrete example.
-  Implement the check locally; do not require the sibling repository at runtime.
+- Follow iq-waterfall's `web/index.html`, `build-local.sh`, `build.rs`, and
+  `src/mainthread.rs` for a complete implementation. Compute the version once
+  in packaging and pass it to compilation through an environment variable that
+  `build.rs` tracks with `cargo:rerun-if-env-changed`. HTML escaping must preserve
+  the version read back through the DOM.
 
 ## Validate the application
 
@@ -216,8 +217,14 @@ Serve the packaged app with the required headers and check it in a real browser:
   controls and canvas content. Check idle/paused rendering and a narrow viewport.
 - Slow display delivery keeps queues bounded and does not prevent Stop.
 
-Use the sibling ruwasm smoke test as inspiration when adding browser automation,
-not as a required dependency. Test hardware behavior when hardware is available;
+For browser automation, serve the actual packaged output on an ephemeral
+loopback port with COOP/COEP headers and launch a headless browser with an
+isolated temporary profile. Wait for observable state such as Ready or a visible
+startup error, with a timeout; collect console errors and verify worker startup
+and shared memory. Exercise deterministic input, Stop, and reconnect, and clean
+up the server, browser, and temporary files even when a check fails.
+
+Test hardware behavior when hardware is available;
 otherwise report what was checked and which paths remain unverified. Document
 build/serve commands, enabled experimental features, and any deployment headers
 in the application's README. Do not publish or deploy as part of app creation
