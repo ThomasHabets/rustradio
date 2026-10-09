@@ -8,7 +8,7 @@ use std::rc::Rc;
 use js_sys::Uint8ClampedArray;
 use rustradio::Float;
 use wasm_bindgen::prelude::*;
-use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement, ImageData};
+use web_sys::{CanvasRenderingContext2d, Element, Event, HtmlCanvasElement, ImageData, MouseEvent};
 
 use crate::TaggedVec;
 use crate::mainthread::CLASS_SINK;
@@ -57,6 +57,7 @@ const WATERFALL_SINK_HTML: &str = r#"
       <span class="rr-waterfall-sink-tick rr-waterfall-sink-tick-4" data-role="waterfall-tick-4"></span>
     </div>
     <div class="rr-waterfall-sink-x-label" data-role="waterfall-x-label">Frequency (Hz)</div>
+    <div class="rr-waterfall-sink-cursor-frequency" data-role="waterfall-cursor-frequency"></div>
   </div>
 </div>
 "#;
@@ -232,6 +233,8 @@ impl SpectrumSink {
 
 /// Waterfall sink. This is a handle to a graph element where FFT power frames
 /// are shown as a scrolling frequency-over-time image.
+/// Hovering over the image shows the frequency relative to the stream center,
+/// in the same range as the axis: -sample_rate / 2 to +sample_rate / 2.
 #[derive(Clone)]
 pub struct WaterfallSink {
     inner: Rc<RefCell<WaterfallInner>>,
@@ -304,6 +307,7 @@ impl WaterfallSink {
         let (bitmap_canvas, bitmap_ctx) = create_canvas_2d()?;
         let status = role::<Element>(root, "waterfall-status")?;
         let tick_labels = waterfall_role_elements(root, "waterfall-tick")?;
+        let cursor_label = role::<Element>(root, "waterfall-cursor-frequency")?;
 
         let sink = Self {
             inner: Rc::new(RefCell::new(WaterfallInner {
@@ -313,6 +317,8 @@ impl WaterfallSink {
                 bitmap_ctx,
                 status,
                 tick_labels,
+                cursor_label,
+                cursor_position: None,
                 history: VecDeque::new(),
                 sample_rate: sanitize_sample_rate(options.sample_rate),
                 max_frames: options.max_frames.max(1),
@@ -335,7 +341,7 @@ impl WaterfallSink {
         self.inner.borrow_mut().draw()
     }
 
-    /// Install resize callbacks for this sink instance.
+    /// Redraw on resize and update the frequency label when the mouse moves.
     fn install_handlers(&self) -> Result<(), JsValue> {
         let inner = self.inner.clone();
         let handler = Closure::<dyn FnMut(Event)>::new(move |_event: Event| {
@@ -345,6 +351,30 @@ impl WaterfallSink {
         });
         let window = web_sys::window().ok_or(JsValue::from_str("no window"))?;
         window.add_event_listener_with_callback("resize", handler.as_ref().unchecked_ref())?;
+        self.inner.borrow_mut().callbacks.push(handler);
+
+        let canvas = self.inner.as_ref().borrow().canvas.clone();
+        let inner = Rc::downgrade(&self.inner);
+        let handler = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
+            if let (Some(inner), Some(event)) = (inner.upgrade(), event.dyn_ref::<MouseEvent>()) {
+                let mut inner = inner.borrow_mut();
+                inner.cursor_position = Some((event.client_x(), event.client_y()));
+                inner.update_cursor_label();
+            }
+        });
+        canvas.add_event_listener_with_callback("mouseenter", handler.as_ref().unchecked_ref())?;
+        canvas.add_event_listener_with_callback("mousemove", handler.as_ref().unchecked_ref())?;
+        self.inner.borrow_mut().callbacks.push(handler);
+
+        let inner = Rc::downgrade(&self.inner);
+        let handler = Closure::<dyn FnMut(Event)>::new(move |_| {
+            if let Some(inner) = inner.upgrade() {
+                let mut inner = inner.borrow_mut();
+                inner.cursor_position = None;
+                inner.update_cursor_label();
+            }
+        });
+        canvas.add_event_listener_with_callback("mouseleave", handler.as_ref().unchecked_ref())?;
         self.inner.borrow_mut().callbacks.push(handler);
 
         Ok(())
@@ -454,6 +484,9 @@ struct WaterfallInner {
     bitmap_ctx: CanvasRenderingContext2d,
     status: Element,
     tick_labels: Vec<Element>,
+    cursor_label: Element,
+    // Viewport coordinates let redraws recompute the frequency after resizing.
+    cursor_position: Option<(i32, i32)>,
     history: VecDeque<Vec<f32>>,
     sample_rate: f32,
     max_frames: usize,
@@ -492,6 +525,7 @@ impl WaterfallInner {
     fn draw(&mut self) -> Result<(), JsValue> {
         let (width, height) = resize_canvas_to_display_size(&self.canvas)?;
         self.update_axis_html(self.history.is_empty())?;
+        self.update_cursor_label();
 
         self.ctx.clear_rect(0.0, 0.0, width, height);
         if self.history.is_empty() {
@@ -517,6 +551,24 @@ impl WaterfallInner {
             )?;
 
         Ok(())
+    }
+
+    /// Show the frequency under the cursor without repainting waterfall pixels.
+    /// CSS coordinates avoid dependence on the canvas's device pixel ratio.
+    fn update_cursor_label(&self) {
+        let text = self.cursor_position.and_then(|(x, y)| {
+            let rect = self.canvas.get_bounding_client_rect();
+            let x = f64::from(x) - rect.left() - f64::from(self.canvas.client_left());
+            let y = f64::from(y) - rect.top() - f64::from(self.canvas.client_top());
+            let width = f64::from(self.canvas.client_width());
+            let height = f64::from(self.canvas.client_height());
+            if width <= 0.0 || x < 0.0 || x > width || y < 0.0 || y > height {
+                return None;
+            }
+            let frequency = (x / width - 0.5) * f64::from(self.sample_rate);
+            Some(format!("Frequency: {frequency:.0} Hz"))
+        });
+        self.cursor_label.set_text_content(text.as_deref());
     }
 
     /// Update waterfall tick labels and status visibility outside the canvas.
@@ -918,5 +970,78 @@ fn format_hz(value: f64) -> String {
         format!("{:.1}k", value / 1000.0)
     } else {
         format!("{value:.0}")
+    }
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod browser_tests {
+    use super::*;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn waterfall_cursor_tracks_frequency_and_leaves_labels_visible() {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let style = document.create_element("style").unwrap();
+        style.set_text_content(Some(include_str!("../../assets/rustradio.css")));
+        document.body().unwrap().append_child(&style).unwrap();
+        let root = document.create_element("div").unwrap();
+        root.set_id("waterfall-cursor-test");
+        document.body().unwrap().append_child(&root).unwrap();
+        let sink = WaterfallSink::mount(
+            &root,
+            WaterfallSinkOptions {
+                sample_rate: 1000.,
+                ..WaterfallSinkOptions::default()
+            },
+        )
+        .unwrap();
+        let canvas = sink.inner.as_ref().borrow().canvas.clone();
+        canvas
+            .set_attribute("style", "width: 400px; height: 200px; border: 0")
+            .unwrap();
+        sink.draw().unwrap();
+        let label = role::<Element>(&root, "waterfall-cursor-frequency").unwrap();
+        assert_eq!(label.text_content().unwrap(), "");
+        assert_eq!(
+            js_sys::eval(
+                "getComputedStyle(document.querySelector('#waterfall-cursor-test [data-role=waterfall-grid-2]')).display"
+            ).unwrap().as_string().unwrap(),
+            "none"
+        );
+        assert!(
+            !role::<Element>(&root, "waterfall-tick-0")
+                .unwrap()
+                .text_content()
+                .unwrap()
+                .is_empty()
+        );
+
+        // Dispatch browser events using CSS coordinates, independent of DPR.
+        let move_mouse = |fraction: f64| {
+            js_sys::eval(&format!(
+                "(() => {{ const c = document.querySelector('#waterfall-cursor-test canvas'); const r = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('mousemove', {{clientX: r.left + c.clientWidth * {fraction}, clientY: r.top + 10}})); }})()"
+            )).unwrap();
+        };
+        move_mouse(0.);
+        assert_eq!(label.text_content().unwrap(), "Frequency: -500 Hz");
+        move_mouse(0.5);
+        assert_eq!(label.text_content().unwrap(), "Frequency: 0 Hz");
+        move_mouse(0.75);
+        assert_eq!(label.text_content().unwrap(), "Frequency: 250 Hz");
+        sink.set_sample_rate(2000.).unwrap();
+        assert_eq!(label.text_content().unwrap(), "Frequency: 500 Hz");
+        canvas
+            .set_attribute("style", "width: 800px; height: 200px; border: 0")
+            .unwrap();
+        sink.draw().unwrap();
+        assert_eq!(label.text_content().unwrap(), "Frequency: -250 Hz");
+        canvas
+            .dispatch_event(&Event::new("mouseleave").unwrap())
+            .unwrap();
+        assert_eq!(label.text_content().unwrap(), "");
+        sink.draw().unwrap();
+        assert_eq!(label.text_content().unwrap(), "");
+        root.remove();
+        style.remove();
     }
 }
