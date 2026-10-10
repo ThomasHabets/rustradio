@@ -109,7 +109,7 @@ impl Block for Hilbert {
             .collect::<Vec<_>>();
         oo.produce(n, &tags);
 
-        self.history[..self.ntaps].clone_from_slice(&iv[n..len]);
+        self.history.clone_from_slice(&iv[n..len]);
         ii.consume(n);
         Ok(BlockRet::Again)
     }
