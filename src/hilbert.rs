@@ -26,7 +26,7 @@ pub struct Hilbert {
     src: ReadStream<Float>,
     #[rustradio(out)]
     dst: WriteStream<Complex>,
-    history: Vec<Float>,
+    history: Box<[Float]>,
     filter: Fir<Float>,
     ntaps: usize,
     threaded: bool,
@@ -52,7 +52,7 @@ impl Hilbert {
                 src,
                 ntaps,
                 dst,
-                history: vec![0.0; ntaps],
+                history: vec![0.0; ntaps].into_boxed_slice(),
                 filter: Fir::new(&taps),
                 threaded: false,
             },
@@ -82,26 +82,13 @@ impl Block for Hilbert {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
 
-        let inout = std::cmp::min(i.len(), o.len());
-        let len = self.history.len() + inout;
-        let n = len - self.ntaps;
-
-        if n == 0 {
-            // TODO: use the right number instead of 1.
-            return Ok(BlockRet::WaitForStream(
-                if i.len() < o.len() {
-                    &self.src
-                } else {
-                    &self.dst
-                },
-                1,
-            ));
-        }
+        let n = std::cmp::min(i.len(), o.len());
+        let len = self.history.len() + n;
 
         // TODO: Probably needless copy.
         let mut iv = Vec::with_capacity(len);
         iv.extend(&self.history);
-        iv.extend(i.iter().take(inout).copied());
+        iv.extend(i.iter().take(n).copied());
 
         if self.threaded {
             use rayon::prelude::*;
@@ -118,7 +105,7 @@ impl Block for Hilbert {
 
         let tags = tags
             .into_iter()
-            .filter(|tag| tag.pos() < n)
+            .take_while(|tag| tag.pos() < n)
             .collect::<Vec<_>>();
         oo.produce(n, &tags);
 
