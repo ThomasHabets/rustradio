@@ -37,7 +37,7 @@ impl<T: Sample> TcpSource<T> {
 
 impl<T> Block for TcpSource<T>
 where
-    T: Sample<Type = T> + std::fmt::Debug,
+    T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;

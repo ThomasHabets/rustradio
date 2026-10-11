@@ -558,7 +558,7 @@ impl<T: Sample + Type> SigMFSource<T> {
 
 impl<T> Block for SigMFSource<T>
 where
-    T: Sample<Type = T> + std::fmt::Debug + Type,
+    T: Sample + std::fmt::Debug + Type,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         if self.repeat.done() {
@@ -623,8 +623,6 @@ mod tests {
     struct RejectZero(u8);
 
     impl Sample for RejectZero {
-        type Type = Self;
-
         fn size() -> usize {
             1
         }

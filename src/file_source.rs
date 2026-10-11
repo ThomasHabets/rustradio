@@ -86,7 +86,7 @@ impl<T: Sample> FileSource<T> {
 
 impl<T> Block for FileSource<T>
 where
-    T: Sample<Type = T> + std::fmt::Debug,
+    T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         if self.repeat.done() {
@@ -164,7 +164,6 @@ mod tests {
     struct NonzeroByte(u8);
 
     impl Sample for NonzeroByte {
-        type Type = Self;
         fn size() -> usize {
             1
         }

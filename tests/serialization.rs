@@ -51,7 +51,6 @@ fn builtins_append_little_endian_bytes_without_reallocating() {
 struct Legacy(u8);
 
 impl Sample for Legacy {
-    type Type = Self;
     fn size() -> usize {
         1
     }
@@ -74,7 +73,6 @@ fn custom_sample_keeps_legacy_serialization() {
 struct AppendOnly(u8);
 
 impl Sample for AppendOnly {
-    type Type = Self;
     fn size() -> usize {
         1
     }

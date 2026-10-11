@@ -714,20 +714,17 @@ pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
 
 /// A trait all sample types must implement.
 pub trait Sample: std::fmt::Debug + Copy + Default + Send + Sync + 'static {
-    /// The type of the sample.
-    type Type;
-
     /// The serialized size of one sample.
     #[must_use]
     fn size() -> usize;
 
-    /// Parse one sample.
+    /// Parse one sample of this type.
     ///
     /// # Errors
     ///
     /// For the currently implemented Sample types, it can only fail if the
     /// passed byte slice is of the wrong size.
-    fn parse(data: &[u8]) -> Result<Self::Type>;
+    fn parse(data: &[u8]) -> Result<Self>;
 
     /// Serialize one sample.
     #[must_use]
@@ -743,11 +740,10 @@ pub trait Sample: std::fmt::Debug + Copy + Default + Send + Sync + 'static {
 }
 
 impl Sample for Complex {
-    type Type = Complex;
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
-    fn parse(data: &[u8]) -> Result<Self::Type> {
+    fn parse(data: &[u8]) -> Result<Self> {
         if data.len() != Self::size() {
             return Err(Error::msg(format!(
                 "Tried to parse Complex from {} bytes",
@@ -770,11 +766,10 @@ impl Sample for Complex {
 }
 
 impl Sample for Float {
-    type Type = Float;
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
-    fn parse(data: &[u8]) -> Result<Self::Type> {
+    fn parse(data: &[u8]) -> Result<Self> {
         if data.len() != Self::size() {
             return Err(Error::msg(format!(
                 "Tried to parse Float from {} bytes",
@@ -792,11 +787,10 @@ impl Sample for Float {
 }
 
 impl Sample for u8 {
-    type Type = u8;
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
-    fn parse(data: &[u8]) -> Result<Self::Type> {
+    fn parse(data: &[u8]) -> Result<Self> {
         if data.len() != Self::size() {
             return Err(Error::msg(format!(
                 "Tried to parse u8 from {} bytes",
@@ -814,11 +808,10 @@ impl Sample for u8 {
 }
 
 impl Sample for u32 {
-    type Type = u32;
     fn size() -> usize {
         4
     }
-    fn parse(data: &[u8]) -> Result<Self::Type> {
+    fn parse(data: &[u8]) -> Result<Self> {
         if data.len() != Self::size() {
             return Err(Error::msg(format!(
                 "Tried to parse u32 from {} bytes",
@@ -836,11 +829,10 @@ impl Sample for u32 {
 }
 
 impl Sample for i32 {
-    type Type = i32;
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
-    fn parse(data: &[u8]) -> Result<Self::Type> {
+    fn parse(data: &[u8]) -> Result<Self> {
         if data.len() != Self::size() {
             return Err(Error::msg(format!(
                 "Tried to parse i32 from {} bytes",

@@ -59,7 +59,7 @@ pub struct Parse<T> {
     dst: WriteStream<T>,
 }
 
-impl<T: Sample<Type = T>> Block for Parse<T> {
+impl<T: Sample> Block for Parse<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: make more efficient by doing batches.
         loop {

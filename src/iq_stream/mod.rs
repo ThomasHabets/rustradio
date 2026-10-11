@@ -48,7 +48,7 @@ mod sealed {
 }
 
 /// Supported packed stream samples. This experimental trait is sealed.
-pub trait IqSample: Sample<Type = Self> + sealed::Sealed {
+pub trait IqSample: Sample + sealed::Sealed {
     /// Fixed wire encoding of this graph port.
     fn encoding() -> proto::Encoding;
 }

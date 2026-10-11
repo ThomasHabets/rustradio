@@ -136,7 +136,7 @@ impl<T: Sample> Drop for FileSink<T> {
 
 impl<T> Block for FileSink<T>
 where
-    T: Sample<Type = T> + std::fmt::Debug,
+    T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, _tags) = self.src.read_buf()?;
@@ -279,7 +279,7 @@ impl<T> Drop for NoCopyFileSink<T> {
 
 impl<T> Block for NoCopyFileSink<T>
 where
-    T: Sample<Type = T> + std::fmt::Debug + Default,
+    T: Sample + std::fmt::Debug + Default,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         if let Some((s, _tags)) = self.src.pop() {

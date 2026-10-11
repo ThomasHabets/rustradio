@@ -28,7 +28,7 @@ impl<T: Sample> WriterSink<T> {
 
 impl<T> Block for WriterSink<T>
 where
-    T: Sample<Type = T> + std::fmt::Debug,
+    T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {

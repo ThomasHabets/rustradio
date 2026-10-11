@@ -73,7 +73,7 @@ impl<T: Sample> ReaderSource<T> {
 
 impl<T> Block for ReaderSource<T>
 where
-    T: Sample<Type = T> + std::fmt::Debug,
+    T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let size = T::size();
