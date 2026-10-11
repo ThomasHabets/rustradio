@@ -59,3 +59,11 @@ that no longer fits the window.
 
 The X axis uses milliseconds when the displayed span is shorter than one second;
 longer spans use seconds. This changes tick labels and the unit label together.
+
+## Problems
+
+It's currently possible to initialize the worker and the main thread with
+different application specific messages. This invokes UB, since the
+BootstrapMpsc message will not point to the type it thinks it'll point to.
+
+This should be fixed with a better startup API.
