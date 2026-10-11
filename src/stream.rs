@@ -543,11 +543,24 @@ impl<T> NCWriteStream<T> {
     ///
     /// This function doesn't enforce capacity. If there's a risk of
     /// overflowing, then check `remaining()` before pushing.
+    ///
+    /// Tags must be sorted by nondecreasing position. Tags at the same position
+    /// retain their supplied order; this method stores tags without sorting.
+    ///
+    /// # Panics
+    ///
+    /// In debug builds, panics if tag positions are not sorted.
     pub fn push<Tags: Into<Vec<Tag>>>(&self, val: T, tags: Tags) {
-        self.inner.lock.lock().unwrap().push_back(NCEntry {
-            val,
-            tags: tags.into(),
-        });
+        let tags = tags.into();
+        debug_assert!(
+            tags.windows(2).all(|pair| pair[0].pos() <= pair[1].pos()),
+            "no-copy stream tags must be sorted by position"
+        );
+        self.inner
+            .lock
+            .lock()
+            .unwrap()
+            .push_back(NCEntry { val, tags });
         self.inner.cv.notify_all();
         #[cfg(feature = "async")]
         self.inner.acvr.notify_waiters();
@@ -566,5 +579,41 @@ impl<T: Len> NCReadStream<T> {
     #[must_use]
     pub fn peek_size(&self) -> Option<usize> {
         self.inner.lock.lock().unwrap().front().map(|e| e.val.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nocopy_tags_preserve_nondecreasing_position_order() {
+        let (writer, reader) = new_nocopy_stream();
+        for tags in [
+            vec![],
+            vec![Tag::new(3, "single", TagValue::Bool(true))],
+            vec![
+                Tag::new(0, "first", TagValue::Bool(true)),
+                Tag::new(0, "second", TagValue::Bool(false)),
+                Tag::new(3, "last", TagValue::Bool(true)),
+            ],
+        ] {
+            writer.push(42u8, tags.clone());
+            assert_eq!(reader.pop(), Some((42, tags)));
+        }
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "no-copy stream tags must be sorted by position")]
+    fn nocopy_push_rejects_unsorted_tags_in_debug_builds() {
+        let (writer, _reader) = new_nocopy_stream();
+        writer.push(
+            42u8,
+            [
+                Tag::new(2, "later", TagValue::Bool(true)),
+                Tag::new(1, "earlier", TagValue::Bool(true)),
+            ],
+        );
     }
 }
