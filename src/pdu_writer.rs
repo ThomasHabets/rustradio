@@ -51,7 +51,7 @@ impl<T: Sample> Block for PduWriter<T> {
                 "{}-{}",
                 SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
-                    .map_err(|e| crate::Error::other(e, "getting system time"))?
+                    .map_err(|e| crate::Error::wrap(e, "getting system time"))?
                     .as_micros(),
                 self.files_written
             );

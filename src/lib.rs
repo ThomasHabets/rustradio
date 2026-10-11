@@ -368,19 +368,6 @@ impl Error {
             msg: if msg.is_empty() { None } else { Some(msg) },
         }
     }
-
-    /// Helper for `Other`.
-    #[must_use]
-    pub fn other<S: Into<String>>(
-        source: impl std::error::Error + Send + Sync + 'static,
-        msg: S,
-    ) -> Self {
-        let msg = msg.into();
-        Self::Other {
-            source: Box::new(source),
-            msg: if msg.is_empty() { None } else { Some(msg) },
-        }
-    }
 }
 
 /// Create default `From<T>` for `Error`, with optional extra context.
