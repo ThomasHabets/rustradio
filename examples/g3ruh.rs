@@ -204,8 +204,7 @@ fn receiver_wpcr(
         g,
         burst_tee,
         ComplexToMag2::new(burst_tee),
-        SinglePoleIirFilter::new(burst_tee, iir_alpha)
-            .ok_or(anyhow::Error::msg("bad IIR parameters"))?,
+        SinglePoleIirFilter::new(burst_tee, iir_alpha)?,
     ];
     Ok(blockchain![
         g,

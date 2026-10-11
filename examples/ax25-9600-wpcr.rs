@@ -9,7 +9,7 @@ use clap::Parser;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::{Error, Float, blockchain};
+use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -106,8 +106,7 @@ fn main() -> Result<()> {
         g,
         burst_tee,
         ComplexToMag2::new(burst_tee),
-        SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)
-            .ok_or(Error::msg("bad IIR parameters"))?,
+        SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)?,
     ];
 
     // Demod.

@@ -74,18 +74,19 @@ where
         + std::ops::Mul<T, Output = T>
         + std::ops::Add<T, Output = T>,
 {
-    /// Create new block.
-    #[must_use]
-    pub fn new(src: ReadStream<T>, alpha: Float) -> Option<(Self, ReadStream<T>)> {
+    /// Create a filter with `alpha` between zero and one, inclusive.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `alpha` is outside that range or is not finite.
+    pub fn new(src: ReadStream<T>, alpha: Float) -> crate::Result<(Self, ReadStream<T>)> {
+        let iir = SinglePoleIir::<T>::new(alpha).ok_or_else(|| {
+            crate::Error::msg(format!(
+                "SinglePoleIirFilter alpha must be finite and between 0 and 1, got {alpha}"
+            ))
+        })?;
         let (dst, dr) = crate::stream::new_stream();
-        Some((
-            Self {
-                src,
-                dst,
-                iir: SinglePoleIir::<T>::new(alpha)?,
-            },
-            dr,
-        ))
+        Ok((Self { src, dst, iir }, dr))
     }
     fn process_sync(&mut self, a: T) -> T {
         self.iir.filter(a)
@@ -96,14 +97,13 @@ where
 mod tests {
     use super::*;
     use crate::block::Block;
-    use crate::{Complex, Error, Result};
+    use crate::{Complex, Result};
 
     #[test]
     fn iir_ff() -> Result<()> {
         // TODO: create an actual test.
         let src = ReadStream::from_slice(&[0.1, 0.2]);
-        let (mut iir, _) =
-            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::msg("alpha out of range"))?;
+        let (mut iir, _) = SinglePoleIirFilter::new(src, 0.2)?;
         iir.work()?;
         Ok(())
     }
@@ -112,8 +112,7 @@ mod tests {
     fn iir_cc() -> Result<()> {
         // TODO: create an actual test.
         let src = ReadStream::from_slice(&[Complex::new(1.0, 0.1), Complex::default()]);
-        let (mut iir, _) =
-            SinglePoleIirFilter::new(src, 0.2).ok_or(Error::msg("alpha out of range"))?;
+        let (mut iir, _) = SinglePoleIirFilter::new(src, 0.2)?;
         iir.work()?;
         Ok(())
     }
@@ -122,15 +121,17 @@ mod tests {
     fn reject_bad_alpha() -> Result<()> {
         for tv in [0.0, 0.1, 1.0] {
             let src = ReadStream::from_slice(&[0.1, 0.2]);
-            SinglePoleIirFilter::new(src, tv).ok_or(Error::msg("should accept {tv}"))?;
+            SinglePoleIirFilter::new(src, tv)?;
         }
-        let src = ReadStream::from_slice(&[0.1, 0.2]);
-        if SinglePoleIirFilter::new(src, -0.1).is_some() {
-            return Err(Error::msg("should not accept -0.1"));
-        }
-        let src = ReadStream::from_slice(&[0.1, 0.2]);
-        if SinglePoleIirFilter::new(src, 1.1).is_some() {
-            return Err(Error::msg("should not accept 1.1"));
+        for alpha in [-0.1, 1.1, Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {
+            let src = ReadStream::from_slice(&[0.1, 0.2]);
+            let err = SinglePoleIirFilter::new(src, alpha)
+                .err()
+                .expect("invalid alpha must be rejected");
+            assert!(
+                err.to_string()
+                    .contains("alpha must be finite and between 0 and 1")
+            );
         }
         Ok(())
     }

@@ -8,11 +8,11 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
+use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
 use rustradio::graph::GraphRunner;
-use rustradio::{Error, Float};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -114,7 +114,7 @@ fn main() -> Result<()> {
         g,
         magpath,
         ComplexToMag2::new(magpath),
-        SinglePoleIirFilter::new(magpath, opt.iir_alpha).ok_or(Error::msg("bad IIR parameters"))?,
+        SinglePoleIirFilter::new(magpath, opt.iir_alpha)?,
     ];
     let prev = blockchain![
         g,
