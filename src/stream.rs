@@ -486,11 +486,12 @@ pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
 }
 
 impl<T> NCReadStream<T> {
-    /// Pop one sample.
-    /// Ideally this should only be `NoCopy`.
+    /// Pop one owned item and its tags.
+    ///
+    /// Tags have positions relative to the item and are sorted in nondecreasing
+    /// order. Equal-position tags preserve their supplied order.
     #[must_use]
     pub fn pop(&self) -> Option<(T, Vec<Tag>)> {
-        // TODO: attach tags.
         let ret = self
             .inner
             .lock

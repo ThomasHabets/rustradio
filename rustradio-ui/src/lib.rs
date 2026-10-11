@@ -165,6 +165,9 @@ where
 }
 
 /// Data and tags. Used to send from worker to the UI for display.
+///
+/// Tag positions are relative to the start of `data` and must be sorted in
+/// nondecreasing order. Equal-position tags preserve their supplied order.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TaggedVec<T> {
     pub data: Vec<T>,
