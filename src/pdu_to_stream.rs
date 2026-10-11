@@ -22,8 +22,10 @@ pub const TAG_END: &str = "PduToStream::end";
 /// on the first and last sample of the stream. For a one-sample vector, these
 /// tags will be on the same sample.
 ///
-/// Empty PDUs are silently discarded.
+/// Empty PDUs are discarded.
 /// Input tags must be sorted by position; equal-position tags keep their order.
+/// Out-of-range tags (`pos >= pdu.len()`) produce a warning and panic in debug
+/// builds. Release builds discard them.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof, new)]
 pub struct PduToStream<T: Sample> {
@@ -63,21 +65,25 @@ impl<T: Sample> Block for PduToStream<T> {
                 let Some((pdu, tags)) = self.src.pop() else {
                     return Ok(BlockRet::WaitForStream(&self.src, 1));
                 };
+                // Sorted positions let us detect invalid tags without scanning
+                // the batch. The position equal to the length is outside too.
+                if let Some(tag) = tags.last().filter(|tag| tag.pos() >= pdu.len()) {
+                    log::warn!(
+                        "PduToStream: tag position {} is outside PDU length {}; dropping out-of-range tags",
+                        tag.pos(),
+                        pdu.len()
+                    );
+                    debug_assert!(
+                        tag.pos() < pdu.len(),
+                        "Tag pos {} must be less than PDU len {}",
+                        tag.pos(),
+                        pdu.len()
+                    );
+                }
                 if pdu.is_empty() {
                     continue;
                 }
                 self.pdu_len = pdu.len() as u64;
-                #[cfg(debug_assertions)]
-                {
-                    for tag in &tags {
-                        assert!(
-                            tag.pos() < pdu.len(),
-                            "Tag pos {} must be less that PDU len {}",
-                            tag.pos(),
-                            pdu.len()
-                        );
-                    }
-                }
                 self.tags = tags
                     .into_iter()
                     .take_while(|tag| tag.pos() < pdu.len())
@@ -117,6 +123,36 @@ mod tests {
     use super::*;
     use crate::block::Block;
     use crate::stream::{DEFAULT_STREAM_SIZE, TagValue, new_nocopy_stream};
+
+    #[test]
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "Tag pos 5 must be less than PDU len 3")
+    )]
+    fn out_of_range_tags_are_rejected() {
+        let (tx, rx) = new_nocopy_stream();
+        let valid = Tag::new(0, "valid", TagValue::Bool(true));
+        tx.push(
+            vec![1u8, 2, 3],
+            vec![
+                valid.clone(),
+                Tag::new(3, "at-length", TagValue::Bool(true)),
+                Tag::new(5, "beyond-length", TagValue::Bool(true)),
+            ],
+        );
+        let (mut block, out) = PduToStream::new(rx);
+        block.work().unwrap();
+        let (samples, tags) = out.read_buf().unwrap();
+        assert_eq!(samples.slice(), [1, 2, 3]);
+        assert_eq!(
+            tags,
+            [
+                valid,
+                Tag::new(0, TAG_START, TagValue::U64(3)),
+                Tag::new(2, TAG_END, TagValue::U64(3)),
+            ]
+        );
+    }
 
     #[test]
     fn one_sample_preserves_equal_position_tag_order() -> Result<()> {
