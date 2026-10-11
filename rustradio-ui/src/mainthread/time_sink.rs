@@ -210,6 +210,8 @@ impl TimeSink {
 
     /// Add new tagged float streams to the sink and redraw unless paused.
     ///
+    /// Each stream's tags must be sorted by position in nondecreasing order.
+    ///
     /// In order to graph a complex signal, first split it into two Float
     /// streams. With triggering enabled, all series must be already aligned and
     /// have equal lengths in each update. Their count must remain fixed until
@@ -577,7 +579,8 @@ impl TimeData {
                 stream
                     .tags
                     .iter()
-                    .filter(|tag| tag.pos() >= retained_start && tag.pos() < end)
+                    .skip_while(|tag| tag.pos() < retained_start)
+                    .take_while(|tag| tag.pos() < end)
                     .map(|tag| {
                         Tag::new(
                             offset + tag.pos() - retained_start,
@@ -701,7 +704,8 @@ impl TimeData {
                     stream
                         .tags
                         .iter()
-                        .filter(|tag| tag.pos() >= cursor && tag.pos() < end)
+                        .skip_while(|tag| tag.pos() < cursor)
+                        .take_while(|tag| tag.pos() < end)
                         .map(|tag| {
                             Tag::new(offset + tag.pos() - cursor, tag.key(), tag.val().clone())
                         }),
