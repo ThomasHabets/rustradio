@@ -55,10 +55,7 @@ where
 #[rustradio(crate, sync)]
 pub struct SinglePoleIirFilter<T>
 where
-    T: Sample
-        + std::ops::Mul<Float, Output = T>
-        + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<Float, Output = T> + std::ops::Add<T, Output = T>,
 {
     iir: SinglePoleIir<T>,
     #[rustradio(in)]
@@ -69,10 +66,7 @@ where
 
 impl<T> SinglePoleIirFilter<T>
 where
-    T: Sample
-        + std::ops::Mul<Float, Output = T>
-        + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>,
+    T: Sample + std::ops::Mul<Float, Output = T> + std::ops::Add<T, Output = T>,
 {
     /// Create a filter with `alpha` between zero and one, inclusive.
     ///
