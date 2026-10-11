@@ -8,7 +8,7 @@ use rustradio::stream::{ReadStream, WriteStream, new_stream};
 const PRODUCE_CHANNEL_SIZE: usize = 10;
 const CHUNK_SIZE: u64 = 65536;
 
-/// Messages from the worker DATA_STREAM bridge into the WasmSource block.
+/// Messages carrying source samples from the UI into the worker graph.
 pub enum Msg<T: rustradio::Sample> {
     /// No more bytes will arrive for this source.
     Eof,
@@ -17,7 +17,7 @@ pub enum Msg<T: rustradio::Sample> {
 }
 
 /// Block for getting data from the UI thread, which in turn gets it from
-/// websocket (data stream) or a file.
+/// websocket or a file.
 #[derive(rustradio_macros::Block)]
 #[rustradio(bound = "T: Sample")]
 pub struct WasmSource<App, T: rustradio::Sample> {

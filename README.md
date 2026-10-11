@@ -36,7 +36,6 @@ A library for digital signals processing in the spirit of GNU Radio.
   * Great for hardware like audio, SDRs.
   * Max ceiling for e.g. TCP streams.
   * Maybe both. Strobe could do with being able to just say.
-* Add tags to data stream API.
 * Switch `Skip` to take `u64`, or newtype `StreamPos`.
 
 ## Contributing
