@@ -9,9 +9,7 @@ For simple 1:1 transformations, you can use a `Map` block. For example
 converting from `Complex` to the real part can be done using:
 
 ```
-    MapBuilder::new(prev_stream, |x| x.re)
-        .name("ComplexToReal")
-        .build()
+    Map::keep_tags(prev_stream, "ComplexToReal", |x: Complex| x.re)
 ```
 
 But eventually you'll need to write a real block.
