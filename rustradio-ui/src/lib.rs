@@ -29,14 +29,14 @@ pub trait ApplicationSpecific: Debug + Send + 'static {
 /// Bootstrap MPSC message. Should not be used directly by applications, and
 /// ideally should be private to this crate.
 #[derive(Debug)]
-pub struct BootstrapMpsc<App1: ApplicationSpecific, App2: ApplicationSpecific> {
+struct BootstrapMpsc<App1: ApplicationSpecific, App2: ApplicationSpecific> {
     pub rx: async_channel::Receiver<MainToWorker<App1>>,
     pub tx: async_channel::Sender<WorkerToMain<App2>>,
 }
 
 impl<App1: ApplicationSpecific, App2: ApplicationSpecific> BootstrapMpsc<App1, App2> {
     // TODO: make this pub(crate).
-    pub fn from_ptr(ptr: usize) -> Self {
+    unsafe fn from_ptr(ptr: usize) -> Self {
         let boot = unsafe { Box::from_raw(ptr as *mut Self) };
         *boot
     }

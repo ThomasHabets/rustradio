@@ -34,7 +34,14 @@ pub fn set_main_ui_tx<App>(tx: Sender<WorkerToMain<App>>)
 where
     App: ApplicationSpecific + 'static,
 {
-    MAIN_UI_TX.with(|slot| *slot.borrow_mut() = Some(Box::new(tx)));
+    MAIN_UI_TX.with(|slot| {
+        let mut t = slot.borrow_mut();
+        assert!(
+            t.is_none(),
+            "Attempted to set main UI tx channel a second time"
+        );
+        *t = Some(Box::new(tx));
+    });
 }
 
 /// Set up the worker. This consists of setting up the slow message passing
@@ -54,7 +61,17 @@ where
             match msg {
                 MainToWorker::<App1>::BootstrapMpsc(b) => {
                     info!("Received main channel endpoints");
-                    let BootstrapMpsc { tx, rx } = BootstrapMpsc::<App1, App2>::from_ptr(b);
+                    // SAFETY: this is set only once. `set_main_ui_tx()` asserts
+                    // on that fact. That of course doesn't fully guarantee that
+                    // the pointer we receive is valid. We simply have to trust
+                    // that mainthread.rs sends us a valid `Box::into_raw() of a
+                    // `BootstrapMpsc::<App1, App2>`.
+                    //
+                    // It may be possible for an application to set up the
+                    // worker and main with different application specific
+                    // extensions. Don't Do That.
+                    let BootstrapMpsc { tx, rx } =
+                        unsafe { BootstrapMpsc::<App1, App2>::from_ptr(b) };
                     set_main_ui_tx(tx);
                     ready(rx);
                 }

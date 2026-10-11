@@ -133,7 +133,13 @@ where
                         bootstrapped = worker_startup::msg(handler_worker.clone(), &e);
 
                         if bootstrapped {
-                            info!("Worker bootstrap done");
+                            info!("Main: Worker started. Sending bootstrap to worker");
+                            // DANGER!
+                            // We're sending a raw pointer to the worker. This
+                            // is an `unsafe` (on the worker side) operation,
+                            // and the worker has to trust that this is
+                            // *exactly* of the right type. See more comments on
+                            // SAFETY in worker.rs.
                             let (wtx, mrx): (
                                 Sender<WorkerToMain<AppWorker>>,
                                 Receiver<WorkerToMain<AppWorker>>,
@@ -142,11 +148,14 @@ where
                                 Sender<MainToWorker<AppMain>>,
                                 Receiver<MainToWorker<AppMain>>,
                             ) = async_channel::bounded(10);
+
                             let b = Box::new(crate::BootstrapMpsc { rx: wrx, tx: wtx });
                             post_message(&MainToWorker::<AppMain>::BootstrapMpsc(
                                 Box::into_raw(b) as usize
                             ))
                             .unwrap();
+                            // End of DANGER zone.
+
                             WORKER_TX.with(|slot| *slot.borrow_mut() = Some(Box::new(mtx)));
                             spawn_local(async move {
                                 while let Ok(msg) = mrx.recv().await {
