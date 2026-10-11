@@ -342,9 +342,9 @@ impl<T: Sample + Type> SigMFSource<T> {
     /// If the exact file name exists, then treat it as an Archive.
     /// If it does not, fall back to checking for separate Recording files.
     #[must_use]
-    pub fn builder(filename: std::path::PathBuf) -> SigMFSourceBuilder<T> {
+    pub fn builder(filename: impl Into<std::path::PathBuf>) -> SigMFSourceBuilder<T> {
         SigMFSourceBuilder {
-            filename,
+            filename: filename.into(),
             ignore_type_error: false,
             repeat: Repeat::finite(1),
             sample_rate: None,
@@ -652,7 +652,7 @@ mod tests {
         let meta = serde_json::to_string(&SigMF::new("rf32_le".into()))?;
         std::fs::write(base_append(&base, "-meta"), meta)?;
         std::fs::write(base_append(&base, "-data"), 1.0_f32.to_le_bytes())?;
-        let (mut source, out) = SigMFSource::<Float>::builder(base)
+        let (mut source, out) = SigMFSource::<Float>::builder(&base)
             .repeat(Repeat::finite(3))
             .build()?;
         for _ in 0..5 {
