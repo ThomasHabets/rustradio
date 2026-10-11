@@ -86,7 +86,7 @@ pub trait FrequencyTranslate {
 
 /// Finite impulse response filter.
 pub struct Fir<T> {
-    taps: Vec<T>,
+    taps: Box<[T]>,
 }
 
 #[cfg(all(
@@ -344,7 +344,7 @@ fn sum_product_complex_wasm(input: &[Complex], taps: &[Complex]) -> Complex {
 ///
 /// A builder is needed to create a decimating FIR filter block.
 pub struct FirFilterBuilder<T> {
-    taps: Vec<T>,
+    taps: Box<[T]>,
     deci: usize,
     // Optional `(sample_rate, frequency)` requested by `translate()`.
     translate: Option<(Float, Float)>,
@@ -410,7 +410,7 @@ where
         + AlgebraicOps,
 {
     /// Create new `FirFilterBuilder`, with the supplied taps.
-    pub fn builder(taps: impl Into<Vec<T>>) -> FirFilterBuilder<T> {
+    pub fn builder(taps: impl Into<Box<[T]>>) -> FirFilterBuilder<T> {
         FirFilterBuilder {
             taps: taps.into(),
             deci: 1,
@@ -712,7 +712,7 @@ pub fn low_pass(
 
 /// Generate hilbert transformer filter.
 #[must_use]
-pub fn hilbert(window: &Window) -> Vec<Float> {
+pub fn hilbert(window: &Window) -> Box<[Float]> {
     assert!(!window.0.is_empty());
     assert_ne!(window.0.len(), 1);
     let ntaps = window.0.len();
@@ -731,7 +731,10 @@ pub fn hilbert(window: &Window) -> Vec<Float> {
         }
     }
     let gain = 1.0 / (2.0 * gain.abs());
-    taps.iter().map(|e| gain * *e).collect()
+    taps.into_iter()
+        .map(|e| gain * e)
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
 }
 
 #[cfg(test)]
