@@ -87,20 +87,20 @@ impl WindowType {
 }
 
 /// Window functions are "weights" used for applying filters and other
-/// operations.
+/// operations. The number of weights is fixed after construction.
 ///
 /// <https://en.wikipedia.org/wiki/Window_function>
-pub struct Window(pub Vec<Float>);
+pub struct Window(pub Box<[Float]>);
 
 /// Create Hamming window.
 ///
 /// <https://en.wikipedia.org/wiki/Window_function#Hann_and_Hamming_windows>
 fn hamming(ntaps: usize, a0: Float) -> Window {
     if ntaps == 0 {
-        return Window(vec![]);
+        return Window(Box::default());
     }
     if ntaps == 1 {
-        return Window(vec![1.0]);
+        return Window(Box::new([1.0]));
     }
     let a1 = 1.0 - a0;
     let m = (ntaps - 1) as Float;
@@ -119,10 +119,10 @@ fn blackman(m: usize) -> Window {
     const A: Float = 0.16;
 
     if m == 0 {
-        return Window(vec![]);
+        return Window(Box::default());
     }
     if m == 1 {
-        return Window(vec![1.0]);
+        return Window(Box::new([1.0]));
     }
 
     let mut b = Vec::with_capacity(m);
@@ -150,7 +150,7 @@ fn blackman(m: usize) -> Window {
         let t2 = 4.0 * PI * n / m;
         b.push(a0 - a1 * t1.cos() + a2 * t2.cos());
     }
-    Window(b)
+    Window(b.into_boxed_slice())
 }
 
 /// Create Blackman-Harris window.
@@ -164,10 +164,10 @@ fn blackman_harris(m: usize) -> Window {
     const A3: Float = 0.01168;
 
     if m == 0 {
-        return Window(vec![]);
+        return Window(Box::default());
     }
     if m == 1 {
-        return Window(vec![1.0]);
+        return Window(Box::new([1.0]));
     }
 
     let mut b = Vec::with_capacity(m);
@@ -181,7 +181,7 @@ fn blackman_harris(m: usize) -> Window {
         let t3 = 6.0 * PI * n / m;
         b.push(A0 - A1 * t1.cos() + A2 * t2.cos() - A3 * t3.cos());
     }
-    Window(b)
+    Window(b.into_boxed_slice())
 }
 
 #[cfg(test)]
@@ -195,7 +195,7 @@ mod tests {
             WindowType::BlackmanHarris,
             WindowType::Hamming,
         ] {
-            assert_eq!(window_type.make_window(1).0, vec![1.0]);
+            assert_eq!(window_type.make_window(1).0.as_ref(), &[1.0]);
         }
     }
 }

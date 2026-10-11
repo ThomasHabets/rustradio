@@ -55,7 +55,7 @@ pub trait ClampedFilter<T: Sample + Clamp>: Filter<T> {
 ///
 /// For more info see <https://en.wikipedia.org/wiki/Infinite_impulse_response>.
 pub struct IirFilter<T: Sample> {
-    taps: Vec<T>,
+    taps: Box<[T]>,
     buf: VecDeque<T>,
 }
 
@@ -67,7 +67,7 @@ where
     pub fn new(taps: &[T]) -> Self {
         assert!(!taps.is_empty());
         Self {
-            taps: taps.to_vec(),
+            taps: taps.into(),
             buf: VecDeque::new(),
         }
     }

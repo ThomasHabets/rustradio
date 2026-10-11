@@ -605,18 +605,18 @@ where
     }
 }
 
-/// Create a multiband filter.
+/// Create a fixed-length set of complex multiband filter taps.
 ///
-/// TODO: this is untested.
+/// Returns `None` for invalid tap counts or frequency ranges.
 #[must_use]
-pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Vec<Complex>> {
+pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Box<[Complex]>> {
     use rustfft::FftPlanner;
 
     if taps == 0 || taps != window.0.len() {
         return None;
     }
 
-    let mut ideal = vec![Complex::new(0.0, 0.0); taps];
+    let mut ideal = vec![Complex::new(0.0, 0.0); taps].into_boxed_slice();
     let scale = (taps as Float) / 2.0;
     for (low, high) in bands {
         let a = (low * scale).floor() as usize;
@@ -635,23 +635,20 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Opti
     ifft.process(&mut ideal);
     ideal.rotate_right(taps / 2);
     let scale = (fft_size as Float).sqrt();
-    Some(
-        ideal
-            .into_iter()
-            .enumerate()
-            .map(|(n, v)| v * window.0[n] / Complex::new(scale, 0.0))
-            .collect(),
-    )
+    for (tap, weight) in ideal.iter_mut().zip(window.0.iter()) {
+        *tap = *tap * *weight / Complex::new(scale, 0.0);
+    }
+    Some(ideal)
 }
 
-/// Create taps for a low pass filter as complex taps.
+/// Create a fixed-length set of complex low pass filter taps.
 #[must_use]
 pub fn low_pass_complex(
     samp_rate: Float,
     cutoff: Float,
     twidth: Float,
     window_type: impl Borrow<WindowType>,
-) -> Vec<Complex> {
+) -> Box<[Complex]> {
     low_pass(samp_rate, cutoff, twidth, window_type)
         .into_iter()
         .map(|t| Complex::new(t, 0.0))
@@ -664,7 +661,7 @@ fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> u
     if (t & 1) == 0 { t + 1 } else { t }
 }
 
-/// Create taps for a low pass filter.
+/// Create a fixed-length set of low pass filter taps.
 ///
 /// TODO: this could be faster if we supported filtering a Complex by a Float.
 /// A low pass filter doesn't actually need complex taps.
@@ -674,7 +671,7 @@ pub fn low_pass(
     cutoff: Float,
     twidth: Float,
     window_type: impl Borrow<WindowType>,
-) -> Vec<Float> {
+) -> Box<[Float]> {
     assert!(samp_rate > 0.0);
     assert!(cutoff > 0.0);
     assert!(twidth > 0.0);
@@ -685,7 +682,7 @@ pub fn low_pass(
     let window = window_type.make_window(ntaps);
     let m = (ntaps - 1) / 2;
     let fwt0 = 2.0 * pi * cutoff / samp_rate;
-    let taps: Vec<_> = window
+    let mut taps: Box<[_]> = window
         .0
         .iter()
         .enumerate()
@@ -707,7 +704,10 @@ pub fn low_pass(
         }
         gain / fmax
     };
-    taps.into_iter().map(|t| t * gain).collect()
+    for tap in &mut taps {
+        *tap *= gain;
+    }
+    taps
 }
 
 /// Generate hilbert transformer filter.
@@ -718,7 +718,7 @@ pub fn hilbert(window: &Window) -> Box<[Float]> {
     let ntaps = window.0.len();
     let mid = (ntaps - 1) / 2;
     let mut gain = 0.0;
-    let mut taps = vec![0.0; ntaps];
+    let mut taps = vec![0.0; ntaps].into_boxed_slice();
     for i in 1..=mid {
         if i & 1 == 1 {
             let x = 1.0 / (i as Float);
@@ -731,10 +731,10 @@ pub fn hilbert(window: &Window) -> Box<[Float]> {
         }
     }
     let gain = 1.0 / (2.0 * gain.abs());
-    taps.into_iter()
-        .map(|e| gain * e)
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+    for tap in &mut taps {
+        *tap *= gain;
+    }
+    taps
 }
 
 #[cfg(test)]
@@ -1044,9 +1044,17 @@ mod tests {
     }
 
     #[test]
+    fn multiband_full_band_is_centered_impulse() {
+        let taps = multiband(&[(0.0, 1.0)], 8, &Window(Box::new([1.0; 8]))).unwrap();
+        let mut expected = [Complex::default(); 8];
+        expected[4] = Complex::new(8.0_f32.sqrt(), 0.0);
+        assert_almost_equal_complex(&taps, &expected);
+    }
+
+    #[test]
     fn multiband_rejects_invalid_ranges() {
-        assert!(multiband(&[(0.0, 1.0)], 0, &Window(vec![])).is_none());
-        assert!(multiband(&[(0.0, 3.0)], 8, &Window(vec![1.0; 8])).is_none());
-        assert!(multiband(&[(0.5, 0.25)], 8, &Window(vec![1.0; 8])).is_none());
+        assert!(multiband(&[(0.0, 1.0)], 0, &Window(Box::default())).is_none());
+        assert!(multiband(&[(0.0, 3.0)], 8, &Window(Box::new([1.0; 8]))).is_none());
+        assert!(multiband(&[(0.5, 0.25)], 8, &Window(Box::new([1.0; 8]))).is_none());
     }
 }

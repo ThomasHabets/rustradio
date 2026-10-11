@@ -13,7 +13,7 @@ pub struct Fft {
     #[rustradio(out)]
     dst: NCWriteStream<Vec<Complex>>,
     fft: Arc<dyn rustfft::Fft<Float>>,
-    scratch: Vec<Complex>,
+    scratch: Box<[Complex]>,
 }
 
 impl Fft {
@@ -23,7 +23,7 @@ impl Fft {
         fft: Arc<dyn rustfft::Fft<Float>>,
     ) -> (Self, NCReadStream<Vec<Complex>>) {
         let (dst, out) = crate::stream::new_nocopy_stream();
-        let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()];
+        let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()].into_boxed_slice();
         (
             Self {
                 src,

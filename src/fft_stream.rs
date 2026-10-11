@@ -29,7 +29,7 @@ pub struct FftStream {
     size: usize,
     fft: std::sync::Arc<dyn rustfft::Fft<Float>>,
     threaded: bool,
-    scratch: Vec<Complex>,
+    scratch: Box<[Complex]>,
     #[rustradio(in)]
     src: ReadStream<Complex>,
     #[rustradio(out)]
@@ -43,7 +43,7 @@ impl FftStream {
         assert_ne!(size, 0, "FFT size must be nonzero");
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
-        let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()];
+        let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()].into_boxed_slice();
         let (dst, dr) = crate::stream::new_stream();
         assert!(
             size <= dst.free(),

@@ -50,7 +50,7 @@ pub mod rr_fftw {
     /// FFT `Engine` for FFTW.
     pub struct FftwEngine {
         tap_len: usize,
-        taps_fft: Vec<Complex>,
+        taps_fft: Box<[Complex]>,
         fft: C2CPlan32,
         ifft: C2CPlan32,
     }
@@ -58,8 +58,8 @@ pub mod rr_fftw {
     impl FftwEngine {
         /// Create new FFTW engine, given taps.
         #[must_use]
-        pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
-            let mut taps_fft = taps.into();
+        pub fn new<T: Into<Box<[Complex]>>>(taps: T) -> Self {
+            let mut taps_fft = taps.into().into_vec();
             assert!(!taps_fft.is_empty());
             let tap_len = taps_fft.len();
             let fft_size = calc_fft_size(taps_fft.len());
@@ -94,7 +94,7 @@ pub mod rr_fftw {
             Self {
                 fft,
                 ifft,
-                taps_fft,
+                taps_fft: taps_fft.into_boxed_slice(),
                 tap_len,
             }
         }
@@ -135,16 +135,17 @@ pub mod rr_rustfft {
     /// FFT `Engine` using crate `rustfft`.
     pub struct RustFftEngine {
         tap_len: usize,
-        taps_fft: Vec<Complex>,
+        taps_fft: Box<[Complex]>,
         fft: Arc<dyn rustfft::Fft<Float>>,
         ifft: Arc<dyn rustfft::Fft<Float>>,
-        scratch: Vec<Complex>,
+        scratch: Box<[Complex]>,
     }
     impl RustFftEngine {
         /// Create new rustfft engine, given taps.
         #[must_use]
-        pub fn new<T: Into<Vec<Complex>>>(taps: T) -> Self {
+        pub fn new<T: Into<Box<[Complex]>>>(taps: T) -> Self {
             let taps = taps.into();
+            let tap_len = taps.len();
             assert!(!taps.is_empty());
             let fft_size = calc_fft_size(taps.len());
             let mut planner = rustfft::FftPlanner::new();
@@ -155,7 +156,7 @@ pub mod rr_rustfft {
                 fft.get_inplace_scratch_len()
                     .max(ifft.get_inplace_scratch_len())
             ];
-            let mut taps_fft = taps.clone();
+            let mut taps_fft = taps.into_vec();
             taps_fft.resize(fft_size, Complex::default());
             fft.process_with_scratch(&mut taps_fft, &mut scratch);
             // Normalization is actually the square root of this
@@ -170,9 +171,9 @@ pub mod rr_rustfft {
             Self {
                 fft,
                 ifft,
-                scratch,
-                taps_fft,
-                tap_len: taps.len(),
+                scratch: scratch.into_boxed_slice(),
+                taps_fft: taps_fft.into_boxed_slice(),
+                tap_len,
             }
         }
     }
@@ -222,7 +223,7 @@ pub struct FftFilter<T: Engine> {
     tags: Vec<Tag>,
     nsamples: usize,
     fft_size: usize,
-    tail: Vec<Complex>,
+    tail: Box<[Complex]>,
     engine: T,
     #[rustradio(in)]
     src: ReadStream<Complex>,
@@ -236,7 +237,7 @@ impl FftFilter<rr_fftw::FftwEngine> {
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
-    pub fn new<T: Into<Vec<Complex>>>(
+    pub fn new<T: Into<Box<[Complex]>>>(
         src: ReadStream<Complex>,
         taps: T,
     ) -> (Self, ReadStream<Complex>) {
@@ -252,7 +253,7 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
-    pub fn new<T: Into<Vec<Complex>>>(
+    pub fn new<T: Into<Box<[Complex]>>>(
         src: ReadStream<Complex>,
         taps: T,
     ) -> (Self, ReadStream<Complex>) {
@@ -275,7 +276,7 @@ impl<T: Engine> FftFilter<T> {
                 src,
                 dst,
                 fft_size,
-                tail: vec![Complex::default(); engine.tap_len()],
+                tail: vec![Complex::default(); engine.tap_len()].into_boxed_slice(),
                 engine,
                 buf: Vec::with_capacity(fft_size),
                 tags: Vec::new(),

@@ -12,7 +12,7 @@ use crate::{Complex, Float, Result};
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct CmaEqualizer {
-    taps: Vec<Complex>,
+    taps: Box<[Complex]>,
     desired_modulus: Float,
     step_size: Float,
     #[rustradio(in)]
@@ -35,7 +35,7 @@ impl CmaEqualizer {
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
-                taps,
+                taps: taps.into_boxed_slice(),
                 desired_modulus,
                 step_size,
                 src,
@@ -111,7 +111,7 @@ mod tests {
         let input: Vec<_> = (0..97)
             .map(|i| Complex::new((i as Float * 0.37).sin(), (i as Float * 0.19).cos()))
             .collect();
-        let taps: Vec<_> = (0..31)
+        let taps: Box<[_]> = (0..31)
             .map(|i| Complex::new((i as Float * 0.23).cos(), (i as Float * 0.41).sin()))
             .collect();
         let expected: Vec<Complex> = input

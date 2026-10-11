@@ -328,7 +328,7 @@ fn bench_fft_backend<E: rustradio::fft_filter::Engine>(
     b: &mut Bencher,
     transition_width: f32,
     fft_size: usize,
-    make_engine: impl FnOnce(Vec<Complex>) -> E,
+    make_engine: impl FnOnce(Box<[Complex]>) -> E,
 ) {
     let taps = rustradio::fir::low_pass_complex(
         1024000.0,
