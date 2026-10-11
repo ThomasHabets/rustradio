@@ -117,12 +117,7 @@ fn main() -> Result<()> {
         prev,
         BinarySlicer::new(prev),
         XorConst::new(prev, 1),
-        CorrelateAccessCodeTag::new(
-            prev,
-            rustradio::il2p_deframer::SYNC_WORD.to_vec(),
-            "sync",
-            0,
-        ),
+        CorrelateAccessCodeTag::new(prev, rustradio::il2p_deframer::SYNC_WORD, "sync", 0),
     ];
 
     let (b, a, prev) = Tee::new(prev);

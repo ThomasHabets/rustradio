@@ -13,15 +13,20 @@ pub struct CorrelateAccessCode {
     #[rustradio(out)]
     dst: WriteStream<u8>,
 
-    code: Vec<u8>,
+    code: Box<[u8]>,
     slide: Vec<u8>,
     allowed_diffs: usize,
 }
 
 impl CorrelateAccessCode {
-    /// Create new correlate access block.
+    /// Create a correlator with an owned, fixed-length access code.
     #[must_use]
-    pub fn new(src: ReadStream<u8>, code: Vec<u8>, allowed_diffs: usize) -> (Self, ReadStream<u8>) {
+    pub fn new(
+        src: ReadStream<u8>,
+        code: impl Into<Box<[u8]>>,
+        allowed_diffs: usize,
+    ) -> (Self, ReadStream<u8>) {
+        let code = code.into();
         assert!(!code.is_empty(), "access code must be nonempty");
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -58,7 +63,7 @@ impl CorrelateAccessCode {
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, sync_tag)]
 pub struct CorrelateAccessCodeTag {
-    code: Vec<u8>,
+    code: Box<[u8]>,
     #[rustradio(in)]
     src: ReadStream<u8>,
     #[rustradio(out)]
@@ -69,13 +74,14 @@ pub struct CorrelateAccessCodeTag {
 }
 
 impl CorrelateAccessCodeTag {
-    /// Create new correlate access block.
+    /// Create a tagged correlator with an owned, fixed-length access code.
     pub fn new<S: Into<String>>(
         src: ReadStream<u8>,
-        code: Vec<u8>,
+        code: impl Into<Box<[u8]>>,
         tag: S,
         allowed_diffs: usize,
     ) -> (Self, ReadStream<u8>) {
+        let code = code.into();
         assert!(!code.is_empty(), "access code must be nonempty");
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -139,7 +145,7 @@ mod tests {
     #[test]
     fn waits_for_full_code_before_match() -> Result<()> {
         let src = ReadStream::from_slice(&[1]);
-        let (mut cac, out) = CorrelateAccessCode::new(src, vec![0, 1], 0);
+        let (mut cac, out) = CorrelateAccessCode::new(src, [0, 1], 0);
 
         cac.work()?;
         let (buf, _) = out.read_buf()?;
@@ -151,7 +157,7 @@ mod tests {
     #[test]
     fn tagged_waits_for_full_code_before_match() -> Result<()> {
         let src = ReadStream::from_slice(&[1]);
-        let (mut cac, out) = CorrelateAccessCodeTag::new(src, vec![0, 1], "sync", 0);
+        let (mut cac, out) = CorrelateAccessCodeTag::new(src, &[0, 1][..], "sync", 0);
 
         cac.work()?;
         let (_, tags) = out.read_buf()?;
