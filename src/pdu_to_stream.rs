@@ -1,5 +1,7 @@
 //! PDU to stream.
 
+use std::collections::VecDeque;
+
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, Tag, TagValue, WriteStream};
 use crate::{Result, Sample};
@@ -21,6 +23,7 @@ pub const TAG_END: &str = "PduToStream::end";
 /// tags will be on the same sample.
 ///
 /// Empty PDUs are silently discarded.
+/// Input tags must be sorted by position; equal-position tags keep their order.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof, new)]
 pub struct PduToStream<T: Sample> {
@@ -35,7 +38,9 @@ pub struct PduToStream<T: Sample> {
     #[rustradio(default)]
     buf: Vec<T>,
     #[rustradio(default)]
-    tags: Vec<Tag>,
+    // Pending tags use positions relative to the original PDU. Taking tags
+    // from the front avoids scanning and rebasing future tags on each write.
+    tags: VecDeque<Tag>,
     #[rustradio(default)]
     pdu_len: u64,
 }
@@ -75,25 +80,29 @@ impl<T: Sample> Block for PduToStream<T> {
                 }
                 self.tags = tags
                     .into_iter()
-                    .filter(|tag| tag.pos() < pdu.len())
+                    .take_while(|tag| tag.pos() < pdu.len())
                     .collect();
                 self.buf = pdu;
+                // Input tags at zero precede the generated start marker, and
+                // later tags follow it.
+                let zeros = self.tags.iter().take_while(|tag| tag.pos() == 0).count();
                 self.tags
-                    .push(Tag::new(0, TAG_START, TagValue::U64(self.pdu_len)));
+                    .insert(zeros, Tag::new(0, TAG_START, TagValue::U64(self.pdu_len)));
             }
             let n = std::cmp::min(o.len(), self.buf.len());
             assert_ne!(n, 0, "we already checked");
             o.slice()[..n].copy_from_slice(&self.buf[..n]);
-            let mut tags = Vec::new();
-            self.tags.retain_mut(|tag| {
-                if tag.pos() < n {
-                    tags.push(tag.clone());
-                    false
-                } else {
-                    tag.set_pos(tag.pos() - n);
-                    true
-                }
-            });
+            let consumed = self.pdu_len as usize - self.buf.len();
+            let end = consumed + n;
+            let count = self.tags.iter().take_while(|tag| tag.pos() < end).count();
+            let mut tags: Vec<_> = self
+                .tags
+                .drain(..count)
+                .map(|mut tag| {
+                    tag.set_pos(tag.pos() - consumed);
+                    tag
+                })
+                .collect();
             self.buf.drain(..n);
             if self.buf.is_empty() {
                 tags.push(Tag::new(n - 1, TAG_END, TagValue::U64(self.pdu_len)));
@@ -110,12 +119,36 @@ mod tests {
     use crate::stream::{DEFAULT_STREAM_SIZE, TagValue, new_nocopy_stream};
 
     #[test]
+    fn one_sample_preserves_equal_position_tag_order() -> Result<()> {
+        let (tx, rx) = new_nocopy_stream();
+        let first = Tag::new(0, "a", TagValue::Bool(true));
+        let second = Tag::new(0, "b", TagValue::Bool(false));
+        tx.push(vec![42u8], vec![first.clone(), second.clone()]);
+        let (mut block, out) = PduToStream::new(rx);
+        block.work()?;
+        let (samples, tags) = out.read_buf()?;
+        assert_eq!(samples.slice(), [42]);
+        assert_eq!(
+            tags,
+            [
+                first,
+                second,
+                Tag::new(0, TAG_START, TagValue::U64(1)),
+                Tag::new(0, TAG_END, TagValue::U64(1)),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn carries_tags_across_partial_output_writes() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
         let len = DEFAULT_STREAM_SIZE + 1;
         tx.push(
             vec![0u8; len],
             &[
+                Tag::new(0, "zero-a", TagValue::Bool(true)),
+                Tag::new(0, "zero-b", TagValue::Bool(false)),
                 Tag::new(123, "one-two-three", TagValue::Bool(false)),
                 Tag::new(len - 1, "tail", TagValue::Bool(true)),
             ],
@@ -128,6 +161,8 @@ mod tests {
         assert_eq!(
             tags,
             vec![
+                Tag::new(0, "zero-a", TagValue::Bool(true)),
+                Tag::new(0, "zero-b", TagValue::Bool(false)),
                 Tag::new(
                     0,
                     "PduToStream::start",
