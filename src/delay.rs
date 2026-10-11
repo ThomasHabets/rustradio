@@ -105,7 +105,7 @@ impl<T: Sample> Block for Delay<T> {
             o.fill_from_slice(&input.slice()[..n]);
             let tags = tags
                 .into_iter()
-                .filter(|tag| tag.pos() < n)
+                .take_while(|tag| tag.pos() < n)
                 .collect::<Vec<_>>();
             o.produce(n, &tags);
             input.consume(n);

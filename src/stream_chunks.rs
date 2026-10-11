@@ -38,7 +38,7 @@ impl<T: Sample> Block for StreamChunks<T> {
                 input.slice()[..self.size].to_vec(),
                 intags
                     .into_iter()
-                    .filter(|t| t.pos() < self.size)
+                    .take_while(|t| t.pos() < self.size)
                     .collect::<Vec<_>>(),
             );
             input.consume(self.size);
@@ -51,6 +51,38 @@ mod tests {
     use super::*;
     use crate::Complex;
     use crate::blocks::VectorSource;
+
+    #[test]
+    fn tags_at_chunk_boundaries_stay_with_their_samples() -> Result<()> {
+        use crate::stream::{Tag, TagValue, new_stream};
+
+        let (writer, reader) = new_stream();
+        let (mut block, out) = StreamChunks::new(reader, 4);
+        let tag = |pos, key| Tag::new(pos, key, TagValue::Bool(true));
+        let mut input = writer.write_buf()?;
+        input.fill_from_slice(&[0u8, 1, 2, 3, 4, 5, 6, 7]);
+        // Writers may supply unordered tags. Readers sort them stably before
+        // the block selects the prefix belonging to each chunk.
+        input.produce(
+            8,
+            &[
+                tag(7, "last"),
+                tag(4, "boundary"),
+                tag(1, "a"),
+                tag(1, "b"),
+                tag(0, "first"),
+            ],
+        );
+        block.work()?;
+        let (data, tags) = out.pop().unwrap();
+        assert_eq!(data, [0, 1, 2, 3]);
+        assert_eq!(tags, [tag(0, "first"), tag(1, "a"), tag(1, "b")]);
+        let (data, tags) = out.pop().unwrap();
+        assert_eq!(data, [4, 5, 6, 7]);
+        assert_eq!(tags, [tag(0, "boundary"), tag(3, "last")]);
+        assert!(out.pop().is_none());
+        Ok(())
+    }
 
     #[test]
     fn rejects_chunks_larger_than_input_capacity() {

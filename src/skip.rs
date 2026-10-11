@@ -41,7 +41,7 @@ impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
             o.slice()[..len].copy_from_slice(&i.slice()[..len]);
             let tags = tags
                 .into_iter()
-                .filter(|tag| tag.pos() < len)
+                .take_while(|tag| tag.pos() < len)
                 .collect::<Vec<_>>();
             o.produce(len, &tags);
             i.consume(len);

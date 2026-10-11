@@ -448,7 +448,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
             }
             let tags = tags
                 .into_iter()
-                .filter(|tag| tag.pos() < n)
+                .take_while(|tag| tag.pos() < n)
                 .collect::<Vec<_>>();
             inner_to.produce(n, &tags);
             outer_in.consume(n);
@@ -473,7 +473,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
             }
             let tags = tags
                 .into_iter()
-                .filter(|tag| tag.pos() < n)
+                .take_while(|tag| tag.pos() < n)
                 .collect::<Vec<_>>();
             inner_from.consume(n);
             outer_to.produce(n, &tags);

@@ -127,7 +127,7 @@ impl<T: Sample> Block for VectorSink<T> {
             storage.0.extend(&i.slice()[..n]);
             storage.1.extend(
                 tags.iter()
-                    .filter(|t| t.pos() < n)
+                    .take_while(|t| t.pos() < n)
                     .map(|t| Tag::new(t.pos() + previous, t.key(), t.val().clone())),
             );
             i.consume(n);
