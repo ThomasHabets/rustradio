@@ -17,7 +17,7 @@ pub struct DebugSinkNoCopy<T: Send + 'static> {
 
 impl<T> Block for DebugSinkNoCopy<T>
 where
-    T: std::fmt::Debug + Default + Send + 'static,
+    T: std::fmt::Debug + Send + 'static,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
@@ -146,6 +146,17 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn nocopy_messages_need_no_default() -> Result<()> {
+        #[derive(Debug)]
+        struct Message;
+        let (writer, reader) = crate::stream::new_nocopy_stream();
+        let mut sink = DebugSinkNoCopy::new(reader);
+        writer.push(Message, &[]);
+        assert!(matches!(sink.work()?, BlockRet::WaitForStream(_, 1)));
+        Ok(())
+    }
+
     use super::*;
     use crate::block::BlockRet;
     use crate::stream::StreamWait;
