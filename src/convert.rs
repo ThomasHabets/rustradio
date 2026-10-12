@@ -51,7 +51,7 @@ impl<In, F> Inspect<In, F> {
 
 /// Block to convert from u8 to other sample types.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, bound = "T: Default+Clone")]
+#[rustradio(crate, new, bound = "T: Default + Copy")]
 pub struct Parse<T> {
     #[rustradio(in)]
     src: ReadStream<u8>,

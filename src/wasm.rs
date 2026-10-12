@@ -85,14 +85,12 @@ struct BufferState<T> {
 }
 
 impl<T: Default> BufferState<T> {
-    const _CHECK_NOT_ZERO: () = assert!(
-        std::mem::size_of::<T>() != 0,
-        "Zero sized stream members are not supported"
-    );
-
     /// Size in bytes.
     fn new(byte_size: usize) -> Result<Self> {
         let member_size = std::mem::size_of::<T>();
+        if member_size == 0 || byte_size == 0 {
+            return Err(Error::msg("unsupported buffer or element size"));
+        }
         let size = byte_size / member_size;
         if !byte_size.is_multiple_of(member_size) {
             return Err(Error::msg(format!(
@@ -174,7 +172,7 @@ pub struct Buffer<T> {
     id: usize,
     state: Mutex<BufferState<T>>,
 }
-impl<T: Default> Buffer<T> {
+impl<T: Default + Copy> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),

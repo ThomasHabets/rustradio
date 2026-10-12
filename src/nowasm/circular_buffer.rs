@@ -136,31 +136,28 @@ impl Circ {
         self.len / 2
     }
 
-    // I'm pretty sure this is a safe error to suppress. Clippy is not
-    // wrong, it's scary. But this whole thing is scary unsafe.
-    //
-    // Possibly the compiler sees something UB, and breaks things with
-    // a strange optimization, but let's hope not. :-)
-    //
-    // The reason this function asserts instead of returns error is that it's
-    // only called from this module, and "cannot" be called with invalid
-    // arguments.
+    /// Borrow a mutable window of initialized elements.
+    ///
+    /// # Safety
+    ///
+    /// The range must contain valid `T`s and must not alias another live
+    /// reference, including through the second mapping of the same pages.
     #[allow(clippy::mut_from_ref)]
     #[must_use]
-    fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
+    unsafe fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         let ez = std::mem::size_of::<T>();
-        debug_assert!(self.len.is_multiple_of(ez));
-        debug_assert!(
+        assert!(ez != 0 && self.len.is_multiple_of(ez));
+        assert!(start <= end);
+        assert!(
             end - start <= self.len / ez / 2,
             "requested {start} to {end} ({} entries) of {} but len is {}",
             end - start,
             ez,
             self.len
         );
-        assert!(start <= end && end <= self.len / ez);
-        // SAFETY: This is a mut cast for memory that C++ would call non-pointer
-        // POD. Data races are possible from this in general, but will be
-        // prevented by the stream API.
+        assert!(end <= self.len / ez);
+        // SAFETY: the caller guarantees initialization and exclusive access;
+        // the bounds above keep the slice inside the mapping.
         unsafe { std::slice::from_raw_parts_mut(self.map.base.cast::<T>().add(start), end - start) }
     }
 }
@@ -309,7 +306,9 @@ impl<T: Copy> BufferWriter<T> {
     /// Return the slice to write to.
     #[must_use]
     pub fn slice(&mut self) -> &mut [T] {
-        self.parent.circ.full_buffer::<T>(self.start, self.end)
+        // SAFETY: the sole writer owns the free range, disjoint from the
+        // reader's unconsumed samples. All elements were initialized in new().
+        unsafe { self.parent.circ.full_buffer::<T>(self.start, self.end) }
     }
 
     /// Shortcut to save typing for the common operation of copying
@@ -388,8 +387,36 @@ pub struct Buffer<T> {
 impl<T> Buffer<T> {
     /// Create a new Buffer.
     ///
-    /// Size is in bytes.
-    pub fn new(size: usize) -> Result<Self> {
+    /// Size is in bytes and must be a positive multiple of the page size
+    /// and element size. Elements must be nonzero sized. The write storage
+    /// starts with valid default values; zero bits need not be valid for `T`.
+    pub fn new(size: usize) -> Result<Self>
+    where
+        T: Copy + Default,
+    {
+        let member_size = std::mem::size_of::<T>();
+        if member_size == 0 || size == 0 || size > isize::MAX as usize / 2 {
+            return Err(Error::msg("unsupported circular buffer or element size"));
+        }
+        if !size.is_multiple_of(member_size) {
+            return Err(Error::msg("buffer size must be a multiple of element size"));
+        }
+        // SAFETY: sysconf takes no pointers and reads the system page size.
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        if page_size <= 0 || !size.is_multiple_of(page_size as usize) {
+            return Err(Error::msg("buffer size must be a multiple of page size"));
+        }
+        let circ = Circ::new(size)?;
+        if !(circ.map.base as usize).is_multiple_of(std::mem::align_of::<T>()) {
+            return Err(Error::msg("element alignment exceeds mapping alignment"));
+        }
+        // Initialize through raw writes before creating any typed reference.
+        // Only the first mapping needs initialization: the second aliases it.
+        for index in 0..size / member_size {
+            // SAFETY: the mapping is aligned, large enough, and exclusively
+            // owned here. Copy elements need no destructor on overwrite/unmap.
+            unsafe { circ.map.base.cast::<T>().add(index).write(T::default()) };
+        }
         Ok(Self {
             id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             state: Arc::new(BufferInner {
@@ -410,7 +437,7 @@ impl<T> Buffer<T> {
                 acvw: tokio::sync::Notify::new(),
             }),
             member_size: std::mem::size_of::<T>(),
-            circ: Circ::new(size)?,
+            circ,
             dummy: std::marker::PhantomData,
         })
     }
@@ -623,6 +650,32 @@ impl<T: Copy> Buffer<T> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn initializes_types_that_cannot_contain_zero_bits() -> Result<()> {
+        #[derive(Clone, Copy, Debug)]
+        struct Nonzero(std::num::NonZeroU8);
+        impl Default for Nonzero {
+            fn default() -> Self {
+                Self(std::num::NonZeroU8::new(7).unwrap())
+            }
+        }
+        let buffer = Arc::new(Buffer::<Nonzero>::new(4096)?);
+        let mut writer = buffer.clone().write_buf()?;
+        assert!(writer.slice().iter().all(|sample| sample.0.get() == 7));
+        writer.produce(4096, &[]);
+        let (reader, _) = buffer.read_buf()?;
+        assert!(reader.iter().all(|sample| sample.0.get() == 7));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_invalid_buffer_layouts() {
+        assert!(Buffer::<()>::new(4096).is_err());
+        assert!(Buffer::<u8>::new(0).is_err());
+        assert!(Buffer::<u8>::new(4095).is_err());
+        assert!(Buffer::<[u8; 3]>::new(4096).is_err());
+    }
+
     use super::*;
 
     #[cfg(feature = "async")]
@@ -667,11 +720,21 @@ mod tests {
     fn circ_reqlen() -> Result<()> {
         let circ = Circ::new(4096)?;
         assert_eq!(circ.total_size(), 4096);
-        assert!(circ.full_buffer::<u32>(0, 0).is_empty());
-        assert_eq!(circ.full_buffer::<u32>(0, 1).len(), 1);
-        assert_eq!(circ.full_buffer::<u32>(0, 1024).len(), 1024);
-        assert_eq!(circ.full_buffer::<u32>(1000, 1200).len(), 200);
-        assert_eq!(circ.full_buffer::<u32>(2040, 2048).len(), 8);
+        // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+        // are retained, and invalid bounds panic before borrowing.
+        assert!(unsafe { circ.full_buffer::<u32>(0, 0) }.is_empty());
+        // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+        // are retained, and invalid bounds panic before borrowing.
+        assert_eq!(unsafe { circ.full_buffer::<u32>(0, 1) }.len(), 1);
+        // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+        // are retained, and invalid bounds panic before borrowing.
+        assert_eq!(unsafe { circ.full_buffer::<u32>(0, 1024) }.len(), 1024);
+        // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+        // are retained, and invalid bounds panic before borrowing.
+        assert_eq!(unsafe { circ.full_buffer::<u32>(1000, 1200) }.len(), 200);
+        // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+        // are retained, and invalid bounds panic before borrowing.
+        assert_eq!(unsafe { circ.full_buffer::<u32>(2040, 2048) }.len(), 8);
         Ok(())
     }
 
@@ -693,7 +756,9 @@ mod tests {
     #[should_panic]
     fn circ_reqlen_too_big_beginning() {
         if let Ok(circ) = Circ::new(4096) {
-            let _ = circ.full_buffer::<u32>(0, 1025);
+            // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+            // are retained, and invalid bounds panic before borrowing.
+            let _ = unsafe { circ.full_buffer::<u32>(0, 1025) };
         }
     }
 
@@ -701,7 +766,9 @@ mod tests {
     #[should_panic]
     fn circ_reqlen_too_big_middle() {
         if let Ok(circ) = Circ::new(4096) {
-            let _ = circ.full_buffer::<u32>(10, 1024 + 11);
+            // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+            // are retained, and invalid bounds panic before borrowing.
+            let _ = unsafe { circ.full_buffer::<u32>(10, 1024 + 11) };
         }
     }
 
@@ -709,7 +776,9 @@ mod tests {
     #[should_panic]
     fn circ_past_end() {
         if let Ok(circ) = Circ::new(4096) {
-            let _ = circ.full_buffer::<u32>(2040, 2049);
+            // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+            // are retained, and invalid bounds panic before borrowing.
+            let _ = unsafe { circ.full_buffer::<u32>(2040, 2049) };
         }
     }
 
@@ -718,12 +787,16 @@ mod tests {
         let circ = Circ::new(4096)?;
         assert_eq!(circ.total_size(), 4096);
         let first = {
-            let buf = circ.full_buffer::<u32>(0, 4);
+            // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+            // are retained, and invalid bounds panic before borrowing.
+            let buf = unsafe { circ.full_buffer::<u32>(0, 4) };
             assert_eq!(buf, [0, 0, 0, 0]);
             buf.copy_from_slice(&[3, 2, 1, 42]);
             buf.as_ptr()
         };
-        let buf2 = circ.full_buffer::<u32>(1024, 1028);
+        // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
+        // are retained, and invalid bounds panic before borrowing.
+        let buf2 = unsafe { circ.full_buffer::<u32>(1024, 1028) };
         assert_eq!(buf2, [3, 2, 1, 42]);
         assert_ne!(first, buf2.as_ptr());
         Ok(())
