@@ -22,14 +22,33 @@ pub struct CmaEqualizer {
 }
 
 impl CmaEqualizer {
-    /// Create the equalizer and output, propagating stream allocation errors.
+    /// Create the equalizer and output.
+    ///
+    /// The nonzero tap count must fit the input stream capacity. Desired
+    /// modulus and step size must be finite and nonnegative; a zero step size
+    /// disables adaptation. Invalid configuration and allocation failures
+    /// return errors.
     pub fn new(
         ntaps: usize,
         desired_modulus: Float,
         step_size: Float,
         src: ReadStream<Complex>,
     ) -> Result<(Self, ReadStream<Complex>)> {
-        assert_ne!(ntaps, 0);
+        if ntaps == 0 || ntaps > src.total_size() {
+            return Err(crate::Error::msg(
+                "CMA tap count must fit the input stream capacity",
+            ));
+        }
+        if !desired_modulus.is_finite() || desired_modulus < 0.0 {
+            return Err(crate::Error::msg(
+                "CMA desired modulus must be finite and nonnegative",
+            ));
+        }
+        if !step_size.is_finite() || step_size < 0.0 {
+            return Err(crate::Error::msg(
+                "CMA step size must be finite and nonnegative",
+            ));
+        }
         let mut taps = vec![Complex::default(); ntaps];
         taps[0] = Complex::new(1.0, 0.0);
         let (dst, dr) = crate::stream::new_stream()?;
@@ -103,6 +122,18 @@ impl Block for CmaEqualizer {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rejects_invalid_configuration_before_processing() {
+        let capacity = ReadStream::<Complex>::from_slice(&[]).total_size();
+        for count in [0, capacity + 1, usize::MAX] {
+            assert!(CmaEqualizer::new(count, 1.0, 0.0, ReadStream::from_slice(&[])).is_err());
+        }
+        for invalid in [-1.0, Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {
+            assert!(CmaEqualizer::new(1, invalid, 0.0, ReadStream::from_slice(&[])).is_err());
+            assert!(CmaEqualizer::new(1, 1.0, invalid, ReadStream::from_slice(&[])).is_err());
+        }
+    }
+
     use super::*;
     use crate::block::Block;
 
