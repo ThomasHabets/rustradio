@@ -138,8 +138,9 @@ where
                             // We're sending a raw pointer to the worker. This
                             // is an `unsafe` (on the worker side) operation,
                             // and the worker has to trust that this is
-                            // *exactly* of the right type. See more comments on
-                            // SAFETY in worker.rs.
+                            // a live, unclaimed bootstrap envelope. The worker
+                            // checks the endpoint types before using them.
+                            // See more comments on SAFETY in worker.rs.
                             let (wtx, mrx): (
                                 Sender<WorkerToMain<AppWorker>>,
                                 Receiver<WorkerToMain<AppWorker>>,
@@ -149,11 +150,9 @@ where
                                 Receiver<MainToWorker<AppMain>>,
                             ) = async_channel::bounded(10);
 
-                            let b = Box::new(crate::BootstrapMpsc { rx: wrx, tx: wtx });
-                            post_message(&MainToWorker::<AppMain>::BootstrapMpsc(
-                                Box::into_raw(b) as usize
-                            ))
-                            .unwrap();
+                            let b = crate::BootstrapMpsc { rx: wrx, tx: wtx };
+                            post_message(&MainToWorker::<AppMain>::BootstrapMpsc(b.into_ptr()))
+                                .unwrap();
                             // End of DANGER zone.
 
                             WORKER_TX.with(|slot| *slot.borrow_mut() = Some(Box::new(mtx)));

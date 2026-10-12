@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+use std::any::Any;
 use std::fmt::Debug;
 
 use log::error;
@@ -28,19 +29,46 @@ pub trait ApplicationSpecific: Debug + Send + 'static {
     type End: Serialize + Debug + Send + for<'de> Deserialize<'de>;
 }
 
-/// Bootstrap MPSC message. Should not be used directly by applications, and
-/// ideally should be private to this crate.
+/// Channel endpoints transferred from the main thread to the worker.
 #[derive(Debug)]
 struct BootstrapMpsc<App1: ApplicationSpecific, App2: ApplicationSpecific> {
     pub rx: async_channel::Receiver<MainToWorker<App1>>,
     pub tx: async_channel::Sender<WorkerToMain<App2>>,
 }
 
+/// All bootstrap pointers address the same envelope layout. The endpoints
+/// retain their concrete type so the worker can check it before taking them.
+struct BootstrapEnvelope {
+    endpoints: Box<dyn Any + Send>,
+}
+
 impl<App1: ApplicationSpecific, App2: ApplicationSpecific> BootstrapMpsc<App1, App2> {
-    // TODO: make this pub(crate).
-    unsafe fn from_ptr(ptr: usize) -> Self {
-        let boot = unsafe { Box::from_raw(ptr as *mut Self) };
-        *boot
+    /// Transfer ownership through a pointer to a non-generic envelope.
+    fn into_ptr(self) -> usize {
+        Box::into_raw(Box::new(BootstrapEnvelope {
+            endpoints: Box::new(self),
+        })) as usize
+    }
+
+    /// Claim the endpoints after checking the main and worker channel types.
+    /// Mismatched endpoints are dropped using their original concrete type.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must come from `BootstrapMpsc::into_ptr` in the same address space
+    /// and identify a live, unclaimed allocation. WASM threads must share the
+    /// same module and linear memory.
+    /// Both success and failure consume it, so it must never be claimed again.
+    unsafe fn from_ptr(ptr: usize) -> rustradio::Result<Self> {
+        // SAFETY: every into_ptr allocation has this non-generic layout.
+        // The caller guarantees that the allocation is live and unclaimed.
+        let boot = unsafe { Box::from_raw(ptr as *mut BootstrapEnvelope) };
+        // Any::downcast checks TypeId before interpreting the endpoints as
+        // this worker's pair of application-specific channel types.
+        boot.endpoints
+            .downcast::<Self>()
+            .map(|endpoints| *endpoints)
+            .map_err(|_| rustradio::Error::msg("bootstrap channel types do not match worker setup"))
     }
 }
 
@@ -56,7 +84,7 @@ impl<App1: ApplicationSpecific, App2: ApplicationSpecific> BootstrapMpsc<App1, A
 ))]
 #[non_exhaustive]
 pub enum MainToWorker<App: ApplicationSpecific> {
-    /// A boxed pointer to BootstrapMpsc.
+    /// A pointer to an owned, type-checked bootstrap envelope.
     ///
     /// Applications should not use this directly.
     BootstrapMpsc(usize),
@@ -202,6 +230,76 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, Serialize, Deserialize)]
+    struct LargeMessages;
+
+    impl ApplicationSpecific for LargeMessages {
+        type App = [u64; 32];
+        type Start = [u64; 32];
+        type Ready = [u64; 32];
+        type End = [u64; 32];
+    }
+
+    #[test]
+    fn bootstrap_matching_types_transfer_endpoints() {
+        let (main_tx, worker_rx) = async_channel::bounded(1);
+        let (worker_tx, main_rx) = async_channel::bounded(1);
+        let ptr = BootstrapMpsc::<AppEmpty, LargeMessages> {
+            rx: worker_rx,
+            tx: worker_tx,
+        }
+        .into_ptr();
+        main_tx.try_send(MainToWorker::Ping(12.0)).unwrap();
+        std::thread::spawn(move || {
+            // SAFETY: ptr is a live allocation from into_ptr, claimed once.
+            let endpoints =
+                unsafe { BootstrapMpsc::<AppEmpty, LargeMessages>::from_ptr(ptr) }.unwrap();
+            assert!(matches!(
+                endpoints.rx.try_recv(),
+                Ok(MainToWorker::Ping(12.0))
+            ));
+            endpoints.tx.try_send(WorkerToMain::Ready([7; 32])).unwrap();
+        })
+        .join()
+        .unwrap();
+        let WorkerToMain::Ready(payload) = main_rx.try_recv().unwrap() else {
+            panic!("expected ready message");
+        };
+        assert_eq!(payload, [7; 32]);
+    }
+
+    /// Mismatches must release the actual endpoints without interpreting them
+    /// as the worker's expected message representations.
+    fn assert_bootstrap_mismatch<Main: ApplicationSpecific, Worker: ApplicationSpecific>() {
+        let (main_tx, worker_rx) = async_channel::bounded(1);
+        let (worker_tx, main_rx) = async_channel::bounded(1);
+        let ptr = BootstrapMpsc::<AppEmpty, AppEmpty> {
+            rx: worker_rx,
+            tx: worker_tx,
+        }
+        .into_ptr();
+        // SAFETY: ptr is live and unclaimed. The expected channel types may
+        // differ; from_ptr checks them before accessing the endpoints.
+        let result = unsafe { BootstrapMpsc::<Main, Worker>::from_ptr(ptr) };
+        let err = result.expect_err("mismatched bootstrap must fail");
+        assert!(
+            err.to_string()
+                .contains("bootstrap channel types do not match worker setup")
+        );
+        assert!(main_tx.is_closed());
+        assert!(main_rx.is_closed());
+    }
+
+    #[test]
+    fn bootstrap_rejects_mismatched_main_types() {
+        assert_bootstrap_mismatch::<LargeMessages, AppEmpty>();
+    }
+
+    #[test]
+    fn bootstrap_rejects_mismatched_worker_types() {
+        assert_bootstrap_mismatch::<AppEmpty, LargeMessages>();
+    }
 
     #[test]
     fn main_to_worker_complexes_round_trip() {

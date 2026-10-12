@@ -61,17 +61,13 @@ where
             match msg {
                 MainToWorker::<App1>::BootstrapMpsc(b) => {
                     info!("Received main channel endpoints");
-                    // SAFETY: this is set only once. `set_main_ui_tx()` asserts
-                    // on that fact. That of course doesn't fully guarantee that
-                    // the pointer we receive is valid. We simply have to trust
-                    // that mainthread.rs sends us a valid `Box::into_raw() of a
-                    // `BootstrapMpsc::<App1, App2>`.
-                    //
-                    // It may be possible for an application to set up the
-                    // worker and main with different application specific
-                    // extensions. Don't Do That.
+                    // SAFETY: mainthread.rs transfers a live, unclaimed
+                    // envelope from into_ptr. This still trusts the sender's
+                    // pointer validity and single-transfer ownership. from_ptr
+                    // checks TypeId before interpreting the endpoint types.
                     let BootstrapMpsc { tx, rx } =
-                        unsafe { BootstrapMpsc::<App1, App2>::from_ptr(b) };
+                        unsafe { BootstrapMpsc::<App1, App2>::from_ptr(b) }
+                            .map_err(|e| JsValue::from_str(&e.to_string()))?;
                     set_main_ui_tx(tx);
                     ready(rx);
                 }
