@@ -3,7 +3,7 @@
 //! Takes a stream of data, runs an FFT on it, and outputs it as a stream.
 //! The consumer of the stream needs to know what the FFT size is, or it won't
 //! be able to make sense of it.
-use crate::Result;
+use crate::{Error, Result};
 use rustfft::FftPlanner;
 
 use crate::block::{Block, BlockRet};
@@ -38,19 +38,21 @@ pub struct FftStream {
 
 impl FftStream {
     /// Create a new `FftStream`.
-    #[must_use]
-    pub fn new(src: ReadStream<Complex>, size: usize) -> (Self, ReadStream<Complex>) {
-        assert_ne!(size, 0, "FFT size must be nonzero");
+    ///
+    /// Returns an error for a zero FFT size or a frame larger than either
+    /// stream's capacity. Validation precedes FFT planning and allocation.
+    pub fn new(src: ReadStream<Complex>, size: usize) -> Result<(Self, ReadStream<Complex>)> {
+        let output_capacity = crate::stream::DEFAULT_STREAM_SIZE / std::mem::size_of::<Complex>();
+        if size == 0 || size > src.total_size() || size > output_capacity {
+            return Err(Error::msg(
+                "FFT size must be nonzero and fit stream capacity",
+            ));
+        }
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
         let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()].into_boxed_slice();
         let (dst, dr) = crate::stream::new_stream();
-        assert!(
-            size <= dst.free(),
-            "FFT size ({size}) must be no bigger than stream size ({})",
-            dst.free()
-        );
-        (
+        Ok((
             Self {
                 size,
                 fft,
@@ -60,7 +62,7 @@ impl FftStream {
                 threaded: false,
             },
             dr,
-        )
+        ))
     }
     /// Turn on or off Rayon multithreading.
     ///
@@ -122,13 +124,20 @@ impl Block for FftStream {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rejects_invalid_frame_sizes_before_planning() {
+        for size in [0, usize::MAX] {
+            assert!(FftStream::new(ReadStream::from_slice(&[Complex::default()]), size).is_err());
+        }
+    }
+
     use super::*;
     use crate::blocks::StreamToPdu;
 
     #[test]
     fn adds_frame_tags() -> Result<()> {
         let src = ReadStream::from_slice(&[Complex::default(); 8]);
-        let (mut fft, out) = FftStream::new(src, 4);
+        let (mut fft, out) = FftStream::new(src, 4)?;
 
         assert!(matches!(fft.work()?, BlockRet::Again));
         let (buf, tags) = out.read_buf()?;
@@ -151,7 +160,7 @@ mod tests {
     #[test]
     fn output_can_be_batched_by_stream_to_pdu() -> Result<()> {
         let src = ReadStream::from_slice(&[Complex::default(); 8]);
-        let (mut fft, fft_out) = FftStream::new(src, 4);
+        let (mut fft, fft_out) = FftStream::new(src, 4)?;
         let (mut to_pdu, pdu_out) = StreamToPdu::new(fft_out, TAG_FRAME, 4, 1);
 
         assert!(matches!(fft.work()?, BlockRet::Again));
