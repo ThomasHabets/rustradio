@@ -255,7 +255,7 @@ mod tests {
                     sps,
                     deviation,
                     Box::new(TedZeroCrossing::new()),
-                    Box::new(crate::iir_filter::IirFilter::new(&[1.0]))
+                    Box::new(crate::iir_filter::IirFilter::new([1.0]).unwrap())
                 )
                 .is_err()
             );
@@ -266,7 +266,7 @@ mod tests {
                 4.0,
                 3.0,
                 Box::new(TedZeroCrossing::new()),
-                Box::new(crate::iir_filter::IirFilter::new(&[1.0]))
+                Box::new(crate::iir_filter::IirFilter::new([1.0]).unwrap())
             )
             .is_ok()
         );
@@ -286,7 +286,7 @@ mod tests {
             4.0,
             0.1,
             Box::new(TedZeroCrossing::new()),
-            Box::new(IirFilter::new(&[0.0001, 0.9999])),
+            Box::new(IirFilter::new([0.0001, 0.9999])?),
         )?;
         let clock = block.out_clock()?.unwrap();
 
@@ -310,7 +310,7 @@ mod tests {
             4.0,
             1.0,
             Box::new(TedZeroCrossing::new()),
-            Box::new(IirFilter::new(&[1.0])),
+            Box::new(IirFilter::new([1.0])?),
         )?;
 
         assert!(matches![b.work()?, BlockRet::Again]);
@@ -326,7 +326,7 @@ mod tests {
             4.0,
             1.0,
             Box::new(TedZeroCrossing::new()),
-            Box::new(IirFilter::new(&[1.0])),
+            Box::new(IirFilter::new([1.0])?),
         )?;
         let mut output = block.dst.write_buf()?;
         let available = output.len() - 1;

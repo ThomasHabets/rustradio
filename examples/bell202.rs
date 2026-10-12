@@ -237,7 +237,9 @@ pub fn main() -> Result<()> {
                 samp_rate_2 / baud,
                 opt.symbol_max_deviation,
                 Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
-                Box::new(rustradio::iir_filter::IirFilter::new(&opt.symbol_taps)),
+                Box::new(rustradio::iir_filter::IirFilter::new(
+                    opt.symbol_taps.as_slice()
+                )?),
             )?,
             BinarySlicer::new(prev)?,
             NrziDecode::new(prev)?,

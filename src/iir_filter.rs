@@ -63,13 +63,19 @@ impl<T> IirFilter<T>
 where
     T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T>,
 {
-    /// Create new IIR from the provided taps.
-    pub fn new(taps: &[T]) -> Self {
-        assert!(!taps.is_empty());
-        Self {
-            taps: taps.into(),
-            buf: VecDeque::new(),
+    /// Create an IIR filter, taking ownership of its fixed tap storage.
+    ///
+    /// Owned boxed taps are reused; borrowed slices are copied. Empty taps
+    /// return an error before filter history is allocated.
+    pub fn new(taps: impl Into<Box<[T]>>) -> crate::Result<Self> {
+        let taps = taps.into();
+        if taps.is_empty() {
+            return Err(crate::Error::msg("IIR taps must be nonempty"));
         }
+        Ok(Self {
+            taps,
+            buf: VecDeque::new(),
+        })
     }
 }
 
@@ -127,15 +133,29 @@ where
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    #[test]
+    fn rejects_empty_taps_and_reuses_owned_storage() -> crate::Result<()> {
+        assert!(IirFilter::<Float>::new([]).is_err());
+        let taps = vec![0.5f32, 0.5].into_boxed_slice();
+        let allocation = taps.as_ptr();
+        let mut filter = IirFilter::new(taps)?;
+        assert_eq!(filter.taps.as_ptr(), allocation);
+        assert_eq!(filter.filter(2.0), 1.0);
+        assert_eq!(filter.filter(2.0), 1.5);
+        let mut copied = IirFilter::new(&[1.0f32, 0.0][..])?;
+        assert_eq!(copied.filter(2.0), 2.0);
+        Ok(())
+    }
+
     use super::*;
     use crate::Result;
 
     #[test]
     fn zero_pole() -> Result<()> {
-        let mut f = IirFilter::new(&[1.0]);
+        let mut f = IirFilter::new([1.0])?;
         assert_eq!(f.filter(123.0), 123.0);
         assert_eq!(f.filter(123.0), 123.0);
-        let mut f = IirFilter::new(&[-0.5]);
+        let mut f = IirFilter::new([-0.5])?;
         assert_eq!(f.filter(402.0), -201.0);
         assert_eq!(f.filter(402.0), -201.0);
         Ok(())
@@ -143,12 +163,12 @@ mod tests {
 
     #[test]
     fn single_pole() -> Result<()> {
-        let mut f = IirFilter::new(&[1.0, 0.0]);
+        let mut f = IirFilter::new([1.0, 0.0])?;
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
 
-        let mut f = IirFilter::new(&[0.9f32, 0.1]);
+        let mut f = IirFilter::new([0.9f32, 0.1])?;
         assert_eq!(f.filter(100.0), 90.0);
         assert_eq!(f.filter(100.0), 99.0);
         assert_eq!(f.filter(100.0), 99.9);
@@ -159,7 +179,7 @@ mod tests {
 
     #[test]
     fn single_pole_clamped() -> Result<()> {
-        let mut f = IirFilter::new(&[1.0, 0.0]);
+        let mut f = IirFilter::new([1.0, 0.0])?;
         assert_eq!(f.filter_clamped(10.0, 0.0, 1.0), 1.0);
         assert_eq!(f.filter_clamped(10.0, 0.0, 1.0), 1.0);
         assert_eq!(f.filter_clamped(10.0, 0.0, 1.0), 1.0);
@@ -169,13 +189,13 @@ mod tests {
 
     #[test]
     fn multi_pole() -> Result<()> {
-        let mut f = IirFilter::new(&[1.0, 0.0, 0.0]);
+        let mut f = IirFilter::new([1.0, 0.0, 0.0])?;
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
         assert_eq!(f.filter(10.0), 10.0);
 
-        let mut f = IirFilter::new(&[1.0f32, 0.9, 0.1]);
+        let mut f = IirFilter::new([1.0f32, 0.9, 0.1])?;
         assert_eq!(f.filter(100.0), 100.0);
         assert_eq!(f.filter(100.0), 190.0);
         assert_eq!(f.filter(100.0), 281.0);
@@ -186,7 +206,7 @@ mod tests {
 
     #[test]
     fn filled() -> Result<()> {
-        let mut f = IirFilter::new(&[1.0f32, 0.9, 0.1]);
+        let mut f = IirFilter::new([1.0f32, 0.9, 0.1])?;
         f.fill(100.0);
         assert_eq!(f.filter(100.0), 200.0);
         assert_eq!(f.filter(100.0), 290.0);
@@ -196,7 +216,7 @@ mod tests {
 
     #[test]
     fn fill_replaces_existing_history() -> Result<()> {
-        let mut f = IirFilter::new(&[1.0f32, 1.0, 1.0]);
+        let mut f = IirFilter::new([1.0f32, 1.0, 1.0])?;
         f.fill(1.0);
         assert_eq!(f.filter(2.0), 4.0);
         f.fill(1.0);
