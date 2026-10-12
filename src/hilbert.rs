@@ -53,7 +53,7 @@ impl Hilbert {
                 ntaps,
                 dst,
                 history: vec![0.0; ntaps].into_boxed_slice(),
-                filter: Fir::new(&taps),
+                filter: Fir::new(taps),
                 threaded: false,
             },
             dr,

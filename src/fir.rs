@@ -192,14 +192,13 @@ impl<T> Fir<T>
 where
     T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + AlgebraicOps,
 {
-    /// Create new FIR.
+    /// Create new FIR, taking ownership of taps and reversing them in place.
     #[must_use]
-    pub fn new(taps: impl AsRef<[T]>) -> Self {
-        let taps = taps.as_ref();
+    pub fn new(taps: impl Into<Box<[T]>>) -> Self {
+        let mut taps = taps.into();
         assert!(!taps.is_empty());
-        Self {
-            taps: taps.iter().copied().rev().collect(),
-        }
+        taps.reverse();
+        Self { taps }
     }
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
@@ -379,7 +378,7 @@ where
         let translator = translate.map_or_else(T::no_translation, |(samp_rate, freq)| {
             T::new_translator(&mut taps, samp_rate, freq, deci)
         });
-        let (mut block, stream) = FirFilter::new(src, &taps);
+        let (mut block, stream) = FirFilter::new(src, taps);
         block.deci = deci;
         block.translator = translator;
         (block, stream)
@@ -417,9 +416,9 @@ where
             translate: None,
         }
     }
-    /// Create Fir block given taps.
-    pub fn new(src: ReadStream<T>, taps: impl AsRef<[T]>) -> (Self, ReadStream<T>) {
-        let taps = taps.as_ref();
+    /// Create FIR block, taking ownership of the supplied taps.
+    pub fn new(src: ReadStream<T>, taps: impl Into<Box<[T]>>) -> (Self, ReadStream<T>) {
+        let taps = taps.into();
         assert!(!taps.is_empty());
         let (dst, dr) = crate::stream::new_stream();
         (
@@ -740,6 +739,16 @@ pub fn hilbert(window: &Window) -> Box<[Float]> {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    #[test]
+    fn owned_taps_keep_their_allocation() {
+        let taps: Box<[Float]> = vec![1.0, 2.0, 3.0].into_boxed_slice();
+        let allocation = taps.as_ptr();
+        let (block, _) = FirFilter::builder(taps).build(ReadStream::from_slice(&[1.0, 0.0, 0.0]));
+        assert_eq!(block.fir.taps.as_ptr(), allocation);
+        assert_eq!(&*block.fir.taps, &[3.0, 2.0, 1.0]);
+        assert_eq!(block.fir.filter(&[1.0, 0.0, 0.0]), 3.0);
+    }
+
     use super::*;
     use crate::Repeat;
     use crate::blocks::VectorSource;
@@ -991,7 +1000,7 @@ mod tests {
             Complex::new(1.0, 0.0),
             Complex::new(0.0, 0.2),
         ];
-        let filter = Fir::new(&taps);
+        let filter = Fir::new(taps);
         assert_almost_equal_complex(
             &filter.filter_n(&input, 1),
             &[
