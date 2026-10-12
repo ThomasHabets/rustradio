@@ -27,7 +27,7 @@ impl<T: Sample> FileSourceBuilder<T> {
     /// Build the `FileSource`.
     pub fn build(self) -> Result<(FileSource<T>, ReadStream<T>)> {
         let (mut block, dst) = FileSource::new(self.filename)?;
-        block.repeat(self.repeat);
+        block.set_repeat(self.repeat);
         Ok((block, dst))
     }
 
@@ -79,7 +79,7 @@ impl<T: Sample> FileSource<T> {
         ))
     }
     /// Set repeat mode.
-    pub fn repeat(&mut self, r: Repeat) {
+    pub fn set_repeat(&mut self, r: Repeat) {
         self.repeat = r;
     }
 }
