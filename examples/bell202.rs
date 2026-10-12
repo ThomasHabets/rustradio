@@ -217,7 +217,7 @@ pub fn main() -> Result<()> {
                 .interp(samp_rate_2 as usize)
                 .build(prev)?,
             QuadratureDemod::new(prev, 1.0),
-            Hilbert::new(prev, 65, &rustradio::window::WindowType::Hamming),
+            Hilbert::new(prev, 65, &rustradio::window::WindowType::Hamming)?,
             QuadratureDemod::new(prev, 1.0),
             FftFilterFloat::new(
                 prev,

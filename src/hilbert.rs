@@ -16,7 +16,7 @@ use crate::block::{Block, BlockRet};
 use crate::fir::Fir;
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::WindowType;
-use crate::{Complex, Float, Result};
+use crate::{Complex, Error, Float, Result};
 
 /// Hilbert transformer block.
 #[derive(rustradio_macros::Block)]
@@ -33,21 +33,22 @@ pub struct Hilbert {
 }
 
 impl Hilbert {
-    /// Create new hilber transformer with this many taps.
-    #[must_use]
+    /// Create a Hilbert transformer with this many taps.
+    ///
+    /// Returns an error unless the tap count is odd and greater than one.
     pub fn new(
         src: ReadStream<Float>,
         ntaps: usize,
         window_type: &WindowType,
-    ) -> (Self, ReadStream<Complex>) {
-        // TODO: take window function.
-        assert!(
-            ntaps > 1 && ntaps & 1 == 1,
-            "hilbert filter len must be odd and greater than 1"
-        );
+    ) -> Result<(Self, ReadStream<Complex>)> {
+        if ntaps <= 1 || ntaps & 1 == 0 {
+            return Err(Error::msg(
+                "Hilbert tap count must be odd and greater than one",
+            ));
+        }
         let taps = crate::fir::hilbert(&window_type.make_window(ntaps));
         let (dst, dr) = crate::stream::new_stream();
-        (
+        Ok((
             Self {
                 src,
                 ntaps,
@@ -57,7 +58,7 @@ impl Hilbert {
                 threaded: false,
             },
             dr,
-        )
+        ))
     }
     /// Turn on or off Rayon multithreading.
     ///
@@ -112,5 +113,31 @@ impl Block for Hilbert {
         self.history.clone_from_slice(&iv[n..len]);
         ii.consume(n);
         Ok(BlockRet::Again)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_invalid_tap_counts() {
+        for ntaps in [0, 1, 2, 4] {
+            assert!(
+                Hilbert::new(ReadStream::from_slice(&[0.0]), ntaps, &WindowType::Hamming).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn valid_transform_outputs_one_sample_per_input() -> Result<()> {
+        let (mut block, out) = Hilbert::new(
+            ReadStream::from_slice(&[1.0, 2.0, 3.0]),
+            3,
+            &WindowType::Hamming,
+        )?;
+        assert!(matches!(block.work()?, BlockRet::Again));
+        assert_eq!(out.read_buf()?.0.len(), 3);
+        Ok(())
     }
 }

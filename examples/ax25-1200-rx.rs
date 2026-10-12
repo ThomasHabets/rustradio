@@ -239,7 +239,7 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        Hilbert::new(prev, 65, &WindowType::Hamming),
+        Hilbert::new(prev, 65, &WindowType::Hamming)?,
         // Can't use FastFM here, because it doesn't work well with
         // preemph'd input.
         QuadratureDemod::new(prev, 1.0),

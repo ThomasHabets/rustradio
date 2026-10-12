@@ -78,7 +78,7 @@ fn main() -> Result<()> {
             .interp(new_samp_rate as usize)
             .build(prev)?,
         QuadratureDemod::new(prev, 1.0),
-        Hilbert::new(prev, 65, &WindowType::Hamming),
+        Hilbert::new(prev, 65, &WindowType::Hamming)?,
         // Can't use FastFM here, because it doesn't work well with
         // preemph'd input.
         QuadratureDemod::new(prev, 1.0),

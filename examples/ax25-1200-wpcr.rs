@@ -106,7 +106,7 @@ fn main() -> Result<()> {
         prev,
         // Demod.
         QuadratureDemod::new(prev, 1.0),
-        Hilbert::new(prev, 65, &WindowType::Hamming),
+        Hilbert::new(prev, 65, &WindowType::Hamming)?,
         QuadratureDemod::new(prev, 1.0),
         // Filter.
         FftFilterFloat::new(
