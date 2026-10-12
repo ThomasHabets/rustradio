@@ -21,12 +21,14 @@ pub struct TcpSource<T: Sample> {
 }
 
 impl<T: Sample> TcpSource<T> {
-    /// Create new TCP source block.
-    pub fn new(addr: &str, port: u16) -> Result<(Self, ReadStream<T>)> {
+    /// Connect to an address (such as a `SocketAddr` or `(host, port)`) and
+    /// create a TCP source block.
+    pub fn new(addr: impl std::net::ToSocketAddrs) -> Result<(Self, ReadStream<T>)> {
+        let stream = std::net::TcpStream::connect(addr)?;
         let (dst, dr) = crate::stream::new_stream();
         Ok((
             Self {
-                stream: std::net::TcpStream::connect(format!("{addr}:{port}"))?,
+                stream,
                 buf: Vec::new(),
                 dst,
             },
@@ -114,13 +116,7 @@ mod tests {
             barrier.wait();
             stream.write_all(&data[pos + n..]).unwrap();
         });
-        let (mut src, src_out): (TcpSource<Float>, _) = match addr {
-            std::net::SocketAddr::V4(_) => panic!("Where did IPv4 come from?"),
-            std::net::SocketAddr::V6(a) => {
-                println!("Connecting to port {}", a.port());
-                TcpSource::new("[::1]", a.port())?
-            }
-        };
+        let (mut src, src_out) = TcpSource::<Float>::new(addr)?;
         barrier.wait();
         src.work()?;
         {
