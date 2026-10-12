@@ -19,14 +19,16 @@ pub struct CorrelateAccessCode {
 }
 
 impl CorrelateAccessCode {
-    /// Create a correlator with an owned, fixed-length access code.
+    /// Create a correlator with an owned access code, returning an error if empty.
     pub fn new(
         src: ReadStream<u8>,
         code: impl Into<Box<[u8]>>,
         allowed_diffs: usize,
     ) -> crate::Result<(Self, ReadStream<u8>)> {
         let code = code.into();
-        assert!(!code.is_empty(), "access code must be nonempty");
+        if code.is_empty() {
+            return Err(crate::Error::msg("access code must be nonempty"));
+        }
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
@@ -73,7 +75,7 @@ pub struct CorrelateAccessCodeTag {
 }
 
 impl CorrelateAccessCodeTag {
-    /// Create a tagged correlator with an owned, fixed-length access code.
+    /// Create a tagged correlator with an owned access code, returning an error if empty.
     pub fn new<S: Into<String>>(
         src: ReadStream<u8>,
         code: impl Into<Box<[u8]>>,
@@ -81,7 +83,9 @@ impl CorrelateAccessCodeTag {
         allowed_diffs: usize,
     ) -> crate::Result<(Self, ReadStream<u8>)> {
         let code = code.into();
-        assert!(!code.is_empty(), "access code must be nonempty");
+        if code.is_empty() {
+            return Err(crate::Error::msg("access code must be nonempty"));
+        }
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
@@ -130,16 +134,15 @@ mod tests {
     use crate::block::Block;
 
     #[test]
-    #[should_panic(expected = "access code must be nonempty")]
     fn rejects_empty_code() {
-        let _ = CorrelateAccessCode::new(ReadStream::from_slice(&[]), vec![], 0).unwrap();
+        assert!(CorrelateAccessCode::new(ReadStream::from_slice(&[]), vec![], 0).is_err());
     }
 
     #[test]
-    #[should_panic(expected = "access code must be nonempty")]
     fn tagged_rejects_empty_code() {
-        let _ =
-            CorrelateAccessCodeTag::new(ReadStream::from_slice(&[]), vec![], "sync", 0).unwrap();
+        assert!(
+            CorrelateAccessCodeTag::new(ReadStream::from_slice(&[]), vec![], "sync", 0).is_err()
+        );
     }
 
     #[test]
