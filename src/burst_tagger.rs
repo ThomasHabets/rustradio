@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn tag_it() -> Result<()> {
-        let (mut src, src_out) = VectorSource::new((0..100).map(|i| i as u32).collect());
+        let (mut src, src_out) = VectorSource::new((0..100).map(|i| i as u32).collect::<Vec<_>>());
         let (mut trigger, trigger_out) = VectorSource::new(
             (0..100)
                 .map(|i| match i as u32 {
@@ -110,7 +110,7 @@ mod tests {
                     80..90 => 0.3,
                     90.. => 0.2,
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
         );
         let (mut b, b_out) = BurstTagger::new(src_out, trigger_out, 0.25, "burst");
         let mut sink = VectorSink::new(b_out, 1000);

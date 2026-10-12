@@ -56,7 +56,7 @@ where
 {
     #[rustradio(out)]
     dst: WriteStream<T>,
-    data: Vec<T>,
+    data: Box<[T]>,
     repeat: Repeat,
     pos: usize,
     tags: Vec<Tag>,
@@ -65,21 +65,21 @@ where
 impl<T: Sample> VectorSource<T> {
     /// New `VectorSource` builder.
     #[must_use]
-    pub fn builder(data: Vec<T>) -> VectorSourceBuilder<T> {
+    pub fn builder(data: impl Into<Box<[T]>>) -> VectorSourceBuilder<T> {
         let (block, out) = VectorSource::new(data);
         VectorSourceBuilder { block, out }
     }
 
-    /// Create new Vector Source block.
+    /// Create a source, taking ownership of fixed sample storage.
     ///
     /// Optionally the data can repeat.
     #[must_use]
-    pub fn new(data: Vec<T>) -> (Self, ReadStream<T>) {
+    pub fn new(data: impl Into<Box<[T]>>) -> (Self, ReadStream<T>) {
         let (dst, dr) = crate::stream::new_stream();
         (
             Self {
                 dst,
-                data,
+                data: data.into(),
                 repeat: Repeat::finite(1),
                 pos: 0,
                 tags: vec![],

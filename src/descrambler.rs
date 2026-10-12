@@ -234,7 +234,7 @@ mod tests {
         let input: Vec<_> = (0..len).map(|_| rng.random_range(0..=1)).collect();
         let pad: Vec<_> = (0..17).map(|_| rng.random_range(0..=1)).collect();
 
-        let (mut b, prev) = VectorSource::new(input.iter().copied().chain(pad).collect());
+        let (mut b, prev) = VectorSource::new(input.iter().copied().chain(pad).collect::<Vec<_>>());
         b.work().unwrap();
         let (mut b, prev) = NrziEncode::new(prev);
         b.work().unwrap();
