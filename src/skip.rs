@@ -12,7 +12,7 @@ pub struct Skip<T: Sample> {
     src: ReadStream<T>,
     #[rustradio(out)]
     dst: WriteStream<T>,
-    skip: usize,
+    skip: u64,
 }
 
 impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
@@ -25,9 +25,9 @@ impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
 
             // Skip if there's skipping to do.
             if self.skip > 0 {
-                let n = self.skip.min(i.len());
+                let n = self.skip.min(i.len() as u64) as usize;
                 i.consume(n);
-                self.skip -= n;
+                self.skip -= n as u64;
                 continue;
             }
 
@@ -51,6 +51,16 @@ impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn skip_count_can_exceed_a_32_bit_sample_index() -> Result<()> {
+        let count = u64::from(u32::MAX) + 2;
+        let (mut block, out) = Skip::new(ReadStream::from_slice(&[1u8, 2, 3]), count);
+        block.work()?;
+        assert_eq!(block.skip, count - 3);
+        assert!(out.read_buf()?.0.is_empty());
+        Ok(())
+    }
+
     use super::*;
     use crate::block::{Block, BlockRet};
     use crate::blocks::VectorSource;
@@ -65,7 +75,7 @@ mod tests {
                 .repeat(Repeat::finite(2))
                 .build()?;
             while !matches!(ib.work()?, BlockRet::EOF) {}
-            let (mut b, out) = Skip::new(src, skip);
+            let (mut b, out) = Skip::new(src, skip as u64);
             let ret = b.work()?;
             assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");
             let (res, tags) = out.read_buf()?;
