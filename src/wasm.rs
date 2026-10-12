@@ -87,9 +87,13 @@ struct BufferState<T> {
 impl<T: Default> BufferState<T> {
     /// Size in bytes.
     fn new(byte_size: usize) -> Result<Self> {
+        const {
+            assert!(std::mem::size_of::<T>() != 0);
+        }
+
         let member_size = std::mem::size_of::<T>();
-        if member_size == 0 || byte_size == 0 {
-            return Err(Error::msg("unsupported buffer or element size"));
+        if byte_size == 0 {
+            return Err(Error::msg("byte size must not be zero"));
         }
         let size = byte_size / member_size;
         if !byte_size.is_multiple_of(member_size) {

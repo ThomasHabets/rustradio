@@ -394,9 +394,13 @@ impl<T> Buffer<T> {
     where
         T: Copy + Default,
     {
+        const {
+            assert!(std::mem::size_of::<T>() != 0);
+        }
+
         let member_size = std::mem::size_of::<T>();
-        if member_size == 0 || size == 0 || size > isize::MAX as usize / 2 {
-            return Err(Error::msg("unsupported circular buffer or element size"));
+        if size == 0 || size > isize::MAX as usize / 2 {
+            return Err(Error::msg("unsupported circular buffer size"));
         }
         if !size.is_multiple_of(member_size) {
             return Err(Error::msg("buffer size must be a multiple of element size"));
@@ -670,7 +674,6 @@ mod tests {
 
     #[test]
     fn rejects_invalid_buffer_layouts() {
-        assert!(Buffer::<()>::new(4096).is_err());
         assert!(Buffer::<u8>::new(0).is_err());
         assert!(Buffer::<u8>::new(4095).is_err());
         assert!(Buffer::<[u8; 3]>::new(4096).is_err());

@@ -307,12 +307,12 @@ impl<T: Copy> WriteStream<T> {
 ///
 /// Basically anything that GNU Radio would *not* call a message port.
 /// Storage starts with valid default values; zero bits need not represent a
-/// valid element.
+/// valid element. Zero-sized element types are rejected at compile time.
 ///
 /// # Errors
 ///
 /// Returns buffer creation errors, including temporary-file or memory-mapping
-/// failures and unsupported element layouts (such as zero-sized elements).
+/// failures and element layouts incompatible with the fixed buffer size.
 pub fn new_stream<T: Default + Copy>() -> Result<(WriteStream<T>, ReadStream<T>)> {
     let circ = Arc::new(crate::sys::Buffer::new(DEFAULT_STREAM_SIZE)?);
     Ok((WriteStream { circ: circ.clone() }, ReadStream { circ }))

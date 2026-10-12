@@ -36,11 +36,10 @@ impl Block for Messages {
 
 #[test]
 fn unsupported_layout_returns_an_error_through_every_constructor() {
-    assert!(new_stream::<()>().is_err());
-    assert!(WriteStream::<()>::new().is_err());
-    assert!(Mixed::<()>::new().is_err());
     // The fixed buffer byte size cannot hold a whole number of three-byte samples.
     assert!(new_stream::<[u8; 3]>().is_err());
+    assert!(WriteStream::<[u8; 3]>::new().is_err());
+    assert!(Mixed::<[u8; 3]>::new().is_err());
     assert!(rustradio::blocks::VectorSource::new(vec![ThreeBytes::default()]).is_err());
     // Configuring a builder must not allocate an output or panic on this layout.
     let builder = rustradio::blocks::VectorSource::builder(vec![ThreeBytes::default()]);
