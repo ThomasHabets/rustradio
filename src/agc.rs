@@ -59,7 +59,7 @@ impl AgcBuilder {
             }
         }
 
-        let (dst, output) = crate::stream::new_stream();
+        let (dst, output) = crate::stream::new_stream()?;
         Ok((
             Agc {
                 src,
@@ -128,7 +128,7 @@ impl AgcBuilder {
 /// use rustradio::blocks::{Agc, VectorSource};
 /// use rustradio::Complex;
 ///
-/// let (_source, input) = VectorSource::new(vec![Complex::new(0.25, 0.0)]);
+/// let (_source, input) = VectorSource::new(vec![Complex::new(0.25, 0.0)]).unwrap();
 /// let (_agc, _output) = Agc::builder(0.1, 0.001)
 ///     .reference(1.0)
 ///     .max_gain(100.0)

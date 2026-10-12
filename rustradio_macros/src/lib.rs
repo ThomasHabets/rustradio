@@ -28,7 +28,10 @@
 /// ```
 ///
 /// Struct attributes:
-/// * `new`: Generate `new()`, taking input streams and other args.
+/// * `new`: Generate `new()`, taking input streams and other args. Returns
+///   `Result<(block, outputs...)>` when any output is a `WriteStream`,
+///   propagating buffer creation errors. With only `NCWriteStream` outputs or
+///   no outputs, the constructor remains infallible.
 /// * `out`: Generate `out()`, returning all output streams.
 /// * `crate`: Block is in the main Rustradio crate.
 /// * `sync`: Block is "one in, one out" via `process_sync()` instead of

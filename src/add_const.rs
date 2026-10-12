@@ -9,14 +9,13 @@ use crate::stream::{ReadStream, Tag, WriteStream};
 /// This is basically example code. We have `AddConst` and `add_const` doing the
 /// same thing.
 #[allow(clippy::type_complexity)]
-#[must_use]
 pub fn add_const<T>(
     src: ReadStream<T>,
     val: T,
-) -> (
+) -> crate::Result<(
     crate::convert::Map<T, T, impl for<'a> FnMut(T, &'a [Tag]) -> (T, Cow<'a, [Tag]>)>,
     ReadStream<T>,
-)
+)>
 where
     T: Sample + std::ops::Add<Output = T>,
 {
@@ -34,10 +33,10 @@ where
 /// let mut graph = Graph::new();
 ///
 /// // Add a constant value. Could just as well use AddConst instead of Add.
-/// let (src, src_out) = SignalSourceFloat::new(44100.0, 1000.0, 1.0);
+/// let (src, src_out) = SignalSourceFloat::new(44100.0, 1000.0, 1.0).unwrap();
 ///
 /// // Sum up the streams.
-/// let (sum, sum_out) = AddConst::new(src_out, 1.0);
+/// let (sum, sum_out) = AddConst::new(src_out, 1.0).unwrap();
 ///
 /// graph.add(Box::new(src));
 /// graph.add(Box::new(sum));

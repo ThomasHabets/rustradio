@@ -481,7 +481,7 @@ impl<T: IqSample> IqStreamSource<T> {
             notify: notify_rx,
             sample_size: T::size(),
         };
-        let (dst, out) = new_stream();
+        let (dst, out) = new_stream()?;
         Ok((
             Self {
                 dst: Some(dst),

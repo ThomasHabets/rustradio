@@ -60,10 +60,10 @@ mod tests {
 
     #[test]
     fn empty() -> crate::Result<()> {
-        let (mut src, src_out) = VectorSource::new(vec![]);
+        let (mut src, src_out) = VectorSource::new(vec![])?;
         let r = src.work()?;
         assert!(matches![r, BlockRet::EOF], "Want EOF, got {r:?}");
-        let (mut enc, enc_out) = RtlSdrEncode::new(src_out);
+        let (mut enc, enc_out) = RtlSdrEncode::new(src_out)?;
         assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = enc_out.read_buf()?;
         assert_eq!(res.len(), 0);
@@ -76,9 +76,9 @@ mod tests {
             Complex::new(-1.016, -0.93600005),
             Complex::new(-0.85600007, -0.93600005),
             Complex::new(-1.016, -0.91200006),
-        ]);
+        ])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (mut enc, enc_out) = RtlSdrEncode::new(src_out);
+        let (mut enc, enc_out) = RtlSdrEncode::new(src_out)?;
         assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = enc_out.read_buf()?;
         assert_eq!(res.slice(), &[0, 10, 20, 10, 0, 13]);
@@ -87,9 +87,9 @@ mod tests {
 
     #[test]
     fn clips_to_byte_range() -> crate::Result<()> {
-        let (mut src, src_out) = VectorSource::new(vec![Complex::new(-10.0, 10.0)]);
+        let (mut src, src_out) = VectorSource::new(vec![Complex::new(-10.0, 10.0)])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (mut enc, enc_out) = RtlSdrEncode::new(src_out);
+        let (mut enc, enc_out) = RtlSdrEncode::new(src_out)?;
         assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = enc_out.read_buf()?;
         assert_eq!(res.slice(), &[0, 255]);

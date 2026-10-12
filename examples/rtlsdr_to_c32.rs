@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         g,
         prev,
         FileSource::new(opt.input.to_str().unwrap())?,
-        RtlSdrDecode::new(prev),
+        RtlSdrDecode::new(prev)?,
     ];
     g.add(Box::new(FileSink::new(
         prev,

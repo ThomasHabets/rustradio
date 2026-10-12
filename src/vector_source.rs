@@ -9,41 +9,40 @@ use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 
 /// `VectorSource` builder.
 pub struct VectorSourceBuilder<T: Sample> {
-    block: VectorSource<T>,
-    out: ReadStream<T>,
+    data: Box<[T]>,
+    repeat: Repeat,
+    tags: Vec<Tag>,
 }
 
 impl<T: Sample> VectorSourceBuilder<T> {
     /// Set a finite repeat count.
     #[must_use]
-    pub fn repeat(mut self, r: Repeat) -> VectorSourceBuilder<T> {
-        self.block.set_repeat(r);
+    pub fn repeat(mut self, r: Repeat) -> Self {
+        self.repeat = r;
         self
     }
     /// Populate tags.
     #[must_use]
-    pub fn tags(mut self, tags: &[Tag]) -> VectorSourceBuilder<T> {
-        self.block.tags.extend(tags.iter().cloned());
+    pub fn tags(mut self, tags: &[Tag]) -> Self {
+        self.tags.extend(tags.iter().cloned());
         self
     }
-    /// Build the `VectorSource`.
+    /// Validate tags and allocate the output stream.
+    ///
+    /// Returns an error for tags outside the data or stream creation failures.
     pub fn build(self) -> Result<(VectorSource<T>, ReadStream<T>)> {
-        if !self.block.tags.is_empty() {
-            let maxtag = self
-                .block
-                .tags
-                .iter()
-                .map(super::stream::Tag::pos)
-                .max()
-                .expect("a nonempty tag list must have a maximum");
-            if maxtag >= self.block.data.len() {
-                return Err(Error::msg(format!(
-                    "provided tags with position up to {maxtag}, but the data is only {} samples",
-                    self.block.data.len()
-                )));
-            }
+        if let Some(maxtag) = self.tags.iter().map(Tag::pos).max()
+            && maxtag >= self.data.len()
+        {
+            return Err(Error::msg(format!(
+                "provided tags with position up to {maxtag}, but the data is only {} samples",
+                self.data.len()
+            )));
         }
-        Ok((self.block, self.out))
+        let (mut block, out) = VectorSource::new(self.data)?;
+        block.repeat = self.repeat;
+        block.tags = self.tags;
+        Ok((block, out))
     }
 }
 
@@ -66,17 +65,19 @@ impl<T: Sample> VectorSource<T> {
     /// New `VectorSource` builder.
     #[must_use]
     pub fn builder(data: impl Into<Box<[T]>>) -> VectorSourceBuilder<T> {
-        let (block, out) = VectorSource::new(data);
-        VectorSourceBuilder { block, out }
+        VectorSourceBuilder {
+            data: data.into(),
+            repeat: Repeat::finite(1),
+            tags: Vec::new(),
+        }
     }
 
     /// Create a source, taking ownership of fixed sample storage.
     ///
     /// Optionally the data can repeat.
-    #[must_use]
-    pub fn new(data: impl Into<Box<[T]>>) -> (Self, ReadStream<T>) {
-        let (dst, dr) = crate::stream::new_stream();
-        (
+    pub fn new(data: impl Into<Box<[T]>>) -> Result<(Self, ReadStream<T>)> {
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 dst,
                 data: data.into(),
@@ -85,7 +86,7 @@ impl<T: Sample> VectorSource<T> {
                 tags: vec![],
             },
             dr,
-        )
+        ))
     }
 
     /// Set repeat status.
@@ -151,14 +152,14 @@ mod tests {
 
     #[test]
     fn empty() -> Result<()> {
-        let (mut src, _) = VectorSource::<u8>::new(vec![]);
+        let (mut src, _) = VectorSource::<u8>::new(vec![])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         Ok(())
     }
 
     #[test]
     fn some() -> Result<()> {
-        let (mut src, os) = VectorSource::new(vec![1u8, 2, 3]);
+        let (mut src, os) = VectorSource::new(vec![1u8, 2, 3])?;
         let r = src.work()?;
         assert!(matches![r, BlockRet::EOF], "res: {r:?}");
         let (res, tags) = os.read_buf()?;
@@ -251,7 +252,7 @@ mod tests {
 
     #[test]
     fn max() -> Result<()> {
-        let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE]);
+        let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (res, _) = os.read_buf()?;
         assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
@@ -260,7 +261,7 @@ mod tests {
 
     #[test]
     fn very_large() -> Result<()> {
-        let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE + 100]);
+        let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE + 100])?;
         assert!(matches![src.work()?, BlockRet::Again]);
         {
             let (res, _) = os.read_buf()?;

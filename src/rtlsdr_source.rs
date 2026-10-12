@@ -99,6 +99,7 @@ impl RtlSdrSource {
             )));
         }
 
+        let (dst, dr) = crate::stream::new_stream()?;
         let (tx, rx) = mpsc::sync_channel(MAX_CHUNKS_IN_FLIGHT);
         let (cmd_tx, cmd_rx) = mpsc::channel::<RtlSdrCommand>();
         let ctrl = RtlSdrControl { tx: cmd_tx };
@@ -156,7 +157,6 @@ impl RtlSdrSource {
                 }
             })?;
         assert_eq!(rx.recv()?, Vec::<u8>::new());
-        let (dst, dr) = crate::stream::new_stream();
         Ok((
             Self {
                 rx,

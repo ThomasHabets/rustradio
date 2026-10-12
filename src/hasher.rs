@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn emits_hash_when_input_closes() -> Result<()> {
-        let (tx, rx) = crate::stream::new_stream();
+        let (tx, rx) = crate::stream::new_stream()?;
         {
             let mut w = tx.write_buf()?;
             w.fill_from_slice(b"abc");
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn emits_hash_when_dropped() -> Result<()> {
-        let (tx, rx) = crate::stream::new_stream();
+        let (tx, rx) = crate::stream::new_stream()?;
         {
             let mut w = tx.write_buf()?;
             w.fill_from_slice(b"abc");

@@ -34,7 +34,7 @@ where
 /// use rustradio::graph::GraphRunner;
 /// use rustradio::agraph::AsyncGraph;
 /// use rustradio::blocks::{VectorSource,NullSink};
-/// let (src, prev) = VectorSource::new(vec![0u8; 10]);
+/// let (src, prev) = VectorSource::new(vec![0u8; 10]).unwrap();
 /// let sink = NullSink::new(prev);
 /// let mut g = AsyncGraph::new();
 /// g.add(Box::new(src));
@@ -147,7 +147,7 @@ mod tests {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{NullSink, VectorSource};
         use crate::graph::GraphRunner;
-        let (src, prev) = VectorSource::new(vec![0u8; 10]);
+        let (src, prev) = VectorSource::new(vec![0u8; 10])?;
         let sink = NullSink::new(prev);
         let mut g = AsyncGraph::new();
         g.add(Box::new(src));
@@ -161,8 +161,8 @@ mod tests {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{Map, VectorSink, VectorSource};
         use crate::graph::GraphRunner;
-        let (src, prev) = VectorSource::new(vec![1u8, 2, 3]);
-        let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2, Cow::Borrowed(tags)));
+        let (src, prev) = VectorSource::new(vec![1u8, 2, 3])?;
+        let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2, Cow::Borrowed(tags)))?;
         let sink = VectorSink::new(prev, 100);
         let hook = sink.hook();
         let mut g = AsyncGraph::new();
@@ -180,10 +180,10 @@ mod tests {
         use crate::blocks::{Map, VectorSink, VectorSource};
         use crate::graph::GraphRunner;
         let n = 1_000_000;
-        let (src, prev) = VectorSource::new(vec![Complex::new(1.0, 0.0); n]);
+        let (src, prev) = VectorSource::new(vec![Complex::new(1.0, 0.0); n])?;
         let (mul, prev) = Map::new(prev, "double", move |x, tags| {
             (x * 2.0, Cow::Borrowed(tags))
-        });
+        })?;
         let sink = VectorSink::new(prev, n * 2);
         let hook = sink.hook();
         let mut g = AsyncGraph::new();

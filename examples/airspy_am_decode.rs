@@ -55,7 +55,7 @@ pub fn main() -> Result<()> {
             let i = (v & 0xffff) as u16 as i16;
             let q = ((v >> 16) & 0xffff) as u16 as i16;
             Complex::new(i as Float, q as Float) / 1000.0
-        }),
+        })?,
         FftFilter::new(
             prev,
             rustradio::fir::low_pass_complex(
@@ -64,8 +64,8 @@ pub fn main() -> Result<()> {
                 10_000.0,
                 &rustradio::window::WindowType::Hamming,
             )
-        ),
-        Map::keep_tags(prev, "AM decode", |v| v.norm()),
+        )?,
+        Map::keep_tags(prev, "AM decode", |v| v.norm())?,
         FftFilterFloat::new(
             prev,
             &rustradio::fir::low_pass(
@@ -74,12 +74,12 @@ pub fn main() -> Result<()> {
                 500.0,
                 &rustradio::window::WindowType::Hamming,
             )
-        ),
+        )?,
         RationalResampler::builder()
             .deci(opt.sample_rate as usize)
             .interp(opt.audio_rate as usize)
             .build(prev)?,
-        MultiplyConst::new(prev, opt.volume),
+        MultiplyConst::new(prev, opt.volume)?,
     ];
 
     if true {

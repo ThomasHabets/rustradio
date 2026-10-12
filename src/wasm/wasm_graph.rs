@@ -193,8 +193,8 @@ mod tests {
     }
     #[test]
     fn external_pending_does_not_interrupt_local_progress() -> crate::Result<()> {
-        let (writer, input) = crate::stream::new_stream();
-        let (writer2, output) = crate::stream::new_stream();
+        let (writer, input) = crate::stream::new_stream()?;
+        let (writer2, output) = crate::stream::new_stream()?;
         let sink = crate::vector_sink::VectorSink::new(output, 1);
         let result = sink.hook();
         let mut graph = WasmGraph::new();
@@ -221,7 +221,7 @@ mod tests {
     }
     #[test]
     fn completed_source_closes_output_before_graph_finishes() -> crate::Result<()> {
-        let (source, input) = crate::vector_source::VectorSource::new(vec![1.0f32]);
+        let (source, input) = crate::vector_source::VectorSource::new(vec![1.0f32])?;
         let finished = Arc::new(AtomicBool::new(false));
         let mut graph = WasmGraph::new();
         graph.add(Box::new(ClosingSink {

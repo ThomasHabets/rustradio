@@ -31,8 +31,8 @@ use rustradio::mtgraph::MTGraph;
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
 let (src, prev) = FileSource::new("/dev/null")?;
-let (dec, prev) = RtlSdrDecode::new(prev);
-let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
+let (dec, prev) = RtlSdrDecode::new(prev)?;
+let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0))?;
 let sink = NullSink::new(prev);
 let mut g = MTGraph::new();
 g.add(Box::new(src));
@@ -246,11 +246,11 @@ mod tests {
     #[test]
     fn small_test() -> Result<()> {
         use crate::blocks::{AddConst, FloatToComplex, VectorSink, VectorSource, add_const};
-        let (src1, src1_out) = VectorSource::new(vec![2.0 as Float]);
-        let (src2, src2_out) = VectorSource::new(vec![-1.0 as Float]);
-        let (conv, conv_out) = FloatToComplex::new(src1_out, src2_out);
-        let (add1, add1_out) = AddConst::new(conv_out, Complex::new(1.1, 2.0));
-        let (add2, add2_out) = add_const(add1_out, Complex::new(1.3, -10.0));
+        let (src1, src1_out) = VectorSource::new(vec![2.0 as Float])?;
+        let (src2, src2_out) = VectorSource::new(vec![-1.0 as Float])?;
+        let (conv, conv_out) = FloatToComplex::new(src1_out, src2_out)?;
+        let (add1, add1_out) = AddConst::new(conv_out, Complex::new(1.1, 2.0))?;
+        let (add2, add2_out) = add_const(add1_out, Complex::new(1.3, -10.0))?;
         let sink = VectorSink::new(add2_out, 100);
         let hook = sink.hook();
         let mut g = MTGraph::new();

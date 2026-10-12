@@ -330,7 +330,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 g,
                 prev,
                 FileSource::builder(filename).repeat(repeat).build()?,
-                RtlSdrDecode::new(prev),
+                RtlSdrDecode::new(prev)?,
             ]
         } else {
             blockchain![
@@ -349,14 +349,14 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 g,
                 prev,
                 RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?,
-                RtlSdrDecode::new(prev),
+                RtlSdrDecode::new(prev)?,
             ]
         }
         #[cfg(not(feature = "rtlsdr"))]
         panic!("can't happen, but must be here to compile")
     };
 
-    let (block, spec_tee, prev) = Tee::new(prev);
+    let (block, spec_tee, prev) = Tee::new(prev)?;
     g.add(Box::new(block));
 
     // Send data to spectrum UI.
@@ -371,7 +371,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                         trace!("Failed to write data to UI (probably exiting): {e}");
                     }
                 }
-            })
+            })?
         ];
         g.add(Box::new(NullSink::new(prev)));
     }
@@ -389,12 +389,12 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 1000.0,
                 rustradio::window::WindowType::Hamming,
             )
-        ),
+        )?,
         RationalResampler::builder()
             .deci(samp_rate as usize)
             .interp(samp_rate_2 as usize)
             .build(prev)?,
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         FftFilterFloat::new(
             prev,
             &rustradio::fir::low_pass(
@@ -403,7 +403,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 500.0,
                 rustradio::window::WindowType::Hamming,
             )
-        ),
+        )?,
         RationalResampler::builder()
             .deci(samp_rate_2 as usize)
             .interp(opt.audio_rate as usize)
@@ -414,8 +414,8 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                     trace!("Failed to write data to UI (probably exiting): {e}");
                 }
             }
-        }),
-        MultiplyConst::new(prev, opt.volume),
+        })?,
+        MultiplyConst::new(prev, opt.volume)?,
     ];
 
     if let Some(ref out) = opt.output {
@@ -423,7 +423,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
         let prev = blockchain![
             g,
             prev,
-            AuEncode::new(prev, rustradio::au::Encoding::Pcm16, opt.audio_rate, 1)
+            AuEncode::new(prev, rustradio::au::Encoding::Pcm16, opt.audio_rate, 1)?
         ];
         // Save to file.
         g.add(Box::new(FileSink::new(prev, out, Mode::Overwrite)?));

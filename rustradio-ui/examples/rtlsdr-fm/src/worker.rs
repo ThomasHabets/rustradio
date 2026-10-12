@@ -33,7 +33,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
     use rustradio_ui::worker::FloatPduSink;
 
     let mut g = rustradio::wasm::wasm_graph::WasmGraph::default();
-    let (src, prev, src_tx) = source::WasmSource::<MyWorkerToMain, _>::new(RCV_SOURCE_ID);
+    let (src, prev, src_tx) = source::WasmSource::<MyWorkerToMain, _>::new(RCV_SOURCE_ID)?;
 
     let samp_rate = crate::mainthread::SAMPLE_RATE as f32;
     let filter1 = rustradio::fir::low_pass_complex(
@@ -49,7 +49,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
         (src, prev),
         {
             let mut dropcount = 0;
-            let (tee, a, prev) = Tee::new(prev);
+            let (tee, a, prev) = Tee::new(prev)?;
             let prev = blockchain![
                 g,
                 prev,
@@ -85,7 +85,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
         FirFilter::builder(filter1)
             .deci(DECI as usize)
             .build(prev)?,
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         RationalResampler::builder()
             .deci((samp_rate as usize) / (DECI as usize))
             .interp(AUDIO_SAMPLE_RATE)

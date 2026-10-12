@@ -92,7 +92,7 @@ impl Sample for AppendOnly {
 fn file_sink_serializes_multiple_batches() -> Result<()> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("samples");
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream()?;
     let mut sink = FileSink::new(reader, &path, Mode::Create)?;
     for samples in [
         [AppendOnly(1), AppendOnly(2)],
@@ -124,7 +124,7 @@ impl Write for ShortWriter {
 #[test]
 fn writer_sink_serializes_and_drains_partial_writes() -> Result<()> {
     let output = Arc::new(Mutex::new(Vec::new()));
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream()?;
     let mut sink = WriterSink::new(reader, ShortWriter(output.clone()));
     for batch in [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]] {
         let samples = batch.map(AppendOnly);

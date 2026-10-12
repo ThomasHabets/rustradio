@@ -55,7 +55,7 @@ pub struct ReaderSource<T: Sample> {
 
 impl<T: Sample> ReaderSource<T> {
     pub fn new<R: Read + Send + 'static>(reader: R) -> Result<(Self, ReadStream<T>)> {
-        let (dst, r) = crate::stream::new_stream();
+        let (dst, r) = crate::stream::new_stream()?;
         let (tx, rx) = std::sync::mpsc::sync_channel(2);
         std::thread::Builder::new()
             .name("ReaderSourceReader".to_string())

@@ -747,15 +747,15 @@ fn add_interactive_transmitter(
         (encoder, envelope),
         Map::keep_tags(prev, "OokToComplex", move |level| {
             Complex::new(amplitude * level, 0.0)
-        }),
+        })?,
         {
             let (b, xlat) = rustradio::blocks::SignalSourceComplex::new(
                 opt.sample_rate as f32,
                 soapy.freq_offset as f32,
                 1.0,
-            );
+            )?;
             graph.add(Box::new(b));
-            rustradio::blocks::Multiply::new(prev, xlat)
+            rustradio::blocks::Multiply::new(prev, xlat)?
         },
         {
             let mut sink =
@@ -842,7 +842,7 @@ fn main() -> Result<()> {
         graph,
         prev,
         Agc::new(prev, 0.2, 1e-4)?,
-        ComplexToMag2::new(prev),
+        ComplexToMag2::new(prev)?,
         PwmDecoder::builder(
             opt.threshold,
             us_to_samples(opt.sample_rate, SHORT_US),
@@ -998,7 +998,7 @@ mod tests {
             ]
         );
 
-        let (mut source, input) = rustradio::blocks::VectorSource::new(samples);
+        let (mut source, input) = rustradio::blocks::VectorSource::new(samples)?;
         assert!(matches!(source.work()?, BlockRet::EOF));
         drop(source);
         let (mut decoder, output) = PwmDecoder::builder(

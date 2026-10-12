@@ -8,13 +8,13 @@ use crate::stream::{ReadStream, WriteStream};
 /// The same effect as `NrziDecode` can be had by doing:
 ///
 /// ```text
-/// let (prev, b) = blockchain![g, prev, Tee::new(prev)];
+/// let (prev, b) = blockchain![g, prev, Tee::new(prev).unwrap()];
 /// let prev = blockchain![
 ///     g,
 ///     prev,
-///     Delay::new(prev, 1),
-///     Xor::new(delay, b),
-///     XorConst::new(prev, 1u8),
+///     Delay::new(prev, 1).unwrap(),
+///     Xor::new(delay, b).unwrap(),
+///     XorConst::new(prev, 1u8).unwrap(),
 /// ];
 /// ```
 ///
@@ -78,9 +78,9 @@ mod tests {
 
     #[test]
     fn encode() -> Result<()> {
-        let (mut b, prev) = VectorSource::new(vec![0u8, 0, 0, 0, 1, 1, 1, 1]);
+        let (mut b, prev) = VectorSource::new(vec![0u8, 0, 0, 0, 1, 1, 1, 1])?;
         b.work()?;
-        let (mut b, out) = NrziDecode::new(prev);
+        let (mut b, out) = NrziDecode::new(prev)?;
         b.work()?;
         let (o, _) = out.read_buf()?;
         assert_eq!(o.slice(), &[1, 1, 1, 1, 0, 1, 1, 1]);
@@ -89,9 +89,9 @@ mod tests {
 
     #[test]
     fn decode() -> Result<()> {
-        let (mut b, prev) = VectorSource::new(vec![1u8, 1, 1, 1, 0, 1, 1, 1]);
+        let (mut b, prev) = VectorSource::new(vec![1u8, 1, 1, 1, 0, 1, 1, 1])?;
         b.work()?;
-        let (mut b, out) = NrziEncode::new(prev);
+        let (mut b, out) = NrziEncode::new(prev)?;
         b.work()?;
         let (o, _) = out.read_buf()?;
         assert_eq!(o.slice(), &[0, 0, 0, 0, 1, 1, 1, 1]);
@@ -104,11 +104,11 @@ mod tests {
         let mut rng = rand::rng();
         let len = 1000;
         let data: Vec<_> = (0..len).map(|_| rng.random_range(0..=1)).collect();
-        let (mut b, prev) = VectorSource::new(data.clone());
+        let (mut b, prev) = VectorSource::new(data.clone())?;
         b.work()?;
-        let (mut b, prev) = NrziEncode::new(prev);
+        let (mut b, prev) = NrziEncode::new(prev)?;
         b.work()?;
-        let (mut b, out) = NrziDecode::new(prev);
+        let (mut b, out) = NrziDecode::new(prev)?;
         b.work()?;
         let (out, _) = out.read_buf()?;
         let out = out.slice();

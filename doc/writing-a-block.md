@@ -9,7 +9,7 @@ For simple 1:1 transformations, you can use a `Map` block. For example
 converting from `Complex` to the real part can be done using:
 
 ```
-    Map::keep_tags(prev_stream, "ComplexToReal", |x: Complex| x.re)
+    Map::keep_tags(prev_stream, "ComplexToReal", |x: Complex| x.re)?
 ```
 
 But eventually you'll need to write a real block.
@@ -57,7 +57,10 @@ This derive may become mandatory in the future.
 The derive macro supports generating `new()`. For this generated constructor,
 input streams are passed to the block's `new()` function. After the input
 streams, it needs the untagged fields passed in. The function returns the
-created block, and all output fields.
+created block, and all output fields. If any output is a `WriteStream`,
+the constructor returns this tuple inside `Result`, propagating buffer creation
+errors. Use `?` when constructing the block, including inside `blockchain!`.
+Constructors with only `NCWriteStream` outputs, or no outputs, are infallible.
 
 This means that the input and output streams are part of the block's API.
 

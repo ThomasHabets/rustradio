@@ -274,7 +274,7 @@ impl PwmEncoderBuilder {
     /// or output levels cannot form a valid encoder configuration.
     pub fn build(self, src: NCReadStream<Vec<u8>>) -> Result<(PwmEncoder, ReadStream<Float>)> {
         self.settings.validate()?;
-        Ok(PwmEncoder::from_settings(src, self.settings))
+        PwmEncoder::from_settings(src, self.settings)
     }
 }
 
@@ -530,14 +530,14 @@ impl PwmEncoder {
     fn from_settings(
         src: NCReadStream<Vec<u8>>,
         settings: PwmEncoderSettings,
-    ) -> (Self, ReadStream<Float>) {
-        let (dst, dst_read) = crate::stream::new_stream();
+    ) -> Result<(Self, ReadStream<Float>)> {
+        let (dst, dst_read) = crate::stream::new_stream()?;
         let (command_tx, command_rx) = mpsc::channel();
         let control_tx = PwmEncoderControl {
             tx: command_tx,
             repeated_frames_supported: settings.reset_gap > settings.frame_gap,
         };
-        (
+        Ok((
             Self {
                 src,
                 dst,
@@ -547,7 +547,7 @@ impl PwmEncoder {
                 control_tx,
             },
             dst_read,
-        )
+        ))
     }
 
     /// Return a control handle for changing settings while the graph is running.

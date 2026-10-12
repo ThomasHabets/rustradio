@@ -57,9 +57,9 @@ mod tests {
     fn head() -> Result<()> {
         let indata = vec![1u8, 2, 3, 4, 5, 6];
         for first in 0..9 {
-            let (mut ib, src) = VectorSource::new(indata.clone());
+            let (mut ib, src) = VectorSource::new(indata.clone())?;
             ib.work()?;
-            let (mut b, out) = Head::new(src, first);
+            let (mut b, out) = Head::new(src, first)?;
             let ret = b.work()?;
             if usize::try_from(first)? <= indata.len() {
                 assert!(matches![ret, BlockRet::EOF], "{ret:?}");

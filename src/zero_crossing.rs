@@ -45,15 +45,14 @@ impl ZeroCrossing {
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
     * `max_deviation`: Not currently used.
      */
-    #[must_use]
     pub fn new(
         src: ReadStream<Float>,
         sps: Float,
         max_deviation: Float,
-    ) -> (Self, ReadStream<Float>) {
+    ) -> Result<(Self, ReadStream<Float>)> {
         assert!(sps > 1.0);
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
@@ -66,16 +65,15 @@ impl ZeroCrossing {
                 out_clock: None,
             },
             dr,
-        )
+        ))
     }
 
     /// Return clock stream.
-    #[must_use]
-    pub fn out_clock(&mut self) -> ReadStream<Float> {
+    pub fn out_clock(&mut self) -> Result<ReadStream<Float>> {
         assert!(self.out_clock.is_none());
-        let (w, r) = crate::stream::new_stream();
+        let (w, r) = crate::stream::new_stream()?;
         self.out_clock = Some(w);
-        r
+        Ok(r)
     }
 }
 
@@ -152,7 +150,7 @@ mod tests {
 
     #[test]
     fn full_output_still_updates_crossing_state() -> Result<()> {
-        let (mut block, _output) = ZeroCrossing::new(ReadStream::from_slice(&[1.0; 4]), 4.0, 0.0);
+        let (mut block, _output) = ZeroCrossing::new(ReadStream::from_slice(&[1.0; 4]), 4.0, 0.0)?;
         let mut output = block.dst.write_buf()?;
         let available = output.len() - 1;
         output.slice()[..available].fill(0.0);

@@ -96,7 +96,7 @@ fn main() -> Result<()> {
             .gain(opt.rx_gain)
             .antenna(&opt.rx_antenna)
             .build()?,
-        Head::new(rx, sample_count),
+        Head::new(rx, sample_count)?,
     ];
     let rx_sink = VectorSink::new(rx, sample_count_usize);
     let rx_hook = rx_sink.hook();
@@ -105,8 +105,8 @@ fn main() -> Result<()> {
     let tx = blockchain![
         graph,
         tx,
-        SignalSourceComplex::new(opt.sample_rate as _, opt.tone_frequency as _, 0.05),
-        Head::new(tx, sample_count),
+        SignalSourceComplex::new(opt.sample_rate as _, opt.tone_frequency as _, 0.05)?,
+        Head::new(tx, sample_count)?,
     ];
     graph.add(Box::new(
         UhdSink::builder(&device, opt.frequency, opt.sample_rate)

@@ -63,11 +63,11 @@ mod tests {
     fn simple() -> Result<()> {
         // Set up input.
         let samps: Vec<_> = (0..10).map(|i| i as Float).collect();
-        let (mut iblock, i) = VectorSource::new(samps.clone());
+        let (mut iblock, i) = VectorSource::new(samps.clone())?;
         iblock.work()?;
 
         // Run tee.
-        let (mut tee, out1, out2) = Tee::new(i);
+        let (mut tee, out1, out2) = Tee::new(i)?;
         let ret = tee.work()?;
         assert!(matches![ret, BlockRet::WaitForStream(_, 1)], "{ret:?}");
 

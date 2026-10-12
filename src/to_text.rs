@@ -7,9 +7,9 @@ use rustradio::graph::{Graph, GraphRunner};
 use rustradio::blocks::{ToText, ConstantSource, FileSink};
 use rustradio::file_sink::Mode;
 use rustradio::Float;
-let (src1, src1_out) = ConstantSource::new(1.0);
-let (src2, src2_out) = ConstantSource::new(-1.0);
-let (to_text, to_text_out) = ToText::new(vec![src1_out, src2_out]);
+let (src1, src1_out) = ConstantSource::new(1.0)?;
+let (src2, src2_out) = ConstantSource::new(-1.0)?;
+let (to_text, to_text_out) = ToText::new(vec![src1_out, src2_out])?;
 let sink = FileSink::new(to_text_out, "/dev/null", Mode::Append)?;
 let mut g = Graph::new();
 g.add(Box::new(src1));
@@ -42,13 +42,12 @@ pub struct ToText<T> {
 
 impl<T> ToText<T> {
     /// Create new `ToText` block.
-    #[must_use]
-    pub fn new(srcs: Vec<ReadStream<T>>) -> (Self, ReadStream<u8>) {
+    pub fn new(srcs: Vec<ReadStream<T>>) -> Result<(Self, ReadStream<u8>)> {
         if srcs.is_empty() {
             debug!("ToText set up with zero inputs. This is probably not intentional");
         }
-        let (dst, dr) = crate::stream::new_stream();
-        (Self { srcs, dst }, dr)
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((Self { srcs, dst }, dr))
     }
 }
 
@@ -113,7 +112,7 @@ mod tests {
         let (mut block, _output) = ToText::new(vec![
             ReadStream::from_slice(&[]),
             ReadStream::from_slice(&[1u8]),
-        ]);
+        ])?;
         assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
         assert!(BlockEOF::eof(&mut block));
         Ok(())

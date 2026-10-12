@@ -76,7 +76,7 @@ fn main() -> Result<()> {
                 100.0,
                 &rustradio::window::WindowType::Hamming,
             )
-        ),
+        )?,
         // Resample RF.
         RationalResampler::builder()
             .deci(samp_rate as usize)
@@ -86,12 +86,12 @@ fn main() -> Result<()> {
     let samp_rate = new_samp_rate;
 
     // Tee out signal strength.
-    let (b, prev, burst_tee) = Tee::new(prev);
+    let (b, prev, burst_tee) = Tee::new(prev)?;
     g.add(Box::new(b));
     let burst_tee = blockchain![
         g,
         burst_tee,
-        ComplexToMag2::new(burst_tee),
+        ComplexToMag2::new(burst_tee)?,
         SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)?,
     ];
 
@@ -105,9 +105,9 @@ fn main() -> Result<()> {
         g,
         prev,
         // Demod.
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         Hilbert::new(prev, 65, &WindowType::Hamming)?,
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         // Filter.
         FftFilterFloat::new(
             prev,
@@ -117,19 +117,19 @@ fn main() -> Result<()> {
                 100.0,
                 &rustradio::window::WindowType::Hamming,
             )
-        ),
+        )?,
         // Tag.
-        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string()),
+        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())?,
         StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50),
         // Symbol sync.
         Midpointer::new(prev),
         Wpcr::builder(prev)
             .samp_rate(opt.sample_rate as Float)
             .build(),
-        PduToStream::new(prev),
-        BinarySlicer::new(prev),
+        PduToStream::new(prev)?,
+        BinarySlicer::new(prev)?,
         // Delay xor, aka NRZI decode.
-        NrziDecode::new(prev),
+        NrziDecode::new(prev)?,
         // Decode.
         HdlcDeframer::new(prev, 10, 1500),
     ];

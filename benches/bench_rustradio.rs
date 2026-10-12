@@ -72,8 +72,8 @@ fn bench_sum_vec_avx_fma(b: &mut Bencher) {
 #[bench]
 fn bench_fft_filter(b: &mut Bencher) {
     let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0, &WindowType::Hamming);
-    let (sw, sr) = new_stream();
-    let (mut filter, out) = FftFilter::new(sr, taps);
+    let (sw, sr) = new_stream().unwrap();
+    let (mut filter, out) = FftFilter::new(sr, taps).unwrap();
     b.iter(|| {
         // Fill input buffer.
         {
@@ -98,7 +98,7 @@ fn bench_fft_filter(b: &mut Bencher) {
 #[bench]
 fn bench_fir_filter(b: &mut Bencher) {
     let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0, &WindowType::Hamming);
-    let (sw, sr) = new_stream();
+    let (sw, sr) = new_stream().unwrap();
     let (mut filter, out) = FirFilter::new(sr, taps).unwrap();
     b.iter(|| {
         // Fill input buffer.
@@ -137,14 +137,15 @@ fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
     } else {
         vec![]
     };
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream().unwrap();
     let (mut block, output): (Box<dyn Block>, _) = if tag_aware {
         let (block, output) = Map::new(reader, "increment", |sample, tags| {
             (sample + 1, Cow::Borrowed(tags))
-        });
+        })
+        .unwrap();
         (Box::new(block), output)
     } else {
-        let (block, output) = AddConst::new(reader, 1u32);
+        let (block, output) = AddConst::new(reader, 1u32).unwrap();
         (Box::new(block), output)
     };
     b.bytes = (samples.len() * std::mem::size_of::<u32>()) as u64;
@@ -224,7 +225,7 @@ fn bench_stream_tags(b: &mut Bencher, stride: usize, reverse: bool) {
     if reverse {
         tags.reverse();
     }
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream().unwrap();
     b.bytes = (samples.len() * std::mem::size_of::<u32>()) as u64;
     b.iter(|| {
         let mut window = writer.write_buf().unwrap();
@@ -440,7 +441,7 @@ fn bench_stream_to_pdu(b: &mut Bencher, burst_len: usize, metadata: bool) {
     }
     tags.sort_by_key(Tag::pos);
     let expected = if burst_len == 0 { 0 } else { N / stride };
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream().unwrap();
     let (mut block, output) = StreamToPdu::new(reader, "burst", N, 1);
     b.bytes = (N * std::mem::size_of::<Complex>()) as u64;
     b.iter(|| {

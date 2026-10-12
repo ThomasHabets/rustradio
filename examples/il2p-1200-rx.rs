@@ -71,22 +71,22 @@ fn main() -> Result<()> {
         FftFilter::new(
             prev,
             rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0, &WindowType::Hamming)
-        ),
+        )?,
         // Resample RF.
         RationalResampler::builder()
             .deci(samp_rate as usize)
             .interp(new_samp_rate as usize)
             .build(prev)?,
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         Hilbert::new(prev, 65, &WindowType::Hamming)?,
         // Can't use FastFM here, because it doesn't work well with
         // preemph'd input.
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         FftFilterFloat::new(
             prev,
             &rustradio::fir::low_pass(samp_rate, 1100.0, 100.0, &WindowType::Hamming)
-        ),
-        AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate),
+        )?,
+        AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)?,
     ];
 
     /*
@@ -107,7 +107,7 @@ fn main() -> Result<()> {
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
             Box::new(clock_filter),
-        );
+        )?;
         g.add(Box::new(block));
         prev
     };
@@ -115,14 +115,14 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        BinarySlicer::new(prev),
-        XorConst::new(prev, 1),
-        CorrelateAccessCodeTag::new(prev, rustradio::il2p_deframer::SYNC_WORD, "sync", 0),
+        BinarySlicer::new(prev)?,
+        XorConst::new(prev, 1)?,
+        CorrelateAccessCodeTag::new(prev, rustradio::il2p_deframer::SYNC_WORD, "sync", 0)?,
     ];
 
-    let (b, a, prev) = Tee::new(prev);
+    let (b, a, prev) = Tee::new(prev)?;
     g.add(Box::new(b));
-    let clock = blockchain![g, clock, ToText::new(vec![a])];
+    let clock = blockchain![g, clock, ToText::new(vec![a])?];
     g.add(Box::new(FileSink::new(
         clock,
         "test.u8",

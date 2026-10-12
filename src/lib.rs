@@ -89,8 +89,8 @@ let (src, prev) = VectorSource::new(
         Complex::new(-20.0, 0.0),
         Complex::new(100.0, -100.0),
     ],
-);
-let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0));
+)?;
+let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0))?;
 let sink = DebugSink::new(prev);
 let mut g = Graph::new();
 g.add(Box::new(src));
@@ -418,10 +418,11 @@ macro_rules! error_from {
 /// let prev = blockchain![
 ///     g,      // Graph object.
 ///     prev,   // Variable to use for the streams from block to block.
-///     SignalSourceFloat::new(44100.0, 1000.0, 1.0),
-///     MultiplyConst::new(prev, 2.0),
-///     MultiplyConst::new(prev, 4.0),
+///     SignalSourceFloat::new(44100.0, 1000.0, 1.0)?,
+///     MultiplyConst::new(prev, 2.0)?,
+///     MultiplyConst::new(prev, 4.0)?,
 /// ];
+/// # Ok::<(), rustradio::Error>(())
 /// ```
 #[macro_export]
 macro_rules! blockchain {

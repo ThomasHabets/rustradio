@@ -60,31 +60,34 @@ pub struct Descrambler {
 impl Descrambler {
     /// Create new descrambler.
     // TODO: take an lfsr, partly so that we can generate this new()
-    #[must_use]
-    pub fn new(src: ReadStream<u8>, mask: u64, seed: u64, len: u8) -> (Self, ReadStream<u8>) {
-        let (dst, dr) = crate::stream::new_stream();
-        (
+    pub fn new(
+        src: ReadStream<u8>,
+        mask: u64,
+        seed: u64,
+        len: u8,
+    ) -> crate::Result<(Self, ReadStream<u8>)> {
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
                 lfsr: Lfsr::new(mask, seed, len),
             },
             dr,
-        )
+        ))
     }
 
     /// Create a descrambler with G3RUH parameters.
-    #[must_use]
-    pub fn g3ruh(src: ReadStream<u8>) -> (Self, ReadStream<u8>) {
-        let (dst, dr) = crate::stream::new_stream();
-        (
+    pub fn g3ruh(src: ReadStream<u8>) -> crate::Result<(Self, ReadStream<u8>)> {
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
                 lfsr: Lfsr::g3ruh(),
             },
             dr,
-        )
+        ))
     }
 
     fn process_sync(&mut self, bit: u8) -> u8 {
@@ -104,17 +107,16 @@ pub struct Scrambler {
 }
 impl Scrambler {
     /// Create a descrambler with G3RUH parameters.
-    #[must_use]
-    pub fn g3ruh(src: ReadStream<u8>) -> (Self, ReadStream<u8>) {
-        let (dst, dr) = crate::stream::new_stream();
-        (
+    pub fn g3ruh(src: ReadStream<u8>) -> crate::Result<(Self, ReadStream<u8>)> {
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
                 lfsr: Lfsr::g3ruh(),
             },
             dr,
-        )
+        ))
     }
 
     fn process_sync(&mut self, bit: u8) -> u8 {
@@ -234,15 +236,16 @@ mod tests {
         let input: Vec<_> = (0..len).map(|_| rng.random_range(0..=1)).collect();
         let pad: Vec<_> = (0..17).map(|_| rng.random_range(0..=1)).collect();
 
-        let (mut b, prev) = VectorSource::new(input.iter().copied().chain(pad).collect::<Vec<_>>());
+        let (mut b, prev) =
+            VectorSource::new(input.iter().copied().chain(pad).collect::<Vec<_>>()).unwrap();
         b.work().unwrap();
-        let (mut b, prev) = NrziEncode::new(prev);
+        let (mut b, prev) = NrziEncode::new(prev).unwrap();
         b.work().unwrap();
-        let (mut b, prev) = Scrambler::g3ruh(prev);
+        let (mut b, prev) = Scrambler::g3ruh(prev).unwrap();
         b.work().unwrap();
-        let (mut b, prev) = Descrambler::g3ruh(prev);
+        let (mut b, prev) = Descrambler::g3ruh(prev).unwrap();
         b.work().unwrap();
-        let (mut b, prev) = NrziDecode::new(prev);
+        let (mut b, prev) = NrziDecode::new(prev).unwrap();
         b.work().unwrap();
 
         let (out, _) = prev.read_buf().unwrap();

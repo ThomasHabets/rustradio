@@ -66,7 +66,7 @@ impl<T: Sample> FileSource<T> {
             std::fs::File::open(&filename).map_err(|e| Error::file_io(e, filename.clone()))?,
         );
         debug!("Opening source {}", filename.display());
-        let (dst, dr) = crate::stream::new_stream();
+        let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 filename,

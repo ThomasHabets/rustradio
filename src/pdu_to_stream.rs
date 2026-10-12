@@ -140,7 +140,7 @@ mod tests {
                 Tag::new(5, "beyond-length", TagValue::Bool(true)),
             ],
         );
-        let (mut block, out) = PduToStream::new(rx);
+        let (mut block, out) = PduToStream::new(rx).unwrap();
         block.work().unwrap();
         let (samples, tags) = out.read_buf().unwrap();
         assert_eq!(samples.slice(), [1, 2, 3]);
@@ -160,7 +160,7 @@ mod tests {
         let first = Tag::new(0, "a", TagValue::Bool(true));
         let second = Tag::new(0, "b", TagValue::Bool(false));
         tx.push(vec![42u8], vec![first.clone(), second.clone()]);
-        let (mut block, out) = PduToStream::new(rx);
+        let (mut block, out) = PduToStream::new(rx)?;
         block.work()?;
         let (samples, tags) = out.read_buf()?;
         assert_eq!(samples.slice(), [42]);
@@ -189,7 +189,7 @@ mod tests {
                 Tag::new(len - 1, "tail", TagValue::Bool(true)),
             ],
         );
-        let (mut b, out) = PduToStream::new(rx);
+        let (mut b, out) = PduToStream::new(rx)?;
 
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         let (buf, tags) = out.read_buf()?;
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn empty_input() -> Result<()> {
         let (_tx, rx) = new_nocopy_stream();
-        let (mut b, out) = PduToStream::<u8>::new(rx);
+        let (mut b, out) = PduToStream::<u8>::new(rx)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         assert_eq!(out.read_buf()?.0.len(), 0);
         Ok(())
@@ -239,7 +239,7 @@ mod tests {
     fn empty_vec() -> Result<()> {
         let (tx, rx) = new_nocopy_stream();
         tx.push(vec![], &[]);
-        let (mut b, out) = PduToStream::<u8>::new(rx);
+        let (mut b, out) = PduToStream::<u8>::new(rx)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         assert_eq!(out.read_buf()?.0.len(), 0);
         Ok(())
@@ -250,7 +250,7 @@ mod tests {
         let (tx, rx) = new_nocopy_stream();
         tx.push(vec![11, 22, 33], &[]);
         tx.push(vec![3, 2, 1, 0], &[]);
-        let (mut b, out) = PduToStream::<u8>::new(rx);
+        let (mut b, out) = PduToStream::<u8>::new(rx)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
         assert_eq!(out.read_buf()?.0.len(), 7);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);

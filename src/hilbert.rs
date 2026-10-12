@@ -47,7 +47,7 @@ impl Hilbert {
             ));
         }
         let taps = crate::fir::hilbert(&window_type.make_window(ntaps));
-        let (dst, dr) = crate::stream::new_stream();
+        let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 src,

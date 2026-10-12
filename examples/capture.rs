@@ -172,7 +172,7 @@ fn main() -> Result<()> {
                 ..Default::default()
             },
             tx
-        ),
+        )?,
     ];
 
     // Save to file.

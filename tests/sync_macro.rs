@@ -58,7 +58,7 @@ fn tag(pos: usize, key: &str) -> Tag {
 }
 
 fn input(samples: &[u32], tags: &[Tag]) -> Result<ReadStream<u32>> {
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream()?;
     let mut window = writer.write_buf()?;
     window.fill_from_slice(samples);
     window.produce(samples.len(), tags);
@@ -140,7 +140,7 @@ fn check_batches(
 #[test]
 fn plain_sync_forwards_first_input_tags_across_batches() -> Result<()> {
     let (a, b) = inputs()?;
-    let (mut block, sum, difference) = Plain::new(a, b);
+    let (mut block, sum, difference) = Plain::new(a, b)?;
     let filler = fill_output(&block.sum)?;
     check_batches(&mut block, sum, difference, filler, false)?;
     let (remaining, tags) = block.b.read_buf()?;
@@ -152,7 +152,7 @@ fn plain_sync_forwards_first_input_tags_across_batches() -> Result<()> {
 #[test]
 fn tagged_sync_groups_each_input_and_preserves_output_tag_order() -> Result<()> {
     let (a, b) = inputs()?;
-    let (mut block, sum, difference) = Tagged::new(a, b);
+    let (mut block, sum, difference) = Tagged::new(a, b)?;
     let filler = fill_output(&block.sum)?;
     check_batches(&mut block, sum, difference, filler, true)
 }
@@ -161,7 +161,7 @@ fn tagged_sync_groups_each_input_and_preserves_output_tag_order() -> Result<()> 
 fn tagged_sync_can_generate_tags_without_input_tags() -> Result<()> {
     let a = input(&[10, 20, 30], &[])?;
     let b = input(&[1, 2, 3], &[])?;
-    let (mut block, sum, difference) = Tagged::new(a, b);
+    let (mut block, sum, difference) = Tagged::new(a, b)?;
     assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
     let (window, tags) = sum.read_buf()?;
     assert_eq!(window.slice(), &[11, 22, 33]);
@@ -183,7 +183,7 @@ fn tagged_sync_can_generate_tags_without_input_tags() -> Result<()> {
 fn plain_sync_discards_tags_from_other_inputs() -> Result<()> {
     let a = input(&[10, 20], &[])?;
     let b = input(&[1, 2], &[tag(0, "discard"), tag(1, "discard")])?;
-    let (mut block, sum, difference) = Plain::new(a, b);
+    let (mut block, sum, difference) = Plain::new(a, b)?;
     assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
     assert!(sum.read_buf()?.1.is_empty());
     assert!(difference.read_buf()?.1.is_empty());

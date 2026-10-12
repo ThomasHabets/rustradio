@@ -70,7 +70,7 @@ fn main() -> Result<()> {
                 g,
                 prev,
                 RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?,
-                RtlSdrDecode::new(prev),
+                RtlSdrDecode::new(prev)?,
             ]
         }
         #[cfg(not(feature = "rtlsdr"))]
@@ -90,7 +90,7 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        FftFilter::new(prev, taps),
+        FftFilter::new(prev, taps)?,
         // Resample RF.
         RationalResampler::builder()
             .deci(samp_rate as usize)
@@ -100,12 +100,12 @@ fn main() -> Result<()> {
     let samp_rate = new_samp_rate;
 
     // Tee out signal strength.
-    let (b, prev, burst_tee) = Tee::new(prev);
+    let (b, prev, burst_tee) = Tee::new(prev)?;
     g.add(Box::new(b));
     let burst_tee = blockchain![
         g,
         burst_tee,
-        ComplexToMag2::new(burst_tee),
+        ComplexToMag2::new(burst_tee)?,
         SinglePoleIirFilter::new(burst_tee, opt.iir_alpha)?,
     ];
 
@@ -113,11 +113,11 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         // Filter.
         //FftFilterFloat::new(prev, &rustradio::fir::low_pass(samp_rate, 16000.0, 100.0));
         // Tag burst.
-        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string()),
+        BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())?,
         // Create quad demod raw sample blobs (Vec<Float>) from tagged
         // stream of Floats.
         StreamToPdu::new(prev, "burst".to_string(), samp_rate as usize, 50),
@@ -126,13 +126,13 @@ fn main() -> Result<()> {
         // Symbol sync.
         Wpcr::builder(prev).samp_rate(samp_rate).build(),
         // Turn Vec<Float> into Float.
-        PduToStream::new(prev),
+        PduToStream::new(prev)?,
         // Turn floats into bits.
-        BinarySlicer::new(prev),
+        BinarySlicer::new(prev)?,
         // NRZI decode.
-        NrziDecode::new(prev),
+        NrziDecode::new(prev)?,
         // G3RUH descramble.
-        Descrambler::new(prev, 0x21, 0, 16),
+        Descrambler::new(prev, 0x21, 0, 16)?,
         // Decode.
         HdlcDeframer::new(prev, 10, 1500),
     ];

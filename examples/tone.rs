@@ -49,14 +49,14 @@ fn main() -> Result<()> {
         blockchain![
             g,
             prev,
-            SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)
+            SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)?
         ]
     } else {
         blockchain![
             g,
             prev,
-            SignalSourceComplex::new(opt.audio_rate as Float, opt.freq, opt.volume),
-            Map::keep_tags(prev, "ComplexToReal", |x| x.re),
+            SignalSourceComplex::new(opt.audio_rate as Float, opt.freq, opt.volume)?,
+            Map::keep_tags(prev, "ComplexToReal", |x| x.re)?,
         ]
     };
 

@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn large_phase_steps_remain_normalized() -> crate::Result<()> {
-        let (mut vco, _output) = Vco::new(ReadStream::from_slice(&[1.0]), MX * 1_000_000.0);
+        let (mut vco, _output) = Vco::new(ReadStream::from_slice(&[1.0]), MX * 1_000_000.0)?;
         vco.work()?;
         assert!(phase_close(vco.phase, 0.0), "phase {} not right", vco.phase);
         Ok(())
@@ -79,7 +79,7 @@ mod tests {
         let (mut vco, output) = Vco::new(
             ReadStream::from_slice(&[1.0, 0.0, 1.0, 1.0, 1.0, 1.0]),
             PI / 2.0,
-        );
+        )?;
         vco.work()?;
         let (o, _tags) = output.read_buf()?;
         assert!(o.iter().map(|c| c.norm()).all(|m| (m - 1.0).abs() < 0.0001));
@@ -99,7 +99,7 @@ mod tests {
         let (mut vco, output) = Vco::new(
             ReadStream::from_slice(&[-1.0, 0.0, -0.5, -0.5, -2.0, -0.5]),
             PI / 2.0,
-        );
+        )?;
         vco.work()?;
         let (o, _tags) = output.read_buf()?;
         assert!(o.iter().map(|c| c.norm()).all(|m| (m - 1.0).abs() < 0.0001));

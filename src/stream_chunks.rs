@@ -73,7 +73,7 @@ mod tests {
     fn tags_at_chunk_boundaries_stay_with_their_samples() -> Result<()> {
         use crate::stream::{Tag, TagValue, new_stream};
 
-        let (writer, reader) = new_stream();
+        let (writer, reader) = new_stream()?;
         let (mut block, out) = StreamChunks::new(reader, 4)?;
         let tag = |pos, key| Tag::new(pos, key, TagValue::Bool(true));
         let mut input = writer.write_buf()?;
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn rejects_chunks_larger_than_input_capacity() {
-        let (_tx, rx) = crate::stream::new_stream::<u32>();
+        let (_tx, rx) = crate::stream::new_stream::<u32>().unwrap();
         let size = rx.total_size() + 1;
         assert!(StreamChunks::new(rx, size).is_err());
     }

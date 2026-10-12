@@ -51,7 +51,7 @@ impl FftStream {
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
         let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()].into_boxed_slice();
-        let (dst, dr) = crate::stream::new_stream();
+        let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 size,

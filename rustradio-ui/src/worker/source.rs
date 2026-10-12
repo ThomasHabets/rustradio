@@ -34,12 +34,13 @@ pub struct WasmSource<App, T: rustradio::Sample> {
 }
 
 impl<App: crate::ApplicationSpecific + 'static, T: rustradio::Sample> WasmSource<App, T> {
+    /// Create the UI source and its channel, returning stream allocation errors.
     pub fn new(
         receiver: impl Into<String>,
-    ) -> (Self, ReadStream<T>, async_channel::Sender<Msg<T>>) {
+    ) -> Result<(Self, ReadStream<T>, async_channel::Sender<Msg<T>>)> {
         let (tx, rx) = async_channel::bounded(PRODUCE_CHANNEL_SIZE);
-        let (dst, src) = new_stream();
-        (
+        let (dst, src) = new_stream()?;
+        Ok((
             Self {
                 receiver: receiver.into(),
                 buf: vec![],
@@ -52,7 +53,7 @@ impl<App: crate::ApplicationSpecific + 'static, T: rustradio::Sample> WasmSource
             },
             src,
             tx,
-        )
+        ))
     }
     fn set_eof(&mut self) {
         self.eof = true;

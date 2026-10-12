@@ -46,9 +46,9 @@ mod tests {
     #[test]
     fn canary() -> Result<()> {
         let c = std::sync::atomic::AtomicBool::new(false);
-        let (mut ib, src) = VectorSource::new(vec![1u8, 2, 3]);
+        let (mut ib, src) = VectorSource::new(vec![1u8, 2, 3])?;
         ib.work()?;
-        let (mut b, out) = Canary::new(src, || c.store(true, Ordering::Relaxed));
+        let (mut b, out) = Canary::new(src, || c.store(true, Ordering::Relaxed))?;
         assert!(!c.load(Ordering::Relaxed));
         let ret = b.work()?;
         assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");

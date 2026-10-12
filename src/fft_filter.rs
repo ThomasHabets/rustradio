@@ -204,10 +204,10 @@ pub mod rr_rustfft {
 /// let taps = low_pass_complex(samp_rate, 100_000.0, 1000.0, rustradio::window::WindowType::Hamming);
 ///
 /// // Set up dummy source and sink.
-/// let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0));
+/// let (src, src_out) = ConstantSource::new(Complex::new(0.0,0.0)).unwrap();
 ///
 /// // Create and connect fft.
-/// let (fft, fft_out) = FftFilter::new(src_out, taps);
+/// let (fft, fft_out) = FftFilter::new(src_out, taps).unwrap();
 ///
 /// // Set up dummy sink.
 /// let sink = NullSink::new(fft_out);
@@ -240,7 +240,7 @@ impl FftFilter<rr_fftw::FftwEngine> {
     pub fn new<T: Into<Box<[Complex]>>>(
         src: ReadStream<Complex>,
         taps: T,
-    ) -> (Self, ReadStream<Complex>) {
+    ) -> crate::Result<(Self, ReadStream<Complex>)> {
         trace!("FftFilter: defaulting to FFTW");
         let engine = rr_fftw::FftwEngine::new(taps);
         Self::new_engine(src, engine)
@@ -256,7 +256,7 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
     pub fn new<T: Into<Box<[Complex]>>>(
         src: ReadStream<Complex>,
         taps: T,
-    ) -> (Self, ReadStream<Complex>) {
+    ) -> crate::Result<(Self, ReadStream<Complex>)> {
         trace!("FftFilter: defaulting to RustFFT");
         let engine = rr_rustfft::RustFftEngine::new(taps);
         Self::new_engine(src, engine)
@@ -264,14 +264,13 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
 }
 impl<T: Engine> FftFilter<T> {
     /// Create new `FftFilter`, given an engine.
-    #[must_use]
-    pub fn new_engine(src: ReadStream<Complex>, engine: T) -> (Self, ReadStream<Complex>) {
+    pub fn new_engine(src: ReadStream<Complex>, engine: T) -> Result<(Self, ReadStream<Complex>)> {
         // Set up FFT / batch size.
         let fft_size = calc_fft_size(engine.tap_len());
         let nsamples = fft_size - engine.tap_len();
 
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
@@ -283,7 +282,7 @@ impl<T: Engine> FftFilter<T> {
                 nsamples,
             },
             dr,
-        )
+        ))
     }
 }
 
@@ -390,7 +389,7 @@ impl FftFilterFloat<rr_fftw::FftwEngine> {
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
-    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
+    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> crate::Result<(Self, ReadStream<Float>)> {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
         let engine = rr_fftw::FftwEngine::new(taps);
         Self::new_engine(src, engine)
@@ -403,8 +402,7 @@ impl FftFilterFloat<rr_rustfft::RustFftEngine> {
     ///
     /// "Best" is assumed to be FFTW, if the `fftw` feature is enabled.
     /// Otherwise it's RustFFT.
-    #[must_use]
-    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> (Self, ReadStream<Float>) {
+    pub fn new(src: ReadStream<Float>, taps: &[Float]) -> crate::Result<(Self, ReadStream<Float>)> {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
         let engine = rr_rustfft::RustFftEngine::new(taps);
         Self::new_engine(src, engine)
@@ -415,14 +413,13 @@ impl<T: Engine> FftFilterFloat<T> {
     /// Create a new `FftFilterFloat` block.
     ///
     /// Use `new()` if to make your application code engine agnostic.
-    #[must_use]
-    pub fn new_engine(src: ReadStream<Float>, engine: T) -> (Self, ReadStream<Float>) {
+    pub fn new_engine(src: ReadStream<Float>, engine: T) -> Result<(Self, ReadStream<Float>)> {
         use crate::stream::StreamWait;
-        let (inner_in, r) = crate::stream::new_stream();
+        let (inner_in, r) = crate::stream::new_stream()?;
         assert_eq!(inner_in.id(), r.id(), "{}", inner_in.id() - r.id());
-        let (complex, inner_out) = FftFilter::new_engine(r, engine);
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (complex, inner_out) = FftFilter::new_engine(r, engine)?;
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 complex,
                 src,
@@ -431,7 +428,7 @@ impl<T: Engine> FftFilterFloat<T> {
                 inner_out,
             },
             dr,
-        )
+        ))
     }
 }
 
@@ -519,11 +516,11 @@ mod tests {
         let twidth = 100.0;
 
         // Create blocks.
-        let (mut src, o) = SignalSourceComplex::new(samp_rate, signal, amplitude);
-        let (mut head, o) = Head::new(o, samp_rate as u64);
+        let (mut src, o) = SignalSourceComplex::new(samp_rate, signal, amplitude)?;
+        let (mut head, o) = Head::new(o, samp_rate as u64)?;
         let taps = low_pass_complex(samp_rate, cutoff, twidth, WindowType::Hamming);
         let taps_len = taps.len();
-        let (mut fft, out) = FftFilter::new(o, taps);
+        let (mut fft, out) = FftFilter::new(o, taps)?;
 
         // Generate a bunch of samples from signal generator.
         let mut total = 0;
@@ -564,7 +561,7 @@ mod tests {
         let (mut src, o) = VectorSource::builder(vec![Complex::default(); 1024])
             .repeat(crate::Repeat::finite(2))
             .build()?;
-        let (mut fft, out) = FftFilter::new(o, [Complex::default()]);
+        let (mut fft, out) = FftFilter::new(o, [Complex::default()])?;
         src.work()?;
         src.work()?;
         fft.work()?;
@@ -594,9 +591,9 @@ mod tests {
             Complex::new(-0.25, 0.5),
             Complex::new(0.125, -0.25),
         ];
-        let (writer, reader) = new_stream();
+        let (writer, reader) = new_stream()?;
         let input_id = reader.id();
-        let (mut filter, out) = FftFilter::new(reader, taps);
+        let (mut filter, out) = FftFilter::new(reader, taps)?;
         assert_eq!(filter.nsamples, 5);
         let all_tags = [0, 2, 3, 4, 5, 10, 15, 16, 17, 19]
             .map(|pos| Tag::new(pos, "sample", TagValue::U64(pos as u64)));
@@ -648,7 +645,7 @@ mod tests {
     fn batched_rounds_respect_output_backpressure() -> Result<()> {
         use crate::stream::{StreamWait, new_stream};
         let samples: Vec<_> = (0..17).map(|i| Complex::new(i as Float, 0.0)).collect();
-        let (writer, reader) = new_stream();
+        let (writer, reader) = new_stream()?;
         let input_id = reader.id();
         let (mut filter, out) = FftFilter::new(
             reader,
@@ -657,7 +654,7 @@ mod tests {
                 Complex::default(),
                 Complex::default(),
             ],
-        );
+        )?;
         let output_id = out.id();
         let mut window = writer.write_buf()?;
         window.fill_from_slice(&samples);
@@ -719,7 +716,7 @@ mod tests {
                 }
             }
         }
-        let (writer, reader) = new_stream();
+        let (writer, reader) = new_stream()?;
         let mut window = writer.write_buf()?;
         window.slice()[..5].fill(Complex::default());
         window.produce(5, &[]);
@@ -729,7 +726,7 @@ mod tests {
                 writer,
                 produced: false,
             },
-        );
+        )?;
         filter.work()?;
         let (window, _) = out.read_buf()?;
         assert_eq!(window.len(), 5);

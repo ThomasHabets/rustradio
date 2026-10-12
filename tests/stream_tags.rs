@@ -24,7 +24,7 @@ fn check(reader: &ReadStream<u32>, count: usize, expected: &[Tag], consume: usiz
 
 #[test]
 fn tags_survive_wraparound_partial_consumption_and_unsorted_batches() -> Result<()> {
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream()?;
     let capacity = reader.total_size();
     for _ in 0..4 {
         // Leave both sample cursors close to the end of the physical buffer.
@@ -50,7 +50,7 @@ fn tags_survive_wraparound_partial_consumption_and_unsorted_batches() -> Result<
 
 #[test]
 fn full_buffer_consumption_removes_all_tags() -> Result<()> {
-    let (writer, reader) = new_stream();
+    let (writer, reader) = new_stream()?;
     let capacity = reader.total_size();
     for _ in 0..3 {
         let tags = [tag(0, 1), tag(capacity - 1, 2), tag(capacity - 1, 3)];

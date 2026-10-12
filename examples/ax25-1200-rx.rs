@@ -126,7 +126,7 @@ fn get_complex_input(
                     g,
                     prev,
                     RtlSdrSource::new(opt.freq, samp as u32, opt.gain)?,
-                    RtlSdrDecode::new(prev),
+                    RtlSdrDecode::new(prev)?,
                 ],
                 samp as f32,
             ));
@@ -148,7 +148,7 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
                     prev,
                     opt.sample_rate
                         .expect("audio source requires --sample-rate") as u32
-                ),
+                )?,
             ];
             // TODO: AuDecode should be providing the bitrate.
             return Ok((
@@ -174,7 +174,7 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
                 100.0,
                 rustradio::window::WindowType::Hamming,
             )
-        ),
+        )?,
         RationalResampler::builder()
             .deci(samp_rate as usize)
             .interp(new_samp_rate as usize)
@@ -182,9 +182,9 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
     ];
     let prev = if opt.fast_fm {
         // This is faster, but slightly worse.
-        blockchain![g, prev, FastFM::new(prev)]
+        blockchain![g, prev, FastFM::new(prev)?]
     } else {
-        blockchain![g, prev, QuadratureDemod::new(prev, 1.0)]
+        blockchain![g, prev, QuadratureDemod::new(prev, 1.0)?]
     };
     Ok((prev, new_samp_rate))
 }
@@ -242,9 +242,9 @@ fn main() -> Result<()> {
         Hilbert::new(prev, 65, &WindowType::Hamming)?,
         // Can't use FastFM here, because it doesn't work well with
         // preemph'd input.
-        QuadratureDemod::new(prev, 1.0),
-        FftFilterFloat::new(prev, &taps),
-        add_const(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate),
+        QuadratureDemod::new(prev, 1.0)?,
+        FftFilterFloat::new(prev, &taps)?,
+        add_const(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)?,
     ];
 
     /*
@@ -267,20 +267,20 @@ fn main() -> Result<()> {
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
             Box::new(clock_filter),
-        );
+        )?;
         (out, block)
     };
 
     // Optional clock output.
     let prev = if let Some(clockfile) = opt.clock_file {
-        let clock = block.out_clock();
-        let (block, a, prev) = Tee::new(prev);
+        let clock = block.out_clock()?;
+        let (block, a, prev) = Tee::new(prev)?;
         g.add(Box::new(block));
         let clock = blockchain![
             g,
             clock,
-            AddConst::new(clock.expect("TODO"), -samp_rate / baud),
-            ToText::new(vec![a, clock]),
+            AddConst::new(clock.expect("TODO"), -samp_rate / baud)?,
+            ToText::new(vec![a, clock])?,
         ];
         g.add(Box::new(FileSink::new(
             clock,
@@ -296,8 +296,8 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        BinarySlicer::new(prev),
-        NrziDecode::new(prev),
+        BinarySlicer::new(prev)?,
+        NrziDecode::new(prev)?,
         // Save bits to file.
         /*
         let (b, a, prev) = Tee::new(prev);

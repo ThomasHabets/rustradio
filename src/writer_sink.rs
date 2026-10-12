@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn writer_sink() -> Result<()> {
-        let (mut b, prev) = VectorSource::new(b"hello world".to_vec());
+        let (mut b, prev) = VectorSource::new(b"hello world".to_vec())?;
         b.work()?;
         let fake = Fake::default();
         let mut b = WriterSink::<u8>::new(prev, fake.clone());

@@ -35,8 +35,8 @@ use rustradio::file_sink::Mode;
 use rustradio::Complex;
 let (src, src_out) = VectorSource::new(
     vec![10.0, 0.0, -20.0, 0.0, 100.0, -100.0],
-);
-let (au, au_out) = AuEncode::new(src_out, Encoding::Pcm16, 48000, 1);
+)?;
+let (au, au_out) = AuEncode::new(src_out, Encoding::Pcm16, 48000, 1)?;
 let sink = FileSink::new(au_out, "/dev/null", Mode::Overwrite)?;
 let mut g = Graph::new();
 g.add(Box::new(src));
@@ -64,13 +64,12 @@ impl AuEncode {
     /// * `encoding`: currently only `Encoding::Pcm16` is implemented.
     /// * `bitrate`: E.g. 48000,
     /// * `channels`: Currently only mono (1) is implemented.
-    #[must_use]
     pub fn new(
         src: ReadStream<Float>,
         encoding: Encoding,
         bitrate: u32,
         channels: u32,
-    ) -> (Self, ReadStream<u8>) {
+    ) -> Result<(Self, ReadStream<u8>)> {
         assert_eq!(
             encoding,
             Encoding::Pcm16,
@@ -101,15 +100,15 @@ impl AuEncode {
         // Minimum annotation field.
         v.extend(&[0, 0, 0, 0]);
 
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 header: Some(v),
                 src,
                 dst,
             },
             dr,
-        )
+        ))
     }
 }
 
@@ -178,10 +177,9 @@ pub struct AuDecode {
 
 impl AuDecode {
     /// Create new `AuDecode` block.
-    #[must_use]
-    pub fn new(src: ReadStream<u8>, bitrate: u32) -> (Self, ReadStream<Float>) {
-        let (dst, dr) = crate::stream::new_stream();
-        (
+    pub fn new(src: ReadStream<u8>, bitrate: u32) -> Result<(Self, ReadStream<Float>)> {
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 bitrate,
@@ -189,7 +187,7 @@ impl AuDecode {
                 state: DecodeState::WaitingMagic,
             },
             dr,
-        )
+        ))
     }
 }
 
@@ -291,7 +289,7 @@ mod tests {
     #[test]
     fn encoder_waits_for_a_complete_sample() -> Result<()> {
         let (mut encoder, out) =
-            AuEncode::new(ReadStream::from_slice(&[0.5]), Encoding::Pcm16, 48000, 1);
+            AuEncode::new(ReadStream::from_slice(&[0.5]), Encoding::Pcm16, 48000, 1)?;
         encoder.work()?;
         let mut buffer = encoder.dst.write_buf()?;
         let n = buffer.len() - 1;

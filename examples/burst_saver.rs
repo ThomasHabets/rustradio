@@ -76,7 +76,7 @@ fn main() -> Result<()> {
                 g,
                 prev,
                 RtlSdrSource::new(opt.freq, opt.sample_rate as u32, opt.gain)?,
-                RtlSdrDecode::new(prev),
+                RtlSdrDecode::new(prev)?,
             ];
             // Decode.
             (prev, opt.sample_rate as Float)
@@ -94,7 +94,7 @@ fn main() -> Result<()> {
         100.0,
         &rustradio::window::WindowType::Hamming,
     );
-    let prev = blockchain![g, prev, FftFilter::new(prev, taps)];
+    let prev = blockchain![g, prev, FftFilter::new(prev, taps)?];
 
     // Resample RF.
     let new_samp_rate = 50_000.0;
@@ -108,19 +108,19 @@ fn main() -> Result<()> {
     ];
     let samp_rate = new_samp_rate;
 
-    let (b, datapath, magpath) = Tee::new(prev);
+    let (b, datapath, magpath) = Tee::new(prev)?;
     g.add(Box::new(b));
     let magpath = blockchain![
         g,
         magpath,
-        ComplexToMag2::new(magpath),
+        ComplexToMag2::new(magpath)?,
         SinglePoleIirFilter::new(magpath, opt.iir_alpha)?,
     ];
     let prev = blockchain![
         g,
         datapath,
-        Delay::new(datapath, opt.delay),
-        BurstTagger::new(datapath, magpath, opt.threshold, "burst".to_string()),
+        Delay::new(datapath, opt.delay)?,
+        BurstTagger::new(datapath, magpath, opt.threshold, "burst".to_string())?,
         StreamToPdu::new(datapath, "burst".to_string(), samp_rate as usize, opt.tail),
     ];
     g.add(Box::new(PduWriter::new(prev, opt.output)));

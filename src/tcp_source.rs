@@ -25,7 +25,7 @@ impl<T: Sample> TcpSource<T> {
     /// create a TCP source block.
     pub fn new(addr: impl std::net::ToSocketAddrs) -> Result<(Self, ReadStream<T>)> {
         let stream = std::net::TcpStream::connect(addr)?;
-        let (dst, dr) = crate::stream::new_stream();
+        let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 stream,

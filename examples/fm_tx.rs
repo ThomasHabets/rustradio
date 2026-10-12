@@ -80,7 +80,7 @@ fn main() -> Result<()> {
         FileSource::builder(&opt.input)
             .repeat(Repeat::infinite())
             .build()?,
-        AuDecode::new(prev, opt.audio_rate as u32),
+        AuDecode::new(prev, opt.audio_rate as u32)?,
         RationalResampler::builder()
             .deci(opt.audio_rate)
             .interp(opt.sample_rate as usize)
@@ -88,7 +88,7 @@ fn main() -> Result<()> {
         Vco::new(
             prev,
             2.0 * std::f64::consts::PI * opt.deviation as f64 / opt.sample_rate
-        ),
+        )?,
     ];
     g.add(Box::new(
         SoapySdrSink::builder(&dev, (1_000_000.0 * opt.freq).into(), opt.sample_rate)

@@ -25,7 +25,7 @@ fn simple_copy() -> Result<()> {
     .build()?;
     let src = Box::new(src);
 
-    let (add, add_out) = AddConst::new(src_out, Complex::new(1.1, 2.0));
+    let (add, add_out) = AddConst::new(src_out, Complex::new(1.1, 2.0))?;
     let sink = DebugSink::new(add_out);
 
     g.add(src);

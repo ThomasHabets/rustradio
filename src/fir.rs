@@ -401,7 +401,7 @@ where
         });
         let ntaps = taps.len();
         let fir = Fir::new(taps)?;
-        let (dst, stream) = crate::stream::new_stream();
+        let (dst, stream) = crate::stream::new_stream()?;
         Ok((
             FirFilter {
                 src,
@@ -898,7 +898,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let (mut src_a, src_a_out) = VectorSource::new(input.clone());
+        let (mut src_a, src_a_out) = VectorSource::new(input.clone())?;
         assert!(matches![src_a.work()?, BlockRet::EOF]);
         let (mut translated, translated_out) = FirFilter::builder(taps.clone())
             .deci(deci)
@@ -907,7 +907,7 @@ mod tests {
         assert!(matches![translated.work()?, BlockRet::Again]);
         assert!(matches![translated.work()?, BlockRet::WaitForStream(_, _)]);
 
-        let (mut src_b, src_b_out) = VectorSource::new(mixed_input);
+        let (mut src_b, src_b_out) = VectorSource::new(mixed_input)?;
         assert!(matches![src_b.work()?, BlockRet::EOF]);
         let (mut manual, manual_out) = FirFilter::builder(taps).deci(deci).build(src_b_out)?;
         assert!(matches![manual.work()?, BlockRet::Again]);
@@ -936,7 +936,7 @@ mod tests {
         let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming);
         let input = tone(4096, samp_rate, freq);
 
-        let (mut src, src_out) = VectorSource::new(input);
+        let (mut src, src_out) = VectorSource::new(input)?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut filter, out) = FirFilter::builder(taps)
             .translate(samp_rate, freq)
@@ -957,7 +957,7 @@ mod tests {
         let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming);
         let input = vec![Complex::new(1.0, 0.0); 4096];
 
-        let (mut src, src_out) = VectorSource::new(input);
+        let (mut src, src_out) = VectorSource::new(input)?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut filter, out) = FirFilter::builder(taps)
             .translate(samp_rate, freq)
@@ -983,7 +983,7 @@ mod tests {
         ];
         let taps = vec![Complex::new(-1.0, 0.0)];
         for deci in 1..=(input.len() + 1) {
-            let (mut src, src_out) = VectorSource::new(input.clone());
+            let (mut src, src_out) = VectorSource::new(input.clone())?;
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");
@@ -1020,7 +1020,7 @@ mod tests {
         ];
         let taps = vec![Complex::new(0.5, 0.0), Complex::new(0.5, 0.0)];
         for deci in 1..=(input.len() + 1) {
-            let (mut src, src_out) = VectorSource::new(input.clone());
+            let (mut src, src_out) = VectorSource::new(input.clone())?;
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");

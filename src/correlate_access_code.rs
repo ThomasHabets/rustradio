@@ -20,16 +20,15 @@ pub struct CorrelateAccessCode {
 
 impl CorrelateAccessCode {
     /// Create a correlator with an owned, fixed-length access code.
-    #[must_use]
     pub fn new(
         src: ReadStream<u8>,
         code: impl Into<Box<[u8]>>,
         allowed_diffs: usize,
-    ) -> (Self, ReadStream<u8>) {
+    ) -> crate::Result<(Self, ReadStream<u8>)> {
         let code = code.into();
         assert!(!code.is_empty(), "access code must be nonempty");
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
@@ -38,7 +37,7 @@ impl CorrelateAccessCode {
                 allowed_diffs,
             },
             dr,
-        )
+        ))
     }
     fn process_sync(&mut self, a: u8) -> u8 {
         self.slide.push(a);
@@ -80,11 +79,11 @@ impl CorrelateAccessCodeTag {
         code: impl Into<Box<[u8]>>,
         tag: S,
         allowed_diffs: usize,
-    ) -> (Self, ReadStream<u8>) {
+    ) -> crate::Result<(Self, ReadStream<u8>)> {
         let code = code.into();
         assert!(!code.is_empty(), "access code must be nonempty");
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 tag: tag.into(),
@@ -94,7 +93,7 @@ impl CorrelateAccessCodeTag {
                 allowed_diffs,
             },
             dr,
-        )
+        ))
     }
     fn process_sync_tags(&mut self, a: u8, tags: &[Tag]) -> (u8, Vec<Tag>) {
         self.slide.push(a);
@@ -133,19 +132,20 @@ mod tests {
     #[test]
     #[should_panic(expected = "access code must be nonempty")]
     fn rejects_empty_code() {
-        let _ = CorrelateAccessCode::new(ReadStream::from_slice(&[]), vec![], 0);
+        let _ = CorrelateAccessCode::new(ReadStream::from_slice(&[]), vec![], 0).unwrap();
     }
 
     #[test]
     #[should_panic(expected = "access code must be nonempty")]
     fn tagged_rejects_empty_code() {
-        let _ = CorrelateAccessCodeTag::new(ReadStream::from_slice(&[]), vec![], "sync", 0);
+        let _ =
+            CorrelateAccessCodeTag::new(ReadStream::from_slice(&[]), vec![], "sync", 0).unwrap();
     }
 
     #[test]
     fn waits_for_full_code_before_match() -> Result<()> {
         let src = ReadStream::from_slice(&[1]);
-        let (mut cac, out) = CorrelateAccessCode::new(src, [0, 1], 0);
+        let (mut cac, out) = CorrelateAccessCode::new(src, [0, 1], 0)?;
 
         cac.work()?;
         let (buf, _) = out.read_buf()?;
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn tagged_waits_for_full_code_before_match() -> Result<()> {
         let src = ReadStream::from_slice(&[1]);
-        let (mut cac, out) = CorrelateAccessCodeTag::new(src, &[0, 1][..], "sync", 0);
+        let (mut cac, out) = CorrelateAccessCodeTag::new(src, &[0, 1][..], "sync", 0)?;
 
         cac.work()?;
         let (_, tags) = out.read_buf()?;

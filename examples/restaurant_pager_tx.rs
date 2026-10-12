@@ -177,7 +177,7 @@ fn main() -> Result<()> {
     let amplitude = opt.amplitude;
     let (to_complex, samples) = Map::keep_tags(envelope, "OokToComplex", move |level| {
         Complex::new(amplitude * level, 0.0)
-    });
+    })?;
     graph.add(Box::new(to_complex));
     let mut sink = SoapySdrSink::builder(&device, opt.frequency, opt.sample_rate)
         .channel(opt.channel)

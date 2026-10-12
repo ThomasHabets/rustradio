@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn find_packet() -> Result<()> {
-        let (mut b, prev) = VectorSource::new(vec![0u8, KISS_FEND, 0, 1, 2, 3, KISS_FEND]);
+        let (mut b, prev) = VectorSource::new(vec![0u8, KISS_FEND, 0, 1, 2, 3, KISS_FEND])?;
         b.work()?;
         let (mut b, prev) = KissFrame::new(prev);
         b.work()?;
@@ -415,7 +415,7 @@ mod tests {
         let mut data = vec![KISS_FEND];
         data.extend(vec![1; MAX_LEN]);
         data.push(KISS_FEND);
-        let (mut src, prev) = VectorSource::new(data);
+        let (mut src, prev) = VectorSource::new(data)?;
         src.work()?;
         let (mut b, prev) = KissFrame::new(prev);
         b.work()?;
@@ -430,7 +430,7 @@ mod tests {
         let mut data = vec![KISS_FEND];
         data.extend(vec![1; MAX_LEN + 1]);
         data.push(KISS_FEND);
-        let (mut src, prev) = VectorSource::new(data);
+        let (mut src, prev) = VectorSource::new(data)?;
         src.work()?;
         let (mut b, prev) = KissFrame::new(prev);
         b.work()?;

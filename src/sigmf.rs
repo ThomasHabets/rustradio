@@ -421,7 +421,7 @@ impl<T: Sample + Type> SigMFSource<T> {
         };
         let file = std::fs::File::open(base_append(base, "-data"))?;
         let range = (0, file.metadata()?.len());
-        let (dst, rx) = crate::stream::new_stream();
+        let (dst, rx) = crate::stream::new_stream()?;
         Ok((
             Self {
                 file,
@@ -530,7 +530,7 @@ impl<T: Sample + Type> SigMFSource<T> {
         )))?;
         file.seek(std::io::SeekFrom::Start(range.0))?;
         let meta = parse_meta(&meta_string)?;
-        let (dst, rx) = crate::stream::new_stream();
+        let (dst, rx) = crate::stream::new_stream()?;
         Ok((
             Self {
                 file,
@@ -714,7 +714,7 @@ mod tests {
         let tmpd = tempfile::tempdir()?;
         let path = tmpd.path().join("short-data");
         std::fs::write(&path, [0xff])?;
-        let (dst, out) = crate::stream::new_stream();
+        let (dst, out) = crate::stream::new_stream()?;
         let mut src = SigMFSource::<Float> {
             file: std::fs::File::open(path)?,
             meta: SigMF::new("rf32_le".into()),

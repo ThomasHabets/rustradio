@@ -162,8 +162,8 @@ pub fn main() -> Result<()> {
             KissDecode::new(prev),
             FcsAdder::new(prev),
             HdlcFramer::new(prev),
-            PduToStream::new(prev),
-            NrziEncode::new(prev),
+            PduToStream::new(prev)?,
+            NrziEncode::new(prev)?,
             RationalResampler::builder()
                 .deci(baud as usize)
                 .interp(audio_rate as usize)
@@ -172,16 +172,16 @@ pub fn main() -> Result<()> {
                 2200.0 as Float
             } else {
                 1200.0
-            }),
-            Vco::new(prev, 2.0 * std::f64::consts::PI / audio_rate),
-            Map::keep_tags(prev, "ComplexToFloat", |s| s.re),
-            MultiplyConst::new(prev, 0.5),
+            })?,
+            Vco::new(prev, 2.0 * std::f64::consts::PI / audio_rate)?,
+            Map::keep_tags(prev, "ComplexToFloat", |s| s.re)?,
+            MultiplyConst::new(prev, 0.5)?,
             RationalResampler::builder()
                 .deci(audio_rate as usize)
                 .interp(opt.sample_rate as usize)
                 .build(prev)?,
-            Vco::new(prev, 2.0 * std::f64::consts::PI * 5000.0 / opt.sample_rate),
-            Canary::new(prev, move || cancel.cancel()),
+            Vco::new(prev, 2.0 * std::f64::consts::PI * 5000.0 / opt.sample_rate)?,
+            Canary::new(prev, move || cancel.cancel())?,
         ];
         g.add(Box::new(
             SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
@@ -211,14 +211,14 @@ pub fn main() -> Result<()> {
                     100.0,
                     &rustradio::window::WindowType::Hamming,
                 )
-            ),
+            )?,
             RationalResampler::builder()
                 .deci(samp_rate as usize)
                 .interp(samp_rate_2 as usize)
                 .build(prev)?,
-            QuadratureDemod::new(prev, 1.0),
+            QuadratureDemod::new(prev, 1.0)?,
             Hilbert::new(prev, 65, &rustradio::window::WindowType::Hamming)?,
-            QuadratureDemod::new(prev, 1.0),
+            QuadratureDemod::new(prev, 1.0)?,
             FftFilterFloat::new(
                 prev,
                 &rustradio::fir::low_pass(
@@ -227,23 +227,23 @@ pub fn main() -> Result<()> {
                     100.0,
                     &rustradio::window::WindowType::Hamming,
                 )
-            ),
+            )?,
             add_const(
                 prev,
                 -center_freq * 2.0 * std::f32::consts::PI / samp_rate_2
-            ),
+            )?,
             SymbolSync::new(
                 prev,
                 samp_rate_2 / baud,
                 opt.symbol_max_deviation,
                 Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
                 Box::new(rustradio::iir_filter::IirFilter::new(&opt.symbol_taps)),
-            ),
-            BinarySlicer::new(prev),
-            NrziDecode::new(prev),
+            )?,
+            BinarySlicer::new(prev)?,
+            NrziDecode::new(prev)?,
             HdlcDeframer::new(prev, 10, 1500),
             KissEncode::new(prev),
-            PduToStream::new(prev),
+            PduToStream::new(prev)?,
         ];
         g.add(Box::new(WriterSink::new(prev, kiss)));
     }

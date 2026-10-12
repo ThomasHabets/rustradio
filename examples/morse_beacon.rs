@@ -135,7 +135,7 @@ pub fn main() -> Result<()> {
         prev,
         Strobe::new(opt.interval, &opt.msg),
         MorseEncode::new(prev),
-        PduToStream::new(prev),
+        PduToStream::new(prev)?,
         RationalResampler::builder()
             // Multiply by 100 to get more significant digits on raw SPS, which
             // otherwise rounds 20 WPM 16.666 to 16.
@@ -145,7 +145,7 @@ pub fn main() -> Result<()> {
         Map::keep_tags(prev, "ToComplex", move |s| Complex::new(
             amp as Float * s as Float,
             0.0
-        )),
+        ))?,
     ];
     g.add(Box::new(
         SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)

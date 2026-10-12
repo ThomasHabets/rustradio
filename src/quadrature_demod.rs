@@ -182,7 +182,7 @@ mod tests {
                 Complex::new(0.0, 1.0),
                 Complex::new(-1.0, 0.0),
             ];
-            let (mut block, out) = QuadratureDemod::new(ReadStream::from_slice(&input), gain);
+            let (mut block, out) = QuadratureDemod::new(ReadStream::from_slice(&input), gain)?;
             block.work()?;
             let (output, _) = out.read_buf()?;
             assert_eq!(output.len(), 2);
@@ -203,7 +203,7 @@ mod tests {
         // Fill the quad input stream.
         let (mut src, prev);
         {
-            (src, prev) = SignalSourceComplex::new(1200.0, 100.0, 1.0);
+            (src, prev) = SignalSourceComplex::new(1200.0, 100.0, 1.0)?;
             src.work()?;
             let (o, _) = prev.read_buf()?;
             assert_eq!(o.len(), 512_000);
@@ -212,7 +212,7 @@ mod tests {
 
         // Run quad once.
         // Get one less, because quad demod is a difference.
-        let (mut b, out) = QuadratureDemod::new(prev, 1.0);
+        let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
         assert_eq!(out.read_buf()?.0.len(), 511_999);
 
@@ -237,9 +237,9 @@ mod tests {
 
     #[test]
     fn quad_nulls() -> Result<()> {
-        let (mut b, prev) = VectorSource::new(vec![Complex::default(); 4]);
+        let (mut b, prev) = VectorSource::new(vec![Complex::default(); 4])?;
         b.work()?;
-        let (mut b, out) = QuadratureDemod::new(prev, 1.0);
+        let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
         let (o, _) = out.read_buf()?;
         assert_eq!(o.slice(), vec![0.0f32; 3]);
@@ -253,9 +253,9 @@ mod tests {
             Complex::new(0.707, -0.707),
             Complex::new(0.0, -1.0),
             Complex::new(-1.0, 0.0),
-        ]);
+        ])?;
         b.work()?;
-        let (mut b, out) = QuadratureDemod::new(prev, 1.0);
+        let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
         let (o, _) = out.read_buf()?;
         assert_almost_equal_float(
@@ -275,9 +275,9 @@ mod tests {
             Complex::new(0.707, 0.707),
             Complex::new(0.0, 1.0),
             Complex::new(-1.0, 0.0),
-        ]);
+        ])?;
         b.work()?;
-        let (mut b, out) = QuadratureDemod::new(prev, 1.0);
+        let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
         let (o, _) = out.read_buf()?;
         assert_almost_equal_float(

@@ -11,8 +11,8 @@ use crate::{Complex, Float, Result, Sample};
 /// use rustradio::Complex;
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::convert::Inspect;
-/// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0));
-/// let (b, out) = Inspect::new(src, "mymap", move |x, _tags| println!("{x}"));
+/// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0)).unwrap();
+/// let (b, out) = Inspect::new(src, "mymap", move |x, _tags| println!("{x}")).unwrap();
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(
@@ -102,12 +102,12 @@ impl<T: Sample> Block for Parse<T> {
 /// use rustradio::Complex;
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::convert::Map;
-/// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0));
+/// let (src_block, src) = ConstantSource::new(Complex::new(12.0, 13.0)).unwrap();
 /// let (b, out) = Map::new(
 ///     src,
 ///     "mymap",
 ///     move |x, tags| (x.re + 10.0, Cow::Borrowed(tags)),
-/// );
+/// ).unwrap();
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(
@@ -133,16 +133,16 @@ impl Map<(), (), ()> {
     /// Create a Map that just passes tags along.
     ///
     /// The specialization args (`AnySample` and the callback) are discarded,
-    /// just to make `Map::keep_tags(src, "some name", |x| x * 2)` compile.
+    /// just to make `Map::keep_tags(src, "some name", |x| x * 2).unwrap()` compile.
     #[allow(clippy::type_complexity)]
     pub fn keep_tags<In, Out, Name, F2>(
         src: ReadStream<In>,
         name: Name,
         mut f: F2,
-    ) -> (
+    ) -> crate::Result<(
         Map<In, Out, impl for<'a> FnMut(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>)>,
         ReadStream<Out>,
-    )
+    )>
     where
         In: Sample,
         Out: Sample,
@@ -252,9 +252,9 @@ impl<In, Out, F> NCMap<In, Out, F> {
 /// ```
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::blocks::FloatToComplex;
-/// let (re_block, re_src) = ConstantSource::new(1.0);
-/// let (im_block, im_src) = ConstantSource::new(42.0);
-/// let (b, out) = FloatToComplex::new(re_src, im_src);
+/// let (re_block, re_src) = ConstantSource::new(1.0).unwrap();
+/// let (im_block, im_src) = ConstantSource::new(42.0).unwrap();
+/// let (b, out) = FloatToComplex::new(re_src, im_src).unwrap();
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
@@ -282,8 +282,8 @@ impl FloatToComplex {
 /// use rustradio::Complex;
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::blocks::ComplexToFloat;
-/// let (src_block, src) = ConstantSource::new(Complex::new(1.0, 2.0));
-/// let (b, out_re, out_im) = ComplexToFloat::new(src);
+/// let (src_block, src) = ConstantSource::new(Complex::new(1.0, 2.0)).unwrap();
+/// let (b, out_re, out_im) = ComplexToFloat::new(src).unwrap();
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, sync)]
@@ -311,14 +311,14 @@ mod tests {
 
     #[test]
     fn parse_waits_for_full_sample() -> Result<()> {
-        let (tx, rx) = new_stream();
+        let (tx, rx) = new_stream()?;
         {
             let mut w = tx.write_buf()?;
             w.slice()[0] = 1;
             w.produce(1, &[]);
         }
         drop(tx);
-        let (mut p, _out) = Parse::<u32>::new(rx);
+        let (mut p, _out) = Parse::<u32>::new(rx)?;
         assert!(matches![p.work()?, BlockRet::WaitForStream(_, 4)]);
         Ok(())
     }

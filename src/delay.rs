@@ -24,10 +24,9 @@ pub struct Delay<T: Sample> {
 
 impl<T: Sample> Delay<T> {
     /// Create new Delay block.
-    #[must_use]
-    pub fn new(src: ReadStream<T>, delay: usize) -> (Self, ReadStream<T>) {
-        let (dst, dr) = crate::stream::new_stream();
-        (
+    pub fn new(src: ReadStream<T>, delay: usize) -> Result<(Self, ReadStream<T>)> {
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
@@ -36,7 +35,7 @@ impl<T: Sample> Delay<T> {
                 skip: 0,
             },
             dr,
-        )
+        ))
     }
 
     /// Change the delay.
@@ -121,8 +120,8 @@ mod tests {
 
     #[test]
     fn restoring_delay_cancels_pending_skip() -> Result<()> {
-        let (tx, rx) = crate::stream::new_stream();
-        let (mut delay, out) = Delay::new(rx, 2);
+        let (tx, rx) = crate::stream::new_stream()?;
+        let (mut delay, out) = Delay::new(rx, 2)?;
         delay.work()?;
         out.read_buf()?.0.consume(2);
 
@@ -139,7 +138,7 @@ mod tests {
     #[test]
     fn delay_zero() -> Result<()> {
         let s = ReadStream::from_slice(&[1.0f32, 2.0, 3.0]);
-        let (mut delay, o) = Delay::new(s, 0);
+        let (mut delay, o) = Delay::new(s, 0)?;
 
         delay.work()?;
         let (res, _) = o.read_buf()?;
@@ -150,7 +149,7 @@ mod tests {
     #[test]
     fn delay_one() -> Result<()> {
         let s = ReadStream::from_slice(&[1.0f32, 2.0, 3.0]);
-        let (mut delay, o) = Delay::new(s, 1);
+        let (mut delay, o) = Delay::new(s, 1)?;
 
         delay.work()?;
         let (res, _) = o.read_buf()?;
@@ -161,7 +160,7 @@ mod tests {
     #[test]
     fn delay_increase_before_work_extends_remaining_delay() -> Result<()> {
         let s = ReadStream::from_slice(&[1u32, 2]);
-        let (mut delay, o) = Delay::new(s, 1);
+        let (mut delay, o) = Delay::new(s, 1)?;
 
         delay.set_delay(2);
         delay.work()?;
@@ -173,7 +172,7 @@ mod tests {
     #[test]
     fn delay_decrease_before_work_reduces_remaining_delay() -> Result<()> {
         let s = ReadStream::from_slice(&[1u32, 2]);
-        let (mut delay, o) = Delay::new(s, 3);
+        let (mut delay, o) = Delay::new(s, 3)?;
 
         delay.set_delay(1);
         delay.work()?;
@@ -187,7 +186,7 @@ mod tests {
         let cap = crate::stream::DEFAULT_STREAM_SIZE / std::mem::size_of::<u32>();
         let input = (0..cap as u32).collect::<Vec<_>>();
         let s = ReadStream::from_slice(&input);
-        let (mut delay, o) = Delay::new(s, cap + 10);
+        let (mut delay, o) = Delay::new(s, cap + 10)?;
 
         delay.work()?;
         {
@@ -210,7 +209,7 @@ mod tests {
     fn eof_waits_for_pending_delay() -> Result<()> {
         let cap = crate::stream::DEFAULT_STREAM_SIZE / std::mem::size_of::<u32>();
         let s = ReadStream::<u32>::from_slice(&[]);
-        let (mut delay, o) = Delay::new(s, cap + 1);
+        let (mut delay, o) = Delay::new(s, cap + 1)?;
 
         assert!(!crate::block::BlockEOF::eof(&mut delay));
         assert!(matches![delay.work()?, BlockRet::WaitForStream(_, 1)]);
@@ -228,7 +227,7 @@ mod tests {
     #[test]
     fn delay_change() -> Result<()> {
         let s = ReadStream::from_slice(&[1u32, 2]);
-        let (mut delay, o) = Delay::new(s, 1);
+        let (mut delay, o) = Delay::new(s, 1)?;
 
         delay.work()?;
         {

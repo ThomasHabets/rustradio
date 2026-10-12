@@ -54,7 +54,7 @@ mod tests {
     #[test]
     fn skip_count_can_exceed_a_32_bit_sample_index() -> Result<()> {
         let count = u64::from(u32::MAX) + 2;
-        let (mut block, out) = Skip::new(ReadStream::from_slice(&[1u8, 2, 3]), count);
+        let (mut block, out) = Skip::new(ReadStream::from_slice(&[1u8, 2, 3]), count)?;
         block.work()?;
         assert_eq!(block.skip, count - 3);
         assert!(out.read_buf()?.0.is_empty());
@@ -75,7 +75,7 @@ mod tests {
                 .repeat(Repeat::finite(2))
                 .build()?;
             while !matches!(ib.work()?, BlockRet::EOF) {}
-            let (mut b, out) = Skip::new(src, skip as u64);
+            let (mut b, out) = Skip::new(src, skip as u64)?;
             let ret = b.work()?;
             assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");
             let (res, tags) = out.read_buf()?;

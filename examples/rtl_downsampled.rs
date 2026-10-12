@@ -36,7 +36,7 @@ fn run(opt: Opt) -> Result<()> {
         g,
         prev,
         RtlSdrSource::new(opt.freq, samp_rate as u32, opt.gain)?,
-        RtlSdrDecode::new(prev),
+        RtlSdrDecode::new(prev)?,
         FftFilter::new(
             prev,
             rustradio::fir::low_pass_complex(
@@ -45,12 +45,12 @@ fn run(opt: Opt) -> Result<()> {
                 1_000.0,
                 &rustradio::window::WindowType::Hamming,
             )
-        ),
+        )?,
         RationalResampler::builder()
             .deci(samp_rate as usize)
             .interp(samp_rate_2 as usize)
             .build(prev)?,
-        RtlSdrEncode::new(prev),
+        RtlSdrEncode::new(prev)?,
     ];
     let sink = Box::new(
         FileSink::builder("/dev/stdout")

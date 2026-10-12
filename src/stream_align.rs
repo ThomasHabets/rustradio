@@ -29,12 +29,7 @@ impl<T: Sample, U: Sample> StreamAlignBuilder<T, U> {
                 return Err(Error::msg("invalid StreamAlign position key"));
             }
         }
-        Ok(StreamAlign::with_keys(
-            self.left,
-            self.right,
-            self.left_key,
-            self.right_key,
-        ))
+        StreamAlign::with_keys(self.left, self.right, self.left_key, self.right_key)
     }
 }
 
@@ -61,9 +56,9 @@ impl<T: Sample, U: Sample> StreamAlignBuilder<T, U> {
 /// ```
 /// use rustradio::blocks::StreamAlign;
 /// use rustradio::stream::new_stream;
-/// let (_, left) = new_stream::<f32>();
-/// let (_, right) = new_stream::<rustradio::Complex>();
-/// let (align, left_out, right_out) = StreamAlign::new(left, right);
+/// let (_, left) = new_stream::<f32>().unwrap();
+/// let (_, right) = new_stream::<rustradio::Complex>().unwrap();
+/// let (align, left_out, right_out) = StreamAlign::new(left, right).unwrap();
 /// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
@@ -202,8 +197,10 @@ fn checked_add(position: u64, count: u64) -> Result<u64> {
 }
 impl<T: Sample, U: Sample> StreamAlign<T, U> {
     /// Create an aligner using the standard absolute-position tag on both inputs.
-    #[must_use]
-    pub fn new(left: ReadStream<T>, right: ReadStream<U>) -> (Self, ReadStream<T>, ReadStream<U>) {
+    pub fn new(
+        left: ReadStream<T>,
+        right: ReadStream<U>,
+    ) -> Result<(Self, ReadStream<T>, ReadStream<U>)> {
         Self::with_keys(
             left,
             right,
@@ -228,10 +225,10 @@ impl<T: Sample, U: Sample> StreamAlign<T, U> {
         right: ReadStream<U>,
         left_key: String,
         right_key: String,
-    ) -> (Self, ReadStream<T>, ReadStream<U>) {
-        let (left_out, left_read) = new_stream();
-        let (right_out, right_read) = new_stream();
-        (
+    ) -> Result<(Self, ReadStream<T>, ReadStream<U>)> {
+        let (left_out, left_read) = new_stream()?;
+        let (right_out, right_read) = new_stream()?;
+        Ok((
             Self {
                 left,
                 right,
@@ -245,7 +242,7 @@ impl<T: Sample, U: Sample> StreamAlign<T, U> {
             },
             left_read,
             right_read,
-        )
+        ))
     }
 }
 impl<T: Sample, U: Sample> BlockEOF for StreamAlign<T, U> {
@@ -369,7 +366,7 @@ mod tests {
     }
     /// Populate a finite input and close its producer so tests can exercise EOF.
     fn input<T: Sample>(samples: &[T], tags: &[Tag]) -> Result<ReadStream<T>> {
-        let (write, read) = new_stream();
+        let (write, read) = new_stream()?;
         let mut buffer = write.write_buf()?;
         buffer.fill_from_slice(samples);
         buffer.produce(samples.len(), tags);
@@ -394,7 +391,7 @@ mod tests {
         ] {
             let left = input(&[0u32, 1, 2, 3], &[anchor(0, left_start)])?;
             let right = input(&[0.0f32, 1.0, 2.0, 3.0], &[anchor(0, right_start)])?;
-            let (mut block, out_left, out_right) = StreamAlign::new(left, right);
+            let (mut block, out_left, out_right) = StreamAlign::new(left, right)?;
             assert!(matches!(block.work()?, BlockRet::EOF));
             assert_eq!(samples(&out_left)?, want_left);
             assert_eq!(samples(&out_right)?, want_right);
@@ -462,7 +459,7 @@ mod tests {
                 } else {
                     (sparse, dense)
                 };
-                let (mut block, l, r) = StreamAlign::new(left, right);
+                let (mut block, l, r) = StreamAlign::new(left, right)?;
                 assert!(matches!(block.work()?, BlockRet::EOF));
                 assert_eq!(samples(&l)?, [0, 1, 5, 6, 7]);
                 assert_eq!(samples(&r)?, [0, 1, 5, 6, 7]);
@@ -483,7 +480,7 @@ mod tests {
     fn gaps_on_both_inputs_merge_into_shared_timeline() -> Result<()> {
         let left = input(&[0u32, 1, 5, 6, 7], &[anchor(0, 100), gap(2, 3)])?;
         let right = input(&[0u32, 3, 4, 5, 6, 7], &[anchor(0, 100), gap(1, 2)])?;
-        let (mut block, l, r) = StreamAlign::new(left, right);
+        let (mut block, l, r) = StreamAlign::new(left, right)?;
         block.work()?;
         assert_eq!(samples(&l)?, [0, 5, 6, 7]);
         assert_eq!(samples(&r)?, [0, 5, 6, 7]);
@@ -505,7 +502,7 @@ mod tests {
         let start = u64::MAX - 20;
         let left = input(&[0u32, 5, 6], &[anchor(0, start), anchor(1, start + 5)])?;
         let right = input(&[0u32, 1, 2, 3, 4, 5, 6], &[anchor(0, start)])?;
-        let (mut block, l, r) = StreamAlign::new(left, right);
+        let (mut block, l, r) = StreamAlign::new(left, right)?;
         block.work()?;
         assert_eq!(samples(&l)?, [0, 5, 6]);
         assert_eq!(samples(&l)?, samples(&r)?);
@@ -545,7 +542,7 @@ mod tests {
             let (mut block, l, r) = StreamAlign::new(
                 input(&[1u32, 2], &bad)?,
                 input(&[1u32, 2], &[anchor(0, right_start)])?,
-            );
+            )?;
             assert!(block.work().is_err(), "markers: {bad:?}");
             drop((l, r));
         }
@@ -555,8 +552,8 @@ mod tests {
     #[test]
     fn invalid_configuration() {
         for key in ["", GAP_SAMPLES, SAMPLE_INDEX] {
-            let (_, left) = new_stream::<u32>();
-            let (_, right) = new_stream::<f32>();
+            let (_, left) = new_stream::<u32>().unwrap();
+            let (_, right) = new_stream::<f32>().unwrap();
             assert!(
                 StreamAlign::builder(left, right)
                     .tag_keys(key, ABSOLUTE_SAMPLE_INDEX)
@@ -577,7 +574,7 @@ mod tests {
             let (mut block, l, r) = StreamAlign::new(
                 input(&left_values, &markers)?,
                 input(&[10u32, 11], &[anchor(0, 10)])?,
-            );
+            )?;
             assert!(matches!(block.work()?, BlockRet::EOF));
             assert!(samples(&l)?.is_empty());
             assert!(samples(&r)?.is_empty());
@@ -587,9 +584,9 @@ mod tests {
 
     #[test]
     fn repeated_wait_does_not_apply_a_gap_twice() -> Result<()> {
-        let (right_write, right) = new_stream::<u32>();
+        let (right_write, right) = new_stream::<u32>()?;
         let left = input(&[5u32, 6], &[anchor(0, 100), gap(0, 5)])?;
-        let (mut block, l, r) = StreamAlign::new(left, right);
+        let (mut block, l, r) = StreamAlign::new(left, right)?;
         for _ in 0..3 {
             assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
         }
@@ -609,7 +606,7 @@ mod tests {
         for block_left in [false, true] {
             let left = input(&[0u32, 4, 5], &[anchor(0, 0), gap(1, 3)])?;
             let right = input(&[0u32, 1, 2, 3, 4, 5], &[anchor(0, 0)])?;
-            let (mut block, l, r) = StreamAlign::new(left, right);
+            let (mut block, l, r) = StreamAlign::new(left, right)?;
             let writer = if block_left {
                 &block.left_out
             } else {
@@ -644,9 +641,9 @@ mod tests {
     }
     #[test]
     fn incremental_inputs_and_gap_while_output_is_full() -> Result<()> {
-        let (left_write, left) = new_stream::<u32>();
-        let (right_write, right) = new_stream::<u32>();
-        let (mut block, l, r) = StreamAlign::new(left, right);
+        let (left_write, left) = new_stream::<u32>()?;
+        let (right_write, right) = new_stream::<u32>()?;
+        let (mut block, l, r) = StreamAlign::new(left, right)?;
         let mut initial = left_write.write_buf()?;
         initial.fill_from_slice(&[0]);
         initial.produce(1, &[anchor(0, 0)]);
@@ -702,7 +699,7 @@ mod tests {
         let (mut block, l, r) = StreamAlign::new(
             input(&[1u32, 2], &[anchor(0, 0)])?,
             input(&[1u32, 2], &[anchor(0, 0)])?,
-        );
+        )?;
         drop(l);
         assert!(matches!(block.work()?, BlockRet::EOF));
         assert!(samples(&r)?.is_empty());
@@ -712,9 +709,9 @@ mod tests {
 
     #[test]
     fn alignment_across_successive_input_buffers() -> Result<()> {
-        let (write, left) = new_stream::<u32>();
+        let (write, left) = new_stream::<u32>()?;
         let right = input(&[5u32, 6, 7], &[anchor(0, 5)])?;
-        let (mut block, l, r) = StreamAlign::new(left, right);
+        let (mut block, l, r) = StreamAlign::new(left, right)?;
         for chunk in 0..4 {
             let mut buffer = write.write_buf()?;
             buffer.fill_from_slice(&[chunk * 2, chunk * 2 + 1]);

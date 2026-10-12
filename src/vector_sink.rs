@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn only_data() -> Result<()> {
-        let (mut src, src_out) = VectorSource::new(vec![0u32, 1, 2, 3, 4, 5]);
+        let (mut src, src_out) = VectorSource::new(vec![0u32, 1, 2, 3, 4, 5])?;
         let mut sink = VectorSink::new(src_out, 100);
         src.work()?;
         sink.work()?;
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn maxed_out() -> Result<()> {
-        let (mut src, src_out) = VectorSource::new(vec![0u32, 1, 2, 3, 4, 5]);
+        let (mut src, src_out) = VectorSource::new(vec![0u32, 1, 2, 3, 4, 5])?;
         let mut sink = VectorSink::new(src_out, 3);
         let r = src.work()?;
         assert!(matches![r, BlockRet::EOF], "Got {r:?}");

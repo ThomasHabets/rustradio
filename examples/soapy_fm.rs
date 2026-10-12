@@ -67,7 +67,7 @@ pub fn main() -> Result<()> {
         1000.0,
         &rustradio::window::WindowType::Hamming,
     );
-    let prev = blockchain![g, prev, FftFilter::new(prev, taps)];
+    let prev = blockchain![g, prev, FftFilter::new(prev, taps)?];
 
     // Resample.
     let new_samp_rate = 200_000.0;
@@ -84,7 +84,7 @@ pub fn main() -> Result<()> {
     // TODO: Add broadcast FM deemph.
 
     // Quad demod.
-    let prev = blockchain![g, prev, QuadratureDemod::new(prev, 1.0)];
+    let prev = blockchain![g, prev, QuadratureDemod::new(prev, 1.0)?];
 
     let taps = rustradio::fir::low_pass(
         samp_rate,
@@ -93,7 +93,7 @@ pub fn main() -> Result<()> {
         &rustradio::window::WindowType::Hamming,
     );
     //let audio_filter = FirFilter::new(prev, &taps);
-    let prev = blockchain![g, prev, FftFilterFloat::new(prev, &taps)];
+    let prev = blockchain![g, prev, FftFilterFloat::new(prev, &taps)?];
 
     // Resample audio.
     let new_samp_rate = 48_000.0;
@@ -111,9 +111,9 @@ pub fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        MultiplyConst::new(prev, opt.volume),
+        MultiplyConst::new(prev, opt.volume)?,
         // Convert to .au.
-        AuEncode::new(prev, rustradio::au::Encoding::Pcm16, 48000, 1),
+        AuEncode::new(prev, rustradio::au::Encoding::Pcm16, 48000, 1)?,
     ];
 
     // Save to file.

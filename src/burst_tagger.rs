@@ -30,10 +30,10 @@ use crate::{Float, Sample};
 /// use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIirFilter,BurstTagger,StreamToPdu};
 /// use rustradio::Complex;
 /// let (src, src_out) = FileSource::new("/dev/null")?;
-/// let (tee, data, b) = Tee::new(src_out);
-/// let (c2m, c2m_out) = ComplexToMag2::new(b);
+/// let (tee, data, b) = Tee::new(src_out).unwrap();
+/// let (c2m, c2m_out) = ComplexToMag2::new(b).unwrap();
 /// let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
-/// let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst");
+/// let (burst, burst_out) = BurstTagger::new(data, iir_out, 0.0001, "burst").unwrap();
 /// let pdus = StreamToPdu::new(burst_out, "burst", 10_000, 50);
 /// // pdus.out() now delivers bursts as Vec<Complex>
 /// # Ok::<(), anyhow::Error>(())
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn tag_it() -> Result<()> {
-        let (mut src, src_out) = VectorSource::new((0..100).map(|i| i as u32).collect::<Vec<_>>());
+        let (mut src, src_out) = VectorSource::new((0..100).map(|i| i as u32).collect::<Vec<_>>())?;
         let (mut trigger, trigger_out) = VectorSource::new(
             (0..100)
                 .map(|i| match i as u32 {
@@ -111,8 +111,8 @@ mod tests {
                     90.. => 0.2,
                 })
                 .collect::<Vec<_>>(),
-        );
-        let (mut b, b_out) = BurstTagger::new(src_out, trigger_out, 0.25, "burst");
+        )?;
+        let (mut b, b_out) = BurstTagger::new(src_out, trigger_out, 0.25, "burst")?;
         let mut sink = VectorSink::new(b_out, 1000);
         src.work()?;
         trigger.work()?;

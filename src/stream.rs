@@ -255,9 +255,10 @@ pub struct WriteStream<T> {
 }
 
 impl<T: Default + Copy> WriteStream<T> {
-    /// Create new stream pair.
-    #[must_use]
-    pub fn new() -> (WriteStream<T>, ReadStream<T>) {
+    /// Create a stream pair, returning buffer creation errors.
+    ///
+    /// See [`new_stream`] for supported layouts and possible errors.
+    pub fn new() -> Result<(WriteStream<T>, ReadStream<T>)> {
         new_stream()
     }
 }
@@ -308,14 +309,13 @@ impl<T: Copy> WriteStream<T> {
 /// Storage starts with valid default values; zero bits need not represent a
 /// valid element.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if allocation fails or the element size/alignment is incompatible
-/// with the fixed buffer layout, including zero-sized elements.
-#[must_use]
-pub fn new_stream<T: Default + Copy>() -> (WriteStream<T>, ReadStream<T>) {
-    let circ = Arc::new(crate::sys::Buffer::new(DEFAULT_STREAM_SIZE).unwrap());
-    (WriteStream { circ: circ.clone() }, ReadStream { circ })
+/// Returns buffer creation errors, including temporary-file or memory-mapping
+/// failures and unsupported element layouts (such as zero-sized elements).
+pub fn new_stream<T: Default + Copy>() -> Result<(WriteStream<T>, ReadStream<T>)> {
+    let circ = Arc::new(crate::sys::Buffer::new(DEFAULT_STREAM_SIZE)?);
+    Ok((WriteStream { circ: circ.clone() }, ReadStream { circ }))
 }
 
 struct NCEntry<T> {
@@ -564,7 +564,7 @@ impl<T: Len> NCReadStream<T> {
 mod tests {
     #[test]
     fn windows_are_exclusive_per_endpoint_and_released_on_drop() -> Result<()> {
-        let (tx, rx) = new_stream::<u8>();
+        let (tx, rx) = new_stream::<u8>()?;
         let mut writer = tx.write_buf()?;
         assert!(tx.write_buf().is_err());
         let (reader, _) = rx.read_buf()?;
@@ -587,7 +587,7 @@ mod tests {
 
     #[test]
     fn reader_cannot_consume_samples_produced_after_checkout() -> Result<()> {
-        let (tx, rx) = new_stream::<u8>();
+        let (tx, rx) = new_stream::<u8>()?;
         let (reader, _) = rx.read_buf()?;
         let mut writer = tx.write_buf()?;
         writer.fill_from_slice(&[1]);
@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn writer_cannot_produce_space_freed_after_checkout() -> Result<()> {
-        let (tx, rx) = new_stream::<u8>();
+        let (tx, rx) = new_stream::<u8>()?;
         let mut writer = tx.write_buf()?;
         let len = writer.len();
         writer.slice().fill(1);

@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)
+        SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)?
     ];
 
     g.add(Box::new(

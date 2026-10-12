@@ -22,18 +22,18 @@ pub struct CmaEqualizer {
 }
 
 impl CmaEqualizer {
-    #[must_use]
+    /// Create the equalizer and output, propagating stream allocation errors.
     pub fn new(
         ntaps: usize,
         desired_modulus: Float,
         step_size: Float,
         src: ReadStream<Complex>,
-    ) -> (Self, ReadStream<Complex>) {
+    ) -> Result<(Self, ReadStream<Complex>)> {
         assert_ne!(ntaps, 0);
         let mut taps = vec![Complex::default(); ntaps];
         taps[0] = Complex::new(1.0, 0.0);
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 taps: taps.into_boxed_slice(),
                 desired_modulus,
@@ -42,7 +42,7 @@ impl CmaEqualizer {
                 dst,
             },
             dr,
-        )
+        ))
     }
 }
 
@@ -118,7 +118,7 @@ mod tests {
             .windows(taps.len())
             .map(|window| taps.iter().zip(window).map(|(t, s)| t * s).sum())
             .collect();
-        let (mut b, out) = CmaEqualizer::new(taps.len(), 1.0, 0.0, ReadStream::from_slice(&input));
+        let (mut b, out) = CmaEqualizer::new(taps.len(), 1.0, 0.0, ReadStream::from_slice(&input))?;
         b.taps = taps;
         assert!(matches!(b.work()?, BlockRet::Again));
         let (output, _) = out.read_buf()?;
@@ -136,7 +136,7 @@ mod tests {
             Complex::new(2.0, 0.0),
             Complex::new(3.0, 0.0),
         ];
-        let (mut b, out) = CmaEqualizer::new(2, 1.0, 0.0, ReadStream::from_slice(&input));
+        let (mut b, out) = CmaEqualizer::new(2, 1.0, 0.0, ReadStream::from_slice(&input))?;
 
         assert!(matches![b.work()?, BlockRet::Again]);
         assert_eq!(out.read_buf()?.0.slice(), &input[..2]);

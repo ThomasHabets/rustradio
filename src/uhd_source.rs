@@ -136,7 +136,7 @@ impl UhdSourceBuilder {
             .channels(vec![self.channel])
             .build();
         let stream = self.device.rx_stream(&stream_args)?;
-        let (dst, output) = crate::stream::new_stream();
+        let (dst, output) = crate::stream::new_stream()?;
         Ok((
             UhdSource {
                 // Keep this field before `_device`; stream must be dropped first.

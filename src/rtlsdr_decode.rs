@@ -55,10 +55,10 @@ mod tests {
 
     #[test]
     fn empty() -> crate::Result<()> {
-        let (mut src, src_out) = VectorSource::new(vec![]);
+        let (mut src, src_out) = VectorSource::new(vec![])?;
         let r = src.work()?;
         assert!(matches![r, BlockRet::EOF], "Want EOF, got {r:?}");
-        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out)?;
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 0);
@@ -67,9 +67,9 @@ mod tests {
 
     #[test]
     fn some_input() -> crate::Result<()> {
-        let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0, 13]);
+        let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0, 13])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out)?;
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = dec_out.read_buf()?;
         // Probably this should compare close to, but not equal.
@@ -95,9 +95,9 @@ mod tests {
 
     #[test]
     fn uneven() -> crate::Result<()> {
-        let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0]);
+        let (mut src, src_out) = VectorSource::new(vec![0, 10, 20, 10, 0])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out)?;
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
         let (res, _) = dec_out.read_buf()?;
         assert_eq!(res.len(), 2);
@@ -107,9 +107,9 @@ mod tests {
     #[test]
     fn overflow() -> crate::Result<()> {
         // Input is pairs of bytes. Output is complex, meaning a 4x increase. That won't fit.
-        let (mut src, src_out) = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE]);
+        let (mut src, src_out) = VectorSource::new(vec![0; crate::stream::DEFAULT_STREAM_SIZE])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (mut dec, dec_out) = RtlSdrDecode::new(src_out);
+        let (mut dec, dec_out) = RtlSdrDecode::new(src_out)?;
         for n in 0..4 {
             eprintln!("loop iter: {n}");
             assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);

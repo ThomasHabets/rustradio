@@ -39,7 +39,7 @@ mod tests {
             Complex::new(0.0, -2.0),
             Complex::new(0.5, 0.0),
         ];
-        let (mut block, out) = ComplexToMag2::new(ReadStream::from_slice(&input));
+        let (mut block, out) = ComplexToMag2::new(ReadStream::from_slice(&input))?;
         block.work()?;
         assert_eq!(
             out.read_buf()?.0.slice(),

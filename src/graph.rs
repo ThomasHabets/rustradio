@@ -54,8 +54,8 @@ use rustradio::graph::{Graph, GraphRunner};
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
 let (src, src_out) = FileSource::new("/dev/null")?;
-let (dec, dec_out) = RtlSdrDecode::new(src_out);
-let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0));
+let (dec, dec_out) = RtlSdrDecode::new(src_out)?;
+let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0))?;
 let sink = Box::new(NullSink::new(add_out));
 let mut g = Graph::new();
 g.add(Box::new(src));
@@ -332,8 +332,8 @@ mod tests {
         use crate::Complex;
         use crate::blocks::{AddConst, FileSource, NullSink, RtlSdrDecode};
         let (src, src_out) = FileSource::new("/dev/null")?;
-        let (dec, dec_out) = RtlSdrDecode::new(src_out);
-        let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0));
+        let (dec, dec_out) = RtlSdrDecode::new(src_out)?;
+        let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0))?;
         let sink = Box::new(NullSink::new(add_out));
         let mut g = Graph::new();
         g.add(Box::new(src));
@@ -398,7 +398,7 @@ mod eof_tests {
     }
     #[test]
     fn completed_source_closes_stream_before_graph_returns() -> Result<()> {
-        let (source, stream) = crate::vector_source::VectorSource::new(vec![1.0f32]);
+        let (source, stream) = crate::vector_source::VectorSource::new(vec![1.0f32])?;
         let finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let mut graph = Graph::new();
         graph.add(Box::new(ClosingSink {

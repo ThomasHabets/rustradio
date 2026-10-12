@@ -168,14 +168,14 @@ fn receiver_traditional(
             .deci(opt.sample_rate as usize)
             .interp(samp_rate_2 as usize)
             .build(prev)?,
-        QuadratureDemod::new(prev, 1.0),
+        QuadratureDemod::new(prev, 1.0)?,
         SymbolSync::new(
             prev,
             samp_rate_2 / baud,
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
             Box::new(rustradio::iir_filter::IirFilter::new(&opt.symbol_taps)),
-        ),
+        )?,
     ])
 }
 
@@ -198,24 +198,24 @@ fn receiver_wpcr(
     // Tee out signal strength.
     let iir_alpha = 0.01;
     let threshold = 0.1;
-    let (b, prev, burst_tee) = Tee::new(prev);
+    let (b, prev, burst_tee) = Tee::new(prev)?;
     g.add(Box::new(b));
     let burst_tee = blockchain![
         g,
         burst_tee,
-        ComplexToMag2::new(burst_tee),
+        ComplexToMag2::new(burst_tee)?,
         SinglePoleIirFilter::new(burst_tee, iir_alpha)?,
     ];
     Ok(blockchain![
         g,
         prev,
-        QuadratureDemod::new(prev, 1.0),
-        BurstTagger::new(prev, burst_tee, threshold, "burst".to_string()),
+        QuadratureDemod::new(prev, 1.0)?,
+        BurstTagger::new(prev, burst_tee, threshold, "burst".to_string())?,
         // 255*8*0.192 sps = 10625
         StreamToPdu::new(prev, "burst".to_string(), samp_rate_2 as usize, 11000),
         Midpointer::new(prev),
         Wpcr::builder(prev).samp_rate(samp_rate_2).build(),
-        PduToStream::new(prev),
+        PduToStream::new(prev)?,
     ])
 }
 
@@ -251,9 +251,9 @@ pub fn main() -> Result<()> {
             KissDecode::new(prev),
             FcsAdder::new(prev),
             HdlcFramer::new(prev),
-            PduToStream::new(prev),
-            Scrambler::g3ruh(prev),
-            NrziEncode::new(prev),
+            PduToStream::new(prev)?,
+            Scrambler::g3ruh(prev)?,
+            NrziEncode::new(prev)?,
             RationalResampler::builder()
                 .deci(baud as usize)
                 .interp(if_rate as usize)
@@ -262,9 +262,9 @@ pub fn main() -> Result<()> {
                 3000.0 as Float
             } else {
                 -3000.0
-            }),
-            Vco::new(prev, 2.0 * std::f64::consts::PI / if_rate),
-            MultiplyConst::new(prev, 0.5.into()),
+            })?,
+            Vco::new(prev, 2.0 * std::f64::consts::PI / if_rate)?,
+            MultiplyConst::new(prev, 0.5.into())?,
             RationalResampler::builder()
                 .deci(if_rate as usize)
                 .interp(opt.sample_rate as usize)
@@ -277,8 +277,8 @@ pub fn main() -> Result<()> {
                     1000.0,
                     &rustradio::window::WindowType::Hamming,
                 )
-            ),
-            Canary::new(prev, move || cancel.cancel()),
+            )?,
+            Canary::new(prev, move || cancel.cancel())?,
         ];
         g.add(Box::new(
             SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
@@ -304,7 +304,7 @@ pub fn main() -> Result<()> {
                     100.0,
                     &rustradio::window::WindowType::Hamming,
                 )
-            ),
+            )?,
         ];
         let prev = if opt.wpcr {
             receiver_wpcr(&opt, &mut g, prev)?
@@ -314,12 +314,12 @@ pub fn main() -> Result<()> {
         let prev = blockchain![
             g,
             prev,
-            BinarySlicer::new(prev),
-            NrziDecode::new(prev),
-            Descrambler::g3ruh(prev),
+            BinarySlicer::new(prev)?,
+            NrziDecode::new(prev)?,
+            Descrambler::g3ruh(prev)?,
             HdlcDeframer::new(prev, 10, 1500),
             KissEncode::new(prev),
-            PduToStream::new(prev),
+            PduToStream::new(prev)?,
         ];
         g.add(Box::new(WriterSink::new(prev, kiss)));
     }

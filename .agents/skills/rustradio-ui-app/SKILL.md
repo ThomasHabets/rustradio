@@ -59,7 +59,8 @@ DSP graph. An existing application's equivalent structure is fine.
 
 Use the macro for sequences of constructors returning `(block, output)`,
 including an already-created source tuple. It adds each block and returns the
-last output stream. Put `?` on fallible constructors inside the macro.
+last output stream. Put `?` on fallible constructors inside the macro. All constructors that
+allocate copying stream outputs, including `WasmSource::new().unwrap()`, return `Result`.
 
 ```rust
 use rustradio::blockchain;

@@ -55,10 +55,10 @@ impl<T: Sample> std::fmt::Debug for State<T> {
 /// use rustradio::blocks::{FileSource, Tee, ComplexToMag2, SinglePoleIirFilter,BurstTagger,StreamToPdu};
 /// use rustradio::Complex;
 /// let (src, src_out) = FileSource::new("/dev/null")?;
-/// let (tee, data, b) = Tee::new(src_out);
-/// let (c2m, c2m_out) = ComplexToMag2::new(b);
+/// let (tee, data, b) = Tee::new(src_out).unwrap();
+/// let (c2m, c2m_out) = ComplexToMag2::new(b).unwrap();
 /// let (iir, iir_out) = SinglePoleIirFilter::new(c2m_out, 0.01).unwrap();
-/// let (burst, prev) = BurstTagger::new(data, iir_out, 0.0001, "burst");
+/// let (burst, prev) = BurstTagger::new(data, iir_out, 0.0001, "burst").unwrap();
 /// let pdus = StreamToPdu::new(prev, "burst", 10_000, 50);
 /// // pdus.out() now delivers bursts as Vec<Complex>
 /// # Ok::<(), anyhow::Error>(())
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn ordered_spans_preserve_metadata_and_ignore_repeated_starts() -> Result<()> {
         for reversed in [false, true] {
-            let (writer, reader) = crate::stream::new_stream();
+            let (writer, reader) = crate::stream::new_stream()?;
             let (mut block, out) = StreamToPdu::new(reader, "burst", 30, 2);
             let mut tags = vec![
                 metadata(0, 0),
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn spans_and_tail_cross_input_windows() -> Result<()> {
-        let (writer, reader) = crate::stream::new_stream();
+        let (writer, reader) = crate::stream::new_stream()?;
         let (mut block, out) = StreamToPdu::new(reader, "burst", 20, 4);
         feed(
             &writer,
@@ -397,7 +397,7 @@ mod tests {
     fn simultaneous_markers_complete_at_eof_and_before_next_burst() -> Result<()> {
         for samples in [vec![42], vec![42, 43]] {
             for reversed in [false, true] {
-                let (writer, reader) = crate::stream::new_stream();
+                let (writer, reader) = crate::stream::new_stream()?;
                 let (mut block, out) = StreamToPdu::new(reader, "burst", 1, 1);
                 let tags: Vec<_> = (0..samples.len())
                     .flat_map(|pos| {
@@ -426,7 +426,7 @@ mod tests {
 
     #[test]
     fn size_limit_resumes_after_the_offending_sample() -> Result<()> {
-        let (writer, reader) = crate::stream::new_stream();
+        let (writer, reader) = crate::stream::new_stream()?;
         let (mut block, out) = StreamToPdu::new(reader, "burst", 3, 0);
         feed(
             &writer,
@@ -448,7 +448,7 @@ mod tests {
         assert_eq!(out.pop(), Some((vec![8, 9], vec![])));
         assert!(out.pop().is_none());
 
-        let (writer, reader) = crate::stream::new_stream();
+        let (writer, reader) = crate::stream::new_stream()?;
         let (mut block, out) = StreamToPdu::new(reader, "burst", 0, 0);
         feed(
             &writer,
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn full_output_preserves_input_and_resumes_between_bursts() -> Result<()> {
         use crate::stream::StreamWait;
-        let (writer, reader) = crate::stream::new_stream();
+        let (writer, reader) = crate::stream::new_stream()?;
         let (mut block, out) = StreamToPdu::new(reader, "burst", 10, 1);
         feed(
             &writer,

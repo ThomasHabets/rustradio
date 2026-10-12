@@ -67,19 +67,18 @@ impl SymbolSync {
     # Args
     * `sps`: Samples per symbol. IOW `samp_rate / baud`.
      */
-    #[must_use]
     pub fn new(
         src: ReadStream<Float>,
         sps: Float,
         max_deviation: Float,
         ted: Box<dyn Ted>,
         mut clock_filter: Box<dyn ClampedFilter<Float>>,
-    ) -> (Self, ReadStream<Float>) {
+    ) -> Result<(Self, ReadStream<Float>)> {
         assert!(sps > 1.0);
         // The filter tracks deviation from sps, not the absolute period.
         clock_filter.fill(0.0);
-        let (dst, dr) = crate::stream::new_stream();
-        (
+        let (dst, dr) = crate::stream::new_stream()?;
+        Ok((
             Self {
                 src,
                 dst,
@@ -95,21 +94,21 @@ impl SymbolSync {
                 out_clock: None,
             },
             dr,
-        )
+        ))
     }
 
     /// Return clock stream.
     ///
     /// The output stream can only be created once, so if called a second time,
     /// just returns None.
-    pub fn out_clock(&mut self) -> Option<ReadStream<Float>> {
+    pub fn out_clock(&mut self) -> Result<Option<ReadStream<Float>>> {
         if self.out_clock.is_some() {
             warn!("SymbolSync::out_clock() called more than once");
-            return None;
+            return Ok(None);
         }
-        let (tx, rx) = crate::stream::new_stream();
+        let (tx, rx) = crate::stream::new_stream()?;
         self.out_clock = Some(tx);
-        Some(rx)
+        Ok(Some(rx))
     }
 }
 
@@ -237,8 +236,8 @@ mod tests {
             0.1,
             Box::new(TedZeroCrossing::new()),
             Box::new(IirFilter::new(&[0.0001, 0.9999])),
-        );
-        let clock = block.out_clock().unwrap();
+        )?;
+        let clock = block.out_clock()?.unwrap();
 
         assert!(matches!(block.work()?, BlockRet::Again));
         let (symbols, _) = output.read_buf()?;
@@ -261,7 +260,7 @@ mod tests {
             1.0,
             Box::new(TedZeroCrossing::new()),
             Box::new(IirFilter::new(&[1.0])),
-        );
+        )?;
 
         assert!(matches![b.work()?, BlockRet::Again]);
         assert_eq!(out.read_buf()?.0.len(), 2);
@@ -277,7 +276,7 @@ mod tests {
             1.0,
             Box::new(TedZeroCrossing::new()),
             Box::new(IirFilter::new(&[1.0])),
-        );
+        )?;
         let mut output = block.dst.write_buf()?;
         let available = output.len() - 1;
         output.slice()[..available].fill(0.0);

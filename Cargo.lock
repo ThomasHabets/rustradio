@@ -2731,39 +2731,6 @@ dependencies = [
 
 [[package]]
 name = "rustradio"
-version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a6934d4619c0637aa2a63eb4cf946213f3bd2f557deee6c737e40bd4b9eb418"
-dependencies = [
- "async-channel",
- "async-trait",
- "axum",
- "fast-math",
- "futures-util",
- "itertools 0.13.0",
- "libc",
- "log",
- "num-complex",
- "prost",
- "prost-types",
- "rayon",
- "rustfft",
- "rustradio_macros 0.18.5",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tonic",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
-name = "rustradio"
 version = "0.18.8"
 dependencies = [
  "anyhow",
@@ -2792,7 +2759,7 @@ dependencies = [
  "rayon",
  "rtlsdr",
  "rustfft",
- "rustradio_macros 0.18.8",
+ "rustradio_macros",
  "rustyline",
  "serde",
  "serde_json",
@@ -2820,8 +2787,8 @@ dependencies = [
  "log",
  "num-complex",
  "prost",
- "rustradio 0.18.5",
- "rustradio_macros 0.18.5",
+ "rustradio",
+ "rustradio_macros",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -2833,36 +2800,13 @@ dependencies = [
 
 [[package]]
 name = "rustradio_macros"
-version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0aa8dca2e148c4910a64d44ebac91abdbae95b344b061cfd71892e68a4ed6a75"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustradio_macros_code 0.18.5",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "rustradio_macros"
 version = "0.18.8"
 dependencies = [
  "itertools 0.14.0",
  "proc-macro2",
  "quote",
- "rustradio 0.18.8",
- "rustradio_macros_code 0.18.8",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "rustradio_macros_code"
-version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d03db3f5902d00ace2b3e5fb435b918bbe1332fcf6d46424a92cfb1cf16ea2f1"
-dependencies = [
- "proc-macro2",
- "quote",
+ "rustradio",
+ "rustradio_macros_code",
  "syn 2.0.118",
 ]
 
@@ -2872,7 +2816,7 @@ version = "0.18.8"
 dependencies = [
  "proc-macro2",
  "quote",
- "rustradio 0.18.8",
+ "rustradio",
  "syn 2.0.118",
 ]
 

@@ -167,6 +167,12 @@ in every existing block. Conversely, the repository's universal use of the
 derive is a strong convention that still exists to generate trait plumbing,
 not a Rust language requirement.
 
+Copying stream construction is fallible: use `new_stream()?` and return
+`Result<(Self, outputs...)>` from manual constructors that allocate copying
+outputs. The derive macro generates this return type for `WriteStream` outputs;
+constructors with only `NCWriteStream` outputs remain infallible. Builders should
+allocate copying outputs in `build()` so allocation errors can be returned.
+
 ## Verify the change
 
 Run the narrow checks first, then broaden them. Replace `new_block` with the

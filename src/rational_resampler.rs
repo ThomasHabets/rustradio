@@ -144,7 +144,7 @@ impl<T: Sample> RationalResampler<T> {
         let g = gcd(deci, interp);
         deci /= g;
         interp /= g;
-        let (dst, dr) = crate::stream::new_stream();
+        let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 interp: i64::try_from(interp)?,
@@ -240,7 +240,7 @@ mod tests {
             Complex::new(6.0, 0.2),
         ];
         for deci in 1..=(input.len() + 1) {
-            let (mut src, src_out) = VectorSource::new(input.clone());
+            let (mut src, src_out) = VectorSource::new(input.clone())?;
             assert!(matches![src.work()?, BlockRet::EOF]);
             let (mut b, os) = RationalResampler::new(src_out, 1, deci)?;
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn example64() -> Result<()> {
         let input: Vec<_> = (0..50).collect();
-        let (mut src, src_out) = VectorSource::new(input.clone());
+        let (mut src, src_out) = VectorSource::new(input.clone())?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut b, os) = RationalResampler::new(src_out, 25, 64)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn example128() -> Result<()> {
         let input: Vec<_> = (0..50).collect();
-        let (mut src, src_out) = VectorSource::new(input.clone());
+        let (mut src, src_out) = VectorSource::new(input.clone())?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
@@ -291,7 +291,7 @@ mod tests {
         let boundary_sample = u32::try_from(output_capacity / 3)?;
         let input: Vec<u32> = (0..=boundary_sample).collect();
 
-        let (mut src, src_out) = VectorSource::new(input);
+        let (mut src, src_out) = VectorSource::new(input)?;
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut b, os) = RationalResampler::new(src_out, 3, 1)?;
 
@@ -313,7 +313,7 @@ mod tests {
 
         // Path 1: direct 25/128.
         let path1 = {
-            let (mut src, src_out) = VectorSource::new(input.clone());
+            let (mut src, src_out) = VectorSource::new(input.clone())?;
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
@@ -323,7 +323,7 @@ mod tests {
 
         // Path 2: first 1/2, then 25/64.
         let path2 = {
-            let (mut src, src_out) = VectorSource::new(input.clone());
+            let (mut src, src_out) = VectorSource::new(input.clone())?;
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             let (mut b1, os1) = RationalResampler::new(src_out, 1, 2)?;
@@ -353,7 +353,7 @@ mod tests {
         let input: Vec<_> = (0..inputsize)
             .map(|i| Complex::new(i as Float, 0.0))
             .collect();
-        let (mut src, src_out) = VectorSource::new(input);
+        let (mut src, src_out) = VectorSource::new(input)?;
         src.work()?;
         let (mut resamp, os) = RationalResampler::new(src_out, interp, deci)?;
         resamp.work()?;

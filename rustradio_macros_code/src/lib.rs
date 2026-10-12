@@ -586,22 +586,62 @@ impl<'a> Parsed<'a> {
         let fields_defaulted = self.fields_defaulted();
         let path = self.attrs.path();
         let out_types: Vec<_> = self.outputs.iter().map(|field| &field.ty).collect();
+        // Only copying outputs allocate a system buffer. No-copy queues keep
+        // their infallible constructors.
+        let copying_outputs: Vec<_> = out_types.iter().map(|ty| {
+            matches!(ty, syn::Type::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == "WriteStream"))
+        }).collect();
+        let fallible = copying_outputs.iter().any(|copying| *copying);
+        let output_tuple =
+            quote! { (Self #(,<#out_types as #path::stream::StreamReadSide>::ReadSide)*) };
+        let return_type = if fallible {
+            quote! { #path::Result<#output_tuple> }
+        } else {
+            output_tuple
+        };
+        let create_outputs = out_names
+            .iter()
+            .zip(out_types.iter())
+            .zip(copying_outputs)
+            .map(|((name, ty), copying)| {
+                if copying {
+                    quote! { let #name = <#ty>::new()?; }
+                } else {
+                    quote! { let #name = <#ty>::new(); }
+                }
+            });
+        let value = quote! {
+            (Self {
+                #(#in_names,)*
+                #(#out_names: #out_names.0,)*
+                #(#parm_into_names: #parm_into_names.into(),)*
+                #(#parm_no_into_names,)*
+                #(#fields_defaulted,)*
+            }#(,#out_names.1)*)
+        };
+        let value = if fallible {
+            quote! { Ok(#value) }
+        } else {
+            value
+        };
+        let constructor_doc = if fallible {
+            "Create the block and its outputs, propagating stream allocation errors."
+        } else {
+            "Create the block and its outputs."
+        };
+        let must_use = (!fallible).then(|| quote! { #[must_use] });
         Some(quote! {
             impl #impl_generics #name #ty_generics #where_clause {
-                #[must_use]
-                pub fn new #(<#parm_into_types>),*(#(#in_name_types,)*#(#parm_name_types),*) -> (Self #(,<#out_types as #path::stream::StreamReadSide>::ReadSide)*) {
-                    #(let #out_names = <#out_types>::new();)*
-                    (Self {
-                        #(#in_names,)*
-                        #(#out_names: #out_names.0,)*
-                        #(#parm_into_names: #parm_into_names.into(),)*
-                        #(#parm_no_into_names,)*
-                        #(#fields_defaulted,)*
-                    }#(,#out_names.1)*)
+                #[doc = #constructor_doc]
+                #must_use
+                pub fn new #(<#parm_into_types>),*(#(#in_name_types,)*#(#parm_name_types),*) -> #return_type {
+                    #(#create_outputs)*
+                    #value
                 }
             }
         })
     }
+
     #[must_use]
     fn expand_blockname(&self) -> TokenStream {
         let name = self.name;
@@ -755,19 +795,19 @@ mod tests {
         let actual = derive_block(input);
         let expected = quote! {
             impl MyBlock {
-                #[must_use]
+                #[doc = "Create the block and its outputs, propagating stream allocation errors."]
                 pub fn new<Intobaz: Into<usize> >(
                     src: ReadStream <Float>,
                     bar: Float,
-                    baz: Intobaz) -> (Self, <WriteStream<Complex> as crate::stream::StreamReadSide>::ReadSide) {
-                    let dst = <WriteStream<Complex> >::new();
-                    (Self {
+                    baz: Intobaz) -> crate::Result<(Self, <WriteStream<Complex> as crate::stream::StreamReadSide>::ReadSide)> {
+                    let dst = <WriteStream<Complex> >::new()?;
+                    Ok((Self {
                         src,
                         dst: dst.0,
                         baz: baz.into(),
                         bar,
                         foo: <u32>::default(),
-                    }, dst.1)
+                    }, dst.1))
                 }
             }
             impl crate::block::BlockName for MyBlock {

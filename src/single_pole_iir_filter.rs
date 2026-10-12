@@ -79,7 +79,7 @@ where
                 "SinglePoleIirFilter alpha must be finite and between 0 and 1, got {alpha}"
             ))
         })?;
-        let (dst, dr) = crate::stream::new_stream();
+        let (dst, dr) = crate::stream::new_stream()?;
         Ok((Self { src, dst, iir }, dr))
     }
     fn process_sync(&mut self, a: T) -> T {

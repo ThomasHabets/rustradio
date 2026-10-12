@@ -624,7 +624,7 @@ mod tests {
     #[tokio::test]
     async fn blocking_sink_preserves_input_when_queue_is_full() -> crate::Result<()> {
         let server = IqServer::new();
-        let (write, read) = new_stream::<f32>();
+        let (write, read) = new_stream::<f32>()?;
         let options = StreamOptions {
             limits: proto::Limits {
                 max_frame_bytes: 256,
@@ -659,7 +659,7 @@ mod tests {
     #[tokio::test]
     async fn nonblocking_sink_reports_exact_final_gap() -> crate::Result<()> {
         let server = IqServer::new();
-        let (write, read) = new_stream::<f32>();
+        let (write, read) = new_stream::<f32>()?;
         let options = StreamOptions {
             limits: proto::Limits {
                 max_frame_bytes: 256,
@@ -714,7 +714,7 @@ mod tests {
     #[tokio::test]
     async fn disconnected_nonblocking_sink_starts_at_current_position() -> crate::Result<()> {
         let server = IqServer::new();
-        let (write, read) = new_stream::<f32>();
+        let (write, read) = new_stream::<f32>()?;
         let mut sink = IqStreamSink::builder(read, &server, "test", 48000.0)
             .blocking(false)
             .build()?;
@@ -759,7 +759,7 @@ mod tests {
     #[tokio::test]
     async fn sink_identification_is_once_per_connection_and_fits_frame() -> crate::Result<()> {
         let server = IqServer::new();
-        let (write, read) = new_stream::<f32>();
+        let (write, read) = new_stream::<f32>()?;
         let options = StreamOptions {
             limits: proto::Limits {
                 max_frame_bytes: 256,
@@ -808,7 +808,7 @@ mod tests {
     #[tokio::test]
     async fn identification_cannot_exceed_negotiated_frame_limit() -> crate::Result<()> {
         let server = IqServer::new();
-        let (write, read) = new_stream::<f32>();
+        let (write, read) = new_stream::<f32>()?;
         let options = StreamOptions {
             limits: proto::Limits {
                 max_frame_bytes: 64,
@@ -890,11 +890,11 @@ mod tests {
     #[tokio::test]
     async fn grpc_roundtrip_and_multiple_named_streams() -> crate::Result<()> {
         let server = IqServer::new();
-        let (a_write, a_read) = new_stream::<f32>();
-        let (b_write, b_read) = new_stream::<crate::Complex>();
+        let (a_write, a_read) = new_stream::<f32>()?;
+        let (b_write, b_read) = new_stream::<crate::Complex>()?;
         let mut a = IqStreamSink::builder(a_read, &server, "real", 48000.0).build()?;
         let mut b = IqStreamSink::builder(b_read, &server, "iq", 96000.0).build()?;
-        let (c_write, c_read) = new_stream::<f32>();
+        let (c_write, c_read) = new_stream::<f32>()?;
         let mut c = IqStreamSink::builder(c_read, &server, "ws", 24000.0).build()?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await

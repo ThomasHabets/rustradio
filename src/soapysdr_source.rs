@@ -404,10 +404,10 @@ impl SoapySdrSourceBuilder<'_> {
             self.dev
                 .set_antenna(soapysdr::Direction::Rx, self.channel, a)?;
         }
+        let (dst, dr) = crate::stream::new_stream()?;
         let mut stream = self.dev.rx_stream(&[self.channel])?;
         stream.activate(None)?;
         let sensor_poller = SensorPoller::new(self.dev.clone(), self.channel, allowed_sensors)?;
-        let (dst, dr) = crate::stream::new_stream();
         Ok((
             SoapySdrSource {
                 _dev: self.dev.clone(),

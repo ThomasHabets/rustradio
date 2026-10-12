@@ -85,7 +85,7 @@ fn main() -> Result<()> {
                 g,
                 prev,
                 FileSource::new(&read)?,
-                AuDecode::new(prev, opt.sample_rate as u32),
+                AuDecode::new(prev, opt.sample_rate as u32)?,
             ];
 
             /*
@@ -113,7 +113,7 @@ fn main() -> Result<()> {
                     g,
                     prev,
                     RtlSdrSource::new(opt.freq, opt.sample_rate as u32, opt.gain)?,
-                    RtlSdrDecode::new(prev),
+                    RtlSdrDecode::new(prev)?,
                 ]
             }
             #[cfg(not(feature = "rtlsdr"))]
@@ -144,12 +144,12 @@ fn main() -> Result<()> {
         let prev = blockchain![
             g,
             prev,
-            FftFilter::new(prev, taps),
+            FftFilter::new(prev, taps)?,
             RationalResampler::builder()
                 .deci(samp_rate as usize)
                 .interp(new_samp_rate as usize)
                 .build(prev)?,
-            QuadratureDemod::new(prev, 1.0),
+            QuadratureDemod::new(prev, 1.0)?,
         ];
         (prev, new_samp_rate)
     };
@@ -166,20 +166,20 @@ fn main() -> Result<()> {
             opt.symbol_max_deviation,
             Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
             Box::new(clock_filter),
-        );
+        )?;
         (prev, block)
     };
 
     // Optional clock output.
     let prev = if let Some(clockfile) = opt.clock_file {
-        let clock = block.out_clock().unwrap();
-        let (b, a, prev) = Tee::new(prev);
+        let clock = block.out_clock()?.unwrap();
+        let (b, a, prev) = Tee::new(prev)?;
         g.add(Box::new(b));
         let clock = blockchain![
             g,
             clock,
-            AddConst::new(clock, -samp_rate / baud),
-            ToText::new(vec![a, clock]),
+            AddConst::new(clock, -samp_rate / baud)?,
+            ToText::new(vec![a, clock])?,
         ];
         g.add(Box::new(FileSink::new(
             clock,
@@ -195,11 +195,11 @@ fn main() -> Result<()> {
     let prev = blockchain![
         g,
         prev,
-        BinarySlicer::new(prev),
+        BinarySlicer::new(prev)?,
         // Delay xor, aka NRZI decode.
-        NrziDecode::new(prev),
+        NrziDecode::new(prev)?,
         // G3RUH descramble.
-        Descrambler::new(prev, 0x21, 0, 16),
+        Descrambler::new(prev, 0x21, 0, 16)?,
         // Decode.
         HdlcDeframer::new(prev, 10, 1500),
     ];
