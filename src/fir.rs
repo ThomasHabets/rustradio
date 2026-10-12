@@ -14,7 +14,7 @@ use std::borrow::Borrow;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
-use crate::{Complex, Float, Result, Sample};
+use crate::{Complex, Error, Float, Result, Sample};
 
 /// Algebraic ops, allowing more optimizations.
 pub trait AlgebraicOps {
@@ -192,13 +192,16 @@ impl<T> Fir<T>
 where
     T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + AlgebraicOps,
 {
-    /// Create new FIR, taking ownership of taps and reversing them in place.
-    #[must_use]
-    pub fn new(taps: impl Into<Box<[T]>>) -> Self {
+    /// Create a FIR, taking ownership of taps and reversing them in place.
+    ///
+    /// Returns an error for empty taps.
+    pub fn new(taps: impl Into<Box<[T]>>) -> Result<Self> {
         let mut taps = taps.into();
-        assert!(!taps.is_empty());
+        if taps.is_empty() {
+            return Err(Error::msg("FIR taps must be nonempty"));
+        }
         taps.reverse();
-        Self { taps }
+        Ok(Self { taps })
     }
     /// Run filter once, creating one sample from the taps and an
     /// equal number of input samples.
@@ -359,29 +362,57 @@ where
 {
     /// Set the decimation to the given value.
     ///
-    /// The default is 1, meaning no decimation.
+    /// The default is 1, meaning no decimation. Zero is rejected by `build()`.
     #[must_use]
     pub fn deci(mut self, deci: usize) -> Self {
-        assert_ne!(deci, 0);
         self.deci = deci;
         self
     }
 
     /// Build a `FirFilter` with the provided settings.
-    #[must_use]
-    pub fn build(self, src: ReadStream<T>) -> (FirFilter<T>, ReadStream<T>) {
+    ///
+    /// Returns an error for empty taps, zero decimation, a required input
+    /// window exceeding stream capacity, or invalid translation frequencies.
+    pub fn build(self, src: ReadStream<T>) -> Result<(FirFilter<T>, ReadStream<T>)> {
         let FirFilterBuilder {
             mut taps,
             deci,
             translate,
         } = self;
+        if taps.is_empty() || deci == 0 {
+            return Err(Error::msg("FIR taps and decimation must be nonzero"));
+        }
+        let need = taps
+            .len()
+            .checked_add(deci - 1)
+            .ok_or_else(|| Error::msg("FIR input window size overflow"))?;
+        if need > src.total_size() {
+            return Err(Error::msg("FIR input window exceeds stream capacity"));
+        }
+        if let Some((sample_rate, frequency)) = translate
+            && (!sample_rate.is_finite() || sample_rate <= 0.0 || !frequency.is_finite())
+        {
+            return Err(Error::msg(
+                "FIR translation requires a finite positive sample rate and finite frequency",
+            ));
+        }
         let translator = translate.map_or_else(T::no_translation, |(samp_rate, freq)| {
             T::new_translator(&mut taps, samp_rate, freq, deci)
         });
-        let (mut block, stream) = FirFilter::new(src, taps);
-        block.deci = deci;
-        block.translator = translator;
-        (block, stream)
+        let ntaps = taps.len();
+        let fir = Fir::new(taps)?;
+        let (dst, stream) = crate::stream::new_stream();
+        Ok((
+            FirFilter {
+                src,
+                dst,
+                ntaps,
+                deci,
+                translator,
+                fir,
+            },
+            stream,
+        ))
     }
 }
 
@@ -416,22 +447,11 @@ where
             translate: None,
         }
     }
-    /// Create FIR block, taking ownership of the supplied taps.
-    pub fn new(src: ReadStream<T>, taps: impl Into<Box<[T]>>) -> (Self, ReadStream<T>) {
-        let taps = taps.into();
-        assert!(!taps.is_empty());
-        let (dst, dr) = crate::stream::new_stream();
-        (
-            Self {
-                src,
-                dst,
-                ntaps: taps.len(),
-                deci: 1,
-                translator: T::no_translation(),
-                fir: Fir::new(taps),
-            },
-            dr,
-        )
+    /// Create a FIR block, taking ownership of the supplied taps.
+    ///
+    /// Returns an error for empty taps or taps exceeding input capacity.
+    pub fn new(src: ReadStream<T>, taps: impl Into<Box<[T]>>) -> Result<(Self, ReadStream<T>)> {
+        Self::builder(taps).build(src)
     }
 }
 
@@ -569,7 +589,7 @@ where
         }
 
         // Cap by output capacity.
-        let n = std::cmp::min(n, out.len() * self.deci);
+        let n = std::cmp::min(n, out.len().saturating_mul(self.deci));
 
         // Final `n` (samples to consume) calculated. Sanity check it.
         assert_eq!(n % self.deci, 0);
@@ -740,10 +760,54 @@ pub fn hilbert(window: &Window) -> Box<[Float]> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     #[test]
+    fn rejects_invalid_configuration_before_processing() {
+        let input = || ReadStream::from_slice(&[Complex::default()]);
+        assert!(Fir::<Float>::new([]).is_err());
+        assert!(FirFilter::<Complex>::new(input(), []).is_err());
+        assert!(
+            FirFilter::builder([Complex::default()])
+                .deci(0)
+                .build(input())
+                .is_err()
+        );
+        assert!(
+            FirFilter::builder([Complex::default(); 2])
+                .deci(usize::MAX)
+                .build(input())
+                .is_err()
+        );
+        let capacity = input().total_size();
+        assert!(
+            FirFilter::builder([Complex::default(); 2])
+                .deci(capacity)
+                .build(input())
+                .is_err()
+        );
+        for rate in [0.0, -1.0, Float::NAN, Float::INFINITY] {
+            assert!(
+                FirFilter::builder([Complex::default()])
+                    .translate(rate, 0.0)
+                    .build(input())
+                    .is_err()
+            );
+        }
+        for freq in [Float::NAN, Float::INFINITY] {
+            assert!(
+                FirFilter::builder([Complex::default()])
+                    .translate(48000.0, freq)
+                    .build(input())
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
     fn owned_taps_keep_their_allocation() {
         let taps: Box<[Float]> = vec![1.0, 2.0, 3.0].into_boxed_slice();
         let allocation = taps.as_ptr();
-        let (block, _) = FirFilter::builder(taps).build(ReadStream::from_slice(&[1.0, 0.0, 0.0]));
+        let (block, _) = FirFilter::builder(taps)
+            .build(ReadStream::from_slice(&[1.0, 0.0, 0.0]))
+            .unwrap();
         assert_eq!(block.fir.taps.as_ptr(), allocation);
         assert_eq!(&*block.fir.taps, &[3.0, 2.0, 1.0]);
         assert_eq!(block.fir.filter(&[1.0, 0.0, 0.0]), 3.0);
@@ -774,7 +838,7 @@ mod tests {
             assert!(matches![src.work()?, BlockRet::EOF]);
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out)?;
             if deci <= 2 * input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
@@ -839,13 +903,13 @@ mod tests {
         let (mut translated, translated_out) = FirFilter::builder(taps.clone())
             .deci(deci)
             .translate(samp_rate, freq)
-            .build(src_a_out);
+            .build(src_a_out)?;
         assert!(matches![translated.work()?, BlockRet::Again]);
         assert!(matches![translated.work()?, BlockRet::WaitForStream(_, _)]);
 
         let (mut src_b, src_b_out) = VectorSource::new(mixed_input);
         assert!(matches![src_b.work()?, BlockRet::EOF]);
-        let (mut manual, manual_out) = FirFilter::builder(taps).deci(deci).build(src_b_out);
+        let (mut manual, manual_out) = FirFilter::builder(taps).deci(deci).build(src_b_out)?;
         assert!(matches![manual.work()?, BlockRet::Again]);
         assert!(matches![manual.work()?, BlockRet::WaitForStream(_, _)]);
 
@@ -876,7 +940,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut filter, out) = FirFilter::builder(taps)
             .translate(samp_rate, freq)
-            .build(src_out);
+            .build(src_out)?;
         assert!(matches![filter.work()?, BlockRet::Again]);
         assert!(matches![filter.work()?, BlockRet::WaitForStream(_, _)]);
 
@@ -897,7 +961,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut filter, out) = FirFilter::builder(taps)
             .translate(samp_rate, freq)
-            .build(src_out);
+            .build(src_out)?;
         assert!(matches![filter.work()?, BlockRet::Again]);
         assert!(matches![filter.work()?, BlockRet::WaitForStream(_, _)]);
 
@@ -923,7 +987,7 @@ mod tests {
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out)?;
             if deci <= input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
@@ -960,7 +1024,7 @@ mod tests {
             src.work()?;
 
             eprintln!("Testing identity with decimation {deci}");
-            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out);
+            let (mut b, os) = FirFilter::builder(taps.clone()).deci(deci).build(src_out)?;
             if deci < input.len() {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
@@ -1000,7 +1064,7 @@ mod tests {
             Complex::new(1.0, 0.0),
             Complex::new(0.0, 0.2),
         ];
-        let filter = Fir::new(taps);
+        let filter = Fir::new(taps).unwrap();
         assert_almost_equal_complex(
             &filter.filter_n(&input, 1),
             &[

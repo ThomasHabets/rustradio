@@ -99,7 +99,7 @@ fn bench_fft_filter(b: &mut Bencher) {
 fn bench_fir_filter(b: &mut Bencher) {
     let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0, &WindowType::Hamming);
     let (sw, sr) = new_stream();
-    let (mut filter, out) = FirFilter::new(sr, taps);
+    let (mut filter, out) = FirFilter::new(sr, taps).unwrap();
     b.iter(|| {
         // Fill input buffer.
         {

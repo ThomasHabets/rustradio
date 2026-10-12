@@ -82,7 +82,9 @@ async fn run_graph() -> Result<(), rustradio::Error> {
             )));
             (tee, a)
         },
-        FirFilter::builder(filter1).deci(DECI as usize).build(prev),
+        FirFilter::builder(filter1)
+            .deci(DECI as usize)
+            .build(prev)?,
         QuadratureDemod::new(prev, 1.0),
         RationalResampler::builder()
             .deci((samp_rate as usize) / (DECI as usize))

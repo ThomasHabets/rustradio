@@ -50,7 +50,7 @@ fn run_fir_filter_graph() {
         .repeat(Repeat::finite(REPEATS))
         .build()
         .expect("build vector source");
-    let (fir, fir_out) = FirFilter::new(src_out, taps);
+    let (fir, fir_out) = FirFilter::new(src_out, taps).expect("build FIR filter");
     let sink = NullSink::new(fir_out);
 
     let mut graph = Graph::new();
