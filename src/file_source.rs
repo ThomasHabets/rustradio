@@ -173,8 +173,8 @@ mod tests {
             }
             Ok(Self(data[0]))
         }
-        fn serialize(&self) -> Vec<u8> {
-            vec![self.0]
+        fn serialize_into(&self, out: &mut Vec<u8>) {
+            out.push(self.0);
         }
     }
 

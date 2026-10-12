@@ -48,24 +48,25 @@ fn builtins_append_little_endian_bytes_without_reallocating() {
 }
 
 #[derive(Debug, Copy, Clone, Default)]
-struct Legacy(u8);
+struct Custom(u8);
 
-impl Sample for Legacy {
+impl Sample for Custom {
     fn size() -> usize {
         1
     }
     fn parse(bytes: &[u8]) -> Result<Self> {
         Ok(Self(bytes[0]))
     }
-    fn serialize(&self) -> Vec<u8> {
-        vec![self.0]
+    fn serialize_into(&self, out: &mut Vec<u8>) {
+        out.push(self.0);
     }
 }
 
 #[test]
-fn custom_sample_keeps_legacy_serialization() {
+fn custom_sample_supports_allocating_and_append_serialization() {
     let mut out = vec![1, 2];
-    Legacy(3).serialize_into(&mut out);
+    assert_eq!(Custom(3).serialize(), [3]);
+    Custom(3).serialize_into(&mut out);
     assert_eq!(out, [1, 2, 3]);
 }
 
