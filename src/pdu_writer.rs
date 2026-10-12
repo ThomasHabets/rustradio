@@ -23,7 +23,7 @@ directory, named as microseconds since epoch.
 */
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct PduWriter<T: Send + Sync + 'static> {
+pub struct PduWriter<T: Send + 'static> {
     #[rustradio(in)]
     src: NCReadStream<Vec<T>>,
     #[rustradio(into)]
@@ -34,7 +34,7 @@ pub struct PduWriter<T: Send + Sync + 'static> {
     buf: Vec<u8>,
 }
 
-impl<T: Send + Sync + 'static> Drop for PduWriter<T> {
+impl<T: Send + 'static> Drop for PduWriter<T> {
     fn drop(&mut self) {
         info!("PDU Writer: wrote {}", self.files_written);
     }

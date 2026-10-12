@@ -15,7 +15,7 @@ type NCStorage<T> = Vec<(T, Vec<Tag>)>;
 /// the stream and just adds it to a vector. Tags are stored to another vector.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct VectorSinkNoCopy<T: Send + Sync> {
+pub struct VectorSinkNoCopy<T: Send> {
     #[rustradio(in)]
     src: NCReadStream<T>,
 
@@ -26,14 +26,14 @@ pub struct VectorSinkNoCopy<T: Send + Sync> {
     max_size: usize,
 }
 
-impl<T: Send + Sync> VectorSinkNoCopy<T> {
+impl<T: Send> VectorSinkNoCopy<T> {
     #[must_use]
     pub fn storage(&self) -> Arc<Mutex<NCStorage<T>>> {
         Arc::clone(&self.storage)
     }
 }
 
-impl<T: Send + Sync> Block for VectorSinkNoCopy<T> {
+impl<T: Send> Block for VectorSinkNoCopy<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut s = self.storage.lock().unwrap();
         while let Some((val, tags)) = self.src.pop() {

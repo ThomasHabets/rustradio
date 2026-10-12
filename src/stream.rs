@@ -367,7 +367,7 @@ pub struct NCReadStream<T> {
 }
 
 #[async_trait]
-impl<T: Send + Sync> StreamWait for NCReadStream<T> {
+impl<T: Send> StreamWait for NCReadStream<T> {
     fn id(&self) -> usize {
         self.id
     }
@@ -409,7 +409,7 @@ impl<T: Send + Sync> StreamWait for NCReadStream<T> {
 }
 
 #[async_trait]
-impl<T: Send + Sync> StreamWait for NCWriteStream<T> {
+impl<T: Send> StreamWait for NCWriteStream<T> {
     fn id(&self) -> usize {
         self.id
     }

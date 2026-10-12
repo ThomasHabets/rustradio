@@ -195,8 +195,8 @@ impl<In, Out, F> Map<In, Out, F> {
     crate,
     custom_name,
     new,
-    bound = "In: Send + Sync",
-    bound = "Out: Send + Sync",
+    bound = "In: Send",
+    bound = "Out: Send",
     bound = "F: FnMut(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send"
 )]
 pub struct NCMap<In, Out, F> {
@@ -211,8 +211,8 @@ pub struct NCMap<In, Out, F> {
 
 impl<In, Out, F> Block for NCMap<In, Out, F>
 where
-    In: Send + Sync,
-    Out: Send + Sync,
+    In: Send,
+    Out: Send,
     F: FnMut(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {

@@ -6,7 +6,7 @@ use crate::stream::NCWriteStream;
 /// Message strobe.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
-pub struct Strobe<T: Send + Clone + Sync> {
+pub struct Strobe<T: Send + Clone> {
     #[rustradio(out)]
     dst: NCWriteStream<T>,
     #[rustradio(default)]
@@ -16,7 +16,7 @@ pub struct Strobe<T: Send + Clone + Sync> {
     data: T,
 }
 
-impl<T: Send + Sync + Clone> Block for Strobe<T> {
+impl<T: Send + Clone> Block for Strobe<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let now = std::time::Instant::now();
         match self.last {
