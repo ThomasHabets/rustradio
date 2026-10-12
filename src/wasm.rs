@@ -77,6 +77,7 @@ struct BufferState<T> {
     tags: StreamTags,
     write_cache: Option<Vec<T>>,
     read_cache: Vec<T>,
+    reader_active: bool,
 
     // Extra accounting to ensure that we never read uninitialized content.
     #[cfg(debug_assertions)]
@@ -107,6 +108,7 @@ impl<T: Default> BufferState<T> {
             tags: StreamTags::default(),
             write_cache: Some(std::iter::repeat_with(T::default).take(size).collect()),
             read_cache: Vec::new(),
+            reader_active: false,
 
             #[cfg(debug_assertions)]
             initialized: vec![false; size],
@@ -269,6 +271,11 @@ impl<T: Copy> Buffer<T> {
 
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
         let mut state = self.state.lock().unwrap();
+        if state.reader_active {
+            return Err(Error::msg(
+                "read_buf() called with an outstanding read buffer",
+            ));
+        }
         let (first, second) = state.ranges(state.rpos, state.used);
         #[cfg(debug_assertions)]
         {
@@ -280,6 +287,7 @@ impl<T: Copy> Buffer<T> {
         stream.extend_from_slice(&state.stream[first]);
         stream.extend_from_slice(&state.stream[second]);
         let tags = state.tags.read();
+        state.reader_active = true;
         drop(state);
         Ok((BufferReader::new(self, stream), tags))
     }
@@ -288,11 +296,17 @@ impl<T: Copy> Buffer<T> {
 pub struct BufferReader<T> {
     parent: Arc<Buffer<T>>,
     stream: Vec<T>,
+    // consume already returned the cache and released the reader checkout.
+    released: bool,
 }
 impl<T> BufferReader<T> {
     #[must_use]
     fn new(parent: Arc<Buffer<T>>, stream: Vec<T>) -> Self {
-        Self { parent, stream }
+        Self {
+            parent,
+            stream,
+            released: false,
+        }
     }
 
     /// Return slice to read from.
@@ -316,6 +330,8 @@ impl<T> BufferReader<T> {
         let mut state = self.parent.state.lock().unwrap();
         state.consume(n);
         state.recycle_reader(std::mem::take(&mut self.stream));
+        state.reader_active = false;
+        self.released = true;
     }
 
     /// len convenience function.
@@ -332,9 +348,10 @@ impl<T> BufferReader<T> {
 }
 impl<T> Drop for BufferReader<T> {
     fn drop(&mut self) {
-        if self.stream.capacity() != 0
+        if !self.released
             && let Ok(mut state) = self.parent.state.lock()
         {
+            state.reader_active = false;
             state.recycle_reader(std::mem::take(&mut self.stream));
         }
     }

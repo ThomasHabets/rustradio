@@ -157,12 +157,11 @@ impl Circ {
             ez,
             self.len
         );
+        assert!(start <= end && end <= self.len / ez);
         // SAFETY: This is a mut cast for memory that C++ would call non-pointer
         // POD. Data races are possible from this in general, but will be
         // prevented by the stream API.
-        let buf =
-            unsafe { std::slice::from_raw_parts_mut(self.map.base.cast::<T>(), self.len / ez) };
-        &mut buf[start..end]
+        unsafe { std::slice::from_raw_parts_mut(self.map.base.cast::<T>().add(start), end - start) }
     }
 }
 
@@ -179,6 +178,8 @@ struct BufferState {
     circ_len: usize,    // In bytes.
     member_size: usize, // In bytes.
     tags: StreamTags,
+    reader_active: bool,
+    writer_active: bool,
 }
 
 impl BufferState {
@@ -220,12 +221,19 @@ pub struct BufferReader<T> {
     parent: Arc<Buffer<T>>,
     start: usize,
     end: usize,
+    // consume/produce already released the checkout under the state lock.
+    released: bool,
 }
 
 impl<T: Copy> BufferReader<T> {
     #[must_use]
     fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> Self {
-        Self { parent, start, end }
+        Self {
+            parent,
+            start,
+            end,
+            released: false,
+        }
     }
 
     /// Return slice to read from.
@@ -240,8 +248,10 @@ impl<T: Copy> BufferReader<T> {
     }
 
     /// We're done with the buffer. Consume `n` samples.
-    pub fn consume(self, n: usize) {
+    pub fn consume(mut self, n: usize) {
+        assert!(n <= self.len(), "consume exceeds checked-out read window");
         self.parent.consume(n);
+        self.released = true;
     }
 
     /// len convenience function.
@@ -265,24 +275,41 @@ impl<T: Copy> std::ops::Index<usize> for BufferReader<T> {
     }
 }
 
+impl<T> Drop for BufferReader<T> {
+    fn drop(&mut self) {
+        if !self.released
+            && let Ok(mut state) = self.parent.state.lock.lock()
+        {
+            state.reader_active = false;
+        }
+    }
+}
+
 /// `BufferWriter` is an RAII fixed window slice with some helper functions.
 pub struct BufferWriter<T> {
     parent: Arc<Buffer<T>>,
     start: usize,
     end: usize,
+    // consume/produce already released the checkout under the state lock.
+    released: bool,
 }
 
 impl<T: Copy> BufferWriter<T> {
     #[must_use]
     fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> BufferWriter<T> {
         assert!(end >= start);
-        Self { parent, start, end }
+        Self {
+            parent,
+            start,
+            end,
+            released: false,
+        }
     }
 
     /// Return the slice to write to.
     #[must_use]
     pub fn slice(&mut self) -> &mut [T] {
-        self.parent.slice_mut(self.start, self.end)
+        self.parent.circ.full_buffer::<T>(self.start, self.end)
     }
 
     /// Shortcut to save typing for the common operation of copying
@@ -305,8 +332,10 @@ impl<T: Copy> BufferWriter<T> {
     ///
     // Tags inherently need to be copied in, because they need to be added to
     // the underlying stream.
-    pub fn produce(self, n: usize, tags: &[Tag]) {
+    pub fn produce(mut self, n: usize, tags: &[Tag]) {
+        assert!(n <= self.len(), "produce exceeds checked-out write window");
         self.parent.produce(n, tags);
+        self.released = true;
     }
 
     /// len convenience function.
@@ -319,6 +348,16 @@ impl<T: Copy> BufferWriter<T> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.end == self.start
+    }
+}
+
+impl<T> Drop for BufferWriter<T> {
+    fn drop(&mut self) {
+        if !self.released
+            && let Ok(mut state) = self.parent.state.lock.lock()
+        {
+            state.writer_active = false;
+        }
     }
 }
 
@@ -361,6 +400,8 @@ impl<T> Buffer<T> {
                     circ_len: size,
                     member_size: std::mem::size_of::<T>(),
                     tags: StreamTags::default(),
+                    reader_active: false,
+                    writer_active: false,
                 }),
                 cv: Condvar::new(),
                 #[cfg(feature = "async")]
@@ -484,10 +525,11 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the read buffer.
     pub(in crate::nowasm::circular_buffer) fn consume(&self, n: usize) {
+        let mut s = self.state.lock.lock().unwrap();
         if n == 0 {
+            s.reader_active = false;
             return;
         }
-        let mut s = self.state.lock.lock().unwrap();
         assert!(
             n <= s.used,
             "trying to consume {}, but only have {}",
@@ -499,6 +541,7 @@ impl<T: Copy> Buffer<T> {
         s.tags.consume(n);
         s.rpos = newpos;
         s.used -= n;
+        s.reader_active = false;
         self.state.cv.notify_all();
         #[cfg(feature = "async")]
         self.state.acvw.notify_one();
@@ -508,13 +551,14 @@ impl<T: Copy> Buffer<T> {
     ///
     /// Will only be called from the write buffer.
     pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
+        let mut s = self.state.lock.lock().unwrap();
         if n == 0 {
+            s.writer_active = false;
             if !tags.is_empty() {
                 error!("produce() called on a stream with 0 entries, but non-empty tags: {tags:?}");
             }
             return;
         }
-        let mut s = self.state.lock.lock().unwrap();
         assert!(
             s.free() >= n,
             "tried to produce {n}, but only {} is free out of {}",
@@ -530,41 +574,50 @@ impl<T: Copy> Buffer<T> {
         s.tags.produce(n, tags);
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
+        s.writer_active = false;
         self.state.cv.notify_all();
         #[cfg(feature = "async")]
         self.state.acvr.notify_waiters();
     }
 
     #[must_use]
-    pub(crate) fn slice(&self, start: usize, end: usize) -> &[T] {
-        self.circ.full_buffer::<T>(start, end)
-    }
-
-    #[must_use]
-    pub(crate) fn slice_mut(&self, start: usize, end: usize) -> &mut [T] {
-        self.circ.full_buffer::<T>(start, end)
+    fn slice(&self, start: usize, end: usize) -> &[T] {
+        // SAFETY: the reader owns the only read window. Only unconsumed
+        // samples are exposed, and the writer can access only the free range.
+        unsafe {
+            std::slice::from_raw_parts(self.circ.map.base.cast::<T>().add(start), end - start)
+        }
     }
 
     /// Get the read slice.
     ///
     /// TODO: no need for Result in API.
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let s = self.state.lock.lock().unwrap();
+        let mut s = self.state.lock.lock().unwrap();
+        if s.reader_active {
+            return Err(Error::msg(
+                "read_buf() called with an outstanding read buffer",
+            ));
+        }
         let (start, end) = s.read_range();
         let tags = s.tags.read();
+        s.reader_active = true;
         drop(s);
         Ok((BufferReader::new(self, start, end), tags))
     }
 
     /// Get the write slice.
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
-        let s = self.state.lock.lock().unwrap();
+        let mut s = self.state.lock.lock().unwrap();
+        if s.writer_active {
+            return Err(Error::msg(
+                "write_buf() called with an outstanding write buffer",
+            ));
+        }
         let (start, end) = s.write_range();
+        s.writer_active = true;
         drop(s);
-        Ok(BufferWriter::new(
-            //unsafe { std::mem::transmute::<&mut [T], &mut [T]>(buf) },
-            self, start, end,
-        ))
+        Ok(BufferWriter::new(self, start, end))
     }
 }
 
@@ -664,19 +717,15 @@ mod tests {
     fn circ_circular() -> Result<()> {
         let circ = Circ::new(4096)?;
         assert_eq!(circ.total_size(), 4096);
-        let buf = circ.full_buffer::<u32>(0, 4);
+        let first = {
+            let buf = circ.full_buffer::<u32>(0, 4);
+            assert_eq!(buf, [0, 0, 0, 0]);
+            buf.copy_from_slice(&[3, 2, 1, 42]);
+            buf.as_ptr()
+        };
         let buf2 = circ.full_buffer::<u32>(1024, 1028);
-        assert_eq!(buf, [0, 0, 0, 0]);
-        assert_eq!(buf2, [0, 0, 0, 0]);
-        buf[0] = 3;
-        buf[1] = 2;
-        buf[2] = 1;
-        buf[3] = 42;
-        // Not sure if compiler fence is enough here, or we need a full `fence`.
-        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
-        assert_eq!(buf, [3, 2, 1, 42]);
         assert_eq!(buf2, [3, 2, 1, 42]);
-        assert_ne!(buf.as_ptr(), buf2.as_ptr());
+        assert_ne!(first, buf2.as_ptr());
         Ok(())
     }
 

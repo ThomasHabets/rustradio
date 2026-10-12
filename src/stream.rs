@@ -8,7 +8,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use async_trait::async_trait;
 
-use crate::{Error, Float, Len, Result};
+use crate::{Float, Len, Result};
 
 /// Tag position in the current stream.
 pub type TagPos = usize;
@@ -207,15 +207,9 @@ impl<T: Default + Copy> ReadStream<T> {
     /// Tags are returned in ascending position order, preserving the order of
     /// tags at the same position.
     ///
-    /// See [`WriteStream::write_buf`] for details about the refcount checks.
+    /// Only one read window may be outstanding, until it is consumed or
+    /// dropped. A second checkout returns an error.
     pub fn read_buf(&self) -> Result<(crate::sys::BufferReader<T>, Vec<Tag>)> {
-        let refcount = Arc::strong_count(&self.circ);
-        debug_assert!(refcount < 4, "read_buf() called with refcount {refcount}");
-        if refcount > 3 {
-            return Err(Error::msg(format!(
-                "read_buf() called with refcount {refcount}"
-            )));
-        }
         Arc::clone(&self.circ).read_buf()
     }
 }
@@ -281,34 +275,10 @@ impl<T: Copy> WriteStream<T> {
 
     /// Return a `BufferWriter` for writing to the stream.
     ///
-    /// Ideally having a `BufferWriter` active on a stream should be prevented
-    /// statically, but I've not come up with a way to do that.
-    ///
-    /// Having `write_buf` hold on to a mutable reference won't work, because
-    /// streams are owned by blocks, and blocks need to be able to call their
-    /// own mutable methods.
-    ///
-    /// `BufferWriters` do get an Arc to the circ buffer, though, so there should
-    /// never be more than four references:
-    /// * The source block.
-    /// * The destination block.
-    /// * The source `BufferWriter`.
-    /// * The destination `BufferReader`.
-    ///
-    /// So this function needs to be called when the refcount is 3 or lower.
-    ///
-    /// Having more than four references is a definite coding bug, and hopefully
-    /// will be caught by `MTGraph` testing during development.
-    ///
-    /// The above also goes for [`ReadStream::read_buf`].
+    /// Only one write window may be outstanding. A second checkout returns
+    /// an error until the first window is produced or dropped. A read window
+    /// may coexist with a write window because their sample ranges are disjoint.
     pub fn write_buf(&self) -> Result<crate::sys::BufferWriter<T>> {
-        let refcount = Arc::strong_count(&self.circ);
-        debug_assert!(refcount < 4, "write_buf() called with refcount {refcount}");
-        if refcount > 3 {
-            return Err(Error::msg(format!(
-                "write_buf() called with refcount {refcount}"
-            )));
-        }
         Arc::clone(&self.circ).write_buf()
     }
 
@@ -585,6 +555,60 @@ impl<T: Len> NCReadStream<T> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn windows_are_exclusive_per_endpoint_and_released_on_drop() -> Result<()> {
+        let (tx, rx) = new_stream::<u8>();
+        let mut writer = tx.write_buf()?;
+        assert!(tx.write_buf().is_err());
+        let (reader, _) = rx.read_buf()?;
+        assert!(rx.read_buf().is_err());
+        // Opposite endpoints can hold windows at the same time.
+        writer.fill_from_slice(&[1, 2]);
+        writer.produce(2, &[]);
+        assert!(reader.is_empty());
+        drop(reader);
+        let (reader, _) = rx.read_buf()?;
+        assert_eq!(reader.slice(), [1, 2]);
+        let writer = tx.write_buf()?;
+        assert!(tx.write_buf().is_err());
+        reader.consume(2);
+        drop(writer);
+        assert!(tx.write_buf().is_ok());
+        assert!(rx.read_buf()?.0.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn reader_cannot_consume_samples_produced_after_checkout() -> Result<()> {
+        let (tx, rx) = new_stream::<u8>();
+        let (reader, _) = rx.read_buf()?;
+        let mut writer = tx.write_buf()?;
+        writer.fill_from_slice(&[1]);
+        writer.produce(1, &[]);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reader.consume(1))).is_err()
+        );
+        assert_eq!(rx.read_buf()?.0.slice(), [1]);
+        Ok(())
+    }
+
+    #[test]
+    fn writer_cannot_produce_space_freed_after_checkout() -> Result<()> {
+        let (tx, rx) = new_stream::<u8>();
+        let mut writer = tx.write_buf()?;
+        let len = writer.len();
+        writer.slice().fill(1);
+        writer.produce(len, &[]);
+        let writer = tx.write_buf()?;
+        rx.read_buf()?.0.consume(1);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| writer.produce(1, &[])))
+                .is_err()
+        );
+        assert_eq!(rx.read_buf()?.0.len(), len - 1);
+        Ok(())
+    }
+
     use super::*;
 
     #[test]
