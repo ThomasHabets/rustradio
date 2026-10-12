@@ -19,13 +19,25 @@ pub struct SignalSourceComplex {
 
 /// Generate pure complex sine sine.
 impl SignalSourceComplex {
-    /// Create new `SignalSourceComplex` block.
+    /// Create a complex sine source.
+    ///
+    /// Returns an error unless the sample rate is finite and positive and the
+    /// frequency and amplitude are finite. Negative frequencies are supported.
     pub fn new(
         samp_rate: Float,
         freq: Float,
         amplitude: Float,
     ) -> Result<(Self, ReadStream<Complex>)> {
-        assert!(samp_rate > 0.0);
+        if !samp_rate.is_finite() || samp_rate <= 0.0 {
+            return Err(crate::Error::msg(
+                "signal sample rate must be finite and positive",
+            ));
+        }
+        if !freq.is_finite() || !amplitude.is_finite() {
+            return Err(crate::Error::msg(
+                "signal frequency and amplitude must be finite",
+            ));
+        }
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
@@ -81,13 +93,25 @@ pub struct SignalSourceFloat {
 
 /// Generate pure complex sine sine.
 impl SignalSourceFloat {
-    /// Create new `SignalSourceFloat` block.
+    /// Create a real sine source.
+    ///
+    /// Returns an error unless the sample rate is finite and positive and the
+    /// frequency and amplitude are finite. Negative frequencies are supported.
     pub fn new(
         samp_rate: Float,
         freq: Float,
         amplitude: Float,
     ) -> Result<(Self, ReadStream<Float>)> {
-        assert!(samp_rate > 0.0);
+        if !samp_rate.is_finite() || samp_rate <= 0.0 {
+            return Err(crate::Error::msg(
+                "signal sample rate must be finite and positive",
+            ));
+        }
+        if !freq.is_finite() || !amplitude.is_finite() {
+            return Err(crate::Error::msg(
+                "signal frequency and amplitude must be finite",
+            ));
+        }
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
@@ -126,3 +150,34 @@ impl Block for SignalSourceFloat {
 }
 /* vim: textwidth=80
  */
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rejects_invalid_signal_parameters() {
+        for rate in [0.0, -1.0, Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {
+            assert!(SignalSourceFloat::new(rate, 1.0, 1.0).is_err());
+            assert!(SignalSourceComplex::new(rate, 1.0, 1.0).is_err());
+        }
+        for invalid in [Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {
+            assert!(SignalSourceFloat::new(10.0, invalid, 1.0).is_err());
+            assert!(SignalSourceComplex::new(10.0, invalid, 1.0).is_err());
+            assert!(SignalSourceFloat::new(10.0, 1.0, invalid).is_err());
+            assert!(SignalSourceComplex::new(10.0, 1.0, invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn supports_signed_frequency_and_zero_amplitude() -> Result<()> {
+        let (mut positive, _) = SignalSourceComplex::new(16.0, 1.0, 1.0)?;
+        let (mut negative, _) = SignalSourceComplex::new(16.0, -1.0, 1.0)?;
+        let positive = positive.next().unwrap();
+        let negative = negative.next().unwrap();
+        assert!((positive.re + negative.re).abs() < 1e-6);
+        assert!((positive.im - negative.im).abs() < 1e-6);
+        let (mut silent, _) = SignalSourceFloat::new(16.0, -1.0, 0.0)?;
+        assert_eq!(silent.next(), Some(0.0));
+        Ok(())
+    }
+}
