@@ -358,7 +358,12 @@ impl WaterfallSink {
         let handler = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
             if let (Some(inner), Some(event)) = (inner.upgrade(), event.dyn_ref::<MouseEvent>()) {
                 let mut inner = inner.borrow_mut();
-                inner.cursor_position = Some((event.client_x(), event.client_y()));
+                // If `--cfg=web_sys_unstable_api`, this is already f64.
+                #[allow(clippy::useless_conversion)]
+                {
+                    inner.cursor_position =
+                        Some((f64::from(event.client_x()), f64::from(event.client_y())));
+                }
                 inner.update_cursor_label();
             }
         });
@@ -486,7 +491,7 @@ struct WaterfallInner {
     tick_labels: Vec<Element>,
     cursor_label: Element,
     // Viewport coordinates let redraws recompute the frequency after resizing.
-    cursor_position: Option<(i32, i32)>,
+    cursor_position: Option<(f64, f64)>,
     history: VecDeque<Vec<f32>>,
     sample_rate: f32,
     max_frames: usize,
@@ -558,8 +563,8 @@ impl WaterfallInner {
     fn update_cursor_label(&self) {
         let text = self.cursor_position.and_then(|(x, y)| {
             let rect = self.canvas.get_bounding_client_rect();
-            let x = f64::from(x) - rect.left() - f64::from(self.canvas.client_left());
-            let y = f64::from(y) - rect.top() - f64::from(self.canvas.client_top());
+            let x = x - rect.left() - f64::from(self.canvas.client_left());
+            let y = y - rect.top() - f64::from(self.canvas.client_top());
             let width = f64::from(self.canvas.client_width());
             let height = f64::from(self.canvas.client_height());
             if width <= 0.0 || x < 0.0 || x > width || y < 0.0 || y > height {
