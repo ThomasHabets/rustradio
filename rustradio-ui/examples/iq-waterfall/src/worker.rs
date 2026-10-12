@@ -104,7 +104,7 @@ async fn run_graph(settings: Connection, stop: Receiver<()>) -> rustradio::Resul
     .await?;
     let mut graph = rustradio::wasm::wasm_graph::WasmGraph::new();
     graph.add(Box::new(source));
-    let (chunks, chunks_out) = StreamChunks::new(samples, FFT_SIZE);
+    let (chunks, chunks_out) = StreamChunks::new(samples, FFT_SIZE)?;
     graph.add(Box::new(chunks));
     let window = rustradio::window::WindowType::Hamming
         .make_window(FFT_SIZE)

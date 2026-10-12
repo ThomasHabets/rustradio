@@ -70,7 +70,7 @@ let bins = blockchain![
     graph,
     prev,
     (source, samples),
-    StreamChunks::new(prev, fft_size),
+    StreamChunks::new(prev, fft_size)?,
     Fft::from_fft_size(prev, fft_size)?,
 ];
 ```

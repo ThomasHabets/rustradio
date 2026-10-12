@@ -53,7 +53,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
             let prev = blockchain![
                 g,
                 prev,
-                StreamChunks::new(prev, SPECTRUM_SIZE),
+                StreamChunks::new(prev, SPECTRUM_SIZE)?,
                 NCMap::new(prev, "downsample", move |i, tags| {
                     dropcount += 1;
                     if dropcount == 15 {
@@ -90,7 +90,7 @@ async fn run_graph() -> Result<(), rustradio::Error> {
             .deci((samp_rate as usize) / (DECI as usize))
             .interp(AUDIO_SAMPLE_RATE)
             .build(prev)?,
-        StreamChunks::new(prev, AUDIO_CHUNK_SIZE),
+        StreamChunks::new(prev, AUDIO_CHUNK_SIZE)?,
     ];
     g.add(Box::new(FloatPduSink::<MyWorkerToMain>::new(
         prev,
