@@ -18,12 +18,14 @@ pub mod worker;
 /// Application specific extensions to MainToWorker and WorkerToMain.
 ///
 /// When not applicable, set a type to [`AppEmpty`].
+/// Payload types must be `Send` because channels transfer them between the
+/// main thread and worker through shared WASM memory.
 pub trait ApplicationSpecific: Debug + Send + 'static {
     // Can't default. https://github.com/rust-lang/rust/issues/29661
-    type App: Serialize + Debug + for<'de> Deserialize<'de>;
-    type Start: Serialize + Debug + for<'de> Deserialize<'de>;
-    type Ready: Serialize + Debug + for<'de> Deserialize<'de>;
-    type End: Serialize + Debug + for<'de> Deserialize<'de>;
+    type App: Serialize + Debug + Send + for<'de> Deserialize<'de>;
+    type Start: Serialize + Debug + Send + for<'de> Deserialize<'de>;
+    type Ready: Serialize + Debug + Send + for<'de> Deserialize<'de>;
+    type End: Serialize + Debug + Send + for<'de> Deserialize<'de>;
 }
 
 /// Bootstrap MPSC message. Should not be used directly by applications, and
