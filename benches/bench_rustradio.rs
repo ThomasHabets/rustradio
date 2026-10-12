@@ -329,7 +329,7 @@ fn bench_fft_backend<E: rustradio::fft_filter::Engine>(
     b: &mut Bencher,
     transition_width: f32,
     fft_size: usize,
-    make_engine: impl FnOnce(Box<[Complex]>) -> E,
+    make_engine: impl FnOnce(Box<[Complex]>) -> rustradio::Result<E>,
 ) {
     let taps = rustradio::fir::low_pass_complex(
         1024000.0,
@@ -345,7 +345,7 @@ fn bench_fft_backend<E: rustradio::fft_filter::Engine>(
     }
     // Reuse plans, transformed taps, and the input allocation, as FftFilter does.
     // Engine::run retains each backend's actual scratch/allocation behavior.
-    let mut engine = make_engine(taps);
+    let mut engine = make_engine(taps).unwrap();
     let mut work = input.clone();
     b.bytes = (count * std::mem::size_of::<Complex>()) as u64;
     b.iter(|| {

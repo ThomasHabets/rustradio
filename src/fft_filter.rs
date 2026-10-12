@@ -33,13 +33,13 @@ pub trait Engine: Send {
     fn tap_len(&self) -> usize;
 }
 
-#[must_use]
-fn calc_fft_size(from: usize) -> usize {
-    let mut n = 1;
-    while n < from {
-        n <<= 1;
+fn calc_fft_size(from: usize) -> Result<usize> {
+    if from == 0 {
+        return Err(crate::Error::msg("FFT filter taps must be nonempty"));
     }
-    2 * n
+    from.checked_next_power_of_two()
+        .and_then(|size| size.checked_mul(2))
+        .ok_or_else(|| crate::Error::msg("FFT filter size overflow"))
 }
 
 #[cfg(feature = "fftw")]
@@ -56,31 +56,33 @@ pub mod rr_fftw {
     }
 
     impl FftwEngine {
-        /// Create new FFTW engine, given taps.
-        #[must_use]
-        pub fn new<T: Into<Box<[Complex]>>>(taps: T) -> Self {
+        /// Create an FFTW engine from owned taps.
+        ///
+        /// Returns errors for empty taps, size overflow, and FFTW planning or
+        /// initial tap-transform failures.
+        pub fn new<T: Into<Box<[Complex]>>>(taps: T) -> Result<Self> {
             let mut taps_fft = taps.into().into_vec();
-            assert!(!taps_fft.is_empty());
             let tap_len = taps_fft.len();
-            let fft_size = calc_fft_size(taps_fft.len());
+            let fft_size = calc_fft_size(taps_fft.len())?;
             // Create FFT planners.
             let mut fft: C2CPlan32 = C2CPlan::aligned(
                 &[fft_size],
                 fftw::types::Sign::Forward,
                 fftw::types::Flag::MEASURE,
             )
-            .unwrap();
+            .map_err(|error| crate::Error::wrap(error, "creating forward FFTW plan"))?;
             let ifft: C2CPlan32 = C2CPlan::aligned(
                 &[fft_size],
                 fftw::types::Sign::Backward,
                 fftw::types::Flag::MEASURE,
             )
-            .unwrap();
+            .map_err(|error| crate::Error::wrap(error, "creating inverse FFTW plan"))?;
 
             // Pre-FFT the taps.
             taps_fft.resize(fft_size, Complex::default());
             let mut tmp = taps_fft.clone();
-            fft.c2c(&mut tmp, &mut taps_fft).unwrap();
+            fft.c2c(&mut tmp, &mut taps_fft)
+                .map_err(|error| crate::Error::wrap(error, "transforming FFTW filter taps"))?;
 
             // Normalization is actually the square root of this
             // expression, but since we'll do two FFTs we can just skip
@@ -91,12 +93,12 @@ pub mod rr_fftw {
                     *s *= f;
                 }
             }
-            Self {
+            Ok(Self {
                 fft,
                 ifft,
                 taps_fft: taps_fft.into_boxed_slice(),
                 tap_len,
-            }
+            })
         }
     }
 
@@ -141,13 +143,13 @@ pub mod rr_rustfft {
         scratch: Box<[Complex]>,
     }
     impl RustFftEngine {
-        /// Create new rustfft engine, given taps.
-        #[must_use]
-        pub fn new<T: Into<Box<[Complex]>>>(taps: T) -> Self {
+        /// Create a RustFFT engine from owned taps.
+        ///
+        /// Returns an error for empty taps or FFT size overflow before planning.
+        pub fn new<T: Into<Box<[Complex]>>>(taps: T) -> Result<Self> {
             let taps = taps.into();
             let tap_len = taps.len();
-            assert!(!taps.is_empty());
-            let fft_size = calc_fft_size(taps.len());
+            let fft_size = calc_fft_size(taps.len())?;
             let mut planner = rustfft::FftPlanner::new();
             let fft = planner.plan_fft_forward(fft_size);
             let ifft = planner.plan_fft_inverse(fft_size);
@@ -168,13 +170,13 @@ pub mod rr_rustfft {
                     *s *= f;
                 }
             }
-            Self {
+            Ok(Self {
                 fft,
                 ifft,
                 scratch: scratch.into_boxed_slice(),
                 taps_fft: taps_fft.into_boxed_slice(),
                 tap_len,
-            }
+            })
         }
     }
     impl Engine for RustFftEngine {
@@ -242,7 +244,7 @@ impl FftFilter<rr_fftw::FftwEngine> {
         taps: T,
     ) -> crate::Result<(Self, ReadStream<Complex>)> {
         trace!("FftFilter: defaulting to FFTW");
-        let engine = rr_fftw::FftwEngine::new(taps);
+        let engine = rr_fftw::FftwEngine::new(taps)?;
         Self::new_engine(src, engine)
     }
 }
@@ -258,16 +260,26 @@ impl FftFilter<rr_rustfft::RustFftEngine> {
         taps: T,
     ) -> crate::Result<(Self, ReadStream<Complex>)> {
         trace!("FftFilter: defaulting to RustFFT");
-        let engine = rr_rustfft::RustFftEngine::new(taps);
+        let engine = rr_rustfft::RustFftEngine::new(taps)?;
         Self::new_engine(src, engine)
     }
 }
 impl<T: Engine> FftFilter<T> {
-    /// Create new `FftFilter`, given an engine.
+    /// Create an FFT filter with the supplied engine.
+    ///
+    /// Returns an error for an empty or overflowing tap count, a batch larger
+    /// than output capacity, or stream allocation failure.
     pub fn new_engine(src: ReadStream<Complex>, engine: T) -> Result<(Self, ReadStream<Complex>)> {
         // Set up FFT / batch size.
-        let fft_size = calc_fft_size(engine.tap_len());
+        let fft_size = calc_fft_size(engine.tap_len())?;
         let nsamples = fft_size - engine.tap_len();
+        // Each round needs one contiguous output window of this many samples.
+        // Larger batches would wait for space that the output can never provide.
+        if nsamples > crate::stream::DEFAULT_STREAM_SIZE / std::mem::size_of::<Complex>() {
+            return Err(crate::Error::msg(
+                "FFT filter batch exceeds output stream capacity",
+            ));
+        }
 
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
@@ -391,7 +403,7 @@ impl FftFilterFloat<rr_fftw::FftwEngine> {
     /// Otherwise it's RustFFT.
     pub fn new(src: ReadStream<Float>, taps: &[Float]) -> crate::Result<(Self, ReadStream<Float>)> {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
-        let engine = rr_fftw::FftwEngine::new(taps);
+        let engine = rr_fftw::FftwEngine::new(taps)?;
         Self::new_engine(src, engine)
     }
 }
@@ -404,7 +416,7 @@ impl FftFilterFloat<rr_rustfft::RustFftEngine> {
     /// Otherwise it's RustFFT.
     pub fn new(src: ReadStream<Float>, taps: &[Float]) -> crate::Result<(Self, ReadStream<Float>)> {
         let taps: Vec<_> = taps.iter().map(|&f| Complex::new(f, 0.0)).collect();
-        let engine = rr_rustfft::RustFftEngine::new(taps);
+        let engine = rr_rustfft::RustFftEngine::new(taps)?;
         Self::new_engine(src, engine)
     }
 }
@@ -500,6 +512,34 @@ impl<T: Engine> Block for FftFilterFloat<T> {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    #[test]
+    fn rejects_empty_taps_and_overflow_before_planning() {
+        assert!(calc_fft_size(0).is_err());
+        assert!(calc_fft_size(usize::MAX).is_err());
+        assert!(calc_fft_size(usize::MAX / 2 + 1).is_err());
+        assert!(rr_rustfft::RustFftEngine::new(Vec::<Complex>::new()).is_err());
+        #[cfg(feature = "fftw")]
+        assert!(rr_fftw::FftwEngine::new(Vec::<Complex>::new()).is_err());
+        assert!(FftFilter::new(ReadStream::from_slice(&[]), Vec::<Complex>::new()).is_err());
+        assert!(FftFilterFloat::new(ReadStream::from_slice(&[]), &[]).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_custom_engine_layouts() {
+        struct Layout(usize);
+        impl Engine for Layout {
+            fn tap_len(&self) -> usize {
+                self.0
+            }
+            fn run(&mut self, _: &mut [Complex]) {
+                panic!("invalid engine must not run");
+            }
+        }
+        for size in [0, usize::MAX, crate::stream::DEFAULT_STREAM_SIZE] {
+            assert!(FftFilter::new_engine(ReadStream::from_slice(&[]), Layout(size)).is_err());
+        }
+    }
+
     use super::*;
     use crate::blocks::{Head, SignalSourceComplex, VectorSource};
     use crate::fir::low_pass_complex;
