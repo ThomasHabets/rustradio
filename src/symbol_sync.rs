@@ -65,7 +65,9 @@ impl SymbolSync {
     /** Create new `SymbolSync` block.
 
     # Args
-    * `sps`: Samples per symbol. IOW `samp_rate / baud`.
+    * `sps`: Finite samples per symbol greater than one (`samp_rate / baud`).
+    * `max_deviation`: Finite, nonnegative deviation; the permitted periods
+      must be finite and at least one sample. Invalid settings return errors.
      */
     pub fn new(
         src: ReadStream<Float>,
@@ -74,7 +76,20 @@ impl SymbolSync {
         ted: Box<dyn Ted>,
         mut clock_filter: Box<dyn ClampedFilter<Float>>,
     ) -> Result<(Self, ReadStream<Float>)> {
-        assert!(sps > 1.0);
+        if !sps.is_finite() || sps <= 1.0 {
+            return Err(crate::Error::msg(
+                "samples per symbol must be finite and greater than one",
+            ));
+        }
+        if !max_deviation.is_finite()
+            || max_deviation < 0.0
+            || sps - max_deviation < 1.0
+            || !(sps + max_deviation).is_finite()
+        {
+            return Err(crate::Error::msg(
+                "clock deviation must be finite and nonnegative, with finite periods of at least one sample",
+            ));
+        }
         // The filter tracks deviation from sps, not the absolute period.
         clock_filter.fill(0.0);
         let (dst, dr) = crate::stream::new_stream()?;
@@ -221,6 +236,42 @@ impl Block for SymbolSync {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rejects_invalid_clock_configuration() {
+        for (sps, deviation) in [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (Float::NAN, 0.0),
+            (Float::INFINITY, 0.0),
+            (4.0, -1.0),
+            (4.0, Float::NAN),
+            (4.0, Float::INFINITY),
+            (4.0, 3.5),
+            (Float::MAX, Float::MAX),
+        ] {
+            assert!(
+                SymbolSync::new(
+                    ReadStream::from_slice(&[]),
+                    sps,
+                    deviation,
+                    Box::new(TedZeroCrossing::new()),
+                    Box::new(crate::iir_filter::IirFilter::new(&[1.0]))
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            SymbolSync::new(
+                ReadStream::from_slice(&[]),
+                4.0,
+                3.0,
+                Box::new(TedZeroCrossing::new()),
+                Box::new(crate::iir_filter::IirFilter::new(&[1.0]))
+            )
+            .is_ok()
+        );
+    }
+
     use super::*;
     use crate::block::Block;
     use crate::iir_filter::IirFilter;
