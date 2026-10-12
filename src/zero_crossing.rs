@@ -42,15 +42,31 @@ impl ZeroCrossing {
     /** Create new `ZeroCrossing` block.
 
     # Args
-    * `sps`: Samples per symbol. IOW `samp_rate / baud`.
-    * `max_deviation`: Not currently used.
+    * `sps`: Finite samples per symbol greater than one (`samp_rate / baud`).
+    * `max_deviation`: Finite, nonnegative deviation; the permitted periods
+      must be finite and at least one sample. Invalid settings return errors.
+
+    The deviation is validated but clock adjustment is not yet implemented.
      */
     pub fn new(
         src: ReadStream<Float>,
         sps: Float,
         max_deviation: Float,
     ) -> Result<(Self, ReadStream<Float>)> {
-        assert!(sps > 1.0);
+        if !sps.is_finite() || sps <= 1.0 {
+            return Err(crate::Error::msg(
+                "samples per symbol must be finite and greater than one",
+            ));
+        }
+        if !max_deviation.is_finite()
+            || max_deviation < 0.0
+            || sps - max_deviation < 1.0
+            || !(sps + max_deviation).is_finite()
+        {
+            return Err(crate::Error::msg(
+                "clock deviation must be finite and nonnegative, with finite periods of at least one sample",
+            ));
+        }
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
@@ -145,6 +161,24 @@ impl Block for ZeroCrossing {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rejects_invalid_clock_configuration() {
+        for (sps, deviation) in [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (Float::NAN, 0.0),
+            (Float::INFINITY, 0.0),
+            (4.0, -1.0),
+            (4.0, Float::NAN),
+            (4.0, Float::INFINITY),
+            (4.0, 3.5),
+            (Float::MAX, Float::MAX),
+        ] {
+            assert!(ZeroCrossing::new(ReadStream::from_slice(&[]), sps, deviation).is_err());
+        }
+        assert!(ZeroCrossing::new(ReadStream::from_slice(&[]), 4.0, 3.0).is_ok());
+    }
+
     use super::*;
     use crate::block::Block;
 
