@@ -172,7 +172,7 @@ fn main() -> Result<()> {
 
     // Optional clock output.
     let prev = if let Some(clockfile) = opt.clock_file {
-        let clock = block.out_clock()?.unwrap();
+        let clock = block.out_clock()?;
         let (b, a, prev) = Tee::new(prev)?;
         g.add(Box::new(b));
         let clock = blockchain![

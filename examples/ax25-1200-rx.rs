@@ -279,7 +279,7 @@ fn main() -> Result<()> {
         let clock = blockchain![
             g,
             clock,
-            AddConst::new(clock.expect("TODO"), -samp_rate / baud)?,
+            AddConst::new(clock, -samp_rate / baud)?,
             ToText::new(vec![a, clock])?,
         ];
         g.add(Box::new(FileSink::new(

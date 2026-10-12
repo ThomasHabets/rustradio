@@ -4,7 +4,7 @@
 * https://youtu.be/jag3btxSsig
 * https://youtu.be/uMEfx_l5Oxk
 */
-use log::{trace, warn};
+use log::trace;
 
 use crate::block::{Block, BlockRet};
 use crate::iir_filter::ClampedFilter;
@@ -112,18 +112,17 @@ impl SymbolSync {
         ))
     }
 
-    /// Return clock stream.
+    /// Create the clock output stream once.
     ///
-    /// The output stream can only be created once, so if called a second time,
-    /// just returns None.
-    pub fn out_clock(&mut self) -> Result<Option<ReadStream<Float>>> {
+    /// Returns an error if the output was already created or allocation fails.
+    /// A failed repeated call leaves the existing output connected.
+    pub fn out_clock(&mut self) -> Result<ReadStream<Float>> {
         if self.out_clock.is_some() {
-            warn!("SymbolSync::out_clock() called more than once");
-            return Ok(None);
+            return Err(crate::Error::msg("clock output already created"));
         }
         let (tx, rx) = crate::stream::new_stream()?;
         self.out_clock = Some(tx);
-        Ok(Some(rx))
+        Ok(rx)
     }
 }
 
@@ -237,6 +236,22 @@ impl Block for SymbolSync {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn repeated_clock_creation_preserves_the_existing_output() -> Result<()> {
+        let (mut block, _samples) = SymbolSync::new(
+            ReadStream::from_slice(&[1.0; 12]),
+            4.0,
+            0.0,
+            Box::new(TedZeroCrossing::new()),
+            Box::new(crate::iir_filter::IirFilter::new([1.0])?),
+        )?;
+        let clock = block.out_clock()?;
+        assert!(block.out_clock().is_err());
+        block.work()?;
+        assert_eq!(clock.read_buf()?.0.slice(), &[4.0; 3]);
+        Ok(())
+    }
+
+    #[test]
     fn rejects_invalid_clock_configuration() {
         for (sps, deviation) in [
             (0.0, 0.0),
@@ -288,7 +303,7 @@ mod tests {
             Box::new(TedZeroCrossing::new()),
             Box::new(IirFilter::new([0.0001, 0.9999])?),
         )?;
-        let clock = block.out_clock()?.unwrap();
+        let clock = block.out_clock()?;
 
         assert!(matches!(block.work()?, BlockRet::Again));
         let (symbols, _) = output.read_buf()?;

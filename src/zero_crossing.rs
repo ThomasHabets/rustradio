@@ -84,9 +84,14 @@ impl ZeroCrossing {
         ))
     }
 
-    /// Return clock stream.
+    /// Create the clock output stream once.
+    ///
+    /// Returns an error if the output was already created or allocation fails.
+    /// A failed repeated call leaves the existing output connected.
     pub fn out_clock(&mut self) -> Result<ReadStream<Float>> {
-        assert!(self.out_clock.is_none());
+        if self.out_clock.is_some() {
+            return Err(crate::Error::msg("clock output already created"));
+        }
         let (w, r) = crate::stream::new_stream()?;
         self.out_clock = Some(w);
         Ok(r)
@@ -161,6 +166,17 @@ impl Block for ZeroCrossing {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn repeated_clock_creation_preserves_the_existing_output() -> Result<()> {
+        let (mut block, _samples) =
+            ZeroCrossing::new(ReadStream::from_slice(&[1.0; 12]), 4.0, 0.0)?;
+        let clock = block.out_clock()?;
+        assert!(block.out_clock().is_err());
+        block.work()?;
+        assert_eq!(clock.read_buf()?.0.slice(), &[4.0; 3]);
+        Ok(())
+    }
+
     #[test]
     fn rejects_invalid_clock_configuration() {
         for (sps, deviation) in [
