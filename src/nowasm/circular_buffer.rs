@@ -4,6 +4,7 @@
 // TODO:
 // * Make Circ typed?
 
+use std::borrow::Cow;
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -325,15 +326,23 @@ impl<T: Copy> BufferWriter<T> {
         self.slice()[..src.len()].copy_from_slice(src);
     }
 
-    /// Having written into the write buffer, now tell the buffer
-    /// we're done. Also here are the tags, with positions relative to
-    /// start of buffer.
+    /// Commit `n` samples and tags with positions relative to this window.
     ///
-    // Tags inherently need to be copied in, because they need to be added to
-    // the underlying stream.
-    pub fn produce(mut self, n: usize, tags: &[Tag]) {
+    /// Borrowed tags (such as `&[Tag]` or `&Vec<Tag>`) are cloned into stream
+    /// storage. Owned tags (`Vec<Tag>`) are moved without cloning their keys
+    /// or values.
+    ///
+    /// Tags are sorted by position, preserving the order of tags at the same
+    /// position. Positions must be less than `n`; use no tags when `n` is zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` exceeds the write window, or if `n` is nonzero and a tag
+    /// is outside the produced samples. Zero-sample writes ignore tags and
+    /// log an error if any were supplied.
+    pub fn produce<'a>(mut self, n: usize, tags: impl Into<Cow<'a, [Tag]>>) {
         assert!(n <= self.len(), "produce exceeds checked-out write window");
-        self.parent.produce(n, tags);
+        self.parent.produce(n, tags.into());
         self.released = true;
     }
 
@@ -581,7 +590,7 @@ impl<T: Copy> Buffer<T> {
     /// Produce samples (commit writes).
     ///
     /// Will only be called from the write buffer.
-    pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: &[Tag]) {
+    pub(in crate::nowasm::circular_buffer) fn produce(&self, n: usize, tags: Cow<'_, [Tag]>) {
         let mut s = self.state.lock.lock().unwrap();
         if n == 0 {
             s.writer_active = false;

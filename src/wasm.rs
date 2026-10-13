@@ -1,6 +1,7 @@
 //! This module contains wasm versions of various code.
 //!
 //! It must fail gracefully when used in a web worker.
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -237,7 +238,7 @@ impl<T> Buffer<T> {
 }
 
 impl<T: Copy> BufferState<T> {
-    fn produce(&mut self, samples: &[T], tags: &[Tag]) {
+    fn produce(&mut self, samples: &[T], tags: Cow<'_, [Tag]>) {
         if samples.is_empty() {
             debug_assert!(tags.is_empty());
             return;
@@ -268,8 +269,8 @@ impl<T: Copy> BufferState<T> {
 
 impl<T: Copy> Buffer<T> {
     #[cfg(test)]
-    fn produce(&self, samples: &[T], tags: &[Tag]) {
-        self.state.lock().unwrap().produce(samples, tags);
+    fn produce<'a>(&self, samples: &[T], tags: impl Into<Cow<'a, [Tag]>>) {
+        self.state.lock().unwrap().produce(samples, tags.into());
     }
 
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
@@ -410,8 +411,21 @@ impl<T: Copy> BufferWriter<T> {
         self.prepared = src.len();
     }
 
-    /// Commit writes and tags, whose positions are relative to this window.
-    pub fn produce(mut self, n: usize, tags: &[Tag]) {
+    /// Commit `n` samples and tags with positions relative to this window.
+    ///
+    /// Borrowed tags (such as `&[Tag]` or `&Vec<Tag>`) are cloned into stream
+    /// storage. Owned tags (`Vec<Tag>`) are moved without cloning their keys
+    /// or values.
+    ///
+    /// Tags are sorted by position, preserving the order of tags at the same
+    /// position. Positions must be less than `n`; use no tags when `n` is zero.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` exceeds the write window or the prepared samples, or a
+    /// tag is outside the produced samples. Zero-sample writes with tags
+    /// panic in debug builds.
+    pub fn produce<'a>(mut self, n: usize, tags: impl Into<Cow<'a, [Tag]>>) {
         assert!(
             n <= self.len,
             "trying to produce {n} samples from a {} sample buffer",
@@ -423,7 +437,10 @@ impl<T: Copy> BufferWriter<T> {
             self.prepared
         );
         let mut state = self.parent.state.lock().unwrap();
-        state.produce(&self.stream.as_ref().expect("writer storage")[..n], tags);
+        state.produce(
+            &self.stream.as_ref().expect("writer storage")[..n],
+            tags.into(),
+        );
         state.write_cache = self.stream.take();
     }
 }
@@ -567,6 +584,19 @@ mod tests {
         assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(3, &[]))).is_err());
         assert!(buffer.is_empty());
         assert!(buffer.clone().write_buf().is_ok());
+    }
+
+    #[test]
+    fn owned_tags_do_not_allow_producing_unprepared_samples() {
+        let buffer = buffer();
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.fill_from_iter([1, 2]);
+        assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(3, vec![]))).is_err());
+        assert!(buffer.is_empty());
+        let mut writer = buffer.clone().write_buf().unwrap();
+        writer.fill_from_slice(&[3]);
+        writer.produce(1, vec![]);
+        assert_eq!(buffer.clone().read_buf().unwrap().0.slice(), [3]);
     }
 
     #[test]

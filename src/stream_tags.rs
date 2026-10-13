@@ -1,4 +1,5 @@
 //! Tag accounting shared by native and WASM stream buffers.
+use std::borrow::Cow;
 use std::collections::VecDeque;
 
 use crate::stream::Tag;
@@ -34,24 +35,32 @@ pub(crate) struct StreamTags {
 }
 
 impl StreamTags {
-    pub(crate) fn produce(&mut self, samples: usize, tags: &[Tag]) {
+    pub(crate) fn produce(&mut self, samples: usize, tags: Cow<'_, [Tag]>) {
         let end = self.write_pos.advance(samples);
         // An out-of-range tag could overlap a later batch and break FIFO order.
         assert!(
             tags.iter().all(|tag| tag.pos() < samples),
             "tag outside produced samples"
         );
+        let sorted = tags.windows(2).all(|pair| pair[0].pos() <= pair[1].pos());
         let previous_len = self.tags.len();
-        self.tags.extend(
-            tags.iter()
-                .map(|tag| (self.write_pos.advance(tag.pos()), tag.clone())),
-        );
+        match tags {
+            Cow::Borrowed(tags) => self.append(tags.iter().cloned()),
+            Cow::Owned(tags) => self.append(tags),
+        }
         // The API accepts unsorted input. Sort only the new batch when needed,
         // preserving the producer's order for tags at the same sample.
-        if !tags.windows(2).all(|pair| pair[0].pos() <= pair[1].pos()) {
+        if !sorted {
             self.tags.make_contiguous()[previous_len..].sort_by_key(|(pos, _)| *pos);
         }
         self.write_pos = end;
+    }
+
+    fn append(&mut self, tags: impl IntoIterator<Item = Tag>) {
+        self.tags.extend(
+            tags.into_iter()
+                .map(|tag| (self.write_pos.advance(tag.pos()), tag)),
+        );
     }
 
     pub(crate) fn consume(&mut self, samples: usize) {
@@ -81,12 +90,61 @@ mod tests {
     use crate::stream::TagValue;
 
     #[test]
+    fn owned_tags_move_string_allocations_and_preserve_stable_order() {
+        let mut tags = StreamTags::default();
+        tags.produce(10, Cow::Borrowed(&[]));
+        tags.consume(10);
+        let owned = Tag::new(3, "owned key", TagValue::String("owned value".into()));
+        let key_ptr = owned.key().as_ptr();
+        let TagValue::String(value) = owned.val() else {
+            unreachable!();
+        };
+        let value_ptr = value.as_ptr();
+        tags.produce(
+            5,
+            Cow::Owned(vec![
+                owned,
+                Tag::new(1, "first", TagValue::Bool(true)),
+                Tag::new(1, "second", TagValue::Bool(false)),
+            ]),
+        );
+        let stored = &tags.tags[2];
+        assert_eq!(stored.0, AbsoluteStreamPos(13));
+        assert_eq!(stored.1.key().as_ptr(), key_ptr);
+        let TagValue::String(value) = stored.1.val() else {
+            unreachable!();
+        };
+        assert_eq!(value.as_ptr(), value_ptr);
+        tags.consume(1);
+        assert_eq!(
+            tags.read(),
+            [
+                Tag::new(0, "first", TagValue::Bool(true)),
+                Tag::new(0, "second", TagValue::Bool(false)),
+                Tag::new(2, "owned key", TagValue::String("owned value".into())),
+            ]
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "tag outside produced samples")]
+    fn owned_tag_cannot_overlap_the_next_batch() {
+        StreamTags::default().produce(
+            1,
+            Cow::Owned(vec![Tag::new(1, "marker", TagValue::Bool(true))]),
+        );
+    }
+
+    #[test]
     fn tags_beyond_32_bit_positions_remain_relative_to_the_reader() {
         let mut tags = StreamTags::default();
         let advance = u32::MAX as usize;
-        tags.produce(advance, &[]);
+        tags.produce(advance, Cow::Borrowed(&[]));
         tags.consume(advance);
-        tags.produce(8, &[Tag::new(5, "marker", TagValue::Bool(true))]);
+        tags.produce(
+            8,
+            Cow::Borrowed(&[Tag::new(5, "marker", TagValue::Bool(true))]),
+        );
         tags.consume(3);
         assert_eq!(tags.read(), [Tag::new(2, "marker", TagValue::Bool(true))]);
     }
@@ -100,6 +158,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "tag outside produced samples")]
     fn tag_cannot_overlap_the_next_batch() {
-        StreamTags::default().produce(1, &[Tag::new(1, "marker", TagValue::Bool(true))]);
+        StreamTags::default().produce(
+            1,
+            Cow::Borrowed(&[Tag::new(1, "marker", TagValue::Bool(true))]),
+        );
     }
 }
