@@ -22,8 +22,13 @@ use crate::{Complex, Float};
 ///
 /// FFTW is a little bit faster.
 pub trait Engine: Send {
-    /// Run runs an FFT round. Input and output is always the size of the FFT.
-    fn run(&mut self, i: &mut [Complex]);
+    /// Run an FFT round in place. Input and output must be exactly the size
+    /// of the FFT, which is twice the next power of two of [`Self::tap_len`].
+    ///
+    /// Returns an error for an invalid input length or a backend failure.
+    /// After an error, the input and engine state are unspecified and the
+    /// graph must stop processing this block.
+    fn run(&mut self, i: &mut [Complex]) -> Result<()>;
 
     /// Return the number of taps used.
     ///
@@ -103,27 +108,19 @@ pub mod rr_fftw {
     }
 
     impl Engine for FftwEngine {
-        fn run(&mut self, i: &mut [Complex]) {
-            use std::mem::MaybeUninit;
-
+        fn run(&mut self, i: &mut [Complex]) -> Result<()> {
             let fft_size = self.taps_fft.len();
-
-            // Ugly option: create un-initialized.
-            let mut tmp: Vec<MaybeUninit<Complex>> = Vec::with_capacity(fft_size);
-            // SAFETy:
-            // It'll be filled.
-            let mut tmp = unsafe {
-                tmp.set_len(fft_size);
-                std::mem::transmute::<Vec<MaybeUninit<Complex>>, Vec<Complex>>(tmp)
-            };
-
-            // Safer option: Create zeroed.
-            // let mut tmp: Vec<Complex> = vec![Complex::default(); fft_size];
-
+            validate_fft_input(i, fft_size)?;
+            let mut tmp = vec![Complex::default(); fft_size];
             // TODO: can we find a way to do this in-place?
-            self.fft.c2c(i, &mut tmp).unwrap();
+            self.fft
+                .c2c(i, &mut tmp)
+                .map_err(|error| crate::Error::wrap(error, "running forward FFTW transform"))?;
             sum_vec(&mut tmp, &self.taps_fft);
-            self.ifft.c2c(&mut tmp, i).unwrap();
+            self.ifft
+                .c2c(&mut tmp, i)
+                .map_err(|error| crate::Error::wrap(error, "running inverse FFTW transform"))?;
+            Ok(())
         }
         fn tap_len(&self) -> usize {
             self.tap_len
@@ -180,15 +177,27 @@ pub mod rr_rustfft {
         }
     }
     impl Engine for RustFftEngine {
-        fn run(&mut self, i: &mut [Complex]) {
+        fn run(&mut self, i: &mut [Complex]) -> Result<()> {
+            validate_fft_input(i, self.taps_fft.len())?;
             self.fft.process_with_scratch(i, &mut self.scratch);
             sum_vec(i, &self.taps_fft);
             self.ifft.process_with_scratch(i, &mut self.scratch);
+            Ok(())
         }
         fn tap_len(&self) -> usize {
             self.tap_len
         }
     }
+}
+
+fn validate_fft_input(input: &[Complex], size: usize) -> Result<()> {
+    if input.len() != size {
+        return Err(crate::Error::msg(format!(
+            "FFT filter expected {size} samples, got {}",
+            input.len()
+        )));
+    }
+    Ok(())
 }
 
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
@@ -347,7 +356,7 @@ impl<T: Engine> Block for FftFilter<T> {
             }
 
             self.buf.resize(self.fft_size, Complex::default());
-            self.engine.run(&mut self.buf);
+            self.engine.run(&mut self.buf)?;
 
             // Add overlapping tail.
             for (i, t) in self.tail.iter().enumerate() {
@@ -531,7 +540,7 @@ mod tests {
             fn tap_len(&self) -> usize {
                 self.0
             }
-            fn run(&mut self, _: &mut [Complex]) {
+            fn run(&mut self, _: &mut [Complex]) -> Result<()> {
                 panic!("invalid engine must not run");
             }
         }
@@ -545,6 +554,61 @@ mod tests {
     use crate::fir::low_pass_complex;
     use crate::stream::TagValue;
     use crate::window::WindowType;
+
+    fn check_engine_processing(mut engine: impl Engine) -> Result<()> {
+        let expected = [Complex::new(2.0, 3.0), Complex::new(4.0, -2.0)];
+        for size in [0, 1, 3, 4] {
+            let mut input = vec![Complex::default(); size];
+            assert!(engine.run(&mut input).is_err());
+        }
+        let mut input = expected;
+        engine.run(&mut input)?;
+        for (actual, expected) in input.iter().zip(expected) {
+            assert!((*actual - expected).norm() < 0.0001);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn rustfft_engine_reports_invalid_lengths() -> Result<()> {
+        check_engine_processing(rr_rustfft::RustFftEngine::new([Complex::new(1.0, 0.0)])?)
+    }
+
+    #[cfg(feature = "fftw")]
+    #[test]
+    fn fftw_engine_reports_invalid_lengths() -> Result<()> {
+        check_engine_processing(rr_fftw::FftwEngine::new([Complex::new(1.0, 0.0)])?)
+    }
+
+    #[test]
+    fn engine_failure_is_reported_without_publishing_output() -> Result<()> {
+        struct FailingEngine;
+        impl Engine for FailingEngine {
+            fn tap_len(&self) -> usize {
+                1
+            }
+            fn run(&mut self, _: &mut [Complex]) -> Result<()> {
+                Err(crate::Error::msg("test FFT backend failure"))
+            }
+        }
+        let make_filter =
+            || FftFilter::new_engine(ReadStream::from_slice(&[Complex::default()]), FailingEngine);
+        let (mut filter, out) = make_filter()?;
+        let error = filter.work().unwrap_err();
+        assert!(error.to_string().contains("test FFT backend failure"));
+        assert!(out.read_buf()?.0.is_empty());
+        #[cfg(not(feature = "wasm"))]
+        {
+            use crate::graph::{Graph, GraphRunner};
+            let (filter, out) = make_filter()?;
+            let mut graph = Graph::new();
+            graph.add(Box::new(filter));
+            let error = graph.run().unwrap_err();
+            assert!(error.to_string().contains("test FFT backend failure"));
+            assert!(out.read_buf()?.0.is_empty());
+        }
+        Ok(())
+    }
 
     #[test]
     fn filter_a_signal() -> Result<()> {
@@ -747,13 +811,14 @@ mod tests {
             fn tap_len(&self) -> usize {
                 3
             }
-            fn run(&mut self, _: &mut [Complex]) {
+            fn run(&mut self, _: &mut [Complex]) -> Result<()> {
                 if !self.produced {
                     let mut window = self.writer.write_buf().unwrap();
                     window.slice()[..5].fill(Complex::default());
                     window.produce(5, &[]);
                     self.produced = true;
                 }
+                Ok(())
             }
         }
         let (writer, reader) = new_stream()?;

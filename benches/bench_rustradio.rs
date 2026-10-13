@@ -353,7 +353,7 @@ fn bench_fft_backend<E: rustradio::fft_filter::Engine>(
     b.bytes = (count * std::mem::size_of::<Complex>()) as u64;
     b.iter(|| {
         work.copy_from_slice(std::hint::black_box(&input));
-        engine.run(&mut work);
+        engine.run(&mut work).unwrap();
         std::hint::black_box(&work);
     });
 }
