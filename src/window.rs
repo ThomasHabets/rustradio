@@ -39,6 +39,20 @@ const DEFAULT_HAMMING_PARM: Float = 25.0 / 46.0;
 /// Window type.
 ///
 /// See <https://en.wikipedia.org/wiki/Window_function>
+///
+/// More window types may be added in future releases. Downstream matches
+/// must include a fallback arm:
+///
+/// ```
+/// use rustradio::window::WindowType;
+/// let window = WindowType::Hamming;
+/// let name = match window {
+///     WindowType::Hamming | WindowType::HammingParm(_) => "Hamming",
+///     _ => "Other window",
+/// };
+/// assert_eq!(name, "Hamming");
+/// ```
+#[non_exhaustive]
 pub enum WindowType {
     /// Blackman window.
     Blackman,

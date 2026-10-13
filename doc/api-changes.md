@@ -38,3 +38,10 @@ the wait ended with too little available and an open peer; a nonblocking
 backend may return this immediately. `Closed` means too little is available
 and the peer has disconnected. Check `StreamWait::closed` when only the
 connection state matters. No-copy capacity remains advisory.
+
+## Window types
+
+`window::WindowType` is now `#[non_exhaustive]`. Add a wildcard arm to
+downstream matches so new window variants can be added without requiring
+another API break. Existing variants and window generation are unchanged.
+>>>>>>> 7526013 (Window: Allow future window types)
