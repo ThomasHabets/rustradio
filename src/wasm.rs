@@ -267,7 +267,8 @@ impl<T: Copy> BufferState<T> {
 }
 
 impl<T: Copy> Buffer<T> {
-    pub fn produce(&self, samples: &[T], tags: &[Tag]) {
+    #[cfg(test)]
+    fn produce(&self, samples: &[T], tags: &[Tag]) {
         self.state.lock().unwrap().produce(samples, tags);
     }
 
