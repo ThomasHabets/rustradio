@@ -6,8 +6,17 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   lowdep:
@@ -16,6 +25,24 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     - uses: dtolnay/rust-toolchain@stable
+    - name: Identify toolchains
+      id: toolchains
+      run: |
+        rustc --version > "$RUNNER_TEMP/toolchains"
+        if rustup toolchain list | grep -q '^nightly'; then
+          rustc +nightly --version >> "$RUNNER_TEMP/toolchains"
+        fi
+        echo "key=$(sha256sum "$RUNNER_TEMP/toolchains" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ${{ runner.temp }}/check-tools
+          target
+        key: ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-${{ hashFiles('Cargo.lock', '.github/workflows/runtests.yml', 'tickbox/**') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-
     - name: Build
       run: cargo build --locked --no-default-features --verbose
     - name: Build examples
@@ -32,8 +59,28 @@ jobs:
       run: rustup component add --toolchain nightly clippy
     - name: Rustup install wasm32
       run: rustup target add wasm32-unknown-unknown
+    - name: Identify toolchains
+      id: toolchains
+      run: |
+        rustc --version > "$RUNNER_TEMP/toolchains"
+        if rustup toolchain list | grep -q '^nightly'; then
+          rustc +nightly --version >> "$RUNNER_TEMP/toolchains"
+        fi
+        echo "key=$(sha256sum "$RUNNER_TEMP/toolchains" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ${{ runner.temp }}/check-tools
+          target
+        key: ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-${{ hashFiles('Cargo.lock', '.github/workflows/runtests.yml', 'tickbox/**') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-
     - name: cargo install
-      run: cargo install --locked cargo-deny tickbox
+      run: |
+        echo "$RUNNER_TEMP/check-tools/bin" >> "$GITHUB_PATH"
+        cargo install --root "$RUNNER_TEMP/check-tools" --locked cargo-deny tickbox
     - name: apt-get update
       run:  sudo apt-get update
     - name: Install dependencies
@@ -48,8 +95,28 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - name: Install Rust nightly
       run: rustup toolchain install nightly --profile minimal
+    - name: Identify toolchains
+      id: toolchains
+      run: |
+        rustc --version > "$RUNNER_TEMP/toolchains"
+        if rustup toolchain list | grep -q '^nightly'; then
+          rustc +nightly --version >> "$RUNNER_TEMP/toolchains"
+        fi
+        echo "key=$(sha256sum "$RUNNER_TEMP/toolchains" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ${{ runner.temp }}/check-tools
+          target
+        key: ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-${{ hashFiles('Cargo.lock', '.github/workflows/runtests.yml', 'tickbox/**') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-
     - name: cargo install
-      run: cargo install --locked tickbox
+      run: |
+        echo "$RUNNER_TEMP/check-tools/bin" >> "$GITHUB_PATH"
+        cargo install --root "$RUNNER_TEMP/check-tools" --locked tickbox
     - name: apt-get update
       run:  sudo apt-get update
     - name: Install dependencies
@@ -64,8 +131,28 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - name: Install Rust nightly
       run: rustup toolchain install nightly --profile minimal
+    - name: Identify toolchains
+      id: toolchains
+      run: |
+        rustc --version > "$RUNNER_TEMP/toolchains"
+        if rustup toolchain list | grep -q '^nightly'; then
+          rustc +nightly --version >> "$RUNNER_TEMP/toolchains"
+        fi
+        echo "key=$(sha256sum "$RUNNER_TEMP/toolchains" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v6
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ${{ runner.temp }}/check-tools
+          target
+        key: ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-${{ hashFiles('Cargo.lock', '.github/workflows/runtests.yml', 'tickbox/**') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ github.job }}-${{ steps.toolchains.outputs.key }}-
     - name: Install tickbox
-      run: cargo install --locked tickbox
+      run: |
+        echo "$RUNNER_TEMP/check-tools/bin" >> "$GITHUB_PATH"
+        cargo install --root "$RUNNER_TEMP/check-tools" --locked tickbox
     - name: Install dependencies
       run: |
         sudo apt-get update

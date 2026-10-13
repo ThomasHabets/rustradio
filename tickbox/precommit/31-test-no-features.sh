@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -ueo pipefail
+source "$TICKBOX_TEMPDIR/work/tickbox/common.sh"
 if [[ ${SLOW:-} = "true" ]]; then
         cd "$TICKBOX_TEMPDIR/work"
-        export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.no-features"
+        tickbox_target native "test.no-features"
         cargo test --locked --workspace --no-default-features
         if [[ ${CLEANUP:-} = true ]]; then
                 rm -fr "${CARGO_TARGET_DIR?}"

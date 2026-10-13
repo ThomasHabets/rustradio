@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ueo pipefail
 source "$TICKBOX_TEMPDIR/work/tickbox/common.sh"
-export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.all-features"
+tickbox_target native "test.all-features"
 cd "$TICKBOX_TEMPDIR/work"
 cargo test --locked --workspace --features "$NATIVE_FEATURES"
 if [[ ${CLEANUP:-} = true ]]; then
