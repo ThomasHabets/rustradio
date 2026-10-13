@@ -21,22 +21,21 @@ must increase, all three crates must start at the same version, and the
 release tag must not exist. The bump updates the workspace lockfile; checks
 and publication then use `--locked`.
 
-All three bumped packages are dry-run together before committing. The release
-commit is pushed to `main` before publication so partial uploads retain their
-source revision. Cargo publishes the macro implementation, macros, and library
-in dependency order. Only after publication succeeds is the exact release tag
-pushed. Other local tags are never pushed by this workflow.
+All three bumped packages are dry-run together before committing. Cargo
+publishes the macro implementation, macros, and library in dependency order.
+After publication succeeds, one atomic push updates `main` and the exact
+release tag together. Other local tags are never pushed by this workflow.
 
 If publication fails, do not bump again: crates.io uploads cannot be undone.
-Check out the existing release commit from `main` and inspect crates.io to
+Keep the local release commit and inspect crates.io to
 identify which versions were uploaded. Publish only the remaining packages,
 in dependency order, using `cargo publish --locked -p PACKAGE`. Run the normal
 verification checks before retrying. Once all three versions are available,
-create `vVERSION` at that release commit if needed, and push just that tag:
+create `vVERSION` at that release commit if needed, and push the commit and tag:
 
 ```sh
-git push origin refs/tags/vVERSION:refs/tags/vVERSION
+git push --atomic origin HEAD:refs/heads/main refs/tags/vVERSION:refs/tags/vVERSION
 ```
 
-If the commit push fails, publication has not started. If the final tag push
-fails, the packages have already been published; retry only that tag push.
+If the final push fails, the packages have already been published; retry only
+the combined push. The local release commit must be retained until it succeeds.
