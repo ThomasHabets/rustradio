@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec cargo build
+exec cargo build --locked

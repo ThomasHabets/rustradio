@@ -11,29 +11,38 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
-
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
+      - name: Require main
+        env:
+          RELEASE_BRANCH: ${{ github.ref_name }}
+        run: test "$RELEASE_BRANCH" = main
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo install
-        run: cargo install --locked tickbox
+        run: cargo install --locked tickbox cargo-semver-checks
 
-      - name: Verify package
-        run: cargo publish --dry-run --locked
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev libpipewire-0.3-dev libvolk-dev libuhd-dev
 
       - name: Commit version bump
         env:
           MANUAL_VERSION: ${{ inputs.version }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

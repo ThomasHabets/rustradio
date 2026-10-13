@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec cargo test --workspace
+exec cargo test --locked --workspace
