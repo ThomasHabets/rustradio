@@ -80,8 +80,8 @@ impl AsyncGraph {
                         BlockRet::EOF => break,
                         BlockRet::WaitForStream(stream, need) => {
                             //debug!("{name} wait for stream");
-                            let eof = stream.wait_async(need).await;
-                            if b.eof() || eof {
+                            let outcome = stream.wait_async(need).await;
+                            if b.eof() || outcome == crate::stream::WaitOutcome::Closed {
                                 break;
                             }
                         }

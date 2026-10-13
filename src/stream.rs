@@ -106,6 +106,30 @@ pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
 const DEFAULT_NOCOPY_CAPACITY: usize = 1_000;
 
+/// Result of waiting for samples or space on a stream.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WaitOutcome {
+    /// The requested number of samples or slots is available.
+    Ready,
+    /// The wait ended without enough samples or slots, but the peer is open.
+    /// Backends that cannot block may return this immediately.
+    TimedOut,
+    /// There are too few samples or slots and the peer has disconnected.
+    Closed,
+}
+
+impl WaitOutcome {
+    fn from_available(have: usize, need: usize, closed: bool) -> Self {
+        if have >= need {
+            Self::Ready
+        } else if closed {
+            Self::Closed
+        } else {
+            Self::TimedOut
+        }
+    }
+}
+
 /// Wait on a stream.
 ///
 /// For `ReadStream`, wait until there's enough to read.
@@ -118,10 +142,11 @@ pub trait StreamWait {
 
     /// Wait for "a while" or until `need` samples are available/space available.
     ///
-    /// Return true if `need` will *never* be satisfied, and blocks waiting for
-    /// it should just go ahead and EOF.
+    /// Buffered data that satisfies `need` returns [`WaitOutcome::Ready`]
+    /// even after the peer disconnects. [`WaitOutcome::Closed`] means the
+    /// requested amount is unavailable and the peer has disconnected.
     #[must_use]
-    fn wait(&self, need: usize) -> bool;
+    fn wait(&self, need: usize) -> WaitOutcome;
 
     /// Return true if the other end of this stream is disconnected.
     #[must_use]
@@ -129,12 +154,11 @@ pub trait StreamWait {
 
     /// Wait for "a while" or until `need` samples are available/space available.
     ///
-    /// Return true if `need` will *never* be satisfied, and blocks waiting for
-    /// it should just go ahead and EOF.
+    /// Returns the same outcomes as [`Self::wait`].
     ///
     /// `must_use` implied by async/Future.
     #[cfg(feature = "async")]
-    async fn wait_async(&self, need: usize) -> bool;
+    async fn wait_async(&self, need: usize) -> WaitOutcome;
 }
 
 #[async_trait]
@@ -142,17 +166,15 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     fn id(&self) -> usize {
         self.circ.id()
     }
-    fn wait(&self, need: usize) -> bool {
+    fn wait(&self, need: usize) -> WaitOutcome {
         self.wait_for_read(need)
     }
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
     #[cfg(feature = "async")]
-    async fn wait_async(&self, need: usize) -> bool {
-        let have = self.circ.wait_for_read_async(need).await;
-        let r = Arc::strong_count(&self.circ);
-        have < need && r == 1
+    async fn wait_async(&self, need: usize) -> WaitOutcome {
+        self.wait_for_read_async(need).await
     }
 }
 
@@ -161,15 +183,15 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     fn id(&self) -> usize {
         self.circ.id()
     }
-    fn wait(&self, need: usize) -> bool {
+    fn wait(&self, need: usize) -> WaitOutcome {
         self.wait_for_write(need)
     }
     fn closed(&self) -> bool {
         self.refcount() == 1
     }
     #[cfg(feature = "async")]
-    async fn wait_async(&self, need: usize) -> bool {
-        self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
+    async fn wait_async(&self, need: usize) -> WaitOutcome {
+        self.wait_for_write_async(need).await
     }
 }
 
@@ -223,17 +245,21 @@ impl<T: Default + Copy> ReadStream<T> {
     }
 }
 impl<T: Copy> ReadStream<T> {
-    /// Return true if the needed number of samples will *never* arrive.
+    /// Wait for samples, returning readiness, timeout, or peer closure.
     #[must_use]
-    pub fn wait_for_read(&self, need: usize) -> bool {
-        self.circ.wait_for_read(need) < need && Arc::strong_count(&self.circ) == 1
+    pub fn wait_for_read(&self, need: usize) -> WaitOutcome {
+        WaitOutcome::from_available(self.circ.wait_for_read(need), need, self.refcount() == 1)
     }
 
-    /// Return true if the needed number of samples will *never* arrive.
+    /// Wait asynchronously for samples, with the same outcomes as [`Self::wait_for_read`].
     #[cfg(feature = "async")]
     #[must_use]
-    pub async fn wait_for_read_async(&self, need: usize) -> bool {
-        self.circ.wait_for_read_async(need).await < need && Arc::strong_count(&self.circ) == 1
+    pub async fn wait_for_read_async(&self, need: usize) -> WaitOutcome {
+        WaitOutcome::from_available(
+            self.circ.wait_for_read_async(need).await,
+            need,
+            self.refcount() == 1,
+        )
     }
 }
 
@@ -320,15 +346,21 @@ impl<T: Copy> WriteStream<T> {
         Arc::clone(&self.circ).write_buf()
     }
 
+    /// Wait for space, returning readiness, timeout, or peer closure.
     #[must_use]
-    pub fn wait_for_write(&self, need: usize) -> bool {
-        self.circ.wait_for_write(need) < need && Arc::strong_count(&self.circ) == 1
+    pub fn wait_for_write(&self, need: usize) -> WaitOutcome {
+        WaitOutcome::from_available(self.circ.wait_for_write(need), need, self.refcount() == 1)
     }
 
+    /// Wait asynchronously for space, with the same outcomes as [`Self::wait_for_write`].
     #[cfg(feature = "async")]
     #[must_use]
-    pub async fn wait_for_write_async(&self, need: usize) -> bool {
-        self.circ.wait_for_write_async(need).await < need && Arc::strong_count(&self.circ) == 1
+    pub async fn wait_for_write_async(&self, need: usize) -> WaitOutcome {
+        WaitOutcome::from_available(
+            self.circ.wait_for_write_async(need).await,
+            need,
+            self.refcount() == 1,
+        )
     }
 
     #[must_use]
@@ -385,37 +417,41 @@ impl<T: Send> StreamWait for NCReadStream<T> {
     fn id(&self) -> usize {
         self.id
     }
-    fn wait(&self, need: usize) -> bool {
-        let l = self
+    fn wait(&self, need: usize) -> WaitOutcome {
+        let (queue, _) = self
             .inner
             .cv
             .wait_timeout_while(
                 self.inner.lock.lock().unwrap(),
                 std::time::Duration::from_millis(100),
-                |s| s.len() < need,
+                |queue| queue.len() < need && !self.closed(),
             )
             .unwrap();
-        l.0.len() < need && Arc::strong_count(&self.inner) == 1
+        WaitOutcome::from_available(queue.len(), need, self.closed())
     }
 
     #[cfg(feature = "async")]
-    async fn wait_async(&self, need: usize) -> bool {
-        if self.inner.lock.lock().unwrap().len() >= need {
-            return false;
-        }
-        loop {
-            // TODO: count down time, don't reset to same on every iteration.
-            let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
-            tokio::select! {
-                _ = sleep => break,
-                _ = self.inner.acvr.notified() => {
-                    if self.inner.lock.lock().unwrap().len() >= need {
-                        return false;
-                    }
-                },
+    async fn wait_async(&self, need: usize) -> WaitOutcome {
+        tokio::time::timeout(std::time::Duration::from_millis(100), async {
+            loop {
+                let notified = self.inner.acvr.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                let outcome = WaitOutcome::from_available(
+                    self.inner.lock.lock().unwrap().len(),
+                    need,
+                    self.closed(),
+                );
+                if outcome != WaitOutcome::TimedOut {
+                    return outcome;
+                }
+                notified.await;
             }
-        }
-        self.inner.lock.lock().unwrap().len() < need && self.closed()
+        })
+        .await
+        .unwrap_or_else(|_| {
+            WaitOutcome::from_available(self.inner.lock.lock().unwrap().len(), need, self.closed())
+        })
     }
     fn closed(&self) -> bool {
         Arc::strong_count(&self.inner) == 1
@@ -427,37 +463,35 @@ impl<T: Send> StreamWait for NCWriteStream<T> {
     fn id(&self) -> usize {
         self.id
     }
-    fn wait(&self, need: usize) -> bool {
+    fn wait(&self, need: usize) -> WaitOutcome {
         let capacity = self.inner.capacity;
-        let l = self
+        let (queue, _) = self
             .inner
             .cv
             .wait_timeout_while(
                 self.inner.lock.lock().unwrap(),
                 std::time::Duration::from_millis(100),
-                |s| capacity.saturating_sub(s.len()) < need,
+                |queue| capacity.saturating_sub(queue.len()) < need && !self.closed(),
             )
             .unwrap();
-        capacity.saturating_sub(l.0.len()) < need && self.closed()
+        WaitOutcome::from_available(capacity.saturating_sub(queue.len()), need, self.closed())
     }
     #[cfg(feature = "async")]
-    async fn wait_async(&self, need: usize) -> bool {
-        let capacity = self.inner.capacity;
-        if capacity.saturating_sub(self.inner.lock.lock().unwrap().len()) >= need {
-            return false;
-        }
-        loop {
-            let sleep = tokio::time::sleep(tokio::time::Duration::from_millis(100));
-            tokio::select! {
-                _ = sleep => break,
-                _ = self.inner.acvw.notified() => {
-                    if capacity.saturating_sub(self.inner.lock.lock().unwrap().len()) >= need {
-                        return false;
-                    }
-                },
+    async fn wait_async(&self, need: usize) -> WaitOutcome {
+        tokio::time::timeout(std::time::Duration::from_millis(100), async {
+            loop {
+                let notified = self.inner.acvw.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                let outcome = WaitOutcome::from_available(self.remaining(), need, self.closed());
+                if outcome != WaitOutcome::TimedOut {
+                    return outcome;
+                }
+                notified.await;
             }
-        }
-        capacity.saturating_sub(self.inner.lock.lock().unwrap().len()) < need && self.closed()
+        })
+        .await
+        .unwrap_or_else(|_| WaitOutcome::from_available(self.remaining(), need, self.closed()))
     }
     fn closed(&self) -> bool {
         Arc::strong_count(&self.inner) == 1
@@ -599,6 +633,122 @@ impl<T: Len> NCReadStream<T> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn copy_read_wait_distinguishes_readiness_timeout_and_closure() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        assert_eq!(reader.wait_for_read(1), WaitOutcome::TimedOut);
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&[1, 2]);
+        window.produce(2, &[]);
+        assert_eq!(reader.wait_for_read(2), WaitOutcome::Ready);
+        drop(writer);
+        assert_eq!(reader.wait_for_read(2), WaitOutcome::Ready);
+        assert_eq!(reader.wait_for_read(3), WaitOutcome::Closed);
+        reader.read_buf()?.0.consume(2);
+        assert_eq!(reader.wait_for_read(1), WaitOutcome::Closed);
+        Ok(())
+    }
+
+    #[test]
+    fn copy_write_wait_distinguishes_readiness_timeout_and_closure() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        assert_eq!(writer.wait_for_write(1), WaitOutcome::Ready);
+        let mut window = writer.write_buf()?;
+        let size = window.len();
+        window.slice().fill(0);
+        window.produce(size, &[]);
+        assert_eq!(writer.wait_for_write(1), WaitOutcome::TimedOut);
+        reader.read_buf()?.0.consume(1);
+        assert_eq!(writer.wait_for_write(1), WaitOutcome::Ready);
+        drop(reader);
+        assert_eq!(writer.wait_for_write(2), WaitOutcome::Closed);
+        Ok(())
+    }
+
+    #[test]
+    fn nocopy_waits_distinguish_outcomes_and_preserve_advisory_capacity() {
+        let (writer, reader) = new_nocopy_stream::<u8>();
+        assert_eq!(reader.wait(1), WaitOutcome::TimedOut);
+        assert_eq!(writer.wait(1), WaitOutcome::Ready);
+        for _ in 0..=DEFAULT_NOCOPY_CAPACITY {
+            writer.push(1, []);
+        }
+        assert_eq!(writer.remaining(), 0);
+        assert_eq!(reader.wait(DEFAULT_NOCOPY_CAPACITY + 1), WaitOutcome::Ready);
+        assert_eq!(writer.wait(1), WaitOutcome::TimedOut);
+        let _ = reader.pop();
+        let _ = reader.pop();
+        assert_eq!(writer.wait(1), WaitOutcome::Ready);
+        drop(writer);
+        assert_eq!(reader.wait(1), WaitOutcome::Ready);
+        assert_eq!(reader.wait(DEFAULT_NOCOPY_CAPACITY), WaitOutcome::Closed);
+        let (writer, reader) = new_nocopy_stream::<u8>();
+        for _ in 0..DEFAULT_NOCOPY_CAPACITY {
+            writer.push(1, []);
+        }
+        drop(reader);
+        assert_eq!(writer.wait(1), WaitOutcome::Closed);
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_copy_waits_distinguish_outcomes() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        assert_eq!(reader.wait_async(1).await, WaitOutcome::TimedOut);
+        assert_eq!(writer.wait_async(1).await, WaitOutcome::Ready);
+        let mut window = writer.write_buf()?;
+        let size = window.len();
+        window.slice().fill(0);
+        window.produce(size, &[]);
+        assert_eq!(writer.wait_async(1).await, WaitOutcome::TimedOut);
+        assert_eq!(reader.wait_async(size).await, WaitOutcome::Ready);
+        drop(writer);
+        assert_eq!(reader.wait_async(size).await, WaitOutcome::Ready);
+        reader.read_buf()?.0.consume(size);
+        assert_eq!(reader.wait_async(1).await, WaitOutcome::Closed);
+
+        let (writer, reader) = new_stream::<u8>()?;
+        let mut window = writer.write_buf()?;
+        let size = window.len();
+        window.slice().fill(0);
+        window.produce(size, &[]);
+        drop(reader);
+        assert_eq!(writer.wait_async(1).await, WaitOutcome::Closed);
+        Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_nocopy_waits_distinguish_outcomes_and_wake_for_data() {
+        let (writer, reader) = new_nocopy_stream::<u8>();
+        assert_eq!(reader.wait_async(1).await, WaitOutcome::TimedOut);
+        let (outcome, ()) = tokio::join!(reader.wait_async(2), async {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            writer.push(1, []);
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            writer.push(2, []);
+        });
+        assert_eq!(outcome, WaitOutcome::Ready);
+        drop(writer);
+        assert_eq!(reader.wait_async(2).await, WaitOutcome::Ready);
+        assert_eq!(reader.wait_async(3).await, WaitOutcome::Closed);
+
+        let (writer, reader) = new_nocopy_stream::<u8>();
+        assert_eq!(writer.wait_async(1).await, WaitOutcome::Ready);
+        for _ in 0..DEFAULT_NOCOPY_CAPACITY {
+            writer.push(1, []);
+        }
+        assert_eq!(writer.wait_async(1).await, WaitOutcome::TimedOut);
+        let (outcome, ()) = tokio::join!(writer.wait_async(1), async {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            let _ = reader.pop();
+        });
+        assert_eq!(outcome, WaitOutcome::Ready);
+        writer.push(1, []);
+        drop(reader);
+        assert_eq!(writer.wait_async(1).await, WaitOutcome::Closed);
+    }
 
     #[cfg(debug_assertions)]
     #[test]

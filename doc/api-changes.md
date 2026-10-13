@@ -23,3 +23,18 @@ Callers must handle the result; `FftFilter` propagates failures through
 Both supplied engines reject input lengths other than twice the next power
 of two of the tap count. After a processing error, discard the engine and
 its input rather than retrying with partially transformed data.
+
+## Stream waits
+
+`StreamWait::wait`, `wait_async`, and the copying stream `wait_for_read` and
+`wait_for_write` methods (including their async forms) return `WaitOutcome`
+instead of `bool`. Custom `StreamWait` implementations must return
+`Ready`, `TimedOut`, or `Closed`.
+
+Replace the old `if stream.wait(need)` EOF check with
+`if stream.wait(need) == WaitOutcome::Closed`. `Ready` means the requested
+amount is available, even if the peer has disconnected. `TimedOut` means
+the wait ended with too little available and an open peer; a nonblocking
+backend may return this immediately. `Closed` means too little is available
+and the peer has disconnected. Check `StreamWait::closed` when only the
+connection state matters. No-copy capacity remains advisory.

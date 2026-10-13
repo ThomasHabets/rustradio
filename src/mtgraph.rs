@@ -101,8 +101,8 @@ impl crate::graph::GraphRunner for MTGraph {
                                 break;
                             }
                             BlockRet::WaitForStream(stream, need) => {
-                                let eof = stream.wait(need);
-                                if b.eof() || eof {
+                                let outcome = stream.wait(need);
+                                if b.eof() || outcome == crate::stream::WaitOutcome::Closed {
                                     break;
                                 }
                             }

@@ -121,6 +121,14 @@ detected by the graph executor. For example:
 When all blocks are "done", the graph is considered "done", and its `.run()`
 will return.
 
+The threaded schedulers wait on a `WaitForStream` request using
+`StreamWait::wait` or `wait_async`. These return `stream::WaitOutcome`:
+`Ready` when the requested amount is available, `TimedOut` when it is
+unavailable but the peer is still open, and `Closed` when it is unavailable
+and the peer has disconnected. Buffered input can still be `Ready` after
+the writer disconnects. A `TimedOut` wait allows another `work()` call;
+it does not signal EOF. Backends that cannot block may return it immediately.
+
 ## SIMD
 
 If manual vectorization is needed for blocks in the main RustRadio library,

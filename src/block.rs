@@ -137,12 +137,12 @@ mod tests {
         fn id(&self) -> usize {
             123
         }
-        fn wait(&self, _need: usize) -> bool {
-            true
+        fn wait(&self, _need: usize) -> crate::stream::WaitOutcome {
+            crate::stream::WaitOutcome::Closed
         }
         #[cfg(feature = "async")]
-        async fn wait_async(&self, _need: usize) -> bool {
-            true
+        async fn wait_async(&self, _need: usize) -> crate::stream::WaitOutcome {
+            crate::stream::WaitOutcome::Closed
         }
         fn closed(&self) -> bool {
             true

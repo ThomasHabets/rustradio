@@ -693,7 +693,10 @@ mod tests {
         buffer.state.acvr.notify_one();
         assert_eq!(buffer.wait_for_read_async(2).await, 3);
         let input = crate::stream::ReadStream::from_slice(&[1u8, 2, 3]);
-        assert!(!input.wait_for_read_async(2).await);
+        assert_eq!(
+            input.wait_for_read_async(2).await,
+            crate::stream::WaitOutcome::Ready
+        );
         Ok(())
     }
 
