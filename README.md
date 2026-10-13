@@ -29,6 +29,8 @@ A library for digital signals processing in the spirit of GNU Radio.
 * What exactly is the purpose of `BlockEOF`?
 * Should `BufferReader` provide tags borrowed, but return owned `Vec<Tag>` from
   `consume()`? Less copying, but we need to convert to/from absolute still.
+  `.tags()` could construct tags on demand for read-only view, and not require
+  returning vec of tags from `read_buf()`.
 * Block structs have needless trait bounds, just to be passed to generated impl
   sections.
 * Should `Pending` return a time estimate?
