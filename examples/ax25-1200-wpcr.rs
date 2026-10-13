@@ -75,7 +75,7 @@ fn main() -> Result<()> {
                 20_000.0,
                 100.0,
                 &rustradio::window::WindowType::Hamming,
-            )
+            )?
         )?,
         // Resample RF.
         RationalResampler::builder()
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
                 2400.0,
                 100.0,
                 &rustradio::window::WindowType::Hamming,
-            )
+            )?
         )?,
         // Tag.
         BurstTagger::new(prev, burst_tee, opt.threshold, "burst".to_string())?,

@@ -46,7 +46,7 @@ impl Hilbert {
                 "Hilbert tap count must be odd and greater than one",
             ));
         }
-        let taps = crate::fir::hilbert(&window_type.make_window(ntaps));
+        let taps = crate::fir::hilbert(&window_type.make_window(ntaps))?;
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {

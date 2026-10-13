@@ -85,7 +85,7 @@ fn main() -> Result<()> {
         20_000.0,
         100.0,
         &rustradio::window::WindowType::Hamming,
-    );
+    )?;
     let new_samp_rate = 50_000.0;
     let prev = blockchain![
         g,

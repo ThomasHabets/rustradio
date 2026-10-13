@@ -71,7 +71,8 @@ fn bench_sum_vec_avx_fma(b: &mut Bencher) {
 
 #[bench]
 fn bench_fft_filter(b: &mut Bencher) {
-    let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0, &WindowType::Hamming);
+    let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0, &WindowType::Hamming)
+        .unwrap();
     let (sw, sr) = new_stream().unwrap();
     let (mut filter, out) = FftFilter::new(sr, taps).unwrap();
     b.iter(|| {
@@ -97,7 +98,8 @@ fn bench_fft_filter(b: &mut Bencher) {
 
 #[bench]
 fn bench_fir_filter(b: &mut Bencher) {
-    let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0, &WindowType::Hamming);
+    let taps = rustradio::fir::low_pass_complex(1024000.0, 50000.0, 10000.0, &WindowType::Hamming)
+        .unwrap();
     let (sw, sr) = new_stream().unwrap();
     let (mut filter, out) = FirFilter::new(sr, taps).unwrap();
     b.iter(|| {
@@ -336,7 +338,8 @@ fn bench_fft_backend<E: rustradio::fft_filter::Engine>(
         50000.0,
         transition_width,
         &WindowType::Hamming,
-    );
+    )
+    .unwrap();
     assert_eq!(2 * taps.len().next_power_of_two(), fft_size);
     let count = fft_size - taps.len();
     let mut input = vec![Complex::default(); fft_size];

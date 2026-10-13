@@ -63,7 +63,7 @@ pub fn main() -> Result<()> {
                 12_500.0,
                 10_000.0,
                 &rustradio::window::WindowType::Hamming,
-            )
+            )?
         )?,
         Map::keep_tags(prev, "AM decode", |v| v.norm())?,
         FftFilterFloat::new(
@@ -73,7 +73,7 @@ pub fn main() -> Result<()> {
                 opt.audio_rate as Float,
                 500.0,
                 &rustradio::window::WindowType::Hamming,
-            )
+            )?
         )?,
         RationalResampler::builder()
             .deci(opt.sample_rate as usize)

@@ -70,7 +70,7 @@ fn main() -> Result<()> {
         // Filter RF.
         FftFilter::new(
             prev,
-            rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0, &WindowType::Hamming)
+            rustradio::fir::low_pass_complex(samp_rate, 20_000.0, 100.0, &WindowType::Hamming)?
         )?,
         // Resample RF.
         RationalResampler::builder()
@@ -84,7 +84,7 @@ fn main() -> Result<()> {
         QuadratureDemod::new(prev, 1.0)?,
         FftFilterFloat::new(
             prev,
-            &rustradio::fir::low_pass(samp_rate, 1100.0, 100.0, &WindowType::Hamming)
+            &rustradio::fir::low_pass(samp_rate, 1100.0, 100.0, &WindowType::Hamming)?
         )?,
         AddConst::new(prev, -center_freq * 2.0 * std::f32::consts::PI / samp_rate)?,
     ];

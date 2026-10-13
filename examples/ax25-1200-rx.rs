@@ -173,7 +173,7 @@ fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Floa
                 20_000.0,
                 100.0,
                 rustradio::window::WindowType::Hamming,
-            )
+            )?
         )?,
         RationalResampler::builder()
             .deci(samp_rate as usize)
@@ -232,7 +232,7 @@ fn main() -> Result<()> {
         1100.0,
         100.0,
         rustradio::window::WindowType::Hamming,
-    );
+    )?;
     let freq1 = 1200.0;
     let freq2 = 2200.0;
     let center_freq = freq1 + (freq2 - freq1) / 2.0;

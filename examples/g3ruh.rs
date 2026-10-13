@@ -278,7 +278,7 @@ pub fn main() -> Result<()> {
                     8_800.0,
                     1000.0,
                     &rustradio::window::WindowType::Hamming,
-                )
+                )?
             )?,
             Canary::new(prev, move || cancel.cancel())?,
         ];
@@ -305,7 +305,7 @@ pub fn main() -> Result<()> {
                     12_500.0,
                     100.0,
                     &rustradio::window::WindowType::Hamming,
-                )
+                )?
             )?,
         ];
         let prev = if opt.wpcr {

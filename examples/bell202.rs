@@ -210,7 +210,7 @@ pub fn main() -> Result<()> {
                     20_000.0,
                     100.0,
                     &rustradio::window::WindowType::Hamming,
-                )
+                )?
             )?,
             RationalResampler::builder()
                 .deci(samp_rate as usize)
@@ -226,7 +226,7 @@ pub fn main() -> Result<()> {
                     1100.0,
                     100.0,
                     &rustradio::window::WindowType::Hamming,
-                )
+                )?
             )?,
             add_const(
                 prev,

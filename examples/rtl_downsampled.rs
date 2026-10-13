@@ -44,7 +44,7 @@ fn run(opt: Opt) -> Result<()> {
                 40_000.0,
                 1_000.0,
                 &rustradio::window::WindowType::Hamming,
-            )
+            )?
         )?,
         RationalResampler::builder()
             .deci(samp_rate as usize)

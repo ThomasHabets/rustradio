@@ -93,7 +93,7 @@ fn main() -> Result<()> {
         20_000.0,
         100.0,
         &rustradio::window::WindowType::Hamming,
-    );
+    )?;
     let prev = blockchain![g, prev, FftFilter::new(prev, taps)?];
 
     // Resample RF.

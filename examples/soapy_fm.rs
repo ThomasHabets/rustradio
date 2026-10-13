@@ -66,7 +66,7 @@ pub fn main() -> Result<()> {
         100_000.0,
         1000.0,
         &rustradio::window::WindowType::Hamming,
-    );
+    )?;
     let prev = blockchain![g, prev, FftFilter::new(prev, taps)?];
 
     // Resample.
@@ -91,7 +91,7 @@ pub fn main() -> Result<()> {
         44_100.0,
         500.0,
         &rustradio::window::WindowType::Hamming,
-    );
+    )?;
     //let audio_filter = FirFilter::new(prev, &taps);
     let prev = blockchain![g, prev, FftFilterFloat::new(prev, &taps)?];
 

@@ -3,7 +3,6 @@
 //! If using many taps, [`FftFilter`](crate::blocks::FftFilter) probably has
 //! better performance.
 //!
-//! TODO: Change taps to return error instead of assert?
 /*
  * TODO:
  * * Only handles case where input, output, and tap type are all the same.
@@ -626,13 +625,26 @@ where
 
 /// Create a fixed-length set of complex multiband filter taps.
 ///
-/// Returns `None` for invalid tap counts or frequency ranges.
-#[must_use]
-pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Option<Box<[Complex]>> {
+/// Band endpoints are normalized to Nyquist and must satisfy
+/// `0 <= low <= high <= 1`.
+///
+/// Returns an error for nonfinite frequencies or window weights, invalid
+/// bands, or a zero tap count or one that differs from the window length.
+pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Result<Box<[Complex]>> {
     use rustfft::FftPlanner;
 
     if taps == 0 || taps != window.0.len() {
-        return None;
+        return Err(Error::msg(
+            "Multiband tap count must be nonzero and match the window length",
+        ));
+    }
+    validate_window(window)?;
+    for &(low, high) in bands {
+        if !low.is_finite() || !high.is_finite() || low < 0.0 || low > high || high > 1.0 {
+            return Err(Error::msg(
+                "Multiband endpoints must satisfy 0 <= low <= high <= 1 and be finite",
+            ));
+        }
     }
 
     let mut ideal = vec![Complex::new(0.0, 0.0); taps].into_boxed_slice();
@@ -640,9 +652,6 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Opti
     for (low, high) in bands {
         let a = (low * scale).floor() as usize;
         let b = (high * scale).ceil() as usize;
-        if a > b || a > taps || b > taps {
-            return None;
-        }
         for n in a..b {
             ideal[n] = Complex::new(1.0, 0.0);
             ideal[taps - n - 1] = Complex::new(1.0, 0.0);
@@ -657,50 +666,73 @@ pub fn multiband(bands: &[(Float, Float)], taps: usize, window: &Window) -> Opti
     for (tap, weight) in ideal.iter_mut().zip(window.0.iter()) {
         *tap = *tap * *weight / Complex::new(scale, 0.0);
     }
-    Some(ideal)
+    Ok(ideal)
 }
 
 /// Create a fixed-length set of complex low pass filter taps.
-#[must_use]
+///
+/// Returns the same configuration errors as [`low_pass`].
 pub fn low_pass_complex(
     samp_rate: Float,
     cutoff: Float,
     twidth: Float,
     window_type: impl Borrow<WindowType>,
-) -> Box<[Complex]> {
-    low_pass(samp_rate, cutoff, twidth, window_type)
+) -> Result<Box<[Complex]>> {
+    Ok(low_pass(samp_rate, cutoff, twidth, window_type)?
         .into_iter()
         .map(|t| Complex::new(t, 0.0))
-        .collect()
+        .collect())
 }
 
-fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> usize {
-    let a = window_type.max_attenuation();
-    let t = (a * samp_rate / (22.0 * twidth)) as usize;
-    if (t & 1) == 0 { t + 1 } else { t }
+fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> Result<usize> {
+    let a = f64::from(window_type.max_attenuation());
+    let count = a * f64::from(samp_rate) / (22.0 * f64::from(twidth));
+    // A slice's allocation must fit in isize::MAX bytes. Check before casting,
+    // since floating-point to integer casts saturate instead of reporting overflow.
+    let max_taps = (isize::MAX as usize) / std::mem::size_of::<Float>();
+    if !count.is_finite() || count < 0.0 || count >= max_taps as f64 {
+        return Err(Error::msg("Low pass tap count overflow"));
+    }
+    let t = count as usize;
+    Ok(if (t & 1) == 0 { t + 1 } else { t })
 }
 
 /// Create a fixed-length set of low pass filter taps.
 ///
 /// TODO: this could be faster if we supported filtering a Complex by a Float.
 /// A low pass filter doesn't actually need complex taps.
-#[must_use]
+/// Returns an error unless the sample rate, cutoff, and transition width are
+/// finite and positive, and the cutoff is at most Nyquist. Also rejects tap
+/// count overflow, nonfinite window weights, and invalid normalization gain.
 pub fn low_pass(
     samp_rate: Float,
     cutoff: Float,
     twidth: Float,
     window_type: impl Borrow<WindowType>,
-) -> Box<[Float]> {
-    assert!(samp_rate > 0.0);
-    assert!(cutoff > 0.0);
-    assert!(twidth > 0.0);
+) -> Result<Box<[Float]>> {
+    if !samp_rate.is_finite() || samp_rate <= 0.0 {
+        return Err(Error::msg(
+            "Low pass sample rate must be finite and positive",
+        ));
+    }
+    if !cutoff.is_finite() || cutoff <= 0.0 || cutoff > samp_rate / 2.0 {
+        return Err(Error::msg(
+            "Low pass cutoff must be finite, positive, and at most Nyquist",
+        ));
+    }
+    if !twidth.is_finite() || twidth <= 0.0 {
+        return Err(Error::msg(
+            "Low pass transition width must be finite and positive",
+        ));
+    }
     let window_type = window_type.borrow();
 
     let pi = std::f64::consts::PI as Float;
-    let ntaps = compute_ntaps(samp_rate, twidth, window_type);
+    let ntaps = compute_ntaps(samp_rate, twidth, window_type)?;
     let window = window_type.make_window(ntaps);
+    validate_window(&window)?;
     let m = (ntaps - 1) / 2;
-    let fwt0 = 2.0 * pi * cutoff / samp_rate;
+    let fwt0 = 2.0 * pi * (cutoff / samp_rate);
     let mut taps: Box<[_]> = window
         .0
         .iter()
@@ -716,24 +748,29 @@ pub fn low_pass(
         })
         .collect();
     let gain = {
-        let gain: Float = 1.0;
         let mut fmax = taps[m];
         for n in 1..=m {
             fmax += 2.0 * taps[n + m];
         }
-        gain / fmax
+        normalization_gain(fmax)?
     };
     for tap in &mut taps {
         *tap *= gain;
     }
-    taps
+    Ok(taps)
 }
 
 /// Generate hilbert transformer filter.
-#[must_use]
-pub fn hilbert(window: &Window) -> Box<[Float]> {
-    assert!(!window.0.is_empty());
-    assert_ne!(window.0.len(), 1);
+///
+/// Returns an error unless the window length is odd and greater than one,
+/// its weights are finite, and the normalization gain is finite and nonzero.
+pub fn hilbert(window: &Window) -> Result<Box<[Float]>> {
+    if window.0.len() <= 1 || window.0.len() & 1 == 0 {
+        return Err(Error::msg(
+            "Hilbert tap count must be odd and greater than one",
+        ));
+    }
+    validate_window(window)?;
     let ntaps = window.0.len();
     let mid = (ntaps - 1) / 2;
     let mut gain = 0.0;
@@ -749,11 +786,27 @@ pub fn hilbert(window: &Window) -> Box<[Float]> {
             taps[mid - i] = 0.0;
         }
     }
-    let gain = 1.0 / (2.0 * gain.abs());
+    let gain = normalization_gain(2.0 * gain.abs())?;
     for tap in &mut taps {
         *tap *= gain;
     }
-    taps
+    Ok(taps)
+}
+
+fn validate_window(window: &Window) -> Result<()> {
+    if window.0.iter().any(|weight| !weight.is_finite()) {
+        return Err(Error::msg("Filter window weights must be finite"));
+    }
+    Ok(())
+}
+
+fn normalization_gain(gain: Float) -> Result<Float> {
+    if !gain.is_finite() || gain == 0.0 || !gain.recip().is_finite() {
+        return Err(Error::msg(
+            "Filter normalization gain must be finite and nonzero",
+        ));
+    }
+    Ok(gain.recip())
 }
 
 #[cfg(test)]
@@ -933,7 +986,7 @@ mod tests {
     fn translated_offset_tone_passes_low_pass() -> Result<()> {
         let samp_rate = 1024.0;
         let freq = 60.0;
-        let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming);
+        let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming).unwrap();
         let input = tone(4096, samp_rate, freq);
 
         let (mut src, src_out) = VectorSource::new(input)?;
@@ -954,7 +1007,7 @@ mod tests {
     fn translated_dc_is_rejected_by_low_pass() -> Result<()> {
         let samp_rate = 1024.0;
         let freq = 60.0;
-        let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming);
+        let taps = low_pass_complex(samp_rate, 20.0, 10.0, &WindowType::Hamming).unwrap();
         let input = vec![Complex::new(1.0, 0.0); 4096];
 
         let (mut src, src_out) = VectorSource::new(input)?;
@@ -1082,7 +1135,7 @@ mod tests {
 
     #[test]
     fn test_filter_generator() {
-        let taps = low_pass_complex(10000.0, 1000.0, 1000.0, WindowType::Hamming);
+        let taps = low_pass_complex(10000.0, 1000.0, 1000.0, WindowType::Hamming).unwrap();
         assert_eq!(taps.len(), 25);
         assert_almost_equal_complex(
             &taps,
@@ -1126,8 +1179,59 @@ mod tests {
 
     #[test]
     fn multiband_rejects_invalid_ranges() {
-        assert!(multiband(&[(0.0, 1.0)], 0, &Window(Box::default())).is_none());
-        assert!(multiband(&[(0.0, 3.0)], 8, &Window(Box::new([1.0; 8]))).is_none());
-        assert!(multiband(&[(0.5, 0.25)], 8, &Window(Box::new([1.0; 8]))).is_none());
+        assert!(multiband(&[(0.0, 1.0)], 0, &Window(Box::default())).is_err());
+        assert!(multiband(&[(0.0, 3.0)], 8, &Window(Box::new([1.0; 8]))).is_err());
+        assert!(multiband(&[(0.5, 0.25)], 8, &Window(Box::new([1.0; 8]))).is_err());
+        assert!(multiband(&[(0.0, 1.0)], 7, &Window(Box::new([1.0; 8]))).is_err());
+        for band in [(-0.1, 0.5), (Float::NAN, 0.5), (0.0, Float::INFINITY)] {
+            assert!(multiband(&[band], 8, &Window(Box::new([1.0; 8]))).is_err());
+        }
+        assert!(multiband(&[(0.0, 1.0)], 3, &Window(Box::new([Float::NAN; 3]))).is_err());
+    }
+
+    #[test]
+    fn low_pass_rejects_invalid_design_parameters() {
+        let window = WindowType::Hamming;
+        for invalid in [0.0, -1.0, Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {
+            assert!(low_pass(invalid, 100.0, 100.0, &window).is_err());
+            assert!(low_pass(1000.0, invalid, 100.0, &window).is_err());
+            assert!(low_pass(1000.0, 100.0, invalid, &window).is_err());
+            assert!(low_pass_complex(1000.0, invalid, 100.0, &window).is_err());
+        }
+        assert!(low_pass(1000.0, 501.0, 100.0, &window).is_err());
+        assert!(low_pass(1000.0, 100.0, Float::MIN_POSITIVE, &window).is_err());
+        assert!(low_pass(1000.0, 100.0, 100.0, WindowType::HammingParm(Float::NAN)).is_err());
+    }
+
+    #[test]
+    fn low_pass_accepts_nyquist_and_large_finite_rates() -> Result<()> {
+        for rate in [1000.0, Float::MAX] {
+            let taps = low_pass(rate, rate / 2.0, rate / 10.0, WindowType::Hamming)?;
+            assert!(taps.iter().all(|tap| tap.is_finite()));
+            assert!((taps.iter().sum::<Float>() - 1.0).abs() < 0.0001);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn hilbert_rejects_invalid_windows() {
+        for weights in [
+            vec![],
+            vec![1.0],
+            vec![1.0; 2],
+            vec![1.0; 4],
+            vec![0.0; 3],
+            vec![Float::NAN; 3],
+            vec![Float::INFINITY; 3],
+        ] {
+            assert!(hilbert(&Window(weights.into_boxed_slice())).is_err());
+        }
+    }
+
+    #[test]
+    fn hilbert_generates_normalized_antisymmetric_taps() -> Result<()> {
+        let taps = hilbert(&Window(Box::new([1.0; 3])))?;
+        assert_eq!(&*taps, &[-0.5, 0.0, 0.5]);
+        Ok(())
     }
 }
