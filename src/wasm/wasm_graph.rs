@@ -118,11 +118,7 @@ mod tests {
         Arc,
         atomic::{AtomicBool, Ordering},
     };
-    use std::task::{Context, Poll, Wake, Waker};
-    struct Noop;
-    impl Wake for Noop {
-        fn wake(self: Arc<Self>) {}
-    }
+    use std::task::{Context, Poll, Waker};
 
     #[derive(rustradio_macros::Block)]
     #[rustradio(crate)]
@@ -210,8 +206,8 @@ mod tests {
         graph.add(Box::new(sink));
         let (_poke, wake) = async_channel::bounded(1);
         let mut run = Box::pin(graph.run_async(wake));
-        let waker = Waker::from(Arc::new(Noop));
-        let mut cx = Context::from_waker(&waker);
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
         assert!(matches!(
             std::future::Future::poll(run.as_mut(), &mut cx),
             Poll::Pending
@@ -231,8 +227,8 @@ mod tests {
         graph.add(Box::new(source));
         let (_poke, wake) = async_channel::bounded(1);
         let mut run = Box::pin(graph.run_async(wake));
-        let waker = Waker::from(Arc::new(Noop));
-        let mut cx = Context::from_waker(&waker);
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
         assert!(matches!(
             std::future::Future::poll(run.as_mut(), &mut cx),
             Poll::Ready(Ok(()))

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -ueo pipefail
+source "$TICKBOX_TEMPDIR/work/tickbox/common.sh"
 cd "$TICKBOX_TEMPDIR/work"
 export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.clippy"
-cargo clippy --no-deps --workspace -F rtlsdr,soapysdr,fast-math,audio,fftw,async,nix,pipewire -- -D warnings
-# Was, and maybe should at some point be changed back to:
-# exec cargo clippy --all-features --all-targets
+exec cargo clippy --locked --no-deps --workspace --lib --bins --examples --tests --features "$NATIVE_FEATURES" -- -D warnings

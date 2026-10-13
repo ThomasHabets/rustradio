@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-set -ueo pipefail
-if [[ ${SLOW:-} = "true" ]]; then
-        cargo +nightly 2> /dev/null > /dev/null && {
-                export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.bench.nightly"
-                cd "$TICKBOX_TEMPDIR/work"
-                cargo +nightly bench --no-run -F rtlsdr
-                if [[ ${CLEANUP:-} = true ]]; then
-                        rm -fr "${CARGO_TARGET_DIR?}"
-                fi
-        }
+set -euo pipefail
+if [[ ${SLOW:-} = true ]]; then
+    cd "$TICKBOX_TEMPDIR/work"
+    export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.bench.nightly"
+    cargo +nightly bench --locked --no-run --features rtlsdr,fftw
+    cargo +nightly bench --locked --no-run --features wasm,fftw --lib --benches
+    if [[ ${CLEANUP:-} = true ]]; then
+        rm -fr "${CARGO_TARGET_DIR?}"
+    fi
 fi

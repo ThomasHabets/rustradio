@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-set -ueo pipefail
-if [[ ${SLOW:-} = "true" ]]; then
-        export RUSTFLAGS="--cfg tokio_unstable"
-        cargo +nightly 2> /dev/null > /dev/null && {
-                export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.nightly.all-features"
-                cd "$TICKBOX_TEMPDIR/work"
-                # This is not "all features" because wasm.
-                cargo +nightly test --workspace -F simd,rtlsdr,soapysdr,fast-math,audio,fftw,async,tokio-unstable,nix,pipewire,volk,uhd
-                if [[ ${CLEANUP:-} = true ]]; then
-                        rm -fr "${CARGO_TARGET_DIR?}"
-                fi
-        }
+set -euo pipefail
+source "$TICKBOX_TEMPDIR/work/tickbox/common.sh"
+if [[ ${SLOW:-} = true ]]; then
+    cd "$TICKBOX_TEMPDIR/work"
+    export RUSTFLAGS="${RUSTFLAGS:-} --cfg tokio_unstable"
+    export CARGO_TARGET_DIR="$TICKBOX_CWD/target/${TICKBOX_BRANCH}.test.nightly.all-features"
+    cargo +nightly test --locked --workspace --features "$NATIVE_FEATURES,$NIGHTLY_FEATURES"
+    if [[ ${CLEANUP:-} = true ]]; then
+        rm -fr "${CARGO_TARGET_DIR?}"
+    fi
 fi

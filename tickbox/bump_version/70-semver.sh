@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-exec cargo semver-checks --only-explicit-features --features rtlsdr,soapysdr,fast-math,audio,fftw,async,pipewire,volk,uhd
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
+exec cargo semver-checks --only-explicit-features --features "$STABLE_FEATURES"

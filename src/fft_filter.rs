@@ -301,7 +301,7 @@ impl<T: Engine> FftFilter<T> {
 #[inline]
 fn sum_vec(left: &mut [Complex], right: &[Complex]) {
     #[cfg(feature = "volk")]
-    volk::volk_32fc_x2_multiply_32fc_inplace(left, &right);
+    volk::volk_32fc_x2_multiply_32fc_inplace(left, right);
     #[cfg(not(feature = "volk"))]
     left.iter_mut()
         .zip(right.iter())
