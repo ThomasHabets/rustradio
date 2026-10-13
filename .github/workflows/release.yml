@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release, e.g. 1.2.3 (currently ignored)"
+        description: "Version to release, e.g. 1.2.3"
         required: true
         type: string
 
@@ -32,6 +32,8 @@ jobs:
         run: cargo publish --dry-run --locked
 
       - name: Commit version bump
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
