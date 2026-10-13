@@ -102,13 +102,6 @@ impl Block for MyBlock {
 }
 ```
 
-For copying streams, `output_stream.produce(n, &tags)` borrows and clones the
-tags into stream storage. When you have a `Vec<Tag>` that is no longer needed,
-use `output_stream.produce(n, tags)` to move the tags without cloning
-their keys or values. Both forms translate window-relative positions into
-absolute stream positions internally and sort tags stably by position. Tag
-positions must be less than `n`; zero-sample writes should have no tags.
-
 TODO:
 * NoCopy blocks.
 

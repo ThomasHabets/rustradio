@@ -27,7 +27,8 @@ A library for digital signals processing in the spirit of GNU Radio.
 * SymbolSync block at least have the right API.
 * `AsRef<Path>` vs `Into<PathBuf>`?
 * What exactly is the purpose of `BlockEOF`?
-* Should `produce()` take `Into<Vec<Tag>>`? Less copying.
+* Should `BufferReader` provide tags borrowed, but return owned `Vec<Tag>` from
+  `consume()`? Less copying, but we need to convert to/from absolute still.
 * Block structs have needless trait bounds, just to be passed to generated impl
   sections.
 * Should `Pending` return a time estimate?
@@ -36,7 +37,14 @@ A library for digital signals processing in the spirit of GNU Radio.
   * Great for hardware like audio, SDRs.
   * Max ceiling for e.g. TCP streams.
   * Maybe both. Strobe could do with being able to just say.
-* Switch `Skip` to take `u64`, or newtype `StreamPos`.
+* Spread the absolute stream pos type more widely?
+
+## Ideas not blocking 1.0
+
+* New builder pattern `build_with_optional()` that returns a struct of all
+  optional streams, but as `Option<>` where only the requested streams are
+  actually created?
+* Dropping optional dst should gracefully stop producing on it?
 
 ## Contributing
 
