@@ -1,5 +1,11 @@
 # Agent Notes
 
+## Working as intended
+
+Do not change these.
+
+* No-copy streams allow pushing more than announced capacity.
+
 ## Context Handoffs
 
 When context is getting tight, leave a compact handoff that lets the
