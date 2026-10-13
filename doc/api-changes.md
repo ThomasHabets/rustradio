@@ -44,4 +44,3 @@ connection state matters. No-copy capacity remains advisory.
 `window::WindowType` is now `#[non_exhaustive]`. Add a wildcard arm to
 downstream matches so new window variants can be added without requiring
 another API break. Existing variants and window generation are unchanged.
->>>>>>> 7526013 (Window: Allow future window types)
