@@ -17,9 +17,9 @@ jobs:
     - uses: actions/checkout@v6
     - uses: dtolnay/rust-toolchain@stable
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --locked --no-default-features --verbose
     - name: Build examples
-      run: cargo build --verbose --examples
+      run: cargo build --locked --no-default-features --verbose --examples
   standard:
     runs-on: ubuntu-latest
     name: Standard tests
@@ -27,7 +27,7 @@ jobs:
     - uses: actions/checkout@v6
     - uses: dtolnay/rust-toolchain@stable
     - name: Install Rust nightly
-      run: rustup install nightly
+      run: rustup toolchain install nightly --profile minimal
     - name: Rustup install nightly clippy
       run: rustup component add --toolchain nightly clippy
     - name: Rustup install wasm32
@@ -37,9 +37,9 @@ jobs:
     - name: apt-get update
       run:  sudo apt-get update
     - name: Install dependencies
-      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev schedtool libpipewire-0.3-dev libvolk*-dev libuhd-dev
+      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev libpipewire-0.3-dev libvolk-dev libuhd-dev
     - name: Run tickbox
-      run: NODIFF=true CLEANUP=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1
+      run: NODIFF=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1
   individual_features:
     runs-on: ubuntu-latest
     name: Individual features
@@ -47,18 +47,28 @@ jobs:
     - uses: actions/checkout@v6
     - uses: dtolnay/rust-toolchain@stable
     - name: Install Rust nightly
-      run: rustup install nightly
-    - name: Rustup install nightly clippy
-      run: rustup component add --toolchain nightly clippy
-    - name: Rustup install wasm32
-      run: rustup target add wasm32-unknown-unknown
+      run: rustup toolchain install nightly --profile minimal
     - name: cargo install
       run: cargo install --locked tickbox
     - name: apt-get update
       run:  sudo apt-get update
     - name: Install dependencies
-      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev schedtool libpipewire-0.3-dev libvolk*-dev libuhd-dev
+      run:  sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev libpipewire-0.3-dev libvolk-dev libuhd-dev
     - name: Run tickbox
-      run: SLOW=true NODIFF=true CLEANUP=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1 --matching '^(10|26)-.*'
-#    - name: Check semver
-#      uses: obi1kenobi/cargo-semver-checks-action@v2
+      run: SLOW=true NODIFF=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1 --matching '^(10|26)-.*'
+  extended:
+    runs-on: ubuntu-latest
+    name: Default, minimal, nightly, and benchmark checks
+    steps:
+    - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Install Rust nightly
+      run: rustup toolchain install nightly --profile minimal
+    - name: Install tickbox
+      run: cargo install --locked tickbox
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev libpipewire-0.3-dev libvolk-dev libuhd-dev
+    - name: Run extended checks
+      run: SLOW=true NODIFF=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1 --matching '^(10|30|31|50|60)-.*'
