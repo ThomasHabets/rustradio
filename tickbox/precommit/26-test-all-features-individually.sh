@@ -16,8 +16,14 @@ if [[ ${SLOW:-} = true ]]; then
         [[ "$toolchain" = nightly ]] && backend=nightly
         [[ "$feature" = wasm ]] && backend=wasm
         tickbox_target "$backend" "test.feature.${feature}"
-        RUSTFLAGS="$flags" cargo "+$toolchain" test --locked --workspace \
-            --no-default-features --features "$feature"
+        if [[ ${feature} = wasm ]]; then
+            # Don't try to build examples.
+            RUSTFLAGS="$flags" cargo "+$toolchain" test --locked --workspace \
+                --no-default-features --features wasm --lib
+        else
+            RUSTFLAGS="$flags" cargo "+$toolchain" test --locked --workspace \
+                --no-default-features --features "$feature"
+        fi
         if [[ ${CLEANUP:-} = true ]]; then
             rm -fr "${CARGO_TARGET_DIR?}"
         fi
