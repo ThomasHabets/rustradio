@@ -5,6 +5,7 @@ by the time the packet arrives the original seed will be shifted out
 anyway.
  */
 use crate::stream::{ReadStream, WriteStream};
+use crate::{Error, Result};
 
 /// LFSR as used by G3RUH.
 ///
@@ -18,16 +19,18 @@ struct Lfsr {
 
 impl Lfsr {
     /// Create new LFSR.
-    fn new(mask: u64, seed: u64, len: u8) -> Self {
-        assert!(len < 64);
-        Self {
+    fn new(mask: u64, seed: u64, len: u8) -> Result<Self> {
+        if len >= 64 {
+            return Err(Error::msg(format!("LFSR len must be <64, was {len}")));
+        }
+        Ok(Self {
             mask,
             len,
             shift_reg: seed,
-        }
+        })
     }
     /// Create new G3RUH LFSR.
-    fn g3ruh() -> Self {
+    fn g3ruh() -> Result<Self> {
         Self::new(0x21, 0, 16)
     }
     /// Clock the LFSR.
@@ -65,26 +68,26 @@ impl Descrambler {
         mask: u64,
         seed: u64,
         len: u8,
-    ) -> crate::Result<(Self, ReadStream<u8>)> {
+    ) -> Result<(Self, ReadStream<u8>)> {
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 src,
                 dst,
-                lfsr: Lfsr::new(mask, seed, len),
+                lfsr: Lfsr::new(mask, seed, len)?,
             },
             dr,
         ))
     }
 
     /// Create a descrambler with G3RUH parameters.
-    pub fn g3ruh(src: ReadStream<u8>) -> crate::Result<(Self, ReadStream<u8>)> {
+    pub fn g3ruh(src: ReadStream<u8>) -> Result<(Self, ReadStream<u8>)> {
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 src,
                 dst,
-                lfsr: Lfsr::g3ruh(),
+                lfsr: Lfsr::g3ruh()?,
             },
             dr,
         ))
@@ -107,13 +110,13 @@ pub struct Scrambler {
 }
 impl Scrambler {
     /// Create a descrambler with G3RUH parameters.
-    pub fn g3ruh(src: ReadStream<u8>) -> crate::Result<(Self, ReadStream<u8>)> {
+    pub fn g3ruh(src: ReadStream<u8>) -> Result<(Self, ReadStream<u8>)> {
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 src,
                 dst,
-                lfsr: Lfsr::g3ruh(),
+                lfsr: Lfsr::g3ruh()?,
             },
             dr,
         ))
@@ -136,7 +139,7 @@ mod tests {
         let input = vec![1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0];
 
         let scrambled = {
-            let mut l1 = Lfsr::g3ruh();
+            let mut l1 = Lfsr::g3ruh().unwrap();
             let scrambled: Vec<_> = input
                 .iter()
                 .copied()
@@ -152,7 +155,7 @@ mod tests {
             vec![1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1,]
         );
 
-        let mut l2 = Lfsr::g3ruh();
+        let mut l2 = Lfsr::g3ruh().unwrap();
         let descrambled: Vec<_> = scrambled
             .iter()
             .copied()
@@ -169,7 +172,7 @@ mod tests {
         let input = vec![1u8; 24];
 
         let scrambled = {
-            let mut l1 = Lfsr::g3ruh();
+            let mut l1 = Lfsr::g3ruh().unwrap();
             let scrambled: Vec<_> = input
                 .iter()
                 .copied()
@@ -187,7 +190,7 @@ mod tests {
             ]
         );
 
-        let mut l2 = Lfsr::g3ruh();
+        let mut l2 = Lfsr::g3ruh().unwrap();
         let descrambled: Vec<_> = scrambled
             .iter()
             .copied()
@@ -206,7 +209,7 @@ mod tests {
         let input: Vec<_> = (0..len).map(|_| rng.random_range(0..=1)).collect();
 
         let scrambled = {
-            let mut l1 = Lfsr::g3ruh();
+            let mut l1 = Lfsr::g3ruh().unwrap();
             let scrambled: Vec<_> = input
                 .iter()
                 .copied()
@@ -217,7 +220,7 @@ mod tests {
             scrambled
         };
 
-        let mut l2 = Lfsr::g3ruh();
+        let mut l2 = Lfsr::g3ruh().unwrap();
         let descrambled: Vec<_> = scrambled
             .iter()
             .copied()
