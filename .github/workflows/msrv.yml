@@ -27,16 +27,9 @@ jobs:
       - name: Install MSRV
         env:
           MSRV: ${{ steps.msrv.outputs.version }}
-        run: rustup toolchain install "$MSRV" --profile minimal --target wasm32-unknown-unknown
+        run: rustup toolchain install "$MSRV" --profile minimal
 
-      # Building the UI together with native examples enables its wasm feature
-      # on their shared RustRadio dependency, which disables the native MTGraph.
       - name: Run native tests with MSRV
         env:
           MSRV: ${{ steps.msrv.outputs.version }}
-        run: cargo "+$MSRV" test --workspace --exclude rustradio-ui --locked
-
-      - name: Check WASM UI with MSRV
-        env:
-          MSRV: ${{ steps.msrv.outputs.version }}
-        run: cargo "+$MSRV" check -p rustradio-ui --target wasm32-unknown-unknown --locked
+        run: cargo "+$MSRV" test --workspace --locked

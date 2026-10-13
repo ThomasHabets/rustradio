@@ -41,3 +41,10 @@ A library for digital signals processing in the spirit of GNU Radio.
 ## Contributing
 
 Contributions are very welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Browser UI
+
+The browser components and WASM applications live in the separate
+`rustradio-ui` repository. For local development, check it out alongside this
+repository at `../rustradio-ui`. Its examples include WebUSB FM reception and
+an IqStream waterfall client.

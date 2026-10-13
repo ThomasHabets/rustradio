@@ -60,7 +60,7 @@ Choose the smallest applicable implementation shape:
 For an example-local or `rustradio-ui` block, follow that crate's local module
 and import structure. The main crate's `#[rustradio(crate, ...)]` convention
 does not automatically apply outside the main crate; compare
-`examples/capture.rs` and `rustradio-ui/src/worker/float_sink.rs`.
+`examples/capture.rs` and `../rustradio-ui/src/worker/float_sink.rs`.
 
 ## Satisfy hard requirements
 

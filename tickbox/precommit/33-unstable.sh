@@ -11,10 +11,3 @@ cargo tree --features wasm,unstable --target wasm32-unknown-unknown \
         echo 'ERROR: unstable enables async-channel/std for WASM' >&2
         exit 1
     fi)
-cargo check -p rustradio-ui --features unstable --target wasm32-unknown-unknown
-cargo tree -p rustradio-ui --features unstable --target wasm32-unknown-unknown \
-    --edges normal,build --invert async-channel --depth 0 --format '{f}' \
-    | (if grep -Eq '(^|,)std(,|$)'; then
-        echo 'ERROR: unstable enables async-channel/std for WASM' >&2
-        exit 1
-    fi)

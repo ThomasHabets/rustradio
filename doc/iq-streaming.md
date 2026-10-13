@@ -481,7 +481,7 @@ avoid per-sample protobuf messages. A copied protobuf `bytes` buffer is acceptab
 do not promise end-to-end zero-copy, particularly with WASM linear snapshots.
 
 The experimental implementation is gated by `unstable` in both `rustradio` and
-`rustradio-ui`. The native `IqServer` registry serves raw gRPC and the WebSocket
+`rustradio-ui` crate in its separate repository. The native `IqServer` registry serves raw gRPC and the WebSocket
 endpoint on one listener. Several resource IDs may be served concurrently; a
 resource admits one active client, with `ALREADY_EXISTS` for a second client.
 The same `IqStreamSink<T>` serves both transports. `IqStreamSource<T>` is a native
