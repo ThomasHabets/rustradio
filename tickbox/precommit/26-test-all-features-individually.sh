@@ -5,6 +5,7 @@ if [[ ${SLOW:-} = true ]]; then
     cd "$TICKBOX_TEMPDIR/work"
     IFS=, read -ra features <<< "$NATIVE_FEATURES,wasm,$NIGHTLY_FEATURES"
     for feature in "${features[@]}"; do
+        echo "Testing feature $feature"
         toolchain=stable
         flags="${RUSTFLAGS:-}"
         case "$feature" in
