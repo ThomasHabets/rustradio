@@ -8,6 +8,10 @@
 * Probably the `process_sync_tags()` functions should get all tag inputs, and
   return them too. Both not just for the first arg.
 * Think about if Cow could improve things.
+* New builder pattern `build_with_optional()` that returns a struct of all
+  optional streams, but as `Option<>` where only the requested streams are
+  actually created?
+* Dropping optional dst should gracefully stop producing on it?
 
 ### Internal
 

@@ -41,13 +41,6 @@ A library for digital signals processing in the spirit of GNU Radio.
   * Maybe both. Strobe could do with being able to just say.
 * Spread the absolute stream pos type more widely?
 
-## Ideas not blocking 1.0
-
-* New builder pattern `build_with_optional()` that returns a struct of all
-  optional streams, but as `Option<>` where only the requested streams are
-  actually created?
-* Dropping optional dst should gracefully stop producing on it?
-
 ## Contributing
 
 Contributions are very welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
@@ -55,6 +48,4 @@ Contributions are very welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 ## Browser UI
 
 The browser components and WASM applications live in the separate
-`rustradio-ui` repository. For local development, check it out alongside this
-repository at `../rustradio-ui`. Its examples include WebUSB FM reception and
-an IqStream waterfall client.
+[`rustradio-ui` repository](https://github.com/ThomasHabets/rustradio-ui).
