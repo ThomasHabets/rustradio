@@ -27,6 +27,10 @@ the exact output is necessary to diagnose the next step.
 Avoid adding dependencies. Ask the user if it truly is the best choice. Never
 vendor dependencies.
 
+## Commits
+
+* Never commit paths from the local machine outside the git repo
+
 ## Commit Messages
 
 Use the existing project style:
