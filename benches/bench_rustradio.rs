@@ -222,7 +222,7 @@ fn bench_serialize(b: &mut Bencher, append: bool) {
     use rustradio::SampleEncoding;
 
     let samples = vec![Complex::new(1.25, -2.5); 8192];
-    let mut bytes = Vec::with_capacity(samples.len() * Complex::size());
+    let mut bytes = Vec::with_capacity(samples.len() * Complex::ENCODED_SIZE.get());
     b.bytes = bytes.capacity() as u64;
     b.iter(|| {
         bytes.clear();

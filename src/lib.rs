@@ -880,47 +880,60 @@ impl<T: std::fmt::Debug + Copy + Default + Send + Sync + 'static> Sample for T {
 ///
 /// To migrate an existing custom sample, move the methods from its old `Sample`
 /// implementation into an implementation of this trait. `Sample` is automatic.
+/// Replace an old `size()` method with `ENCODED_SIZE`, and read its integer
+/// value using `Self::ENCODED_SIZE.get()`. Zero-width encodings are rejected:
+///
+/// ```compile_fail,E0080
+/// use rustradio::{Result, SampleEncoding};
+/// use std::num::NonZeroUsize;
+/// #[derive(Debug, Default, Copy, Clone)]
+/// struct Bad(u8);
+/// impl SampleEncoding for Bad {
+///     const ENCODED_SIZE: NonZeroUsize = NonZeroUsize::new(0).unwrap();
+///     fn parse(_: &[u8]) -> Result<Self> { Ok(Self(0)) }
+///     fn serialize_into(&self, _: &mut Vec<u8>) {}
+/// }
+/// let _ = Bad::ENCODED_SIZE;
+/// ```
 pub trait SampleEncoding: Sample {
-    /// The serialized size of one sample.
-    #[must_use]
-    fn size() -> usize;
+    /// The fixed, nonzero number of encoded bytes per sample.
+    const ENCODED_SIZE: std::num::NonZeroUsize;
 
     /// Parse one sample of this type.
     ///
     /// # Errors
     ///
-    /// For the currently implemented Sample types, it can only fail if the
+    /// For the built-in encodings, it can only fail if the
     /// passed byte slice is of the wrong size.
     fn parse(data: &[u8]) -> Result<Self>;
 
     /// Serialize one sample.
     #[must_use]
     fn serialize(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(Self::size());
+        let mut out = Vec::with_capacity(Self::ENCODED_SIZE.get());
         self.serialize_into(&mut out);
         out
     }
 
     /// Append one sample's serialized bytes to an existing buffer.
     ///
-    /// Append exactly `Self::size()` bytes, preserving bytes already in `out`.
-    /// Implement this directly so sinks can reuse their serialization buffer.
+    /// Append exactly `Self::ENCODED_SIZE.get()` bytes, preserving bytes already
+    /// in `out`. Implement this directly so sinks can reuse their buffer.
     fn serialize_into(&self, out: &mut Vec<u8>);
 }
 
 impl SampleEncoding for Complex {
-    fn size() -> usize {
-        std::mem::size_of::<Self>()
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize =
+        std::num::NonZeroUsize::new(std::mem::size_of::<Self>()).unwrap();
     fn parse(data: &[u8]) -> Result<Self> {
-        if data.len() != Self::size() {
+        if data.len() != Self::ENCODED_SIZE.get() {
             return Err(Error::msg(format!(
                 "Tried to parse Complex from {} bytes",
                 data.len()
             )));
         }
-        let i = Float::from_le_bytes(data[0..Self::size() / 2].try_into()?);
-        let q = Float::from_le_bytes(data[Self::size() / 2..].try_into()?);
+        let i = Float::from_le_bytes(data[0..Self::ENCODED_SIZE.get() / 2].try_into()?);
+        let q = Float::from_le_bytes(data[Self::ENCODED_SIZE.get() / 2..].try_into()?);
         Ok(Complex::new(i, q))
     }
     fn serialize_into(&self, out: &mut Vec<u8>) {
@@ -930,17 +943,18 @@ impl SampleEncoding for Complex {
 }
 
 impl SampleEncoding for Float {
-    fn size() -> usize {
-        std::mem::size_of::<Self>()
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize =
+        std::num::NonZeroUsize::new(std::mem::size_of::<Self>()).unwrap();
     fn parse(data: &[u8]) -> Result<Self> {
-        if data.len() != Self::size() {
+        if data.len() != Self::ENCODED_SIZE.get() {
             return Err(Error::msg(format!(
                 "Tried to parse Float from {} bytes",
                 data.len()
             )));
         }
-        Ok(Float::from_le_bytes(data[0..Self::size()].try_into()?))
+        Ok(Float::from_le_bytes(
+            data[0..Self::ENCODED_SIZE.get()].try_into()?,
+        ))
     }
     fn serialize_into(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(&self.to_le_bytes());
@@ -948,11 +962,10 @@ impl SampleEncoding for Float {
 }
 
 impl SampleEncoding for u8 {
-    fn size() -> usize {
-        std::mem::size_of::<Self>()
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize =
+        std::num::NonZeroUsize::new(std::mem::size_of::<Self>()).unwrap();
     fn parse(data: &[u8]) -> Result<Self> {
-        if data.len() != Self::size() {
+        if data.len() != Self::ENCODED_SIZE.get() {
             return Err(Error::msg(format!(
                 "Tried to parse u8 from {} bytes",
                 data.len()
@@ -966,17 +979,17 @@ impl SampleEncoding for u8 {
 }
 
 impl SampleEncoding for u32 {
-    fn size() -> usize {
-        4
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(4).unwrap();
     fn parse(data: &[u8]) -> Result<Self> {
-        if data.len() != Self::size() {
+        if data.len() != Self::ENCODED_SIZE.get() {
             return Err(Error::msg(format!(
                 "Tried to parse u32 from {} bytes",
                 data.len()
             )));
         }
-        Ok(u32::from_le_bytes(data[0..Self::size()].try_into()?))
+        Ok(u32::from_le_bytes(
+            data[0..Self::ENCODED_SIZE.get()].try_into()?,
+        ))
     }
     fn serialize_into(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(&self.to_le_bytes());
@@ -984,17 +997,18 @@ impl SampleEncoding for u32 {
 }
 
 impl SampleEncoding for i32 {
-    fn size() -> usize {
-        std::mem::size_of::<Self>()
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize =
+        std::num::NonZeroUsize::new(std::mem::size_of::<Self>()).unwrap();
     fn parse(data: &[u8]) -> Result<Self> {
-        if data.len() != Self::size() {
+        if data.len() != Self::ENCODED_SIZE.get() {
             return Err(Error::msg(format!(
                 "Tried to parse i32 from {} bytes",
                 data.len()
             )));
         }
-        Ok(i32::from_le_bytes(data[0..Self::size()].try_into()?))
+        Ok(i32::from_le_bytes(
+            data[0..Self::ENCODED_SIZE.get()].try_into()?,
+        ))
     }
     fn serialize_into(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(&self.to_le_bytes());

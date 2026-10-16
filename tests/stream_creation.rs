@@ -62,9 +62,7 @@ fn mixed_outputs_are_fallible_and_nocopy_outputs_remain_infallible() -> Result<(
 #[derive(Debug, Default, Clone, Copy)]
 struct ThreeBytes([u8; 3]);
 impl SampleEncoding for ThreeBytes {
-    fn size() -> usize {
-        3
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(3).unwrap();
     fn parse(bytes: &[u8]) -> Result<Self> {
         Ok(Self(bytes[..3].try_into().unwrap()))
     }

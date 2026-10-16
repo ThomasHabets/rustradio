@@ -282,8 +282,8 @@ impl<T: IqSample> IqStreamSink<T> {
                 }
                 let mut n = input
                     .len()
-                    .min(session.limits.max_frame_bytes as usize / T::size());
-                let mut samples = self.resource.pool.take(n * T::size());
+                    .min(session.limits.max_frame_bytes as usize / T::ENCODED_SIZE);
+                let mut samples = self.resource.pool.take(n * T::ENCODED_SIZE.get());
                 for sample in &input.slice()[..n] {
                     sample.serialize_into(&mut samples);
                 }
@@ -302,7 +302,7 @@ impl<T: IqSample> IqStreamSink<T> {
                     let count_tags =
                         wire_tags.partition_point(|t| t.sample_index < first + count as u64);
                     let mut chunk_size = scalar_size(first) + scalar_size(count as u64);
-                    let bytes = count * T::size();
+                    let bytes = count * T::ENCODED_SIZE.get();
                     if bytes > 0 {
                         chunk_size += 1 + varint_size(bytes as u64) + bytes;
                     }
@@ -330,7 +330,7 @@ impl<T: IqSample> IqStreamSink<T> {
                     return Err(err("IQ frame limit cannot fit one sample and its tags"));
                 }
                 let end = advance(first, n as u64)?;
-                samples.truncate(n * T::size());
+                samples.truncate(n * T::ENCODED_SIZE.get());
                 let tags = wire_tags
                     .into_iter()
                     .take_while(|t| t.sample_index < end)

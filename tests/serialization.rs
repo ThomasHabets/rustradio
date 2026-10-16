@@ -43,7 +43,7 @@ fn builtins_append_little_endian_bytes_without_reallocating() {
     assert_eq!(out.as_ptr(), allocation);
     assert_eq!(
         sample.serialize(),
-        expected[expected.len() - Complex::size()..]
+        expected[expected.len() - Complex::ENCODED_SIZE.get()..]
     );
 }
 
@@ -51,9 +51,7 @@ fn builtins_append_little_endian_bytes_without_reallocating() {
 struct Custom(u32);
 
 impl SampleEncoding for Custom {
-    fn size() -> usize {
-        1
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(1).unwrap();
     fn parse(bytes: &[u8]) -> Result<Self> {
         Ok(Self(u32::from(bytes[0])))
     }
@@ -65,7 +63,7 @@ impl SampleEncoding for Custom {
 #[test]
 fn custom_sample_supports_allocating_and_append_serialization() {
     // Encoded width is independent of the sample's in-memory layout.
-    assert_ne!(std::mem::size_of::<Custom>(), Custom::size());
+    assert_ne!(std::mem::size_of::<Custom>(), Custom::ENCODED_SIZE.get());
     let mut out = vec![1, 2];
     assert_eq!(Custom(3).serialize(), [3]);
     Custom(3).serialize_into(&mut out);
@@ -100,9 +98,7 @@ fn custom_encoding_round_trips_through_file_blocks() -> Result<()> {
 struct AppendOnly(u8);
 
 impl SampleEncoding for AppendOnly {
-    fn size() -> usize {
-        1
-    }
+    const ENCODED_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(1).unwrap();
     fn parse(bytes: &[u8]) -> Result<Self> {
         Ok(Self(bytes[0]))
     }

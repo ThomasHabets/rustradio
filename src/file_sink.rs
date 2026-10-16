@@ -145,7 +145,7 @@ where
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
         self.buf.clear();
-        self.buf.reserve(T::size() * n);
+        self.buf.reserve(T::ENCODED_SIZE.get() * n);
         for sample in i.iter() {
             sample.serialize_into(&mut self.buf);
         }
@@ -286,7 +286,7 @@ where
             // TODO: write tags.
             //let s2 = format!["{:?}", s].into();
             self.buf.clear();
-            self.buf.reserve(T::size() + 1);
+            self.buf.reserve(T::ENCODED_SIZE.get() + 1);
             s.serialize_into(&mut self.buf);
             self.buf.push(10); // Newline.
             self.f

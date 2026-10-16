@@ -428,7 +428,7 @@ impl<T: IqSample> IqStreamSource<T> {
         options: &StreamOptions,
     ) -> Result<(Self, ReadStream<T>, SourceHandle, SourceTransport)> {
         let (rx, handle, transport) =
-            start_source(started, options, T::encoding(), Some(T::size()))?;
+            start_source(started, options, T::encoding(), Some(T::ENCODED_SIZE.get()))?;
         let (dst, out) = new_stream()?;
         Ok((
             Self {
@@ -637,8 +637,9 @@ impl<T: IqSample> IqStreamSource<T> {
                 *tag_cursor += 1;
             }
             for (sample, bytes) in output.slice()[..n].iter_mut().zip(
-                chunk.samples[*offset * T::size()..(*offset + n) * T::size()]
-                    .chunks_exact(T::size()),
+                chunk.samples
+                    [*offset * T::ENCODED_SIZE.get()..(*offset + n) * T::ENCODED_SIZE.get()]
+                    .chunks_exact(T::ENCODED_SIZE.get()),
             ) {
                 *sample = T::parse(bytes)?;
             }

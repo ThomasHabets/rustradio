@@ -65,18 +65,18 @@ impl<T: SampleEncoding> Block for Parse<T> {
         loop {
             // TODO: handle tags.
             let (i, _) = self.src.read_buf()?;
-            if i.len() < T::size() {
-                return Ok(BlockRet::WaitForStream(&self.src, T::size()));
+            if i.len() < T::ENCODED_SIZE.get() {
+                return Ok(BlockRet::WaitForStream(&self.src, T::ENCODED_SIZE.get()));
             }
             let mut o = self.dst.write_buf()?;
             if o.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let items = o.len().min(i.len() / T::size());
+            let items = o.len().min(i.len() / T::ENCODED_SIZE);
             let os = o.slice();
             for (n, s) in i
                 .slice()
-                .chunks_exact(T::size())
+                .chunks_exact(T::ENCODED_SIZE.get())
                 .take(items)
                 .map(|chunk| T::parse(chunk))
                 .enumerate()
@@ -84,7 +84,7 @@ impl<T: SampleEncoding> Block for Parse<T> {
                 os[n] = s?;
             }
             o.produce(items, &[]);
-            i.consume(items * T::size());
+            i.consume(items * T::ENCODED_SIZE.get());
         }
     }
 }

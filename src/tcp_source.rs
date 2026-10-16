@@ -43,7 +43,7 @@ where
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;
-        let size = T::size();
+        let size = T::ENCODED_SIZE.get();
         if o.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }

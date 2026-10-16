@@ -76,7 +76,7 @@ where
     T: SampleEncoding + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let size = T::size();
+        let size = T::ENCODED_SIZE.get();
         loop {
             let mut o = self.dst.write_buf()?;
             let ospace = o.len();

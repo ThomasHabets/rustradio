@@ -53,7 +53,7 @@ where
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
-            self.buf.reserve(T::size() * i.len());
+            self.buf.reserve(T::ENCODED_SIZE.get() * i.len());
             for sample in i.iter() {
                 sample.serialize_into(&mut self.buf);
             }

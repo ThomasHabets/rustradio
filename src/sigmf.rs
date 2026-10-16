@@ -564,7 +564,7 @@ where
         if self.repeat.done() {
             return Ok(BlockRet::EOF);
         }
-        let sample_size = T::size();
+        let sample_size = T::ENCODED_SIZE.get();
         if u64::try_from(self.buf.len())? + self.left < u64::try_from(sample_size)? {
             if self.repeat.again() {
                 // If the file is empty, then this will basically busyloop.
@@ -623,9 +623,7 @@ mod tests {
     struct RejectZero(u8);
 
     impl SampleEncoding for RejectZero {
-        fn size() -> usize {
-            1
-        }
+        const ENCODED_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(1).unwrap();
 
         fn parse(data: &[u8]) -> Result<Self> {
             if data == [0] {

@@ -62,7 +62,7 @@ impl<T: SampleEncoding> Block for PduWriter<T> {
                 .create_new(true)
                 .open(full)?;
             self.buf.clear();
-            self.buf.reserve(T::size() * packet.len());
+            self.buf.reserve(T::ENCODED_SIZE.get() * packet.len());
             for sample in &packet {
                 sample.serialize_into(&mut self.buf);
             }

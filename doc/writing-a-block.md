@@ -114,8 +114,9 @@ types need no explicit trait implementation and no serialization methods.
 
 Byte-oriented blocks such as `FileSource`, `FileSink`, `ReaderSource`,
 `WriterSink`, `TcpSource`, and `Parse` additionally require `SampleEncoding`.
-This trait owns `size`, `parse`, `serialize`, and `serialize_into`. Its size
-describes encoded bytes, independently of `std::mem::size_of::<T>()`. Built-in
+This trait owns `ENCODED_SIZE`, `parse`, `serialize`, and `serialize_into`. Its size
+is a `NonZeroUsize` constant describing encoded bytes, independently of
+`std::mem::size_of::<T>()`. Use `T::ENCODED_SIZE.get()` for its `usize` value. Built-in
 encodings remain little-endian, with real then imaginary complex components.
 
 To migrate a custom serialized sample, change `impl Sample for MySample` to

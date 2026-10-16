@@ -93,7 +93,7 @@ where
             return Ok(BlockRet::EOF);
         }
         let mut o = self.dst.write_buf()?;
-        let sample_size = T::size();
+        let sample_size = T::ENCODED_SIZE.get();
         let have = self.buf.len() / sample_size;
         let want = o.len();
         if want == 0 {
@@ -164,9 +164,7 @@ mod tests {
     struct NonzeroByte(u8);
 
     impl SampleEncoding for NonzeroByte {
-        fn size() -> usize {
-            1
-        }
+        const ENCODED_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(1).unwrap();
         fn parse(data: &[u8]) -> Result<Self> {
             if data == [0] {
                 return Err(Error::msg("zero is not a valid sample"));
