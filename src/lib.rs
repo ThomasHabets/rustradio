@@ -182,6 +182,7 @@ pub mod multiply;
 pub mod multiply_const;
 pub mod nrzi;
 pub mod null_sink;
+pub mod oscillator;
 pub mod pdu_average;
 pub mod pdu_to_stream;
 pub mod pdu_writer;

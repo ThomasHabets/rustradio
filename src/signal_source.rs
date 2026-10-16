@@ -1,5 +1,6 @@
 //! Generate a pure signal.
 use crate::Result;
+use crate::oscillator::ComplexOscillator;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
@@ -18,12 +19,8 @@ pub struct SignalSourceComplex {
     dst: WriteStream<Complex>,
 
     amplitude: Float,
-    rotation: num_complex::Complex<f64>,
-    phasor: num_complex::Complex<f64>,
-    until_normalize: usize,
+    oscillator: ComplexOscillator,
 }
-
-const NORMALIZE_INTERVAL: usize = 4096;
 
 impl SignalSourceComplex {
     /// Create a complex sine source.
@@ -35,51 +32,47 @@ impl SignalSourceComplex {
         freq: Float,
         amplitude: Float,
     ) -> Result<(Self, ReadStream<Complex>)> {
-        if !samp_rate.is_finite() || samp_rate <= 0.0 {
-            return Err(crate::Error::msg(
-                "signal sample rate must be finite and positive",
-            ));
+        if !amplitude.is_finite() {
+            return Err(crate::Error::msg("signal amplitude must be finite"));
         }
-        if !freq.is_finite() || !amplitude.is_finite() {
-            return Err(crate::Error::msg(
-                "signal frequency and amplitude must be finite",
-            ));
-        }
-        // Reduce frequency before evaluating trigonometry, including when the
-        // requested frequency is many times the sample rate.
-        let step =
-            (f64::from(freq) % f64::from(samp_rate)) / f64::from(samp_rate) * std::f64::consts::TAU;
-        let (sin, cos) = step.sin_cos();
+        let mut oscillator = ComplexOscillator::new(samp_rate, freq, -std::f32::consts::FRAC_PI_2)?;
+        // The sine/-cosine waveform starts at sample one.
+        let _ = oscillator.next();
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 dst,
                 amplitude,
-                rotation: num_complex::Complex::new(cos, sin),
-                // Preserve the original sin(phase), -cos(phase) convention,
-                // advancing by one step before returning the first sample.
-                phasor: num_complex::Complex::new(0.0, -1.0),
-                until_normalize: NORMALIZE_INTERVAL,
+                oscillator,
             },
             dr,
         ))
+    }
+
+    /// Change frequency in Hz, preserving the phase of the next sample.
+    ///
+    /// Rejects nonfinite values and nonpositive sample rates without changing
+    /// the oscillator.
+    pub fn set_frequency(&mut self, samp_rate: Float, freq: Float) -> Result<()> {
+        self.oscillator.set_frequency(samp_rate, freq)
+    }
+
+    /// Set the phase in radians of the next generated sample.
+    ///
+    /// Rejects nonfinite phases without changing the oscillator.
+    pub fn set_phase(&mut self, phase: Float) -> Result<()> {
+        self.oscillator.set_phase(phase)
     }
 }
 
 impl Iterator for SignalSourceComplex {
     type Item = Complex;
+    #[inline]
     fn next(&mut self) -> Option<Complex> {
         use crate::AlgebraicMul;
-        self.phasor = self.phasor.algebraic_mul(self.rotation);
-        self.until_normalize -= 1;
-        if self.until_normalize == 0 {
-            self.phasor = self.phasor.algebraic_mul(1.0f64 / self.phasor.norm());
-            self.until_normalize = NORMALIZE_INTERVAL;
-        }
-        Some(
-            Complex::new(self.phasor.re as Float, self.phasor.im as Float)
-                .algebraic_mul(self.amplitude),
-        )
+        self.oscillator
+            .next()
+            .map(|sample| sample.algebraic_mul(self.amplitude))
     }
 }
 
@@ -172,8 +165,9 @@ impl Block for SignalSourceFloat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oscillator::NORMALIZE_INTERVAL;
 
-    fn expected_sample(rate: f32, freq: f32, amplitude: f32, index: usize) -> Complex {
+    fn expected_sample(rate: Float, freq: Float, amplitude: f32, index: usize) -> Complex {
         let phase = std::f64::consts::TAU * (f64::from(freq) % f64::from(rate)) / f64::from(rate)
             * index as f64;
         Complex::new(phase.sin() as f32, -phase.cos() as f32) * amplitude
@@ -221,7 +215,6 @@ mod tests {
                 let sample = source.next().unwrap();
                 assert!((sample.norm() - 1.0).abs() < 2e-7);
                 if index % NORMALIZE_INTERVAL == 0 {
-                    assert!((source.phasor.norm() - 1.0).abs() < 1e-14);
                     let expected = expected_sample(1_024_000.0, freq, 1.0, index);
                     assert!((sample - expected).norm() < 1e-6);
                 }
@@ -234,9 +227,9 @@ mod tests {
     fn complex_oscillator_preserves_phase_under_backpressure() -> Result<()> {
         let (mut source, output) = SignalSourceComplex::new(1_024_000.0, 100_000.0, 1.0)?;
         assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
-        let phase = source.phasor;
+        let phase = source.oscillator.phase();
         assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
-        assert_eq!(source.phasor, phase);
+        assert_eq!(source.oscillator.phase(), phase);
         let (buffer, tags) = output.read_buf()?;
         let capacity = buffer.len();
         assert!(tags.is_empty());
@@ -279,6 +272,17 @@ mod tests {
         assert!((positive.im - negative.im).abs() < 1e-6);
         let (mut silent, _) = SignalSourceFloat::new(16.0, -1.0, 0.0)?;
         assert_eq!(silent.next(), Some(0.0));
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_phase_and_frequency_changes_use_the_shared_iterator() -> Result<()> {
+        let (mut source, _output) = SignalSourceComplex::new(8.0, 2.0, 2.0)?;
+        source.set_phase(0.0)?;
+        assert_eq!(source.next(), Some(Complex::new(2.0, 0.0)));
+        source.set_frequency(8.0, -2.0)?;
+        assert!((source.next().unwrap() - Complex::new(0.0, 2.0)).norm() < 1e-6);
+        assert!((source.next().unwrap() - Complex::new(2.0, 0.0)).norm() < 1e-6);
         Ok(())
     }
 }
