@@ -134,34 +134,6 @@ operations the block uses. For example, a FIR kernel needs
 `C: Copy` for its coefficients. Stream storage, division, and the standard
 `Add`/`Mul` traits are not required by the kernel.
 
-These traits replace `AlgebraicOps`. To migrate a custom sample type, split its
-implementation into the individual traits and declare `type Output = Self`
-for each same-type operation. Implementations may also use different operand
-and output types. Both `Complex<f32>`/`f32` and `Complex<f64>`/`f64` support
-mixed addition, multiplication, and division in either operand order.
-
-For example, `value.algebraic_mul(gain)` scales a complex value directly.
-For scalar-left operations, use `AlgebraicMul::algebraic_mul(gain, value)` to
-avoid the primitive float's same-named inherent method. Floating-point
-implementations permit algebraic optimizations rather than promising the
-evaluation order of ordinary arithmetic operators.
-
-## FIR translation at runtime
-
-`FirFilter<T, C = T>` keeps the same type when translation is enabled, retuned,
-or disabled, including complex samples with real coefficients. Custom samples
-need no translation trait. For complex filters, obtain `filter.control()`
-before moving the block into a graph. Clones of this handle expose
-`set_translation(sample_rate, frequency)` and `disable_translation()`.
-
-Requests are validated immediately and applied at the next output-producing
-work call; the latest request wins. Retuning rebuilds translated coefficients
-from the originals and preserves mixer phase at the next input-window start.
-Zero frequency holds that phase. Disabling restores ordinary filtering and
-resets phase, so subsequent enabling starts at zero phase. The builder's
-`.translate(sample_rate, frequency)` sets the initial request without changing
-the builder or filter type.
-
 ## When a block is "done"
 
 A block is deemed "done" when it will never again produce any output on any
