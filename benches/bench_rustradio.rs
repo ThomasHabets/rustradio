@@ -10,6 +10,38 @@ use rustradio::window::WindowType;
 
 use test::Bencher;
 
+#[bench]
+fn bench_signal_source_complex_recursive(b: &mut Bencher) {
+    let (mut source, _output) = SignalSourceComplex::new(1_024_000.0, 100_000.0, 1.0).unwrap();
+    let mut samples = [Complex::default(); 1024];
+    b.bytes = std::mem::size_of_val(&samples) as u64;
+    b.iter(|| {
+        for sample in &mut samples {
+            *sample = source.next().unwrap();
+        }
+        std::hint::black_box(&samples);
+    });
+}
+
+// Reference implementation before the recursive oscillator optimization.
+#[bench]
+fn bench_signal_source_complex_trigonometric(b: &mut Bencher) {
+    let mut phase = 0.0f64;
+    let step = std::f64::consts::TAU * 100_000.0 / 1_024_000.0;
+    let mut samples = [Complex::default(); 1024];
+    b.bytes = std::mem::size_of_val(&samples) as u64;
+    b.iter(|| {
+        for sample in &mut samples {
+            phase = (phase + step) % std::f64::consts::TAU;
+            *sample = Complex::new(
+                phase.sin() as f32,
+                (phase - std::f64::consts::FRAC_PI_2).sin() as f32,
+            );
+        }
+        std::hint::black_box(&samples);
+    });
+}
+
 /// AVX code for multiplying two vectors.
 ///
 /// Looks like this code is a little faster on my laptop than the rust compiled code, as of Rust

@@ -6,6 +6,11 @@ use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 
 /// Generate a pure complex sine wave.
+///
+/// Uses a double-precision recursive oscillator with periodic amplitude
+/// normalization. Sample `n`, starting at one, is approximately
+/// `amplitude * (sin(n * step) - i * cos(n * step))`, where
+/// `step = 2π * freq / samp_rate`. No tags are generated.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct SignalSourceComplex {
@@ -13,11 +18,13 @@ pub struct SignalSourceComplex {
     dst: WriteStream<Complex>,
 
     amplitude: Float,
-    rad_per_sample: f64,
-    current: f64,
+    rotation: num_complex::Complex<f64>,
+    phasor: num_complex::Complex<f64>,
+    until_normalize: usize,
 }
 
-/// Generate pure complex sine sine.
+const NORMALIZE_INTERVAL: usize = 4096;
+
 impl SignalSourceComplex {
     /// Create a complex sine source.
     ///
@@ -38,13 +45,21 @@ impl SignalSourceComplex {
                 "signal frequency and amplitude must be finite",
             ));
         }
+        // Reduce frequency before evaluating trigonometry, including when the
+        // requested frequency is many times the sample rate.
+        let step =
+            (f64::from(freq) % f64::from(samp_rate)) / f64::from(samp_rate) * std::f64::consts::TAU;
+        let (sin, cos) = step.sin_cos();
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 dst,
-                current: 0.0,
                 amplitude,
-                rad_per_sample: 2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate),
+                rotation: num_complex::Complex::new(cos, sin),
+                // Preserve the original sin(phase), -cos(phase) convention,
+                // advancing by one step before returning the first sample.
+                phasor: num_complex::Complex::new(0.0, -1.0),
+                until_normalize: NORMALIZE_INTERVAL,
             },
             dr,
         ))
@@ -54,14 +69,18 @@ impl SignalSourceComplex {
 impl Iterator for SignalSourceComplex {
     type Item = Complex;
     fn next(&mut self) -> Option<Complex> {
-        self.current = (self.current + self.rad_per_sample) % (2.0 * std::f64::consts::PI);
-        Some(
-            self.amplitude
-                * Complex::new(
-                    self.current.sin() as Float,
-                    (self.current - std::f64::consts::PI / 2.0).sin() as Float,
-                ),
-        )
+        use crate::fir::AlgebraicOps;
+        self.phasor = self.phasor.algebraic_mul(self.rotation);
+        self.until_normalize -= 1;
+        if self.until_normalize == 0 {
+            self.phasor =
+                crate::algebraic_mul_complex_float(self.phasor, 1.0f64 / self.phasor.norm());
+            self.until_normalize = NORMALIZE_INTERVAL;
+        }
+        Some(crate::algebraic_mul_complex_float(
+            Complex::new(self.phasor.re as Float, self.phasor.im as Float),
+            self.amplitude,
+        ))
     }
 }
 
@@ -154,6 +173,89 @@ impl Block for SignalSourceFloat {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn expected_sample(rate: f32, freq: f32, amplitude: f32, index: usize) -> Complex {
+        let phase = std::f64::consts::TAU * (f64::from(freq) % f64::from(rate)) / f64::from(rate)
+            * index as f64;
+        Complex::new(phase.sin() as f32, -phase.cos() as f32) * amplitude
+    }
+
+    #[test]
+    fn complex_oscillator_matches_waveform_and_aliases() -> Result<()> {
+        for freq in [
+            0.0,
+            100_000.0,
+            -100_000.0,
+            512_000.0,
+            -512_000.0,
+            1_124_000.0,
+        ] {
+            for amplitude in [0.0, 0.25, -2.0] {
+                let (mut source, _output) = SignalSourceComplex::new(1_024_000.0, freq, amplitude)?;
+                for index in 1..=2 * NORMALIZE_INTERVAL + 1 {
+                    let got = source.next().unwrap();
+                    let want = expected_sample(1_024_000.0, freq, amplitude, index);
+                    assert!(
+                        (got - want).norm() < 1e-6,
+                        "{freq} Hz, sample {index}: {got} != {want}"
+                    );
+                }
+            }
+        }
+        // Finite parameters can have extreme ratios; range reduction must
+        // still leave a finite, unit-magnitude rotation.
+        for freq in [f32::MAX, -f32::MAX] {
+            let (mut source, _output) = SignalSourceComplex::new(f32::MIN_POSITIVE, freq, 1.0)?;
+            for sample in source.by_ref().take(10) {
+                assert!(sample.re.is_finite() && sample.im.is_finite());
+                assert!((sample.norm() - 1.0).abs() < 1e-6);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn complex_oscillator_preserves_amplitude_and_phase_over_long_runs() -> Result<()> {
+        for freq in [100_000.0, -100_000.0, 0.001] {
+            let (mut source, _output) = SignalSourceComplex::new(1_024_000.0, freq, 1.0)?;
+            for index in 1..=1_000_000 {
+                let sample = source.next().unwrap();
+                assert!((sample.norm() - 1.0).abs() < 2e-7);
+                if index % NORMALIZE_INTERVAL == 0 {
+                    assert!((source.phasor.norm() - 1.0).abs() < 1e-14);
+                    let expected = expected_sample(1_024_000.0, freq, 1.0, index);
+                    assert!((sample - expected).norm() < 1e-6);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn complex_oscillator_preserves_phase_under_backpressure() -> Result<()> {
+        let (mut source, output) = SignalSourceComplex::new(1_024_000.0, 100_000.0, 1.0)?;
+        assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
+        let phase = source.phasor;
+        assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
+        assert_eq!(source.phasor, phase);
+        let (buffer, tags) = output.read_buf()?;
+        let capacity = buffer.len();
+        assert!(tags.is_empty());
+        assert!(
+            (buffer.slice()[0] - expected_sample(1_024_000.0, 100_000.0, 1.0, 1)).norm() < 1e-6
+        );
+        buffer.consume(13);
+        assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
+        let (buffer, tags) = output.read_buf()?;
+        assert_eq!(buffer.len(), capacity);
+        assert!(tags.is_empty());
+        for (offset, sample) in buffer.slice()[capacity - 13..].iter().enumerate() {
+            let expected = expected_sample(1_024_000.0, 100_000.0, 1.0, capacity + offset + 1);
+            assert!((*sample - expected).norm() < 1e-6);
+        }
+        Ok(())
+    }
+
     #[test]
     fn rejects_invalid_signal_parameters() {
         for rate in [0.0, -1.0, Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {

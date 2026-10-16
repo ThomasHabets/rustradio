@@ -279,8 +279,11 @@ pub type Complex = num_complex::Complex<Float>;
 
 /// TODO: make pub?
 #[inline(always)]
-pub(crate) fn algebraic_mul_complex_float(c: Complex, rhs: Float) -> Complex {
-    Complex::new(c.re.algebraic_mul(rhs), c.im.algebraic_mul(rhs))
+pub(crate) fn algebraic_mul_complex_float<T: fir::AlgebraicOps + Copy>(
+    c: num_complex::Complex<T>,
+    rhs: T,
+) -> num_complex::Complex<T> {
+    num_complex::Complex::new(c.re.algebraic_mul(rhs), c.im.algebraic_mul(rhs))
 }
 
 pub(crate) static NEXT_STREAM_ID: std::sync::atomic::AtomicUsize =
