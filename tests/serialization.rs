@@ -6,7 +6,7 @@ use rustradio::block::{Block, BlockRet};
 use rustradio::file_sink::{FileSink, Mode};
 use rustradio::stream::new_stream;
 use rustradio::writer_sink::WriterSink;
-use rustradio::{Complex, Float, Result, Sample};
+use rustradio::{Complex, Float, Result, SampleEncoding};
 
 #[test]
 fn builtins_append_little_endian_bytes_without_reallocating() {
@@ -48,32 +48,58 @@ fn builtins_append_little_endian_bytes_without_reallocating() {
 }
 
 #[derive(Debug, Copy, Clone, Default)]
-struct Custom(u8);
+struct Custom(u32);
 
-impl Sample for Custom {
+impl SampleEncoding for Custom {
     fn size() -> usize {
         1
     }
     fn parse(bytes: &[u8]) -> Result<Self> {
-        Ok(Self(bytes[0]))
+        Ok(Self(u32::from(bytes[0])))
     }
     fn serialize_into(&self, out: &mut Vec<u8>) {
-        out.push(self.0);
+        out.push(self.0 as u8);
     }
 }
 
 #[test]
 fn custom_sample_supports_allocating_and_append_serialization() {
+    // Encoded width is independent of the sample's in-memory layout.
+    assert_ne!(std::mem::size_of::<Custom>(), Custom::size());
     let mut out = vec![1, 2];
     assert_eq!(Custom(3).serialize(), [3]);
     Custom(3).serialize_into(&mut out);
     assert_eq!(out, [1, 2, 3]);
 }
 
+#[test]
+fn custom_encoding_round_trips_through_file_blocks() -> Result<()> {
+    use rustradio::file_source::FileSource;
+
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("encoded");
+    let (writer, reader) = new_stream()?;
+    let mut sink = FileSink::new(reader, &path, Mode::Create)?;
+    let mut window = writer.write_buf()?;
+    window.fill_from_slice(&[Custom(7), Custom(9)]);
+    window.produce(2, &[]);
+    sink.work()?;
+    drop(sink);
+    assert_eq!(std::fs::read(&path)?, [7, 9]);
+    let (mut source, stream) = FileSource::<Custom>::new(&path)?;
+    source.work()?;
+    let (window, _) = stream.read_buf()?;
+    assert_eq!(
+        window.iter().map(|sample| sample.0).collect::<Vec<_>>(),
+        [7, 9]
+    );
+    Ok(())
+}
+
 #[derive(Debug, Copy, Clone, Default)]
 struct AppendOnly(u8);
 
-impl Sample for AppendOnly {
+impl SampleEncoding for AppendOnly {
     fn size() -> usize {
         1
     }

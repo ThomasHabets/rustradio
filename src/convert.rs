@@ -3,7 +3,7 @@ use std::borrow::Cow;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, WriteStream};
-use crate::{Complex, Float, Result, Sample};
+use crate::{Complex, Float, Result, Sample, SampleEncoding};
 
 /// Like Map, but cannot modify what it sees.
 ///
@@ -59,7 +59,7 @@ pub struct Parse<T> {
     dst: WriteStream<T>,
 }
 
-impl<T: Sample> Block for Parse<T> {
+impl<T: SampleEncoding> Block for Parse<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: make more efficient by doing batches.
         loop {

@@ -219,7 +219,7 @@ fn bench_sync_tag_aware_tagged(b: &mut Bencher) {
 }
 
 fn bench_serialize(b: &mut Bencher, append: bool) {
-    use rustradio::Sample;
+    use rustradio::SampleEncoding;
 
     let samples = vec![Complex::new(1.25, -2.5); 8192];
     let mut bytes = Vec::with_capacity(samples.len() * Complex::size());

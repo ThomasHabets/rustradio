@@ -12,7 +12,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::Sample;
+use crate::SampleEncoding;
 use crate::block::{Block, BlockRet};
 use crate::stream::NCReadStream;
 
@@ -40,7 +40,7 @@ impl<T: Send + 'static> Drop for PduWriter<T> {
     }
 }
 
-impl<T: Sample> Block for PduWriter<T> {
+impl<T: SampleEncoding> Block for PduWriter<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             let packet = match self.src.pop() {

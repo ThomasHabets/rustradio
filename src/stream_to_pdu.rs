@@ -107,7 +107,7 @@ impl<T: Sample> StreamToPdu<T> {
         debug!(
             "StreamToPdu> got burst of size {} samples, {} bytes",
             v.len(),
-            v.len() * T::size()
+            std::mem::size_of_val(v.as_slice())
         );
         // TODO: record stream pos.
         self.dst.push(v, tags);

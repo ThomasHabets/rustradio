@@ -1,7 +1,7 @@
 //! Check that buffer errors reach callers of manual and generated constructors.
 use rustradio::block::{Block, BlockRet};
 use rustradio::stream::{NCReadStream, NCWriteStream, ReadStream, WriteStream, new_stream};
-use rustradio::{Result, Sample};
+use rustradio::{Result, SampleEncoding};
 
 #[derive(rustradio_macros::Block)]
 #[rustradio(new, bound = "T: Copy + Default + Send + Sync")]
@@ -61,7 +61,7 @@ fn mixed_outputs_are_fallible_and_nocopy_outputs_remain_infallible() -> Result<(
 
 #[derive(Debug, Default, Clone, Copy)]
 struct ThreeBytes([u8; 3]);
-impl Sample for ThreeBytes {
+impl SampleEncoding for ThreeBytes {
     fn size() -> usize {
         3
     }

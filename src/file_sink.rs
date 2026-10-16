@@ -6,7 +6,7 @@ use log::{debug, error};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, ReadStream};
-use crate::{Error, Result, Sample};
+use crate::{Error, Result, SampleEncoding};
 
 /// File write mode.
 #[derive(Clone, Copy)]
@@ -22,14 +22,14 @@ pub enum Mode {
 }
 
 /// Builder for file sink.
-pub struct FileSinkBuilder<T: Sample> {
+pub struct FileSinkBuilder<T: SampleEncoding> {
     filename: std::path::PathBuf,
     flush: bool,
     mode: Mode,
     _dummy: std::marker::PhantomData<T>,
 }
 
-impl<T: Sample> FileSinkBuilder<T> {
+impl<T: SampleEncoding> FileSinkBuilder<T> {
     /// Create new `FileSinkBuilder`.
     /// Mode defaults to Create.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
@@ -64,7 +64,7 @@ impl<T: Sample> FileSinkBuilder<T> {
 /// Send stream to raw file.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FileSink<T: Sample> {
+pub struct FileSink<T: SampleEncoding> {
     f: BufWriter<std::fs::File>,
     buf: Vec<u8>,
     #[rustradio(in)]
@@ -73,7 +73,7 @@ pub struct FileSink<T: Sample> {
     flush: bool,
 }
 
-impl<T: Sample> FileSink<T> {
+impl<T: SampleEncoding> FileSink<T> {
     /// Create new builder.
     pub fn builder<P: Into<std::path::PathBuf>>(filename: P) -> FileSinkBuilder<T> {
         FileSinkBuilder::new(filename)
@@ -123,7 +123,7 @@ impl<T: Sample> FileSink<T> {
     }
 }
 
-impl<T: Sample> Drop for FileSink<T> {
+impl<T: SampleEncoding> Drop for FileSink<T> {
     fn drop(&mut self) {
         if let Err(e) = self.flush() {
             error!(
@@ -136,7 +136,7 @@ impl<T: Sample> Drop for FileSink<T> {
 
 impl<T> Block for FileSink<T>
 where
-    T: Sample + std::fmt::Debug,
+    T: SampleEncoding + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let (i, _tags) = self.src.read_buf()?;
@@ -279,7 +279,7 @@ impl<T> Drop for NoCopyFileSink<T> {
 
 impl<T> Block for NoCopyFileSink<T>
 where
-    T: Sample + std::fmt::Debug + Default,
+    T: SampleEncoding + std::fmt::Debug + Default,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         if let Some((s, _tags)) = self.src.pop() {

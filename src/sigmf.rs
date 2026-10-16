@@ -15,7 +15,7 @@ pub const VERSION: &str = "1.1.0";
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Error, Float, Repeat, Result, Sample};
+use crate::{Complex, Error, Float, Repeat, Result, SampleEncoding};
 
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
@@ -234,7 +234,7 @@ pub struct SigMFSourceBuilder<T> {
     dummy: std::marker::PhantomData<T>,
 }
 
-impl<T: Sample + Type> SigMFSourceBuilder<T> {
+impl<T: SampleEncoding + Type> SigMFSourceBuilder<T> {
     /// Force a certain sample rate.
     #[must_use]
     pub fn sample_rate(mut self, rate: f64) -> Self {
@@ -267,7 +267,7 @@ impl<T: Sample + Type> SigMFSourceBuilder<T> {
 /// SigMF file source.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct SigMFSource<T: Sample> {
+pub struct SigMFSource<T: SampleEncoding> {
     file: std::fs::File,
     meta: SigMF,
 
@@ -336,7 +336,7 @@ fn base_append<P: AsRef<std::path::Path>>(path: P, s: &str) -> std::path::PathBu
     }
 }
 
-impl<T: Sample + Type> SigMFSource<T> {
+impl<T: SampleEncoding + Type> SigMFSource<T> {
     /// Create new SigMF source builder.
     ///
     /// If the exact file name exists, then treat it as an Archive.
@@ -558,7 +558,7 @@ impl<T: Sample + Type> SigMFSource<T> {
 
 impl<T> Block for SigMFSource<T>
 where
-    T: Sample + std::fmt::Debug + Type,
+    T: SampleEncoding + std::fmt::Debug + Type,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         if self.repeat.done() {
@@ -622,7 +622,7 @@ mod tests {
     #[derive(Clone, Copy, Debug, Default)]
     struct RejectZero(u8);
 
-    impl Sample for RejectZero {
+    impl SampleEncoding for RejectZero {
         fn size() -> usize {
             1
         }

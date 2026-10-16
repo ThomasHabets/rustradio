@@ -860,8 +860,26 @@ pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
     })? * mul)
 }
 
-/// A trait all sample types must implement.
-pub trait Sample: std::fmt::Debug + Copy + Default + Send + Sync + 'static {
+/// An in-memory sample that can be carried by processing blocks.
+///
+/// Automatically implemented for types satisfying the storage and threading
+/// requirements. `Default` provides valid initial storage; it need not be
+/// numerical zero. Processing a sample does not require a serialized format.
+/// Byte-oriented sources and sinks additionally require [`SampleEncoding`].
+pub trait Sample: std::fmt::Debug + Copy + Default + Send + Sync + 'static {}
+
+impl<T: std::fmt::Debug + Copy + Default + Send + Sync + 'static> Sample for T {}
+
+/// A sample's fixed-width byte encoding, independent of its in-memory layout.
+///
+/// Built-in encodings use little-endian bytes; complex samples encode the real
+/// component followed by the imaginary component. Custom sample types only
+/// need this trait when used with byte-oriented sources or sinks. Other byte
+/// orders and formats can be represented by sample newtypes.
+///
+/// To migrate an existing custom sample, move the methods from its old `Sample`
+/// implementation into an implementation of this trait. `Sample` is automatic.
+pub trait SampleEncoding: Sample {
     /// The serialized size of one sample.
     #[must_use]
     fn size() -> usize;
@@ -889,7 +907,7 @@ pub trait Sample: std::fmt::Debug + Copy + Default + Send + Sync + 'static {
     fn serialize_into(&self, out: &mut Vec<u8>);
 }
 
-impl Sample for Complex {
+impl SampleEncoding for Complex {
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
@@ -910,7 +928,7 @@ impl Sample for Complex {
     }
 }
 
-impl Sample for Float {
+impl SampleEncoding for Float {
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
@@ -928,7 +946,7 @@ impl Sample for Float {
     }
 }
 
-impl Sample for u8 {
+impl SampleEncoding for u8 {
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }
@@ -946,7 +964,7 @@ impl Sample for u8 {
     }
 }
 
-impl Sample for u32 {
+impl SampleEncoding for u32 {
     fn size() -> usize {
         4
     }
@@ -964,7 +982,7 @@ impl Sample for u32 {
     }
 }
 
-impl Sample for i32 {
+impl SampleEncoding for i32 {
     fn size() -> usize {
         std::mem::size_of::<Self>()
     }

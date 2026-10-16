@@ -6,16 +6,16 @@ use log::{debug, trace};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Error, Repeat, Result, Sample};
+use crate::{Error, Repeat, Result, SampleEncoding};
 
 /// `FileSource` builder.
-pub struct FileSourceBuilder<T: Sample> {
+pub struct FileSourceBuilder<T: SampleEncoding> {
     filename: std::path::PathBuf,
     repeat: Repeat,
     _dummy: std::marker::PhantomData<T>,
 }
 
-impl<T: Sample> FileSourceBuilder<T> {
+impl<T: SampleEncoding> FileSourceBuilder<T> {
     /// Create builder.
     pub fn new<P: Into<std::path::PathBuf>>(filename: P) -> Self {
         FileSourceBuilder {
@@ -42,7 +42,7 @@ impl<T: Sample> FileSourceBuilder<T> {
 /// Read stream from raw file.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FileSource<T: Sample> {
+pub struct FileSource<T: SampleEncoding> {
     filename: std::path::PathBuf,
     f: BufReader<std::fs::File>,
     repeat: Repeat,
@@ -51,7 +51,7 @@ pub struct FileSource<T: Sample> {
     dst: WriteStream<T>,
 }
 
-impl<T: Sample> FileSource<T> {
+impl<T: SampleEncoding> FileSource<T> {
     /// Create builder.
     ///
     /// `u8` is a dummy type to make `FileSource::builder()` work. It'll work
@@ -86,7 +86,7 @@ impl<T: Sample> FileSource<T> {
 
 impl<T> Block for FileSource<T>
 where
-    T: Sample + std::fmt::Debug,
+    T: SampleEncoding + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         if self.repeat.done() {
@@ -163,7 +163,7 @@ mod tests {
     #[derive(Clone, Copy, Debug, Default)]
     struct NonzeroByte(u8);
 
-    impl Sample for NonzeroByte {
+    impl SampleEncoding for NonzeroByte {
         fn size() -> usize {
             1
         }

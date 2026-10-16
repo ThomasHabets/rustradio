@@ -2,12 +2,12 @@ use std::io::Write;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::ReadStream;
-use crate::{Result, Sample};
+use crate::{Result, SampleEncoding};
 
 /// Arbitrary writer sink.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct WriterSink<T: Sample> {
+pub struct WriterSink<T: SampleEncoding> {
     writer: Box<dyn Write + Send>,
     #[rustradio(in)]
     src: ReadStream<T>,
@@ -16,7 +16,7 @@ pub struct WriterSink<T: Sample> {
     buf: Vec<u8>,
 }
 
-impl<T: Sample> WriterSink<T> {
+impl<T: SampleEncoding> WriterSink<T> {
     pub fn new<R: Write + Send + 'static>(src: ReadStream<T>, writer: R) -> Self {
         Self {
             writer: Box::new(writer),
@@ -28,7 +28,7 @@ impl<T: Sample> WriterSink<T> {
 
 impl<T> Block for WriterSink<T>
 where
-    T: Sample + std::fmt::Debug,
+    T: SampleEncoding + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {

@@ -105,6 +105,24 @@ impl Block for MyBlock {
 TODO:
 * NoCopy blocks.
 
+## Samples and byte encodings
+
+`Sample` describes in-memory samples and is automatically implemented for
+`Debug + Copy + Default + Send + Sync + 'static` types. Custom processing-only
+types need no explicit trait implementation and no serialization methods.
+`Default` initializes valid storage; it does not promise numerical zero.
+
+Byte-oriented blocks such as `FileSource`, `FileSink`, `ReaderSource`,
+`WriterSink`, `TcpSource`, and `Parse` additionally require `SampleEncoding`.
+This trait owns `size`, `parse`, `serialize`, and `serialize_into`. Its size
+describes encoded bytes, independently of `std::mem::size_of::<T>()`. Built-in
+encodings remain little-endian, with real then imaginary complex components.
+
+To migrate a custom serialized sample, change `impl Sample for MySample` to
+`impl SampleEncoding for MySample` and import `SampleEncoding` where its
+methods are called. Generic processing code keeps its `Sample` bounds; generic
+byte I/O code uses `SampleEncoding`.
+
 ## Arithmetic in generic blocks
 
 Use the independent crate-root traits `AlgebraicAdd`, `AlgebraicMul`, and

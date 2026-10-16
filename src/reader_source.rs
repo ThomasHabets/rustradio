@@ -4,7 +4,7 @@ use log::debug;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Result, Sample};
+use crate::{Result, SampleEncoding};
 
 fn reader_thread<R: Read + Send + 'static>(
     mut reader: R,
@@ -46,14 +46,14 @@ fn reader_thread<R: Read + Send + 'static>(
 /// e.g. Ctrl-C.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct ReaderSource<T: Sample> {
+pub struct ReaderSource<T: SampleEncoding> {
     buf: Vec<u8>,
     #[rustradio(out)]
     dst: WriteStream<T>,
     rx: std::sync::mpsc::Receiver<Result<Vec<u8>>>,
 }
 
-impl<T: Sample> ReaderSource<T> {
+impl<T: SampleEncoding> ReaderSource<T> {
     pub fn new<R: Read + Send + 'static>(reader: R) -> Result<(Self, ReadStream<T>)> {
         let (dst, r) = crate::stream::new_stream()?;
         let (tx, rx) = std::sync::mpsc::sync_channel(2);
@@ -73,7 +73,7 @@ impl<T: Sample> ReaderSource<T> {
 
 impl<T> Block for ReaderSource<T>
 where
-    T: Sample + std::fmt::Debug,
+    T: SampleEncoding + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let size = T::size();

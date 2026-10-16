@@ -8,19 +8,19 @@ use log::warn;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Result, Sample};
+use crate::{Result, SampleEncoding};
 
 /// TCP Source, connecting to a server and streaming the data.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct TcpSource<T: Sample> {
+pub struct TcpSource<T: SampleEncoding> {
     stream: std::net::TcpStream,
     buf: Vec<u8>,
     #[rustradio(out)]
     dst: WriteStream<T>,
 }
 
-impl<T: Sample> TcpSource<T> {
+impl<T: SampleEncoding> TcpSource<T> {
     /// Connect to an address (such as a `SocketAddr` or `(host, port)`) and
     /// create a TCP source block.
     pub fn new(addr: impl std::net::ToSocketAddrs) -> Result<(Self, ReadStream<T>)> {
@@ -39,7 +39,7 @@ impl<T: Sample> TcpSource<T> {
 
 impl<T> Block for TcpSource<T>
 where
-    T: Sample + std::fmt::Debug,
+    T: SampleEncoding + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut o = self.dst.write_buf()?;

@@ -35,7 +35,7 @@ pub use wire::{Decoded, decode_client, decode_server};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stream::Tag;
 use crate::stream::TagValue;
-use crate::{Complex, Error, Float, Result, Sample};
+use crate::{Complex, Error, Float, Result, SampleEncoding};
 
 /// Gap count attached to the first retained sample after a discontinuity.
 pub const GAP_SAMPLES: &str = "rustradio.iq.gap_samples";
@@ -58,7 +58,7 @@ mod sealed {
 
 /// Supported packed stream samples: `Float`, `Complex`, and `u8`.
 /// This experimental trait is sealed.
-pub trait IqSample: Sample + sealed::Sealed {
+pub trait IqSample: SampleEncoding + sealed::Sealed {
     /// Fixed wire encoding of this graph port.
     fn encoding() -> proto::Encoding;
 }
