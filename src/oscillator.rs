@@ -9,12 +9,11 @@ pub(crate) const NORMALIZE_INTERVAL: usize = 4096;
 /// Sample `n`, starting at zero, is approximately
 /// `exp(i * (phase + n * 2π * frequency / sample_rate))`. Configuration and
 /// output use [`Float`]. A recursive double-precision phasor with periodic
-/// normalization avoids per-sample trigonometry. No streams or output buffers
-/// are allocated.
+/// normalization avoids drift. No streams or output buffers are allocated.
 ///
 /// ```
 /// use rustradio::{Complex, oscillator::ComplexOscillator};
-/// let mut oscillator = ComplexOscillator::new(8.0, 2.0, 0.0)?;
+/// let mut oscillator = ComplexOscillator::new(8.0, 2.0)?;
 /// assert_eq!(oscillator.next(), Some(Complex::new(1.0, 0.0)));
 /// oscillator.set_frequency(8.0, -2.0)?;
 /// # Ok::<(), rustradio::Error>(())
@@ -27,18 +26,17 @@ pub struct ComplexOscillator {
 }
 
 impl ComplexOscillator {
-    /// Create an oscillator with an explicit first-sample phase in radians.
+    /// Create an oscillator whose first sample has phase zero.
     ///
     /// Rejects nonfinite configuration and nonpositive sample rates. Negative
     /// frequencies are supported; frequencies alias modulo the sample rate.
-    pub fn new(sample_rate: Float, frequency: Float, phase: Float) -> Result<Self> {
+    pub fn new(sample_rate: Float, frequency: Float) -> Result<Self> {
         let mut oscillator = Self {
             rotation: num_complex::Complex::new(1.0, 0.0),
             phasor: num_complex::Complex::new(1.0, 0.0),
             until_normalize: NORMALIZE_INTERVAL,
         };
         oscillator.set_frequency(sample_rate, frequency)?;
-        oscillator.set_phase(phase)?;
         Ok(oscillator)
     }
 
@@ -109,7 +107,8 @@ mod tests {
     #[test]
     fn first_phase_signed_frequencies_and_aliases() -> Result<()> {
         for frequency in [0.0, 1.0, -1.0, 4.0, -4.0, 17.0] {
-            let mut oscillator = ComplexOscillator::new(8.0, frequency, 0.37)?;
+            let mut oscillator = ComplexOscillator::new(8.0, frequency)?;
+            oscillator.set_phase(0.37)?;
             let step = (f64::from(frequency) % 8.0) / 8.0 * std::f64::consts::TAU;
             for index in 0..2 * NORMALIZE_INTERVAL + 1 {
                 let actual = oscillator.next().unwrap();
@@ -123,7 +122,8 @@ mod tests {
 
     #[test]
     fn retuning_preserves_next_phase_and_phase_can_be_reset() -> Result<()> {
-        let mut oscillator = ComplexOscillator::new(16.0, 1.0, 0.5)?;
+        let mut oscillator = ComplexOscillator::new(16.0, 1.0)?;
+        oscillator.set_phase(0.5)?;
         for _ in 0..3 {
             oscillator.next();
         }
@@ -145,15 +145,15 @@ mod tests {
 
     #[test]
     fn invalid_settings_leave_iteration_unchanged() -> Result<()> {
-        let mut oscillator = ComplexOscillator::new(8.0, 1.0, 0.2)?;
+        let mut oscillator = ComplexOscillator::new(8.0, 1.0)?;
+        oscillator.set_phase(0.2)?;
         let mut original = oscillator.clone();
         for rate in [0.0, -1.0, Float::NAN, Float::INFINITY] {
-            assert!(ComplexOscillator::new(rate, 1.0, 0.0).is_err());
+            assert!(ComplexOscillator::new(rate, 1.0).is_err());
             assert!(oscillator.set_frequency(rate, 1.0).is_err());
         }
         for invalid in [Float::NAN, Float::INFINITY, Float::NEG_INFINITY] {
-            assert!(ComplexOscillator::new(8.0, invalid, 0.0).is_err());
-            assert!(ComplexOscillator::new(8.0, 1.0, invalid).is_err());
+            assert!(ComplexOscillator::new(8.0, invalid).is_err());
             assert!(oscillator.set_frequency(8.0, invalid).is_err());
             assert!(oscillator.set_phase(invalid).is_err());
         }
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn extreme_frequency_ratios_remain_finite() -> Result<()> {
         for frequency in [Float::MAX, -Float::MAX] {
-            let oscillator = ComplexOscillator::new(Float::from_bits(1), frequency, 0.0)?;
+            let oscillator = ComplexOscillator::new(Float::from_bits(1), frequency)?;
             for sample in oscillator.take(10) {
                 assert!(sample.re.is_finite() && sample.im.is_finite());
                 assert!((sample.norm() - 1.0).abs() < 1e-6);
@@ -179,7 +179,8 @@ mod tests {
     fn normalization_preserves_amplitude_and_phase_over_long_runs() -> Result<()> {
         let frequency = 100_000.0;
         let rate = 1_024_000.0;
-        let mut oscillator = ComplexOscillator::new(rate, frequency, 0.123)?;
+        let mut oscillator = ComplexOscillator::new(rate, frequency)?;
+        oscillator.set_phase(0.123)?;
         let step = f64::from(frequency) / f64::from(rate) * std::f64::consts::TAU;
         for index in 0..1_000_000 {
             let sample = oscillator.next().unwrap();

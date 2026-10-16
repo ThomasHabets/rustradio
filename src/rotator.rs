@@ -30,7 +30,7 @@ impl Rotator {
         samp_rate: Float,
         freq: Float,
     ) -> Result<(Self, ReadStream<Complex>)> {
-        let xlat = ComplexOscillator::new(samp_rate, freq, 0.0)?;
+        let xlat = ComplexOscillator::new(samp_rate, freq)?;
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {

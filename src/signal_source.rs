@@ -35,7 +35,8 @@ impl SignalSourceComplex {
         if !amplitude.is_finite() {
             return Err(crate::Error::msg("signal amplitude must be finite"));
         }
-        let mut oscillator = ComplexOscillator::new(samp_rate, freq, -std::f32::consts::FRAC_PI_2)?;
+        let mut oscillator = ComplexOscillator::new(samp_rate, freq)?;
+        oscillator.set_phase(-std::f32::consts::FRAC_PI_2)?;
         // The sine/-cosine waveform starts at sample one.
         let _ = oscillator.next();
         let (dst, dr) = crate::stream::new_stream()?;
