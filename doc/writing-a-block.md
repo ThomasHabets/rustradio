@@ -129,9 +129,10 @@ Use the independent crate-root traits `AlgebraicAdd`, `AlgebraicMul`, and
 `AlgebraicDiv` when a block permits algebraic arithmetic optimizations. Each
 trait has a right-hand operand parameter (`Rhs`, defaulting to `Self`) and an
 associated `Output` type, like the standard arithmetic traits. Require only the
-operations the block uses. For example, a FIR needs
-`T: Sample + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>`; division and
-the standard `Add`/`Mul` traits are not required.
+operations the block uses. For example, a FIR kernel needs
+`T: Copy + AlgebraicAdd<Output = T> + AlgebraicMul<C, Output = T>` and
+`C: Copy` for its coefficients. Stream storage, division, and the standard
+`Add`/`Mul` traits are not required by the kernel.
 
 These traits replace `AlgebraicOps`. To migrate a custom sample type, split its
 implementation into the individual traits and declare `type Output = Self`
@@ -144,6 +145,22 @@ For scalar-left operations, use `AlgebraicMul::algebraic_mul(gain, value)` to
 avoid the primitive float's same-named inherent method. Floating-point
 implementations permit algebraic optimizations rather than promising the
 evaluation order of ordinary arithmetic operators.
+
+## FIR translation at runtime
+
+`FirFilter<T, C = T>` keeps the same type when translation is enabled, retuned,
+or disabled, including complex samples with real coefficients. Custom samples
+need no translation trait. For complex filters, obtain `filter.control()`
+before moving the block into a graph. Clones of this handle expose
+`set_translation(sample_rate, frequency)` and `disable_translation()`.
+
+Requests are validated immediately and applied at the next output-producing
+work call; the latest request wins. Retuning rebuilds translated coefficients
+from the originals and preserves mixer phase at the next input-window start.
+Zero frequency holds that phase. Disabling restores ordinary filtering and
+resets phase, so subsequent enabling starts at zero phase. The builder's
+`.translate(sample_rate, frequency)` sets the initial request without changing
+the builder or filter type.
 
 ## When a block is "done"
 

@@ -3,52 +3,28 @@
 //! If using many taps, [`FftFilter`](crate::blocks::FftFilter) probably has
 //! better performance.
 //!
-/*
- * TODO:
- * * Only handles case where input, output, and tap type are all the same.
- */
-use log::error;
 use std::borrow::Borrow;
+use std::sync::{Arc, Mutex, Weak};
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
 use crate::{AlgebraicAdd, AlgebraicMul, Complex, Error, Float, Result, Sample};
 
-#[doc(hidden)]
-pub trait FrequencyTranslate {
-    /// Per-block translation state.
-    ///
-    /// Most sample types do not support translation and use `()`. Complex FIRs
-    /// use a rotator that advances once per output sample.
-    type Translator: Send;
-
-    /// Return the no-op translator for blocks that do not translate frequency.
-    fn no_translation() -> Self::Translator;
-
-    /// Configure frequency translation before the FIR is built.
-    ///
-    /// Implementations may modify `taps` to fold fixed per-tap phase terms into
-    /// the filter, then return any state needed to finish translation while
-    /// samples are produced.
-    fn new_translator(
-        taps: &mut [Self],
-        samp_rate: Float,
-        freq: Float,
-        deci: usize,
-    ) -> Self::Translator
-    where
-        Self: Sized;
-
-    /// Apply the continuing part of frequency translation to produced samples.
-    fn translate_output(out: &mut [Self], translator: &mut Self::Translator)
-    where
-        Self: Sized;
-}
-
-/// Finite impulse response filter.
-pub struct Fir<T> {
-    taps: Box<[T]>,
+/// Slice-based finite impulse response filter, parameterized by coefficient type.
+///
+/// Input samples can have a different type and need no storage or encoding
+/// traits. For example, real coefficients can filter complex samples:
+///
+/// ```
+/// use rustradio::{Complex, fir::Fir};
+/// let fir = Fir::new([0.5f32, 0.5])?;
+/// assert_eq!(fir.filter(&[Complex::new(2.0, 1.0), Complex::new(4.0, 3.0)]),
+///            Complex::new(3.0, 2.0));
+/// # Ok::<(), rustradio::Error>(())
+/// ```
+pub struct Fir<C> {
+    taps: Box<[C]>,
 }
 
 #[cfg(all(
@@ -150,14 +126,13 @@ impl Fir<Float> {
     }
 }
 
-impl<T> Fir<T>
-where
-    T: Sample + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
-{
-    /// Create a FIR, taking ownership of taps and reversing them in place.
+impl<C> Fir<C> {
+    /// Create a FIR, taking ownership of coefficients and reversing them in place.
     ///
-    /// Returns an error for empty taps.
-    pub fn new(taps: impl Into<Box<[T]>>) -> Result<Self> {
+    /// Returns an error for empty coefficients. No stream or encoding traits are
+    /// needed: the kernel operates on slices, and coefficients may have a
+    /// different type from the input samples.
+    pub fn new(taps: impl Into<Box<[C]>>) -> Result<Self> {
         let mut taps = taps.into();
         if taps.is_empty() {
             return Err(Error::msg("FIR taps must be nonempty"));
@@ -165,27 +140,40 @@ where
         taps.reverse();
         Ok(Self { taps })
     }
-    /// Run filter once, creating one sample from the taps and an
-    /// equal number of input samples.
+
+    /// Run the filter once, multiplying each input sample by its coefficient.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `input` is shorter than the coefficients.
     #[must_use]
-    pub fn filter(&self, input: &[T]) -> T {
+    pub fn filter<T>(&self, input: &[T]) -> T
+    where
+        C: Copy,
+        T: Copy + AlgebraicAdd<Output = T> + AlgebraicMul<C, Output = T>,
+    {
         assert!(
             input.len() >= self.taps.len(),
             "input {} < taps {}",
             input.len(),
             self.taps.len()
         );
-        input
+        let mut products = input
             .iter()
             .zip(self.taps.iter())
-            .fold(T::default(), |acc, (&f, &x)| {
-                acc.algebraic_add(x.algebraic_mul(f))
-            })
+            .map(|(&sample, &tap)| sample.algebraic_mul(tap));
+        // Nonempty taps let us avoid assuming that Default is numerical zero.
+        let first = products.next().expect("FIR taps are nonempty");
+        products.fold(first, |acc, product| acc.algebraic_add(product))
     }
 
     /// Call `filter()` multiple times, across an input range.
     #[must_use]
-    pub fn filter_n(&self, input: &[T], deci: usize) -> Vec<T> {
+    pub fn filter_n<T>(&self, input: &[T], deci: usize) -> Vec<T>
+    where
+        C: Copy,
+        T: Copy + AlgebraicAdd<Output = T> + AlgebraicMul<C, Output = T>,
+    {
         assert_ne!(deci, 0);
         assert!(input.len() >= self.taps.len());
         let n = input.len() - self.taps.len();
@@ -195,8 +183,12 @@ where
             .collect()
     }
 
-    /// Like `filter_n`, but avoids a copy when there's a destination in mind.
-    pub fn filter_n_inplace(&self, input: &[T], deci: usize, out: &mut [T]) {
+    /// Like `filter_n`, but writes directly into the destination.
+    pub fn filter_n_inplace<T>(&self, input: &[T], deci: usize, out: &mut [T])
+    where
+        C: Copy,
+        T: Copy + AlgebraicAdd<Output = T> + AlgebraicMul<C, Output = T>,
+    {
         assert_ne!(deci, 0);
         out.iter_mut()
             .enumerate()
@@ -306,36 +298,36 @@ fn sum_product_complex_wasm(input: &[Complex], taps: &[Complex]) -> Complex {
 
 /// Builder for a FIR filter block.
 ///
-/// A builder is needed to create a decimating FIR filter block.
-pub struct FirFilterBuilder<T> {
-    taps: Box<[T]>,
+/// Sample and coefficient types stay the same when translation is configured.
+pub struct FirFilterBuilder<T, C = T> {
+    taps: Box<[C]>,
     deci: usize,
-    // Optional `(sample_rate, frequency)` requested by `translate()`.
-    translate: Option<(Float, Float)>,
+    translation: Option<Translation<T, C>>,
 }
 
-impl<T> FirFilterBuilder<T>
-where
-    T: Sample + FrequencyTranslate + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
-{
-    /// Set the decimation to the given value.
-    ///
-    /// The default is 1, meaning no decimation. Zero is rejected by `build()`.
+impl<T, C> FirFilterBuilder<T, C> {
+    /// Set the decimation. Defaults to one; zero is rejected by `build()`.
     #[must_use]
     pub fn deci(mut self, deci: usize) -> Self {
         self.deci = deci;
         self
     }
+}
 
-    /// Build a `FirFilter` with the provided settings.
+impl<T, C> FirFilterBuilder<T, C>
+where
+    T: Sample + AlgebraicAdd<Output = T> + AlgebraicMul<C, Output = T>,
+    C: Copy + Send,
+{
+    /// Build a FIR with the supplied input stream.
     ///
-    /// Returns an error for empty taps, zero decimation, a required input
-    /// window exceeding stream capacity, or invalid translation frequencies.
-    pub fn build(self, src: ReadStream<T>) -> Result<(FirFilter<T>, ReadStream<T>)> {
-        let FirFilterBuilder {
-            mut taps,
+    /// Rejects empty coefficients, zero decimation, an input window exceeding
+    /// stream capacity, or invalid frequency translation settings.
+    pub fn build(self, src: ReadStream<T>) -> Result<(FirFilter<T, C>, ReadStream<T>)> {
+        let Self {
+            taps,
             deci,
-            translate,
+            translation,
         } = self;
         if taps.is_empty() || deci == 0 {
             return Err(Error::msg("FIR taps and decimation must be nonzero"));
@@ -347,16 +339,11 @@ where
         if need > src.total_size() {
             return Err(Error::msg("FIR input window exceeds stream capacity"));
         }
-        if let Some((sample_rate, frequency)) = translate
-            && (!sample_rate.is_finite() || sample_rate <= 0.0 || !frequency.is_finite())
+        if let Some(translation) = &translation
+            && let Some(settings) = translation.state.requested()?
         {
-            return Err(Error::msg(
-                "FIR translation requires a finite positive sample rate and finite frequency",
-            ));
+            settings.validate()?;
         }
-        let translator = translate.map_or_else(T::no_translation, |(samp_rate, freq)| {
-            T::new_translator(&mut taps, samp_rate, freq, deci)
-        });
         let ntaps = taps.len();
         let fir = Fir::new(taps)?;
         let (dst, stream) = crate::stream::new_stream()?;
@@ -364,154 +351,291 @@ where
             FirFilter {
                 src,
                 dst,
+                fir,
                 ntaps,
                 deci,
-                translator,
-                fir,
+                translation,
             },
             stream,
         ))
     }
 }
 
-/// Finite impulse response filter block.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TranslationSettings {
+    samp_rate: Float,
+    freq: Float,
+}
+
+impl TranslationSettings {
+    fn validate(self) -> Result<()> {
+        if !self.samp_rate.is_finite() || self.samp_rate <= 0.0 || !self.freq.is_finite() {
+            return Err(Error::msg(
+                "FIR translation requires a finite positive sample rate and finite frequency",
+            ));
+        }
+        Ok(())
+    }
+}
+
+type TranslationRequest = Mutex<Option<TranslationSettings>>;
+
+/// Runtime frequency translation control for a complex [`FirFilter`].
+///
+/// Clones can be sent to other threads after the filter is moved into a graph.
+/// Successful requests are validated and scheduled for the next output-producing
+/// work call; they do not wait for processing. The latest request at that batch
+/// boundary wins. Waiting for input or output space does not advance phase.
+#[derive(Debug, Clone)]
+pub struct FirFilterControl {
+    request: Weak<TranslationRequest>,
+}
+
+impl FirFilterControl {
+    /// Mix by `-freq` Hz using the supplied sample rate, preserving mixer phase.
+    ///
+    /// Changes apply to the next batch's input windows. Zero frequency holds
+    /// the current phase; use [`Self::disable_translation`] to remove mixing.
+    ///
+    /// # Errors
+    ///
+    /// Rejects nonfinite values, a nonpositive sample rate, or a dropped filter.
+    pub fn set_translation(&self, samp_rate: Float, freq: Float) -> Result<()> {
+        let settings = TranslationSettings { samp_rate, freq };
+        settings.validate()?;
+        self.request(Some(settings))
+    }
+
+    /// Restore the original filter coefficients and reset mixer phase to zero.
+    ///
+    /// Applies at the next output-producing work call. Returns an error if the
+    /// filter has been dropped. Re-enabling starts at zero phase at that batch's
+    /// first input-window sample.
+    pub fn disable_translation(&self) -> Result<()> {
+        self.request(None)
+    }
+
+    fn request(&self, settings: Option<TranslationSettings>) -> Result<()> {
+        let request = self
+            .request
+            .upgrade()
+            .ok_or_else(|| Error::msg("FIR control: filter has been dropped"))?;
+        *request
+            .lock()
+            .map_err(|_| Error::msg("FIR control lock poisoned"))? = settings;
+        Ok(())
+    }
+}
+
+// Erase only the complex batch entry point, so ordinary sample types need no
+// translation trait. Coefficients and samples retain their public static types.
+// Dispatch happens once per batch, never in the per-sample FIR loop.
+type TranslateBatch<T, C> =
+    fn(&mut TranslationState, &Fir<C>, &[T], usize, &mut [T]) -> Result<bool>;
+
+struct Translation<T, C> {
+    state: TranslationState,
+    filter: TranslateBatch<T, C>,
+}
+
+struct TranslationState {
+    request: Arc<TranslationRequest>,
+    applied: Option<TranslationSettings>,
+    rotated: Option<Fir<Complex>>,
+    // Mixer phase at the first sample of the next input window.
+    phase: num_complex::Complex<f64>,
+    step: num_complex::Complex<f64>,
+    until_normalize: usize,
+}
+
+impl TranslationState {
+    fn requested(&self) -> Result<Option<TranslationSettings>> {
+        self.request
+            .lock()
+            .map(|settings| *settings)
+            .map_err(|_| Error::msg("FIR control lock poisoned"))
+    }
+}
+
+impl<C: Copy + Into<Complex>> Translation<Complex, C> {
+    fn new(settings: Option<TranslationSettings>) -> Self {
+        Self {
+            state: TranslationState {
+                request: Arc::new(Mutex::new(settings)),
+                applied: None,
+                rotated: None,
+                phase: num_complex::Complex::new(1.0, 0.0),
+                step: num_complex::Complex::new(1.0, 0.0),
+                until_normalize: 4096,
+            },
+            filter: filter_translated::<C>,
+        }
+    }
+}
+
+fn filter_translated<C: Copy + Into<Complex>>(
+    state: &mut TranslationState,
+    original: &Fir<C>,
+    input: &[Complex],
+    deci: usize,
+    output: &mut [Complex],
+) -> Result<bool> {
+    let requested = state.requested()?;
+    if requested != state.applied {
+        if let Some(settings) = requested {
+            let input_step = -2.0 * std::f64::consts::PI * f64::from(settings.freq)
+                / f64::from(settings.samp_rate);
+            let tap_step = num_complex::Complex::new(input_step.cos(), input_step.sin());
+            let mut tap_phase = num_complex::Complex::new(1.0, 0.0);
+            // The original kernel stores reversed coefficients. Incorporate
+            // mixing relative to the start of each window, then rotate each
+            // filtered output by that window's continuing mixer phase.
+            let taps = original
+                .taps
+                .iter()
+                .map(|&tap| {
+                    let tap = tap
+                        .into()
+                        .algebraic_mul(Complex::new(tap_phase.re as Float, tap_phase.im as Float));
+                    tap_phase *= tap_step;
+                    tap
+                })
+                .collect();
+            state.rotated = Some(Fir { taps });
+            let output_step = input_step * deci as f64;
+            state.step = num_complex::Complex::new(output_step.cos(), output_step.sin());
+        } else {
+            state.rotated = None;
+            state.phase = num_complex::Complex::new(1.0, 0.0);
+            state.step = num_complex::Complex::new(1.0, 0.0);
+            state.until_normalize = 4096;
+        }
+        state.applied = requested;
+    }
+    if requested.is_none()
+        || (requested.is_some_and(|settings| settings.freq == 0.0)
+            && state.phase == num_complex::Complex::new(1.0, 0.0))
+    {
+        return Ok(false);
+    }
+    state
+        .rotated
+        .as_ref()
+        .expect("active translation has prepared coefficients")
+        .filter_n_inplace(input, deci, output);
+    for sample in output {
+        *sample = sample.algebraic_mul(Complex::new(
+            state.phase.re as Float,
+            state.phase.im as Float,
+        ));
+        state.phase *= state.step;
+        state.until_normalize -= 1;
+        if state.until_normalize == 0 {
+            state.phase /= state.phase.norm();
+            state.until_normalize = 4096;
+        }
+    }
+    Ok(true)
+}
+
+impl<C: Copy + Into<Complex>> FirFilterBuilder<Complex, C> {
+    /// Mix by `-freq` Hz while filtering complex samples.
+    ///
+    /// Keeps the builder and filter types unchanged, including real coefficient
+    /// types. `build()` validates these settings. Use [`FirFilter::control`] for
+    /// subsequent changes while the graph is running.
+    #[must_use]
+    pub fn translate(mut self, samp_rate: Float, freq: Float) -> Self {
+        self.translation = Some(Translation::new(Some(TranslationSettings {
+            samp_rate,
+            freq,
+        })));
+        self
+    }
+}
+
+/// Streaming FIR with independent sample and coefficient types.
+///
+/// `C` defaults to `T`. Ordinary custom samples need no frequency translation
+/// implementation. Complex filters can enable, retune, and disable translation
+/// without changing their type, using [`Self::control`].
+///
+/// ```
+/// use rustradio::{Complex, fir::FirFilter, stream::new_stream};
+/// let (_writer, input) = new_stream::<Complex>()?;
+/// let (mut filter, _output) = FirFilter::new(input, [0.25f32, 0.5, 0.25])?;
+/// let control = filter.control();
+/// control.set_translation(48000.0, 1000.0)?;
+/// // Keep `control` when moving `filter` into a running graph.
+/// control.set_translation(48000.0, 2000.0)?;
+/// control.disable_translation()?;
+/// # Ok::<(), rustradio::Error>(())
+/// ```
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
-pub struct FirFilter<T: Sample + FrequencyTranslate> {
-    fir: Fir<T>,
+pub struct FirFilter<T: Sample, C: Copy + Send = T> {
+    fir: Fir<C>,
     ntaps: usize,
     deci: usize,
-    // Per-block rotator state for fused frequency translation.
-    translator: T::Translator,
+    translation: Option<Translation<T, C>>,
     #[rustradio(in)]
     src: ReadStream<T>,
     #[rustradio(out)]
     dst: WriteStream<T>,
 }
 
-impl<T> FirFilter<T>
-where
-    T: Sample + FrequencyTranslate + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
-{
-    /// Create new `FirFilterBuilder`, with the supplied taps.
-    pub fn builder(taps: impl Into<Box<[T]>>) -> FirFilterBuilder<T> {
+impl<T: Sample, C: Copy + Send> FirFilter<T, C> {
+    /// Configure a FIR with the supplied coefficients.
+    pub fn builder(taps: impl Into<Box<[C]>>) -> FirFilterBuilder<T, C> {
         FirFilterBuilder {
             taps: taps.into(),
             deci: 1,
-            translate: None,
+            translation: None,
         }
     }
-    /// Create a FIR block, taking ownership of the supplied taps.
+
+    /// Create a FIR without frequency translation.
     ///
-    /// Returns an error for empty taps or taps exceeding input capacity.
-    pub fn new(src: ReadStream<T>, taps: impl Into<Box<[T]>>) -> Result<(Self, ReadStream<T>)> {
+    /// Rejects empty coefficients and windows exceeding input capacity.
+    pub fn new(src: ReadStream<T>, taps: impl Into<Box<[C]>>) -> Result<(Self, ReadStream<T>)>
+    where
+        T: AlgebraicAdd<Output = T> + AlgebraicMul<C, Output = T>,
+    {
         Self::builder(taps).build(src)
     }
 }
 
-macro_rules! impl_no_frequency_translate {
-    ($($ty:ty),* $(,)?) => {
-        $(
-            impl FrequencyTranslate for $ty {
-                type Translator = ();
-                fn no_translation() -> Self::Translator {}
-
-                fn new_translator(
-                    _taps: &mut [Self],
-                    _samp_rate: Float,
-                    _freq: Float,
-                    _deci: usize,
-                ) -> Self::Translator {
-                    error!("FirFilter asked to translate on non-Complex");
-                }
-
-                fn translate_output(_out: &mut [Self], _translator: &mut Self::Translator) {}
-            }
-        )*
-    };
-}
-
-// Enable FftFilter on these types, even though only `Complex` actually supports
-// frequency translation. This is type restricted in the builder, so it should
-// not be possible to actually instantiate a translator anyway.
-impl_no_frequency_translate!(f32, f64, u8, u32, i32);
-
-#[doc(hidden)]
-pub struct ComplexFrequencyTranslator {
-    /// Current complex oscillator value for the next output sample.
-    phase: Complex,
-    /// Per-output oscillator step, including decimation.
-    step: Complex,
-}
-
-impl FrequencyTranslate for Complex {
-    type Translator = Option<ComplexFrequencyTranslator>;
-
-    fn no_translation() -> Self::Translator {
-        None
-    }
-
-    fn new_translator(
-        taps: &mut [Self],
-        samp_rate: Float,
-        freq: Float,
-        deci: usize,
-    ) -> Self::Translator {
-        assert!(samp_rate > 0.0);
-        assert_ne!(deci, 0);
-        if freq == 0.0 {
-            return None;
-        }
-        let input_step = 2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate);
-        let tap_step = Complex::new(input_step.cos() as Float, input_step.sin() as Float);
-        let mut phase = Complex::new(1.0, 0.0);
-        // Pre-rotate taps by their relative delay so filtering plus one output
-        // rotation matches explicitly mixing each input sample by `-freq`.
-        for tap in &mut *taps {
-            *tap *= phase;
-            phase *= tap_step;
-        }
-
-        // The first produced FIR output is aligned with the newest sample in
-        // the first input window; after that, outputs advance by `deci` inputs.
-        let first_output_phase = -input_step * (taps.len() - 1) as f64;
-        let output_step = -input_step * deci as f64;
-        Some(ComplexFrequencyTranslator {
-            phase: Complex::new(
-                first_output_phase.cos() as Float,
-                first_output_phase.sin() as Float,
-            ),
-            step: Complex::new(output_step.cos() as Float, output_step.sin() as Float),
-        })
-    }
-
-    fn translate_output(out: &mut [Self], translator: &mut Self::Translator) {
-        // TODO: do we need to reset this periodically, to get around rounding
-        // errors?
-        if let Some(translator) = translator {
-            for sample in out {
-                *sample = sample.algebraic_mul(translator.phase);
-                translator.phase = translator.phase.algebraic_mul(translator.step);
-            }
-        }
-    }
-}
-
-impl FirFilterBuilder<Complex> {
-    /// Mix by `-freq` Hz while filtering.
+impl<C: Copy + Send + Into<Complex>> FirFilter<Complex, C> {
+    /// Obtain a cloneable translation control handle before moving into a graph.
     ///
-    /// A tone at `freq` Hz is translated to DC. The implementation folds the
-    /// input mixer into the FIR taps and keeps one rotator per output sample.
-    #[must_use]
-    pub fn translate(mut self, samp_rate: Float, freq: Float) -> Self {
-        self.translate = Some((samp_rate, freq));
-        self
+    /// This lazily attaches control state, preserving the original coefficients.
+    /// Calling it alone leaves translation disabled.
+    pub fn control(&mut self) -> FirFilterControl {
+        let translation = self
+            .translation
+            .get_or_insert_with(|| Translation::new(None));
+        FirFilterControl {
+            request: Arc::downgrade(&translation.state.request),
+        }
+    }
+
+    /// Schedule translation at the next output-producing work call.
+    ///
+    /// Equivalent to [`FirFilterControl::set_translation`] when holding the block.
+    pub fn set_translation(&mut self, samp_rate: Float, freq: Float) -> Result<()> {
+        self.control().set_translation(samp_rate, freq)
+    }
+
+    /// Schedule disabling translation and resetting phase at the next output batch.
+    pub fn disable_translation(&mut self) -> Result<()> {
+        self.control().disable_translation()
     }
 }
 
-impl<T> Block for FirFilter<T>
+impl<T, C> Block for FirFilter<T, C>
 where
-    T: Sample + FrequencyTranslate + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
+    T: Sample + AlgebraicAdd<Output = T> + AlgebraicMul<C, Output = T>,
+    C: Copy + Send,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let (input, mut tags) = self.src.read_buf()?;
@@ -547,12 +671,21 @@ where
 
         // Run the FIR.
         let out_n = n / self.deci;
-        self.fir
-            .filter_n_inplace(&input.slice()[..need], self.deci, &mut out.slice()[..out_n]);
-
-        // Frequency translate. This is an empty function call if translation is
-        // zero.
-        T::translate_output(&mut out.slice()[..out_n], &mut self.translator);
+        let translated = if let Some(translation) = &mut self.translation {
+            (translation.filter)(
+                &mut translation.state,
+                &self.fir,
+                &input.slice()[..need],
+                self.deci,
+                &mut out.slice()[..out_n],
+            )?
+        } else {
+            false
+        };
+        if !translated {
+            self.fir
+                .filter_n_inplace(&input.slice()[..need], self.deci, &mut out.slice()[..out_n]);
+        }
 
         // Sanity check the generated output.
         assert!(out_n <= out.len());
@@ -650,8 +783,7 @@ fn compute_ntaps(samp_rate: Float, twidth: Float, window_type: &WindowType) -> R
 
 /// Create a fixed-length set of low pass filter taps.
 ///
-/// TODO: this could be faster if we supported filtering a Complex by a Float.
-/// A low pass filter doesn't actually need complex taps.
+/// Real coefficients can filter either real or complex samples.
 /// Returns an error unless the sample rate, cutoff, and transition width are
 /// finite and positive, and the cutoff is at most Nyquist. Also rejects tap
 /// count overflow, nonfinite window weights, and invalid normalization gain.
@@ -763,6 +895,40 @@ fn normalization_gain(gain: Float) -> Result<Float> {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    #[test]
+    fn blocked_output_does_not_apply_or_advance_translation() -> Result<()> {
+        let (writer, input) = crate::stream::new_stream()?;
+        let (mut filter, output) = FirFilter::new(input, [1.0f32])?;
+        let control = filter.control();
+        control.set_translation(8.0, 2.0)?;
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&[Complex::new(1.0, 0.0); 3]);
+        window.produce(3, &[]);
+        filter.work()?;
+        output.read_buf()?.0.consume(3);
+
+        let mut full = filter.dst.write_buf()?;
+        let capacity = full.len();
+        full.slice().fill(Complex::new(99.0, 0.0));
+        full.produce(capacity, &[]);
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&[Complex::new(1.0, 0.0); 2]);
+        window.produce(2, &[]);
+        control.disable_translation()?;
+        assert!(matches!(filter.work()?, BlockRet::WaitForStream(_, 1)));
+        // Supersede the blocked disable request: zero frequency must hold the
+        // phase reached after the initial three samples (positive pi/2).
+        control.set_translation(8.0, 0.0)?;
+        output.read_buf()?.0.consume(capacity);
+        assert!(matches!(filter.work()?, BlockRet::Again));
+        let (window, _) = output.read_buf()?;
+        assert_eq!(window.len(), 2);
+        for sample in window.iter() {
+            assert!((*sample - Complex::new(0.0, 1.0)).norm() < 1e-6);
+        }
+        Ok(())
+    }
+
     #[test]
     fn rejects_invalid_configuration_before_processing() {
         let input = || ReadStream::from_slice(&[Complex::default()]);
