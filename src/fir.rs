@@ -10,11 +10,10 @@
 use log::error;
 use std::borrow::Borrow;
 
-use crate::AlgebraicOps;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::window::{Window, WindowType};
-use crate::{Complex, Error, Float, Result, Sample};
+use crate::{AlgebraicAdd, AlgebraicMul, Complex, Error, Float, Result, Sample};
 
 #[doc(hidden)]
 pub trait FrequencyTranslate {
@@ -153,7 +152,7 @@ impl Fir<Float> {
 
 impl<T> Fir<T>
 where
-    T: Sample + std::ops::Mul<T, Output = T> + std::ops::Add<T, Output = T> + AlgebraicOps,
+    T: Sample + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
 {
     /// Create a FIR, taking ownership of taps and reversing them in place.
     ///
@@ -317,11 +316,7 @@ pub struct FirFilterBuilder<T> {
 
 impl<T> FirFilterBuilder<T>
 where
-    T: Sample
-        + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>
-        + FrequencyTranslate
-        + AlgebraicOps,
+    T: Sample + FrequencyTranslate + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
 {
     /// Set the decimation to the given value.
     ///
@@ -396,11 +391,7 @@ pub struct FirFilter<T: Sample + FrequencyTranslate> {
 
 impl<T> FirFilter<T>
 where
-    T: Sample
-        + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>
-        + FrequencyTranslate
-        + AlgebraicOps,
+    T: Sample + FrequencyTranslate + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
 {
     /// Create new `FirFilterBuilder`, with the supplied taps.
     pub fn builder(taps: impl Into<Box<[T]>>) -> FirFilterBuilder<T> {
@@ -520,11 +511,7 @@ impl FirFilterBuilder<Complex> {
 
 impl<T> Block for FirFilter<T>
 where
-    T: Sample
-        + std::ops::Mul<T, Output = T>
-        + std::ops::Add<T, Output = T>
-        + FrequencyTranslate
-        + AlgebraicOps,
+    T: Sample + FrequencyTranslate + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let (input, mut tags) = self.src.read_buf()?;

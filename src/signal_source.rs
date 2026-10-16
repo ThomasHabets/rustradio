@@ -69,18 +69,17 @@ impl SignalSourceComplex {
 impl Iterator for SignalSourceComplex {
     type Item = Complex;
     fn next(&mut self) -> Option<Complex> {
-        use crate::AlgebraicOps;
+        use crate::AlgebraicMul;
         self.phasor = self.phasor.algebraic_mul(self.rotation);
         self.until_normalize -= 1;
         if self.until_normalize == 0 {
-            self.phasor =
-                crate::algebraic_mul_complex_float(self.phasor, 1.0f64 / self.phasor.norm());
+            self.phasor = self.phasor.algebraic_mul(1.0f64 / self.phasor.norm());
             self.until_normalize = NORMALIZE_INTERVAL;
         }
-        Some(crate::algebraic_mul_complex_float(
-            Complex::new(self.phasor.re as Float, self.phasor.im as Float),
-            self.amplitude,
-        ))
+        Some(
+            Complex::new(self.phasor.re as Float, self.phasor.im as Float)
+                .algebraic_mul(self.amplitude),
+        )
     }
 }
 

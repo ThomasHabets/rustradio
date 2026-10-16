@@ -10,10 +10,11 @@
 use crate::Result;
 use log::trace;
 
-use crate::AlgebraicOps;
+#[allow(unused_imports)]
+use crate::AlgebraicMul;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, Tag, WriteStream};
-use crate::{Complex, Float};
+use crate::{AlgebraicAdd, Complex, Float};
 
 /// FFT engine.
 ///

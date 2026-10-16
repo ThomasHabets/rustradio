@@ -5,9 +5,8 @@
 //!
 //! This block tracks the running mean (DC component) of the complex stream with
 //! a single-pole IIR low-pass filter and subtracts it from the input.
-use crate::AlgebraicOps;
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Float};
+use crate::{AlgebraicAdd, AlgebraicMul, Complex, Float};
 
 /// Remove DC offset from a complex I/Q stream.
 #[derive(rustradio_macros::Block)]
@@ -83,10 +82,9 @@ impl IqBalance {
     }
 
     fn process_sync(&mut self, x: Complex) -> Complex {
-        use crate::algebraic_mul_complex_float as mul_c_f;
         // mean[n] = (1-a)*mean[n-1] + a*x[n]
-        let a = mul_c_f(self.mean, self.one_minus_alpha);
-        let b = mul_c_f(x, self.alpha);
+        let a = self.mean.algebraic_mul(self.one_minus_alpha);
+        let b = x.algebraic_mul(self.alpha);
         self.mean = a.algebraic_add(b);
         x - self.mean
     }

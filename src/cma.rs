@@ -3,10 +3,9 @@
 //! Links:
 //! * <https://en.wikipedia.org/wiki/Blind_equalization>
 
-use crate::AlgebraicOps;
 use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
-use crate::{Complex, Float, Result};
+use crate::{AlgebraicAdd, AlgebraicMul, Complex, Float, Result};
 
 /// CMA Equalizer.
 #[derive(rustradio_macros::Block)]

@@ -105,6 +105,28 @@ impl Block for MyBlock {
 TODO:
 * NoCopy blocks.
 
+## Arithmetic in generic blocks
+
+Use the independent crate-root traits `AlgebraicAdd`, `AlgebraicMul`, and
+`AlgebraicDiv` when a block permits algebraic arithmetic optimizations. Each
+trait has a right-hand operand parameter (`Rhs`, defaulting to `Self`) and an
+associated `Output` type, like the standard arithmetic traits. Require only the
+operations the block uses. For example, a FIR needs
+`T: Sample + AlgebraicAdd<Output = T> + AlgebraicMul<Output = T>`; division and
+the standard `Add`/`Mul` traits are not required.
+
+These traits replace `AlgebraicOps`. To migrate a custom sample type, split its
+implementation into the individual traits and declare `type Output = Self`
+for each same-type operation. Implementations may also use different operand
+and output types. Both `Complex<f32>`/`f32` and `Complex<f64>`/`f64` support
+mixed addition, multiplication, and division in either operand order.
+
+For example, `value.algebraic_mul(gain)` scales a complex value directly.
+For scalar-left operations, use `AlgebraicMul::algebraic_mul(gain, value)` to
+avoid the primitive float's same-named inherent method. Floating-point
+implementations permit algebraic optimizations rather than promising the
+evaluation order of ordinary arithmetic operators.
+
 ## When a block is "done"
 
 A block is deemed "done" when it will never again produce any output on any
