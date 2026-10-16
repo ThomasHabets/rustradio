@@ -1,6 +1,6 @@
 //! Frequency translation through complex exponential.
 
-use crate::AlgebraicMul;
+use crate::block::{Block, BlockRet};
 use crate::oscillator::ComplexOscillator;
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float, Result};
@@ -12,7 +12,7 @@ use crate::{Complex, Float, Result};
 /// by one, and subsequent inputs by `exp(i * n * 2π * freq / samp_rate)`.
 /// At zero frequency the default rotation is the identity. Tags are preserved.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, sync)]
+#[rustradio(crate)]
 pub struct Rotator {
     translator: ComplexOscillator,
     #[rustradio(in)]
@@ -51,13 +51,26 @@ impl Rotator {
     pub fn set_phase(&mut self, phase: Float) -> Result<()> {
         self.translator.set_phase(phase)
     }
+}
 
-    fn process_sync(&mut self, x: Complex) -> Complex {
-        x.algebraic_mul(
+impl Block for Rotator {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
+        loop {
+            let (input, tags) = self.src.read_buf()?;
+            if input.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            }
+            let mut output = self.dst.write_buf()?;
+            if output.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+            }
+            let n = input.len().min(output.len());
             self.translator
-                .next()
-                .expect("can't happen: infinite stream ended"),
-        )
+                .mix(&input.slice()[..n], &mut output.slice()[..n])?;
+            let tags: Vec<_> = tags.into_iter().take_while(|tag| tag.pos() < n).collect();
+            output.produce(n, &tags);
+            input.consume(n);
+        }
     }
 }
 
@@ -131,16 +144,61 @@ mod tests {
     }
 
     #[test]
+    fn partial_output_preserves_remaining_samples_and_tags() -> Result<()> {
+        let (writer, input) = new_stream()?;
+        let (mut rotator, output) = Rotator::new(input, 8.0, 1.0)?;
+        let mut prefill = rotator.dst.write_buf()?;
+        let padding = prefill.len() - 2;
+        prefill.slice()[..padding].fill(Complex::default());
+        prefill.produce(padding, &[]);
+        let samples = [Complex::new(2.0, -3.0); 5];
+        let tags = [
+            Tag::new(1, "first", TagValue::Bool(true)),
+            Tag::new(3, "second", TagValue::Bool(true)),
+        ];
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&samples);
+        window.produce(5, &tags);
+        drop(writer);
+        let mut expected = ComplexOscillator::new(8.0, 1.0)?;
+        assert!(matches!(rotator.work()?, BlockRet::WaitForStream(_, 1)));
+        output.read_buf()?.0.consume(padding);
+        for (count, name) in [(2, "first"), (3, "second")] {
+            let (window, tags) = output.read_buf()?;
+            assert_eq!(window.len(), count);
+            for sample in window.iter() {
+                assert_eq!(*sample, samples[0] * expected.next().unwrap());
+            }
+            assert_eq!(tags, [Tag::new(1, name, TagValue::Bool(true))]);
+            window.consume(count);
+            rotator.work()?;
+        }
+        assert!(rotator.src.eof());
+        assert_eq!(rotator.translator.next(), expected.next());
+        Ok(())
+    }
+
+    #[test]
     fn frequency_and_phase_can_be_changed_while_holding_the_block() -> Result<()> {
-        let (_writer, input) = new_stream()?;
-        let (mut rotator, _output) = Rotator::new(input, 8.0, 2.0)?;
+        let (writer, input) = new_stream()?;
+        let (mut rotator, output) = Rotator::new(input, 8.0, 2.0)?;
+        let mix_one = |rotator: &mut Rotator, sample| -> Result<Complex> {
+            let mut window = writer.write_buf()?;
+            window.slice()[0] = sample;
+            window.produce(1, &[]);
+            rotator.work()?;
+            let (window, _) = output.read_buf()?;
+            let result = window.slice()[0];
+            window.consume(1);
+            Ok(result)
+        };
         let one = Complex::new(1.0, 0.0);
-        assert_eq!(rotator.process_sync(one), one);
+        assert_eq!(mix_one(&mut rotator, one)?, one);
         rotator.set_frequency(8.0, -2.0)?;
-        assert!((rotator.process_sync(one) - Complex::new(0.0, 1.0)).norm() < 1e-6);
-        assert!((rotator.process_sync(one) - one).norm() < 1e-6);
+        assert!((mix_one(&mut rotator, one)? - Complex::new(0.0, 1.0)).norm() < 1e-6);
+        assert!((mix_one(&mut rotator, one)? - one).norm() < 1e-6);
         rotator.set_phase(std::f32::consts::PI)?;
-        assert!((rotator.process_sync(one) - Complex::new(-1.0, 0.0)).norm() < 1e-6);
+        assert!((mix_one(&mut rotator, one)? - Complex::new(-1.0, 0.0)).norm() < 1e-6);
         Ok(())
     }
 
