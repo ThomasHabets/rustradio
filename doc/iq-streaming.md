@@ -475,10 +475,11 @@ while a receiver is unavailable; connection loss ends the session.
 Keep network I/O outside the block scheduler's synchronous work function, using
 bounded queues and asynchronous tasks. Source/sink blocks translate between
 absolute wire indices and local buffer-relative tags. Use batch serialization
-and the existing little-endian `Float` or interleaved `Complex` layout, matching
-the graph port's sample type to the negotiated layout. Reuse chunk buffers and
-avoid per-sample protobuf messages. A copied protobuf `bytes` buffer is acceptable;
-do not promise end-to-end zero-copy, particularly with WASM linear snapshots.
+and the existing little-endian `Float` or interleaved `Complex` layout, or raw
+`u8` samples, matching the graph port's sample type to the negotiated layout.
+Reuse chunk buffers and avoid per-sample protobuf messages. A copied protobuf
+`bytes` buffer is acceptable; do not promise end-to-end zero-copy, particularly
+with WASM linear snapshots.
 
 The experimental implementation is gated by `unstable` in both `rustradio` and
 `rustradio-ui` crate in its separate repository. The native `IqServer` registry serves raw gRPC and the WebSocket
@@ -486,8 +487,10 @@ endpoint on one listener. Several resource IDs may be served concurrently; a
 resource admits one active client, with `ALREADY_EXISTS` for a second client.
 The same `IqStreamSink<T>` serves both transports. `IqStreamSource<T>` is a native
 gRPC client; `rustradio_ui::worker::IqStreamSource<T>` is a browser WebSocket
-client. The initial adapters support `Float` and `Complex` in little-endian
-FLOAT32 layout, the five scalar RustRadio tag kinds, and ACCEPTED completion.
+client. The adapters support `Float` and `Complex` in little-endian FLOAT32
+layout, and `u8` in UINT8/NOT_APPLICABLE/REAL encoding. Each `u8` is one sample,
+preserved without scaling or normalization. They support the five scalar
+RustRadio tag kinds and ACCEPTED completion.
 Uploads and DURABLE completion return `UNIMPLEMENTED`. Structured values,
 provenance and terminal tags are not accepted by graph sources.
 

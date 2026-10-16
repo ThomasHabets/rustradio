@@ -894,7 +894,7 @@ mod tests {
         let (b_write, b_read) = new_stream::<crate::Complex>()?;
         let mut a = IqStreamSink::builder(a_read, &server, "real", 48000.0).build()?;
         let mut b = IqStreamSink::builder(b_read, &server, "iq", 96000.0).build()?;
-        let (c_write, c_read) = new_stream::<f32>()?;
+        let (c_write, c_read) = new_stream::<u8>()?;
         let mut c = IqStreamSink::builder(c_read, &server, "ws", 24000.0).build()?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -922,11 +922,20 @@ mod tests {
         )
         .await?;
         let mut ws = WsClient::connect(address).await?;
-        ws.send(StreamOptions::default().open::<f32>("ws")?).await?;
-        assert!(matches!(
-            ws.receive().await?.unwrap().message.body,
-            Some(proto::server_message::Body::Started(_))
-        ));
+        ws.send(StreamOptions::default().open::<u8>("ws")?).await?;
+        let Some(proto::server_message::Body::Started(started)) =
+            ws.receive().await?.unwrap().message.body
+        else {
+            panic!("expected Started");
+        };
+        assert_eq!(
+            started.description.unwrap().encoding,
+            Some(proto::Encoding {
+                component_type: proto::ComponentType::Uint8 as i32,
+                byte_order: proto::ByteOrder::NotApplicable as i32,
+                layout: proto::SampleLayout::Real as i32,
+            })
+        );
         ws.send(proto::ClientMessage {
             body: Some(proto::client_message::Body::FlowControl(
                 proto::FlowControl { send_limit: 8 },
@@ -934,8 +943,8 @@ mod tests {
         })
         .await?;
         let mut buffer = c_write.write_buf()?;
-        buffer.slice()[..2].copy_from_slice(&[4.0, 5.0]);
-        buffer.produce(2, &[]);
+        buffer.slice()[..4].copy_from_slice(&[0, 127, 128, 255]);
+        buffer.produce(4, &[]);
         drop(c_write);
         let ws_task = tokio::spawn(async move {
             let mut frames = 0;
@@ -948,16 +957,13 @@ mod tests {
                             proto::frame::Body::Chunk(chunk) => chunk,
                             _ => panic!("unexpected gap"),
                         };
-                        assert_eq!(chunk.sample_count, 2);
+                        assert_eq!(chunk.sample_count, 4);
                         assert_eq!(chunk.first_sample, 0);
-                        assert_eq!(
-                            chunk.samples,
-                            [4.0f32.to_le_bytes(), 5.0f32.to_le_bytes()].concat()
-                        );
+                        assert_eq!(chunk.samples, [0, 127, 128, 255]);
                         frames += 1;
                     }
                     Some(proto::server_message::Body::End(end)) => {
-                        assert_eq!(end.next_sample, 2);
+                        assert_eq!(end.next_sample, 4);
                         ws.send(proto::ClientMessage {
                             body: Some(proto::client_message::Body::Complete(proto::Complete {
                                 next_sequence: end.next_sequence,
@@ -1051,6 +1057,74 @@ mod tests {
         ws_task.await.map_err(|e| err(e.to_string()))??;
         let _ = shutdown_tx.send(());
         server_task.await.map_err(|e| err(e.to_string()))??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn grpc_u8_roundtrip() -> crate::Result<()> {
+        for samples in [vec![], (0..=255u8).cycle().take(1024).collect()] {
+            let server = IqServer::new();
+            let (write, read) = new_stream::<u8>()?;
+            let options = StreamOptions {
+                limits: proto::Limits {
+                    max_frame_bytes: 256,
+                    max_in_flight_frames: 1,
+                },
+                ..Default::default()
+            };
+            let mut sink = IqStreamSink::builder(read, &server, "bytes", 48000.0)
+                .limits(options.limits.clone())
+                .build()?;
+            // A float client must not silently reinterpret unsigned samples.
+            assert!(server.open(open::<f32>(&options, "bytes")).is_err());
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .map_err(|e| err(e.to_string()))?;
+            let address = listener.local_addr().map_err(|e| err(e.to_string()))?;
+            let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+            let server_task = tokio::spawn(async move {
+                server
+                    .serve(listener, async {
+                        let _ = shutdown_rx.await;
+                    })
+                    .await
+            });
+            let (mut source, output, handle) =
+                IqStreamSource::<u8>::connect(format!("http://{address}"), "bytes", options)
+                    .await?;
+            let tags = if samples.is_empty() {
+                vec![]
+            } else {
+                vec![Tag::new(511, "marker", TagValue::Bool(true))]
+            };
+            let mut buffer = write.write_buf()?;
+            buffer.slice()[..samples.len()].copy_from_slice(&samples);
+            buffer.produce(samples.len(), &tags);
+            drop(write);
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while handle.status() != super::super::SourceStatus::Complete {
+                    sink.work()?;
+                    source.work()?;
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                }
+                Ok::<_, crate::Error>(())
+            })
+            .await
+            .map_err(|_| err("u8 roundtrip timed out"))??;
+            let (buffer, received_tags) = output.read_buf()?;
+            assert_eq!(buffer.slice(), samples);
+            assert_eq!(
+                received_tags
+                    .into_iter()
+                    .filter(|tag| tag.key() == "marker")
+                    .collect::<Vec<_>>(),
+                tags
+            );
+            buffer.consume(samples.len());
+            assert!(output.eof());
+            let _ = shutdown_tx.send(());
+            server_task.await.map_err(|e| err(e.to_string()))??;
+        }
         Ok(())
     }
 }

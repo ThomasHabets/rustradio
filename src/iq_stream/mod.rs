@@ -1,5 +1,8 @@
 //! Experimental real/complex sample streaming. Enable the `unstable` feature.
 //!
+//! Supports little-endian FLOAT32 `Float` and `Complex` samples, and raw `u8`
+//! samples using UINT8/NOT_APPLICABLE/REAL encoding without scaling.
+//!
 //! Native graphs use gRPC clients and a shared gRPC/WebSocket server. Browser
 //! workers use the WebSocket client in `rustradio-ui`. All queues are bounded;
 //! graph `work()` methods never wait on sockets. See `doc/iq-streaming.md`.
@@ -45,9 +48,11 @@ mod sealed {
     pub trait Sealed {}
     impl Sealed for crate::Float {}
     impl Sealed for crate::Complex {}
+    impl Sealed for u8 {}
 }
 
-/// Supported packed stream samples. This experimental trait is sealed.
+/// Supported packed stream samples: `Float`, `Complex`, and `u8`.
+/// This experimental trait is sealed.
 pub trait IqSample: Sample + sealed::Sealed {
     /// Fixed wire encoding of this graph port.
     fn encoding() -> proto::Encoding;
@@ -60,6 +65,15 @@ impl IqSample for Float {
 impl IqSample for Complex {
     fn encoding() -> proto::Encoding {
         encoding(proto::SampleLayout::Complex)
+    }
+}
+impl IqSample for u8 {
+    fn encoding() -> proto::Encoding {
+        proto::Encoding {
+            component_type: proto::ComponentType::Uint8 as i32,
+            byte_order: proto::ByteOrder::NotApplicable as i32,
+            layout: proto::SampleLayout::Real as i32,
+        }
     }
 }
 fn encoding(layout: proto::SampleLayout) -> proto::Encoding {
