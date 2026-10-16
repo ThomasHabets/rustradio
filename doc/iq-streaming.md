@@ -1,4 +1,4 @@
-# Real and complex sample streaming over gRPC and WebSocket
+# Sample and string streaming over gRPC and WebSocket
 
 Status: proposed protocol version 1. The schema is
 [iq_stream.proto](../proto/iq_stream.proto). This document specifies the wire
@@ -11,7 +11,7 @@ Carry sample data and tags together, support continuous reception and finite
 file transfers, and leave room for SigMF adapters and GNU Radio source/sink
 blocks.
 
-One session carries **one real or complex channel in one direction**. Upload
+One session carries **one sample or string channel in one direction**. Upload
 means client to server; download means server to client. The client initiates
 either operation. Two sessions are required for two opposing sample streams.
 A connection can remain open indefinitely, but sample encoding and sample rate
@@ -200,6 +200,18 @@ offering both layouts does not request discarding Q or synthesizing a zero Q.
 | INT16 / UINT16 | 2 | 4 | Signed two's complement / unsigned |
 | INT32 / UINT32 | 4 | 8 | Signed two's complement / unsigned |
 | INT64 / UINT64 | 8 | 16 | Signed two's complement / unsigned |
+| UTF8 | Variable | Invalid | One UTF-8 string per chunk |
+
+`UTF8` uses `NOT_APPLICABLE` byte order and `REAL` layout. Each chunk carries
+exactly one complete string: `sample_count` is `1` and `samples` contains its
+UTF-8 bytes, without a terminator or length prefix inside the payload. Empty
+strings and embedded NUL characters are valid. Invalid UTF-8 fails the stream.
+Strings cannot be split across frames or combined in a chunk. The string and
+its tags must fit within the negotiated frame limit; oversized strings fail
+the session. Sample indices, counts, gaps, offsets, and the rate count string
+messages rather than bytes or Unicode characters. Tags attach to the whole
+message, including when its text is empty. This additive encoding must be
+explicitly negotiated; numeric clients cannot reinterpret strings as samples.
 
 Multibyte components require explicit little or big endian. Eight-bit components
 require `NOT_APPLICABLE`. Transport implementations should support
@@ -219,8 +231,9 @@ number. For a chunk:
 
 1. `first_sample` must equal the sample cursor.
 2. `sample_count` must be positive.
-3. `samples.len()` must equal `sample_count * bytes_per_sample`, checked without
-   integer overflow.
+3. For numeric formats, `samples.len()` must equal
+   `sample_count * bytes_per_sample`, checked without integer overflow. For
+   `UTF8`, `sample_count` must be `1` and `samples` must be valid UTF-8.
 4. Tags must satisfy the rules below.
 5. Advance the cursor by `sample_count` and frame sequence by one.
 
@@ -493,6 +506,32 @@ preserved without scaling or normalization. They support the five scalar
 RustRadio tag kinds and ACCEPTED completion.
 Uploads and DURABLE completion return `UNIMPLEMENTED`. Structured values,
 provenance and terminal tags are not accepted by graph sources.
+
+`IqStreamStringSink` and `IqStreamStringSource` transfer individual `String`
+messages using `NCReadStream<String>` and `NCWriteStream<String>`. Their API
+mirrors the numeric blocks: configure the sink with `builder`, and connect a
+native source with `IqStreamStringSource::connect`. The sink rate is in messages
+per second. Input and output tags use position zero to describe the entire
+string; nonzero input tag positions are rejected. Both blocking and nonblocking
+sink modes use the same credit, gap, and completion rules as numeric streams.
+The source checks output capacity before accepting a queued message into the
+graph. Empty messages consume one credit and advance the sample cursor by one.
+
+Browser adapters can use `StreamOptions::open_strings` and
+`IqStreamStringSource::from_started` with the shared `SourceTransport`; the
+separate `rustradio-ui` browser wrapper must expose these string ports to use
+them.
+
+```rust
+use rustradio::iq_stream::{IqServer, IqStreamStringSink};
+use rustradio::stream::new_nocopy_stream;
+
+let server = IqServer::new();
+let (messages, input) = new_nocopy_stream::<String>();
+let sink = IqStreamStringSink::builder(input, &server, "status", 1.0).build()?;
+messages.push("hello 🦀".into(), &[]);
+messages.push(String::new(), &[]); // A separate, empty message.
+```
 
 A sink's `.blocking(true)` setting preserves input when its bounded queue fills
 and waits while disconnected. `.blocking(false)` consumes and discards newly

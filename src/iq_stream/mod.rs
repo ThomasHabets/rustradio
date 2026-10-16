@@ -2,6 +2,8 @@
 //!
 //! Supports little-endian FLOAT32 `Float` and `Complex` samples, and raw `u8`
 //! samples using UINT8/NOT_APPLICABLE/REAL encoding without scaling.
+//! `IqStreamStringSink` and [`IqStreamStringSource`] preserve individual UTF-8
+//! string messages on no-copy streams, including empty strings.
 //!
 //! Native graphs use gRPC clients and a shared gRPC/WebSocket server. Browser
 //! workers use the WebSocket client in `rustradio-ui`. All queues are bounded;
@@ -23,8 +25,11 @@ mod sink;
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::IqServer;
 #[cfg(not(target_arch = "wasm32"))]
-pub use sink::{IqStreamSink, IqStreamSinkBuilder};
-pub use source::{IqStreamSource, SourceHandle, SourceStatus, SourceTransport, StreamOptions};
+pub use sink::{IqStreamSink, IqStreamSinkBuilder, IqStreamStringSink, IqStreamStringSinkBuilder};
+pub use source::{
+    IqStreamSource, IqStreamStringSource, SourceHandle, SourceStatus, SourceTransport,
+    StreamOptions,
+};
 pub use wire::{Decoded, decode_client, decode_server};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -81,6 +86,13 @@ fn encoding(layout: proto::SampleLayout) -> proto::Encoding {
         component_type: proto::ComponentType::Float32 as i32,
         byte_order: proto::ByteOrder::LittleEndian as i32,
         layout: layout as i32,
+    }
+}
+fn string_encoding() -> proto::Encoding {
+    proto::Encoding {
+        component_type: proto::ComponentType::Utf8 as i32,
+        byte_order: proto::ByteOrder::NotApplicable as i32,
+        layout: proto::SampleLayout::Real as i32,
     }
 }
 // Advertise exactly the value types that crate::stream::TagValue can represent.

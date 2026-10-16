@@ -119,9 +119,10 @@ impl IqServer {
         };
         if download.accepted_encodings.is_empty()
             || download.accepted_encodings.iter().any(|e| {
-                !(1..=10).contains(&e.component_type)
+                !(1..=11).contains(&e.component_type)
                     || !matches!(e.layout, 1 | 2)
-                    || if matches!(e.component_type, 3 | 4) {
+                    || (e.component_type == 11 && e.layout != 1)
+                    || if matches!(e.component_type, 3 | 4 | 11) {
                         e.byte_order != 3
                     } else {
                         !matches!(e.byte_order, 1 | 2)
@@ -535,69 +536,80 @@ impl<T: IqSample> IqStreamSource<T> {
         options: StreamOptions,
     ) -> crate::Result<(Self, crate::stream::ReadStream<T>, SourceHandle)> {
         let open = options.open::<T>(source)?;
-        let endpoint =
-            tonic::transport::Endpoint::from_shared(uri.into()).map_err(|e| err(e.to_string()))?;
-        let endpoint = if endpoint.uri().scheme_str() == Some("https") {
-            endpoint
-                .tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
-                .map_err(|e| err(e.to_string()))?
-        } else {
-            endpoint
-        };
-        let channel = endpoint.connect().await.map_err(|e| err(e.to_string()))?;
-        let (tx, rx) = mpsc::channel(1);
-        tx.send(open).await.map_err(|e| err(e.to_string()))?;
-        let mut grpc = tonic::client::Grpc::new(channel);
-        grpc = grpc
-            .max_decoding_message_size(super::MAX_ENVELOPE)
-            .max_encoding_message_size(super::MAX_ENVELOPE);
-        grpc.ready().await.map_err(|e| err(e.to_string()))?;
-        let response = grpc
-            .streaming(
-                tonic::Request::new(tokio_stream::wrappers::ReceiverStream::new(rx)),
-                axum::http::uri::PathAndQuery::from_static(super::rpc::RPC_PATH),
-                super::rpc::CheckedCodec::<proto::ClientMessage, proto::ServerMessage>::new(false),
-            )
-            .await
-            .map_err(|e| err(e.to_string()))?;
-        let mut input = response.into_inner();
-        let first = input
-            .message()
-            .await
-            .map_err(|e| err(e.to_string()))?
-            .ok_or_else(|| err("missing Started"))?;
-        let started = match first.message.body {
-            Some(proto::server_message::Body::Started(started)) => started,
-            Some(proto::server_message::Body::Failure(f)) => return Err(err(f.message)),
-            _ => return Err(err("first server message must be Started")),
-        };
-        let (block, out, handle, transport) = Self::from_started(started, &options)?;
-        let transport = Arc::new(transport);
-        tokio::spawn(async move {
-            let writer_transport = transport.clone();
-            let writer = async move {
-                while let Some(message) = writer_transport.next_control().await {
-                    let stop = matches!(message.body, Some(proto::client_message::Body::Cancel(_)));
-                    tx.send(message).await.map_err(|e| err(e.to_string()))?;
-                    if stop {
-                        return Err(err("IQ source cancelled"));
-                    }
-                }
-                std::future::pending::<crate::Result<()>>().await
-            };
-            let reader = async {
-                while let Some(message) = input.message().await.map_err(|e| err(e.to_string()))? {
-                    transport.accept(message)?;
-                }
-                transport.finish()
-            };
-            let result = tokio::select! { result = reader => result, result = writer => result };
-            if let Err(error) = result {
-                transport.fail(error.to_string());
-            }
-        });
-        Ok((block, out, handle))
+        connect_source(uri, open, options, Self::from_started).await
     }
+}
+pub(super) async fn connect_source<B, O>(
+    uri: impl Into<String>,
+    open: proto::ClientMessage,
+    options: StreamOptions,
+    build: impl FnOnce(
+        proto::Started,
+        &StreamOptions,
+    ) -> crate::Result<(B, O, SourceHandle, super::SourceTransport)>,
+) -> crate::Result<(B, O, SourceHandle)> {
+    let endpoint =
+        tonic::transport::Endpoint::from_shared(uri.into()).map_err(|e| err(e.to_string()))?;
+    let endpoint = if endpoint.uri().scheme_str() == Some("https") {
+        endpoint
+            .tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
+            .map_err(|e| err(e.to_string()))?
+    } else {
+        endpoint
+    };
+    let channel = endpoint.connect().await.map_err(|e| err(e.to_string()))?;
+    let (tx, rx) = mpsc::channel(1);
+    tx.send(open).await.map_err(|e| err(e.to_string()))?;
+    let mut grpc = tonic::client::Grpc::new(channel);
+    grpc = grpc
+        .max_decoding_message_size(super::MAX_ENVELOPE)
+        .max_encoding_message_size(super::MAX_ENVELOPE);
+    grpc.ready().await.map_err(|e| err(e.to_string()))?;
+    let response = grpc
+        .streaming(
+            tonic::Request::new(tokio_stream::wrappers::ReceiverStream::new(rx)),
+            axum::http::uri::PathAndQuery::from_static(super::rpc::RPC_PATH),
+            super::rpc::CheckedCodec::<proto::ClientMessage, proto::ServerMessage>::new(false),
+        )
+        .await
+        .map_err(|e| err(e.to_string()))?;
+    let mut input = response.into_inner();
+    let first = input
+        .message()
+        .await
+        .map_err(|e| err(e.to_string()))?
+        .ok_or_else(|| err("missing Started"))?;
+    let started = match first.message.body {
+        Some(proto::server_message::Body::Started(started)) => started,
+        Some(proto::server_message::Body::Failure(f)) => return Err(err(f.message)),
+        _ => return Err(err("first server message must be Started")),
+    };
+    let (block, out, handle, transport) = build(started, &options)?;
+    let transport = Arc::new(transport);
+    tokio::spawn(async move {
+        let writer_transport = transport.clone();
+        let writer = async move {
+            while let Some(message) = writer_transport.next_control().await {
+                let stop = matches!(message.body, Some(proto::client_message::Body::Cancel(_)));
+                tx.send(message).await.map_err(|e| err(e.to_string()))?;
+                if stop {
+                    return Err(err("IQ source cancelled"));
+                }
+            }
+            std::future::pending::<crate::Result<()>>().await
+        };
+        let reader = async {
+            while let Some(message) = input.message().await.map_err(|e| err(e.to_string()))? {
+                transport.accept(message)?;
+            }
+            transport.finish()
+        };
+        let result = tokio::select! { result = reader => result, result = writer => result };
+        if let Err(error) = result {
+            transport.fail(error.to_string());
+        }
+    });
+    Ok((block, out, handle))
 }
 
 #[cfg(test)]
@@ -1125,6 +1137,209 @@ mod tests {
             let _ = shutdown_tx.send(());
             server_task.await.map_err(|e| err(e.to_string()))??;
         }
+        Ok(())
+    }
+    fn string_open(options: &StreamOptions, name: &str) -> proto::Open {
+        let Some(proto::client_message::Body::Open(open)) =
+            options.open_strings(name).unwrap().body
+        else {
+            unreachable!()
+        };
+        open
+    }
+    #[tokio::test]
+    async fn string_sink_backpressure_limits_and_loss() -> crate::Result<()> {
+        use super::super::IqStreamStringSink;
+        use crate::stream::new_nocopy_stream;
+        let server = IqServer::new();
+        let (tx, rx) = new_nocopy_stream();
+        let options = StreamOptions {
+            limits: proto::Limits {
+                max_frame_bytes: 256,
+                max_in_flight_frames: 1,
+            },
+            ..Default::default()
+        };
+        let mut sink = IqStreamStringSink::builder(rx, &server, "strings", 1.0)
+            .limits(options.limits.clone())
+            .build()?;
+        tx.push("first".into(), &[]);
+        tx.push("second".into(), &[]);
+        assert!(matches!(sink.work()?, BlockRet::Pending));
+        assert!(server.open(open::<u8>(&options, "strings")).is_err());
+        for (layout, byte_order) in [
+            (
+                proto::SampleLayout::Complex,
+                proto::ByteOrder::NotApplicable,
+            ),
+            (proto::SampleLayout::Real, proto::ByteOrder::LittleEndian),
+        ] {
+            let mut invalid = string_open(&options, "strings");
+            let Some(proto::open::Operation::Download(download)) = &mut invalid.operation else {
+                unreachable!();
+            };
+            download.accepted_encodings[0].layout = layout as i32;
+            download.accepted_encodings[0].byte_order = byte_order as i32;
+            assert!(server.open(invalid).is_err());
+        }
+        let (connection, _) = server.open(string_open(&options, "strings")).unwrap();
+        credit(&connection, 1).unwrap();
+        assert!(matches!(sink.work()?, BlockRet::Again));
+        assert!(matches!(sink.work()?, BlockRet::Pending));
+        assert_eq!(connection.resource.lock().position, 1);
+        connection.next().await.unwrap();
+        assert!(matches!(sink.work()?, BlockRet::Again));
+        credit(&connection, 2).unwrap();
+        connection.next().await.unwrap();
+        tx.push("x".repeat(256), &[]);
+        assert!(sink.work().is_err());
+
+        let (tx, rx) = new_nocopy_stream();
+        let mut sink = IqStreamStringSink::builder(rx, &server, "lossy", 1.0)
+            .blocking(false)
+            .limits(options.limits.clone())
+            .build()?;
+        let options = StreamOptions {
+            loss_policy: proto::LossPolicy::AllowGaps,
+            ..options
+        };
+        let (connection, _) = server.open(string_open(&options, "lossy")).unwrap();
+        tx.push("".into(), &[]);
+        tx.push("lost".into(), &[]);
+        sink.work()?;
+        sink.work()?;
+        assert_eq!(
+            connection
+                .resource
+                .lock()
+                .active
+                .as_ref()
+                .unwrap()
+                .lost
+                .as_ref()
+                .unwrap()
+                .sample_count,
+            1
+        );
+        Ok(())
+    }
+    #[tokio::test]
+    async fn strings_over_grpc_and_websocket() -> crate::Result<()> {
+        use super::super::{IqStreamStringSink, IqStreamStringSource};
+        use crate::stream::new_nocopy_stream;
+        let server = IqServer::new();
+        let (tx, rx) = new_nocopy_stream();
+        let (ws_tx, ws_rx) = new_nocopy_stream();
+        let mut sink = IqStreamStringSink::builder(rx, &server, "strings", 10.0).build()?;
+        let mut ws_sink =
+            IqStreamStringSink::builder(ws_rx, &server, "ws-strings", 10.0).build()?;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .map_err(|e| err(e.to_string()))?;
+        let address = listener.local_addr().map_err(|e| err(e.to_string()))?;
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        let server_task = tokio::spawn(async move {
+            server
+                .serve(listener, async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+        });
+        let options = StreamOptions {
+            limits: proto::Limits {
+                max_frame_bytes: 256,
+                max_in_flight_frames: 1,
+            },
+            ..Default::default()
+        };
+        let (mut source, output, handle) =
+            IqStreamStringSource::connect(format!("http://{address}"), "strings", options).await?;
+        let mut ws = WsClient::connect(address).await?;
+        ws.send(StreamOptions::default().open_strings("ws-strings")?)
+            .await?;
+        let Some(proto::server_message::Body::Started(started)) =
+            ws.receive().await?.unwrap().message.body
+        else {
+            panic!("expected Started");
+        };
+        assert_eq!(
+            started.description.unwrap().encoding,
+            Some(super::super::string_encoding())
+        );
+        ws.send(proto::ClientMessage {
+            body: Some(proto::client_message::Body::FlowControl(
+                proto::FlowControl { send_limit: 8 },
+            )),
+        })
+        .await?;
+        let messages = ["", "hello", "雪\0🦀", ""];
+        let tag = Tag::new(0, "marker", TagValue::String("value".into()));
+        for message in messages {
+            tx.push(message.into(), vec![tag.clone()]);
+            ws_tx.push(message.into(), &[]);
+        }
+        drop(tx);
+        drop(ws_tx);
+        let ws_task = tokio::spawn(async move {
+            let mut received = vec![];
+            let mut complete = false;
+            while let Some(message) = ws.receive().await? {
+                match message.message.body {
+                    Some(proto::server_message::Body::Frame(frame)) => {
+                        let Some(proto::frame::Body::Chunk(chunk)) = frame.body else {
+                            panic!("expected chunk");
+                        };
+                        assert_eq!(chunk.first_sample, received.len() as u64);
+                        assert_eq!(chunk.sample_count, 1);
+                        received.push(String::from_utf8(chunk.samples).unwrap());
+                    }
+                    Some(proto::server_message::Body::End(end)) => {
+                        assert_eq!(end.next_sample, messages.len() as u64);
+                        ws.send(proto::ClientMessage {
+                            body: Some(proto::client_message::Body::Complete(proto::Complete {
+                                next_sequence: end.next_sequence,
+                                next_sample: end.next_sample,
+                                completion_mode: proto::CompletionMode::Accepted as i32,
+                            })),
+                        })
+                        .await?;
+                    }
+                    Some(proto::server_message::Body::Complete(_)) => complete = true,
+                    other => panic!("unexpected response: {other:?}"),
+                }
+            }
+            assert!(complete);
+            assert_eq!(received, messages);
+            Ok::<_, crate::Error>(())
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while handle.status() != super::super::SourceStatus::Complete || !ws_task.is_finished()
+            {
+                sink.work()?;
+                ws_sink.work()?;
+                source.work()?;
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+            Ok::<_, crate::Error>(())
+        })
+        .await
+        .map_err(|_| err("string roundtrip timed out"))??;
+        for message in messages {
+            let (received, tags) = output.pop().unwrap();
+            assert_eq!(received, message);
+            assert_eq!(
+                tags.iter()
+                    .filter(|t| t.key() == "marker")
+                    .collect::<Vec<_>>(),
+                vec![&tag]
+            );
+        }
+        assert!(output.eof());
+        assert_eq!(handle.end().unwrap().next_sample, messages.len() as u64);
+        assert_eq!(handle.description().sample_rate_hz, 10.0);
+        ws_task.await.map_err(|e| err(e.to_string()))??;
+        let _ = shutdown_tx.send(());
+        server_task.await.map_err(|e| err(e.to_string()))??;
         Ok(())
     }
 }

@@ -6,7 +6,10 @@ use super::{
 };
 use crate::Result;
 use crate::block::{Block, BlockEOF, BlockRet};
-use crate::stream::{ReadStream, StreamWait, Tag, TagValue, WriteStream, new_stream};
+use crate::stream::{
+    NCReadStream, NCWriteStream, ReadStream, StreamWait, Tag, TagValue, WriteStream,
+    new_nocopy_stream, new_stream,
+};
 use async_channel::{Receiver, Sender};
 use prost::Message;
 
@@ -32,6 +35,17 @@ impl Default for StreamOptions {
 impl StreamOptions {
     /// Construct an Open envelope for the exact graph sample type.
     pub fn open<T: IqSample>(&self, source: impl Into<String>) -> Result<proto::ClientMessage> {
+        self.open_encoding(source, T::encoding())
+    }
+    /// Construct an Open envelope preserving individual UTF-8 string messages.
+    pub fn open_strings(&self, source: impl Into<String>) -> Result<proto::ClientMessage> {
+        self.open_encoding(source, super::string_encoding())
+    }
+    fn open_encoding(
+        &self,
+        source: impl Into<String>,
+        encoding: proto::Encoding,
+    ) -> Result<proto::ClientMessage> {
         limits_valid(&self.limits)?;
         if self.loss_policy == proto::LossPolicy::Unspecified {
             return Err(err("unspecified IQ loss policy"));
@@ -48,7 +62,7 @@ impl StreamOptions {
                 completion_mode: proto::CompletionMode::Accepted as i32,
                 operation: Some(proto::open::Operation::Download(proto::Download {
                     source,
-                    accepted_encodings: vec![T::encoding()],
+                    accepted_encodings: vec![encoding],
                     accepted_tag_kinds: TAG_KINDS.to_vec(),
                     ..Default::default()
                 })),
@@ -173,7 +187,8 @@ pub struct SourceTransport {
     handle: SourceHandle,
     frames: Sender<proto::Frame>,
     notify: Receiver<()>,
-    sample_size: usize,
+    // Fixed numeric sample size, or None for one variable-length UTF-8 string.
+    sample_size: Option<usize>,
 }
 impl SourceTransport {
     /// Clone the application status handle.
@@ -204,10 +219,18 @@ impl SourceTransport {
                         let end = advance(chunk.first_sample, u64::from(chunk.sample_count))?;
                         if chunk.first_sample != s.next_sample
                             || chunk.sample_count == 0
-                            || chunk.samples.len()
-                                != (chunk.sample_count as usize)
-                                    .checked_mul(self.sample_size)
-                                    .ok_or_else(|| err("sample byte overflow"))?
+                            || match self.sample_size {
+                                Some(size) => {
+                                    chunk.samples.len()
+                                        != (chunk.sample_count as usize)
+                                            .checked_mul(size)
+                                            .ok_or_else(|| err("sample byte overflow"))?
+                                }
+                                None => {
+                                    chunk.sample_count != 1
+                                        || std::str::from_utf8(&chunk.samples).is_err()
+                                }
+                            }
                             || chunk.tags.len() > 4096
                         {
                             return Err(err("invalid IQ sample chunk"));
@@ -378,7 +401,7 @@ impl Drop for SourceTransport {
     }
 }
 
-/// Download source for Float or Complex samples.
+/// Download source for `Float`, `Complex`, or `u8` samples.
 ///
 /// Gaps produce [`super::GAP_SAMPLES`] and [`super::SAMPLE_INDEX`] on the next
 /// retained sample. Stateful DSP must handle those discontinuities explicitly.
@@ -404,83 +427,8 @@ impl<T: IqSample> IqStreamSource<T> {
         started: proto::Started,
         options: &StreamOptions,
     ) -> Result<(Self, ReadStream<T>, SourceHandle, SourceTransport)> {
-        limits_valid(&options.limits)?;
-        let limits = started
-            .limits
-            .as_ref()
-            .ok_or_else(|| err("missing IQ limits"))?;
-        limits_valid(limits)?;
-        let desc = started
-            .description
-            .as_ref()
-            .ok_or_else(|| err("missing IQ description"))?;
-        if limits.max_frame_bytes > options.limits.max_frame_bytes
-            || limits.max_in_flight_frames > options.limits.max_in_flight_frames
-            || options.loss_policy == proto::LossPolicy::Unspecified
-            || started.loss_policy != options.loss_policy as i32
-            || started.completion_mode != proto::CompletionMode::Accepted as i32
-            || started.initial_credit.is_some()
-            || desc.encoding.as_ref() != Some(&T::encoding())
-            || !desc.sample_rate_hz.is_finite()
-            || desc.sample_rate_hz <= 0.0
-            || desc.uses_terminal_tags
-            || desc.uses_tag_source_ids
-            || !desc.opaque_codecs.is_empty()
-            || desc.tag_kinds.iter().any(|kind| !TAG_KINDS.contains(kind))
-            || desc
-                .tag_kinds
-                .iter()
-                .enumerate()
-                .any(|(i, k)| desc.tag_kinds[..i].contains(k))
-        {
-            return Err(err("unsupported IQ description or policies"));
-        }
-        if let Some(time) = &desc.sample_zero_time
-            && (!(-62135596800..=253402300799).contains(&time.seconds)
-                || !(0..1_000_000_000).contains(&time.nanos))
-        {
-            return Err(err("invalid IQ UTC anchor"));
-        }
-        let mut keys = std::collections::HashSet::new();
-        for property in &desc.properties {
-            if property.key.is_empty()
-                || !keys.insert(&property.key)
-                || !desc.tag_kinds.contains(&value_kind(
-                    property
-                        .value
-                        .as_ref()
-                        .ok_or_else(|| err("missing IQ property value"))?,
-                )?)
-            {
-                return Err(err("invalid IQ property"));
-            }
-        }
-        let (tx, rx) = async_channel::bounded(limits.max_in_flight_frames as usize);
-        let (notify_tx, notify_rx) = async_channel::bounded(1);
-        let handle = SourceHandle {
-            state: Arc::new(Mutex::new(State {
-                started,
-                status: SourceStatus::Receiving,
-                next_sequence: 0,
-                next_sample: 0,
-                retired: 0,
-                grant: 0,
-                end: None,
-                complete_requested: false,
-                complete_sent: false,
-                cancel_sent: false,
-                server_complete: false,
-                lost_samples: 0,
-                trailing_gap: None,
-            })),
-            notify: notify_tx,
-        };
-        let transport = SourceTransport {
-            handle: handle.clone(),
-            frames: tx,
-            notify: notify_rx,
-            sample_size: T::size(),
-        };
+        let (rx, handle, transport) =
+            start_source(started, options, T::encoding(), Some(T::size()))?;
         let (dst, out) = new_stream()?;
         Ok((
             Self {
@@ -495,6 +443,91 @@ impl<T: IqSample> IqStreamSource<T> {
             transport,
         ))
     }
+}
+fn start_source(
+    started: proto::Started,
+    options: &StreamOptions,
+    encoding: proto::Encoding,
+    sample_size: Option<usize>,
+) -> Result<(Receiver<proto::Frame>, SourceHandle, SourceTransport)> {
+    limits_valid(&options.limits)?;
+    let limits = started
+        .limits
+        .as_ref()
+        .ok_or_else(|| err("missing IQ limits"))?;
+    limits_valid(limits)?;
+    let desc = started
+        .description
+        .as_ref()
+        .ok_or_else(|| err("missing IQ description"))?;
+    if limits.max_frame_bytes > options.limits.max_frame_bytes
+        || limits.max_in_flight_frames > options.limits.max_in_flight_frames
+        || options.loss_policy == proto::LossPolicy::Unspecified
+        || started.loss_policy != options.loss_policy as i32
+        || started.completion_mode != proto::CompletionMode::Accepted as i32
+        || started.initial_credit.is_some()
+        || desc.encoding.as_ref() != Some(&encoding)
+        || !desc.sample_rate_hz.is_finite()
+        || desc.sample_rate_hz <= 0.0
+        || desc.uses_terminal_tags
+        || desc.uses_tag_source_ids
+        || !desc.opaque_codecs.is_empty()
+        || desc.tag_kinds.iter().any(|kind| !TAG_KINDS.contains(kind))
+        || desc
+            .tag_kinds
+            .iter()
+            .enumerate()
+            .any(|(i, k)| desc.tag_kinds[..i].contains(k))
+    {
+        return Err(err("unsupported IQ description or policies"));
+    }
+    if let Some(time) = &desc.sample_zero_time
+        && (!(-62135596800..=253402300799).contains(&time.seconds)
+            || !(0..1_000_000_000).contains(&time.nanos))
+    {
+        return Err(err("invalid IQ UTC anchor"));
+    }
+    let mut keys = std::collections::HashSet::new();
+    for property in &desc.properties {
+        if property.key.is_empty()
+            || !keys.insert(&property.key)
+            || !desc.tag_kinds.contains(&value_kind(
+                property
+                    .value
+                    .as_ref()
+                    .ok_or_else(|| err("missing IQ property value"))?,
+            )?)
+        {
+            return Err(err("invalid IQ property"));
+        }
+    }
+    let (tx, rx) = async_channel::bounded(limits.max_in_flight_frames as usize);
+    let (notify_tx, notify_rx) = async_channel::bounded(1);
+    let handle = SourceHandle {
+        state: Arc::new(Mutex::new(State {
+            started,
+            status: SourceStatus::Receiving,
+            next_sequence: 0,
+            next_sample: 0,
+            retired: 0,
+            grant: 0,
+            end: None,
+            complete_requested: false,
+            complete_sent: false,
+            cancel_sent: false,
+            server_complete: false,
+            lost_samples: 0,
+            trailing_gap: None,
+        })),
+        notify: notify_tx,
+    };
+    let transport = SourceTransport {
+        handle: handle.clone(),
+        frames: tx,
+        notify: notify_rx,
+        sample_size,
+    };
+    Ok((rx, handle, transport))
 }
 impl<T: IqSample> BlockEOF for IqStreamSource<T> {
     fn eof(&mut self) -> bool {
@@ -635,6 +668,159 @@ impl<T: IqSample> Drop for IqStreamSource<T> {
     }
 }
 
+/// Receive individual UTF-8 strings on a bounded no-copy output.
+///
+/// Each item is one string, including empty strings; tags are at position zero.
+/// Positions, gaps, and the negotiated rate count messages rather than bytes.
+/// Gaps attach the same markers as [`IqStreamSource`]; trailing gaps remain on
+/// [`SourceHandle`]. Invalid UTF-8 or chunks containing multiple strings fail
+/// validation before publishing data. Each string and its tags must fit in one
+/// negotiated frame. Output backpressure withholds frame credit.
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, noeof)]
+pub struct IqStreamStringSource {
+    #[rustradio(out)]
+    dst: Option<NCWriteStream<String>>,
+    rx: Receiver<proto::Frame>,
+    handle: SourceHandle,
+    done: bool,
+}
+impl IqStreamStringSource {
+    /// Construct graph and transport halves after a successful Started handshake.
+    /// Browser adapters must check envelope budgets before calling this method,
+    /// as for [`IqStreamSource::from_started`].
+    pub fn from_started(
+        started: proto::Started,
+        options: &StreamOptions,
+    ) -> Result<(Self, NCReadStream<String>, SourceHandle, SourceTransport)> {
+        let (rx, handle, transport) =
+            start_source(started, options, super::string_encoding(), None)?;
+        let (dst, output) = new_nocopy_stream();
+        Ok((
+            Self {
+                dst: Some(dst),
+                rx,
+                handle: handle.clone(),
+                done: false,
+            },
+            output,
+            handle,
+            transport,
+        ))
+    }
+    /// Connect a native gRPC string download. Requires a running Tokio runtime.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn connect(
+        uri: impl Into<String>,
+        source: impl Into<String>,
+        options: StreamOptions,
+    ) -> Result<(Self, NCReadStream<String>, SourceHandle)> {
+        let open = options.open_strings(source)?;
+        super::native::connect_source(uri, open, options, Self::from_started).await
+    }
+    fn work_inner(&mut self) -> Result<BlockRet<'_>> {
+        if self.done {
+            return Ok(BlockRet::EOF);
+        }
+        if let SourceStatus::Failed(message) = self.handle.status() {
+            self.dst.take();
+            return Err(err(message));
+        }
+        if self.dst.as_ref().is_some_and(StreamWait::closed) {
+            self.dst.take();
+            self.done = true;
+            self.handle.cancel();
+            return Ok(BlockRet::EOF);
+        }
+        let mut progress = false;
+        loop {
+            if self.dst.as_ref().is_some_and(|dst| dst.remaining() == 0) {
+                return Ok(BlockRet::WaitForStream(self.dst.as_ref().unwrap(), 1));
+            }
+            let frame = match self.rx.try_recv() {
+                Ok(frame) => frame,
+                Err(_) => {
+                    let mut state = self.handle.lock();
+                    if state.end.is_some() && !state.complete_requested {
+                        self.dst.take();
+                        state.complete_requested = true;
+                        state.status = SourceStatus::Completing;
+                        drop(state);
+                        self.handle.wake();
+                    } else if state.status == SourceStatus::Complete {
+                        self.done = true;
+                        return Ok(BlockRet::EOF);
+                    }
+                    return Ok(if progress {
+                        BlockRet::Again
+                    } else {
+                        BlockRet::Pending
+                    });
+                }
+            };
+            match frame.body {
+                Some(proto::frame::Body::Gap(gap)) => {
+                    let mut state = self.handle.lock();
+                    state.lost_samples = advance(state.lost_samples, gap.sample_count)?;
+                    state.trailing_gap = Some(match state.trailing_gap.take() {
+                        Some(previous) => proto::Gap {
+                            first_sample: previous.first_sample,
+                            sample_count: advance(previous.sample_count, gap.sample_count)?,
+                            reason: "stream discontinuity".into(),
+                        },
+                        None => gap,
+                    });
+                }
+                Some(proto::frame::Body::Chunk(chunk)) => {
+                    let dst = self
+                        .dst
+                        .as_ref()
+                        .ok_or_else(|| err("IQ string after output closure"))?;
+                    let mut tags = vec![];
+                    if let Some(gap) = self.handle.lock().trailing_gap.take() {
+                        tags.push(Tag::new(0, GAP_SAMPLES, TagValue::U64(gap.sample_count)));
+                        tags.push(Tag::new(0, SAMPLE_INDEX, TagValue::U64(chunk.first_sample)));
+                    }
+                    for tag in chunk.tags {
+                        tags.push(Tag::new(
+                            0,
+                            tag.key,
+                            value_from_wire(tag.value.expect("validated tag"))?,
+                        ));
+                    }
+                    dst.push(
+                        String::from_utf8(chunk.samples).map_err(|e| err(e.to_string()))?,
+                        tags,
+                    );
+                }
+                None => return Err(err("missing queued IQ frame body")),
+            }
+            self.handle.retire()?;
+            progress = true;
+        }
+    }
+}
+impl BlockEOF for IqStreamStringSource {
+    fn eof(&mut self) -> bool {
+        self.done
+    }
+}
+impl Block for IqStreamStringSource {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
+        let handle = self.handle.clone();
+        let result = self.work_inner();
+        if let Err(error) = &result {
+            handle.fail(error.to_string());
+        }
+        result
+    }
+}
+impl Drop for IqStreamStringSource {
+    fn drop(&mut self) {
+        self.handle.cancel();
+    }
+}
+
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
@@ -672,6 +858,121 @@ mod tests {
                 tags,
             })),
         })
+    }
+    fn string_started(options: &StreamOptions) -> proto::Started {
+        let mut started = started::<u8>(options);
+        started.description.as_mut().unwrap().encoding = Some(super::super::string_encoding());
+        started
+    }
+    fn string_chunk(sequence: u64, bytes: Vec<u8>) -> proto::server_message::Body {
+        proto::server_message::Body::Frame(proto::Frame {
+            sequence,
+            body: Some(proto::frame::Body::Chunk(proto::SampleChunk {
+                first_sample: sequence,
+                sample_count: 1,
+                samples: bytes,
+                tags: vec![],
+            })),
+        })
+    }
+    #[tokio::test]
+    async fn string_validation_and_output_backpressure() -> Result<()> {
+        let options = StreamOptions::default();
+        let (mut source, output, handle, transport) =
+            IqStreamStringSource::from_started(string_started(&options), &options)?;
+        transport.next_control().await.unwrap();
+        // Invalid frames do not advance the cursor or publish a partial message.
+        assert!(accept(&transport, string_chunk(0, vec![0xff])).is_err());
+        let mut bad = string_chunk(0, vec![]);
+        if let proto::server_message::Body::Frame(frame) = &mut bad
+            && let Some(proto::frame::Body::Chunk(chunk)) = &mut frame.body
+        {
+            chunk.sample_count = 2;
+        }
+        assert!(accept(&transport, bad).is_err());
+        assert!(output.is_empty());
+        let capacity = source.dst.as_ref().unwrap().remaining();
+        for _ in 0..capacity {
+            source.dst.as_ref().unwrap().push("queued".into(), &[]);
+        }
+        accept(&transport, string_chunk(0, vec![]))?;
+        assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
+        assert_eq!(handle.lock().retired, 0);
+        for _ in 0..capacity {
+            output.pop().unwrap();
+        }
+        source.work()?;
+        assert_eq!(output.pop().unwrap().0, "");
+        assert_eq!(handle.lock().retired, 1);
+        drop(output);
+        assert!(matches!(source.work()?, BlockRet::EOF));
+        assert_eq!(handle.status(), SourceStatus::Cancelled);
+        Ok(())
+    }
+    #[tokio::test]
+    async fn string_gaps_and_empty_stream_completion() -> Result<()> {
+        let options = StreamOptions {
+            loss_policy: proto::LossPolicy::AllowGaps,
+            ..Default::default()
+        };
+        let (mut source, output, handle, transport) =
+            IqStreamStringSource::from_started(string_started(&options), &options)?;
+        transport.next_control().await.unwrap();
+        accept(
+            &transport,
+            proto::server_message::Body::Frame(proto::Frame {
+                sequence: 0,
+                body: Some(proto::frame::Body::Gap(proto::Gap {
+                    first_sample: 0,
+                    sample_count: 3,
+                    reason: "test".into(),
+                })),
+            }),
+        )?;
+        let mut frame = string_chunk(1, "雪\0🦀".as_bytes().to_vec());
+        if let proto::server_message::Body::Frame(frame) = &mut frame
+            && let Some(proto::frame::Body::Chunk(chunk)) = &mut frame.body
+        {
+            chunk.first_sample = 3;
+        }
+        accept(&transport, frame)?;
+        source.work()?;
+        let (message, tags) = output.pop().unwrap();
+        assert_eq!(message, "雪\0🦀");
+        assert_eq!(
+            tags,
+            [
+                Tag::new(0, GAP_SAMPLES, TagValue::U64(3)),
+                Tag::new(0, SAMPLE_INDEX, TagValue::U64(3))
+            ]
+        );
+        assert_eq!(handle.lost_samples(), 3);
+
+        let options = StreamOptions::default();
+        let (mut source, output, handle, transport) =
+            IqStreamStringSource::from_started(string_started(&options), &options)?;
+        transport.next_control().await.unwrap();
+        accept(
+            &transport,
+            proto::server_message::Body::End(proto::End::default()),
+        )?;
+        source.work()?;
+        assert!(output.eof());
+        let complete = transport.next_control().await.unwrap();
+        let Some(proto::client_message::Body::Complete(complete)) = complete.body else {
+            panic!("expected Complete");
+        };
+        accept(&transport, proto::server_message::Body::Complete(complete))?;
+        transport.finish()?;
+        assert!(matches!(source.work()?, BlockRet::EOF));
+        assert_eq!(handle.status(), SourceStatus::Complete);
+        Ok(())
+    }
+    #[test]
+    fn string_source_rejects_numeric_encoding() {
+        let options = StreamOptions::default();
+        assert!(IqStreamStringSource::from_started(started::<u8>(&options), &options).is_err());
+        assert!(IqStreamSource::<u8>::from_started(string_started(&options), &options).is_err());
     }
     #[tokio::test]
     async fn samples_tags_credit_and_completion() -> Result<()> {

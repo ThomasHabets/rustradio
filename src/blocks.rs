@@ -29,9 +29,9 @@ pub use crate::hilbert::Hilbert;
 pub use crate::il2p_deframer::Il2pDeframer;
 pub use crate::iq_balance::IqBalance;
 #[cfg(all(feature = "unstable", not(target_arch = "wasm32")))]
-pub use crate::iq_stream::IqStreamSink;
+pub use crate::iq_stream::{IqStreamSink, IqStreamStringSink};
 #[cfg(feature = "unstable")]
-pub use crate::iq_stream::IqStreamSource;
+pub use crate::iq_stream::{IqStreamSource, IqStreamStringSource};
 pub use crate::kiss::{KissDecode, KissEncode, KissFrame};
 pub use crate::morse_encode::MorseEncode;
 pub use crate::multiply::Multiply;

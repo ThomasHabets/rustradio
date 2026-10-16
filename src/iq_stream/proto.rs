@@ -386,6 +386,7 @@ pub enum ComponentType {
     Uint32 = 8,
     Int64 = 9,
     Uint64 = 10,
+    Utf8 = 11,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ::prost::Enumeration)]

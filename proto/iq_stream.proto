@@ -7,7 +7,7 @@ package rustradio.iq.v1;
 
 import "google/protobuf/timestamp.proto";
 
-// One RPC carries one unidirectional real or complex sample stream. Reverse
+// One RPC carries one unidirectional sample or UTF-8 string stream. Reverse
 // messages carry negotiation, credits, completion, and cancellation.
 // See doc/iq-streaming.md for the full validation and state-machine rules.
 // Upload means client -> server; download means server -> client. Use separate
@@ -153,7 +153,7 @@ message Limits {
   uint32 max_in_flight_frames = 2;     // Credit window bound, including gaps.
 }
 
-// Immutable session metadata. One real or complex channel; use separate sessions
+// Immutable session metadata. One sample or string channel; use separate sessions
 // for multiple channels. All required fields must be present.
 message StreamDescription {
   Encoding encoding = 1;
@@ -182,6 +182,7 @@ message StreamDescription {
 
 // Exactly one channel, with no padding. REAL packs x[0], x[1], ...; COMPLEX
 // packs I[0], Q[0], I[1], Q[1], ... . Layout is required and immutable.
+// UTF8 is a message format: REAL and NOT_APPLICABLE, one string per chunk.
 // No implicit scaling: integers are counts and floats are raw values. Transport
 // implementations should support FLOAT32/LITTLE_ENDIAN in both layouts.
 // A resource offers only formats it can actually consume/produce; a typed graph
@@ -193,6 +194,7 @@ message Encoding {
 }
 
 // REAL has one component per sample; COMPLEX has two, real then imaginary.
+// UTF8 requires REAL and counts one complete message as one sample.
 // UNSPECIFIED is invalid, including when the field is omitted.
 enum SampleLayout {
   SAMPLE_LAYOUT_UNSPECIFIED = 0;
@@ -200,8 +202,8 @@ enum SampleLayout {
   SAMPLE_LAYOUT_COMPLEX = 2;
 }
 
-// One scalar component; bytes per sample are component size multiplied by
-// one for REAL or two for COMPLEX. Both layouts use the same component types.
+// Numeric components have a fixed size multiplied by one for REAL or two for
+// COMPLEX. UTF8 is variable-size and permits only REAL, as specified below.
 // Floats are IEEE 754 binary32/binary64; signed integers are two's complement.
 enum ComponentType {
   COMPONENT_TYPE_UNSPECIFIED = 0;
@@ -215,13 +217,17 @@ enum ComponentType {
   COMPONENT_TYPE_UINT32 = 8;
   COMPONENT_TYPE_INT64 = 9;
   COMPONENT_TYPE_UINT64 = 10;
+  // Variable-length UTF-8 messages. Requires REAL and NOT_APPLICABLE. Each
+  // chunk contains exactly one string (sample_count = 1), including empty
+  // strings. samples holds its UTF-8 bytes without a terminator or prefix.
+  COMPONENT_TYPE_UTF8 = 11;
 }
 
 enum ByteOrder {
   BYTE_ORDER_UNSPECIFIED = 0;
   BYTE_ORDER_LITTLE_ENDIAN = 1;
   BYTE_ORDER_BIG_ENDIAN = 2;
-  BYTE_ORDER_NOT_APPLICABLE = 3;        // Required for 8-bit components only.
+  BYTE_ORDER_NOT_APPLICABLE = 3;        // Required for 8-bit and UTF8 components.
 }
 
 // Descriptive metadata, including future SigMF global JSON. Keys are nonempty
@@ -245,14 +251,16 @@ message Frame {
 }
 
 // A contiguous range of retained samples with all tags starting in that range.
-// Chunk boundaries have no DSP meaning and need not align to FFTs or bursts.
+// Numeric chunk boundaries have no DSP meaning and need not align to FFTs or
+// bursts. For UTF8, each chunk is exactly one complete string message.
 message SampleChunk {
   // Must equal the current sample cursor; undeclared jumps are invalid.
   uint64 first_sample = 1;            // Absolute index within this stream.
   uint32 sample_count = 2;            // Positive; whole samples, per layout.
-  // Preserve the declared encoding and byte order. This is packed sample data,
-  // not a repeated protobuf scalar array. Check length arithmetic for overflow.
-  bytes samples = 3;                  // Exactly sample_count * bytes_per_sample.
+  // Preserve the declared encoding and byte order. Numeric data is packed,
+  // with length sample_count * bytes_per_sample (check for overflow). For UTF8,
+  // sample_count is exactly one; samples must be valid UTF-8 and may be empty.
+  bytes samples = 3;                  // Fixed-size samples, or one UTF8 string.
   // Every index is in [first_sample, first_sample + sample_count). Equal-position
   // tags keep source order and may repeat keys; no late tags for previous chunks.
   repeated Tag tags = 4;              // Sorted; stable ties; at most 4096 per chunk.

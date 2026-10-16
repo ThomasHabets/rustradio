@@ -6,7 +6,7 @@ use tokio::sync::Notify;
 use super::{IqSample, IqServer, TAG_KINDS, advance, err, limits_valid, proto, tag_to_wire};
 use crate::Result;
 use crate::block::{Block, BlockEOF, BlockRet};
-use crate::stream::ReadStream;
+use crate::stream::{NCReadStream, ReadStream};
 
 /// Sample allocations return here after the transport encodes their frame.
 #[derive(Clone)]
@@ -111,41 +111,59 @@ impl<T: IqSample> IqStreamSinkBuilder<T> {
     }
     /// Validate configuration and register this named stream exactly once.
     pub fn build(self) -> Result<IqStreamSink<T>> {
-        limits_valid(&self.limits)?;
-        if self.name.is_empty() || !self.rate.is_finite() || self.rate <= 0.0 {
-            return Err(err("invalid IQ stream name or sample rate"));
-        }
-        let description = proto::StreamDescription {
-            encoding: Some(T::encoding()),
-            sample_rate_hz: self.rate,
-            tag_kinds: TAG_KINDS.to_vec(),
-            source_id: self.name.clone(),
-            ..Default::default()
-        };
-        if description.encoded_len() + 64 > super::MAX_CONTROL {
-            return Err(err("IQ description byte limit"));
-        }
-        let resource = Arc::new(Resource {
-            state: Mutex::new(ResourceState {
-                description,
-                position: 0,
-                active: None,
-                eof: false,
-                stopped: false,
-                generation: 0,
-            }),
-            pool: SamplePool::new(self.limits.max_in_flight_frames as usize),
-            notify: Notify::new(),
-            blocking: self.blocking,
-            limits: self.limits,
-        });
-        self.server.register(self.name, resource.clone())?;
+        let resource = register_resource(
+            &self.server,
+            self.name,
+            self.rate,
+            self.blocking,
+            self.limits,
+            T::encoding(),
+        )?;
         Ok(IqStreamSink {
             src: self.src,
             resource,
             done: false,
         })
     }
+}
+fn register_resource(
+    server: &IqServer,
+    name: String,
+    rate: f64,
+    blocking: bool,
+    limits: proto::Limits,
+    encoding: proto::Encoding,
+) -> Result<Arc<Resource>> {
+    limits_valid(&limits)?;
+    if name.is_empty() || !rate.is_finite() || rate <= 0.0 {
+        return Err(err("invalid IQ stream name or sample rate"));
+    }
+    let description = proto::StreamDescription {
+        encoding: Some(encoding),
+        sample_rate_hz: rate,
+        tag_kinds: TAG_KINDS.to_vec(),
+        source_id: name.clone(),
+        ..Default::default()
+    };
+    if description.encoded_len() + 64 > super::MAX_CONTROL {
+        return Err(err("IQ description byte limit"));
+    }
+    let resource = Arc::new(Resource {
+        state: Mutex::new(ResourceState {
+            description,
+            position: 0,
+            active: None,
+            eof: false,
+            stopped: false,
+            generation: 0,
+        }),
+        pool: SamplePool::new(limits.max_in_flight_frames as usize),
+        notify: Notify::new(),
+        blocking,
+        limits,
+    });
+    server.register(name, resource.clone())?;
+    Ok(resource)
 }
 /// Native server sink shared by gRPC and WebSocket download clients.
 ///
@@ -407,6 +425,210 @@ pub(super) fn identity_tags(
         source_id: None,
     });
     tags
+}
+
+/// Configure a named string-message sink. Each message must fit in one frame.
+pub struct IqStreamStringSinkBuilder {
+    src: NCReadStream<String>,
+    server: IqServer,
+    name: String,
+    rate: f64,
+    blocking: bool,
+    limits: proto::Limits,
+}
+impl IqStreamStringSinkBuilder {
+    /// Preserve queued input when full or disconnected (the default).
+    /// Nonblocking mode drops new messages and reports gaps counted in strings.
+    #[must_use]
+    pub fn blocking(mut self, blocking: bool) -> Self {
+        self.blocking = blocking;
+        self
+    }
+    /// Upper bounds selected during negotiation, including string and tag bytes.
+    #[must_use]
+    pub fn limits(mut self, limits: proto::Limits) -> Self {
+        self.limits = limits;
+        self
+    }
+    /// Validate configuration and register this resource exactly once.
+    pub fn build(self) -> Result<IqStreamStringSink> {
+        let resource = register_resource(
+            &self.server,
+            self.name,
+            self.rate,
+            self.blocking,
+            self.limits,
+            super::string_encoding(),
+        )?;
+        Ok(IqStreamStringSink {
+            src: self.src,
+            resource,
+            done: false,
+        })
+    }
+}
+
+/// Serve individual UTF-8 strings over gRPC and WebSocket.
+///
+/// Each no-copy item is one message, including empty strings. Wire sample
+/// positions and gaps count messages; the rate is in messages per second.
+/// Input tags must be at position zero and apply to the whole message.
+/// Identification tags follow the same rules as [`IqStreamSink`]. Strings and
+/// their tags must fit in one negotiated frame; oversized messages fail the
+/// session. Blocking mode preserves input under backpressure. Nonblocking mode
+/// drops new messages while full or disconnected, like [`IqStreamSink`].
+#[derive(rustradio_macros::Block)]
+#[rustradio(crate, noeof)]
+pub struct IqStreamStringSink {
+    #[rustradio(in)]
+    src: NCReadStream<String>,
+    resource: Arc<Resource>,
+    done: bool,
+}
+impl IqStreamStringSink {
+    /// Configure a named string stream with a finite, positive message rate.
+    pub fn builder(
+        src: NCReadStream<String>,
+        server: &IqServer,
+        name: impl Into<String>,
+        messages_per_second: f64,
+    ) -> IqStreamStringSinkBuilder {
+        IqStreamStringSinkBuilder {
+            src,
+            server: server.clone(),
+            name: name.into(),
+            rate: messages_per_second,
+            blocking: true,
+            limits: super::StreamOptions::default().limits,
+        }
+    }
+    fn work_inner(&mut self) -> Result<BlockRet<'_>> {
+        if self.done {
+            return Ok(BlockRet::EOF);
+        }
+        let mut state = self.resource.lock();
+        if state.stopped {
+            return Err(err("IQ server stopped"));
+        }
+        if let Some(session) = state.active.as_mut()
+            && session.queue.len() < session.limits.max_in_flight_frames as usize
+            && let Some(gap) = session.lost.take()
+        {
+            session.queue.push_back(proto::frame::Body::Gap(gap));
+            self.resource.notify.notify_one();
+        }
+        if self.src.is_empty() {
+            if self.src.eof() {
+                state.eof = true;
+                self.resource.notify.notify_one();
+                if state.active.is_none() {
+                    self.done = true;
+                    return Ok(BlockRet::EOF);
+                }
+                return Ok(BlockRet::Pending);
+            }
+            return Ok(BlockRet::WaitForStream(&self.src, 1));
+        }
+        if self.resource.blocking
+            && state.active.as_ref().is_none_or(|session| {
+                session.queue.len() >= session.limits.max_in_flight_frames as usize
+            })
+        {
+            return Ok(BlockRet::Pending);
+        }
+        let (message, tags) = self.src.pop().expect("nonempty string input");
+        if tags.iter().any(|tag| tag.pos() != 0) {
+            return Err(err("IQ string tags must have position zero"));
+        }
+        let absolute = state.position;
+        let position = advance(absolute, 1)?;
+        if let Some(session) = state.active.as_mut() {
+            if session.end_sent {
+                return Err(err("IQ input after End"));
+            }
+            let first = session.cursor;
+            let end = advance(first, 1)?;
+            if session.queue.len() >= session.limits.max_in_flight_frames as usize {
+                session.lost = Some(match session.lost.take() {
+                    Some(gap) => proto::Gap {
+                        sample_count: advance(gap.sample_count, 1)?,
+                        ..gap
+                    },
+                    None => proto::Gap {
+                        first_sample: first,
+                        sample_count: 1,
+                        reason: "sink overflow".into(),
+                    },
+                });
+            } else {
+                let sequence = advance(session.next_sequence, session.queue.len() as u64)?;
+                if sequence == u64::MAX {
+                    return Err(err("IQ frame sequence exhausted"));
+                }
+                let mut wire_tags = if session.identity_pending {
+                    identity_tags(first, absolute, env!("GIT_VERSION"))
+                } else {
+                    vec![]
+                };
+                for tag in &tags {
+                    wire_tags.push(tag_to_wire(tag, first)?);
+                }
+                let frame = proto::Frame {
+                    sequence,
+                    body: Some(proto::frame::Body::Chunk(proto::SampleChunk {
+                        first_sample: first,
+                        sample_count: 1,
+                        samples: message.into_bytes(),
+                        tags: wire_tags,
+                    })),
+                };
+                let tag_count = match frame.body.as_ref().unwrap() {
+                    proto::frame::Body::Chunk(chunk) => chunk.tags.len(),
+                    _ => unreachable!(),
+                };
+                if tag_count > 4096 || frame.encoded_len() > session.limits.max_frame_bytes as usize
+                {
+                    return Err(err("IQ string and tags exceed frame limit"));
+                }
+                session.queue.push_back(frame.body.unwrap());
+                session.identity_pending = false;
+            }
+            session.cursor = end;
+        }
+        state.position = position;
+        self.resource.notify.notify_one();
+        Ok(BlockRet::Again)
+    }
+}
+impl BlockEOF for IqStreamStringSink {
+    fn eof(&mut self) -> bool {
+        self.done
+    }
+}
+impl Block for IqStreamStringSink {
+    fn work(&mut self) -> Result<BlockRet<'_>> {
+        let resource = self.resource.clone();
+        let result = self.work_inner();
+        if result.is_err() {
+            let mut state = resource.lock();
+            state.eof = true;
+            state.active = None;
+            drop(state);
+            resource.notify.notify_one();
+        }
+        result
+    }
+}
+impl Drop for IqStreamStringSink {
+    fn drop(&mut self) {
+        let mut state = self.resource.lock();
+        state.eof = true;
+        if !self.done {
+            state.active = None;
+        }
+        drop(state);
+        self.resource.notify.notify_one();
+    }
 }
 
 #[cfg(test)]
