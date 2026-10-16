@@ -190,6 +190,7 @@ pub mod pwm_encoder;
 pub mod quadrature_demod;
 pub mod rational_resampler;
 pub mod reader_source;
+pub mod rotator;
 pub mod rtlsdr_decode;
 pub mod rtlsdr_encode;
 pub mod sigmf;

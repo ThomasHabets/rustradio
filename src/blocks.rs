@@ -46,6 +46,7 @@ pub use crate::pwm_encoder::{PwmEncoder, PwmEncoderBuilder, PwmEncoderControl};
 pub use crate::quadrature_demod::{FastFM, QuadratureDemod};
 pub use crate::rational_resampler::RationalResampler;
 pub use crate::reader_source::ReaderSource;
+pub use crate::rotator::Rotator;
 pub use crate::rtlsdr_decode::RtlSdrDecode;
 pub use crate::rtlsdr_encode::RtlSdrEncode;
 pub use crate::sigmf::SigMFSource;
