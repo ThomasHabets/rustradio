@@ -5,7 +5,7 @@
 //!
 //! This block tracks the running mean (DC component) of the complex stream with
 //! a single-pole IIR low-pass filter and subtracts it from the input.
-use crate::fir::AlgebraicOps;
+use crate::AlgebraicOps;
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 

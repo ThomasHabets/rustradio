@@ -10,8 +10,8 @@
 use crate::Result;
 use log::trace;
 
+use crate::AlgebraicOps;
 use crate::block::{Block, BlockRet};
-use crate::fir::AlgebraicOps;
 use crate::stream::{ReadStream, Tag, WriteStream};
 use crate::{Complex, Float};
 

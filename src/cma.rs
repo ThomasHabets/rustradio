@@ -3,8 +3,8 @@
 //! Links:
 //! * <https://en.wikipedia.org/wiki/Blind_equalization>
 
+use crate::AlgebraicOps;
 use crate::block::{Block, BlockRet};
-use crate::fir::AlgebraicOps;
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float, Result};
 

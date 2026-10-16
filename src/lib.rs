@@ -277,9 +277,121 @@ pub type Float = f32;
 /// Complex (I/Q) data.
 pub type Complex = num_complex::Complex<Float>;
 
+/// Algebraic ops, allowing more optimizations.
+pub trait AlgebraicOps {
+    #[must_use]
+    fn algebraic_add(self, rhs: Self) -> Self;
+    #[must_use]
+    fn algebraic_mul(self, rhs: Self) -> Self;
+    #[must_use]
+    fn algebraic_div(self, rhs: Self) -> Self;
+}
+
+impl AlgebraicOps for f32 {
+    #[inline(always)]
+    fn algebraic_add(self, rhs: Self) -> Self {
+        Float::algebraic_add(self, rhs)
+    }
+    #[inline(always)]
+    fn algebraic_mul(self, rhs: Self) -> Self {
+        Float::algebraic_mul(self, rhs)
+    }
+    #[inline(always)]
+    fn algebraic_div(self, rhs: Self) -> Self {
+        Float::algebraic_div(self, rhs)
+    }
+}
+
+impl AlgebraicOps for f64 {
+    #[inline(always)]
+    fn algebraic_add(self, rhs: Self) -> Self {
+        Self::algebraic_add(self, rhs)
+    }
+    #[inline(always)]
+    fn algebraic_mul(self, rhs: Self) -> Self {
+        Self::algebraic_mul(self, rhs)
+    }
+    #[inline(always)]
+    fn algebraic_div(self, rhs: Self) -> Self {
+        Self::algebraic_div(self, rhs)
+    }
+}
+
+impl AlgebraicOps for Complex {
+    #[inline(always)]
+    fn algebraic_add(self, rhs: Self) -> Self {
+        Complex::new(self.re.algebraic_add(rhs.re), self.im.algebraic_add(rhs.im))
+    }
+    #[inline(always)]
+    fn algebraic_mul(self, rhs: Self) -> Self {
+        Complex::new(
+            self.re
+                .algebraic_mul(rhs.re)
+                .algebraic_sub(self.im.algebraic_mul(rhs.im)),
+            self.re
+                .algebraic_mul(rhs.im)
+                .algebraic_add(self.im.algebraic_mul(rhs.re)),
+        )
+    }
+    #[inline(always)]
+    fn algebraic_div(self, rhs: Self) -> Self {
+        let denom = rhs
+            .re
+            .algebraic_mul(rhs.re)
+            .algebraic_add(rhs.im.algebraic_mul(rhs.im));
+
+        Complex::new(
+            self.re
+                .algebraic_mul(rhs.re)
+                .algebraic_add(self.im.algebraic_mul(rhs.im))
+                .algebraic_div(denom),
+            self.im
+                .algebraic_mul(rhs.re)
+                .algebraic_sub(self.re.algebraic_mul(rhs.im))
+                .algebraic_div(denom),
+        )
+    }
+}
+
+impl AlgebraicOps for num_complex::Complex<f64> {
+    #[inline(always)]
+    fn algebraic_add(self, rhs: Self) -> Self {
+        Self::new(self.re.algebraic_add(rhs.re), self.im.algebraic_add(rhs.im))
+    }
+    #[inline(always)]
+    fn algebraic_mul(self, rhs: Self) -> Self {
+        Self::new(
+            self.re
+                .algebraic_mul(rhs.re)
+                .algebraic_sub(self.im.algebraic_mul(rhs.im)),
+            self.re
+                .algebraic_mul(rhs.im)
+                .algebraic_add(self.im.algebraic_mul(rhs.re)),
+        )
+    }
+    #[inline(always)]
+    fn algebraic_div(self, rhs: Self) -> Self {
+        let denom = rhs
+            .re
+            .algebraic_mul(rhs.re)
+            .algebraic_add(rhs.im.algebraic_mul(rhs.im));
+
+        Self::new(
+            self.re
+                .algebraic_mul(rhs.re)
+                .algebraic_add(self.im.algebraic_mul(rhs.im))
+                .algebraic_div(denom),
+            self.im
+                .algebraic_mul(rhs.re)
+                .algebraic_sub(self.re.algebraic_mul(rhs.im))
+                .algebraic_div(denom),
+        )
+    }
+}
+
 /// TODO: make pub?
 #[inline(always)]
-pub(crate) fn algebraic_mul_complex_float<T: fir::AlgebraicOps + Copy>(
+pub(crate) fn algebraic_mul_complex_float<T: AlgebraicOps + Copy>(
     c: num_complex::Complex<T>,
     rhs: T,
 ) -> num_complex::Complex<T> {

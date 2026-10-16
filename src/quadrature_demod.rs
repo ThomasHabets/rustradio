@@ -1,8 +1,8 @@
 //! Quadrature demod, the core of an FM demodulator.
 
-use crate::block::{Block, BlockRet};
 #[allow(unused_imports)]
-use crate::fir::AlgebraicOps;
+use crate::AlgebraicOps;
+use crate::block::{Block, BlockRet};
 use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float, Result};
 
