@@ -1,5 +1,8 @@
 # Agent Notes
 
+* If an API is changed, don't reference how it changed or how it used to be, in
+  comments or documentation.
+
 ## Working as intended
 
 Do not change these.

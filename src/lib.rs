@@ -879,11 +879,6 @@ impl<T: std::fmt::Debug + Copy + Default + Send + Sync + 'static> Sample for T {
 /// need this trait when used with byte-oriented sources or sinks. Other byte
 /// orders and formats can be represented by sample newtypes.
 ///
-/// To migrate an existing custom sample, move the methods from its old `Sample`
-/// implementation into an implementation of this trait. `Sample` is automatic.
-/// Replace an old `size()` method with `ENCODED_SIZE`, and read its integer
-/// value using `Self::ENCODED_SIZE.get()`. Zero-width encodings are rejected:
-///
 /// ```compile_fail,E0080
 /// use rustradio::{Result, SampleEncoding};
 /// use std::num::NonZeroUsize;
