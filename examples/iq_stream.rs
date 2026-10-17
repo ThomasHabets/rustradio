@@ -32,7 +32,7 @@ async fn main() -> rustradio::Result<()> {
 
     // Connect before starting the finite graph. Both transports use the same
     // resource ID. A browser would use ws://ADDRESS/iq/v1/stream instead.
-    let (source, input, status) = IqStreamSource::<f32>::connect(
+    let (source, input, status) = IqStreamSource::<f32>::connect_async(
         format!("http://{address}"),
         "audio",
         StreamOptions::default(),

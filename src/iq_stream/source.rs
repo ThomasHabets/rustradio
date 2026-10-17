@@ -709,9 +709,24 @@ impl IqStreamStringSource {
             transport,
         ))
     }
+    /// Connect a native gRPC string download from synchronous code.
+    ///
+    /// Blocks until the handshake succeeds or fails. A dedicated runtime thread
+    /// drives the transport until completion, failure, or source cancellation.
+    /// Returns an error if runtime startup, connection, or negotiation fails.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn connect(
+        uri: impl Into<String>,
+        source: impl Into<String>,
+        options: StreamOptions,
+    ) -> Result<(Self, NCReadStream<String>, SourceHandle)> {
+        let open = options.open_strings(source)?;
+        super::native::connect_source_sync(uri.into(), open, options, Self::from_started)
+    }
+
     /// Connect a native gRPC string download. Requires a running Tokio runtime.
     #[cfg(not(target_arch = "wasm32"))]
-    pub async fn connect(
+    pub async fn connect_async(
         uri: impl Into<String>,
         source: impl Into<String>,
         options: StreamOptions,

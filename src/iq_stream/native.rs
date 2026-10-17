@@ -528,9 +528,24 @@ async fn websocket(
         })
 }
 impl<T: IqSample> IqStreamSource<T> {
+    /// Connect a native gRPC download from synchronous code.
+    ///
+    /// Blocks until the handshake succeeds or fails. A dedicated runtime thread
+    /// drives the transport until completion, failure, or source cancellation.
+    /// The returned handle contains the negotiated rate before the graph starts.
+    /// Returns an error if runtime startup, connection, or negotiation fails.
+    pub fn connect(
+        uri: impl Into<String>,
+        source: impl Into<String>,
+        options: StreamOptions,
+    ) -> crate::Result<(Self, crate::stream::ReadStream<T>, SourceHandle)> {
+        let open = options.open::<T>(source)?;
+        connect_source_sync(uri.into(), open, options, Self::from_started)
+    }
+
     /// Connect a native gRPC download source. Requires a running Tokio runtime.
     /// The returned handle contains the negotiated rate before the graph starts.
-    pub async fn connect(
+    pub async fn connect_async(
         uri: impl Into<String>,
         source: impl Into<String>,
         options: StreamOptions,
@@ -548,8 +563,62 @@ pub(super) async fn connect_source<B, O>(
         &StreamOptions,
     ) -> crate::Result<(B, O, SourceHandle, super::SourceTransport)>,
 ) -> crate::Result<(B, O, SourceHandle)> {
-    let endpoint =
-        tonic::transport::Endpoint::from_shared(uri.into()).map_err(|e| err(e.to_string()))?;
+    let (connection, _task) = start_source_connection(uri.into(), open, options, build).await?;
+    Ok(connection)
+}
+
+pub(super) fn connect_source_sync<B: Send + 'static, O: Send + 'static>(
+    uri: String,
+    open: proto::ClientMessage,
+    options: StreamOptions,
+    build: impl FnOnce(
+        proto::Started,
+        &StreamOptions,
+    ) -> crate::Result<(B, O, SourceHandle, super::SourceTransport)>
+    + Send
+    + 'static,
+) -> crate::Result<(B, O, SourceHandle)> {
+    let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("iq-stream-source".into())
+        .spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    let _ = ready_tx.send(Err(err(error.to_string())));
+                    return;
+                }
+            };
+            runtime.block_on(async move {
+                match start_source_connection(uri, open, options, build).await {
+                    Ok((connection, task)) => {
+                        if ready_tx.send(Ok(connection)).is_ok() {
+                            let _ = task.await;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = ready_tx.send(Err(error));
+                    }
+                }
+            });
+        })
+        .map_err(|e| err(e.to_string()))?;
+    ready_rx.recv().map_err(|e| err(e.to_string()))?
+}
+
+async fn start_source_connection<B, O>(
+    uri: String,
+    open: proto::ClientMessage,
+    options: StreamOptions,
+    build: impl FnOnce(
+        proto::Started,
+        &StreamOptions,
+    ) -> crate::Result<(B, O, SourceHandle, super::SourceTransport)>,
+) -> crate::Result<((B, O, SourceHandle), tokio::task::JoinHandle<()>)> {
+    let endpoint = tonic::transport::Endpoint::from_shared(uri).map_err(|e| err(e.to_string()))?;
     let endpoint = if endpoint.uri().scheme_str() == Some("https") {
         endpoint
             .tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
@@ -586,7 +655,7 @@ pub(super) async fn connect_source<B, O>(
     };
     let (block, out, handle, transport) = build(started, &options)?;
     let transport = Arc::new(transport);
-    tokio::spawn(async move {
+    let task = tokio::spawn(async move {
         let writer_transport = transport.clone();
         let writer = async move {
             while let Some(message) = writer_transport.next_control().await {
@@ -609,7 +678,7 @@ pub(super) async fn connect_source<B, O>(
             transport.fail(error.to_string());
         }
     });
-    Ok((block, out, handle))
+    Ok(((block, out, handle), task))
 }
 
 #[cfg(test)]
@@ -618,6 +687,90 @@ mod tests {
     use super::*;
     use crate::block::{Block, BlockRet};
     use crate::stream::{Tag, TagValue, new_stream};
+
+    #[test]
+    fn connect_roundtrip() -> crate::Result<()> {
+        use super::super::{IqStreamStringSink, IqStreamStringSource, SourceStatus};
+        use crate::stream::new_nocopy_stream;
+
+        // The caller has no entered Tokio runtime. Only the server uses this one.
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()?;
+        let server = IqServer::new();
+        let (write, read) = new_stream::<u8>()?;
+        let mut sink = IqStreamSink::builder(read, &server, "bytes", 48000.0).build()?;
+        let (tx, rx) = new_nocopy_stream();
+        let mut string_sink = IqStreamStringSink::builder(rx, &server, "strings", 10.0).build()?;
+        let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))?;
+        let address = listener.local_addr()?;
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let serving = runtime.spawn(async move {
+            server
+                .serve(listener, async {
+                    let _ = stopped.await;
+                })
+                .await
+        });
+        let uri = format!("http://{address}");
+        assert!(IqStreamSource::<u8>::connect(&uri, "missing", StreamOptions::default()).is_err());
+        let (mut source, output, handle) =
+            IqStreamSource::<u8>::connect(&uri, "bytes", StreamOptions::default())?;
+        let (mut string_source, strings, string_handle) =
+            IqStreamStringSource::connect(&uri, "strings", StreamOptions::default())?;
+        assert_eq!(handle.description().sample_rate_hz, 48000.0);
+        assert_eq!(string_handle.description().sample_rate_hz, 10.0);
+        let samples = [0, 127, 128, 255];
+        let tag = Tag::new(0, "marker", TagValue::Bool(true));
+        let mut buffer = write.write_buf()?;
+        buffer.slice()[..samples.len()].copy_from_slice(&samples);
+        buffer.produce(samples.len(), std::slice::from_ref(&tag));
+        drop(write);
+        for value in ["", "hello", "雪"] {
+            tx.push(value.into(), vec![tag.clone()]);
+        }
+        drop(tx);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while handle.status() != SourceStatus::Complete
+            || string_handle.status() != SourceStatus::Complete
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "sync roundtrip timed out"
+            );
+            sink.work()?;
+            source.work()?;
+            string_sink.work()?;
+            string_source.work()?;
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        let (buffer, tags) = output.read_buf()?;
+        assert_eq!(buffer.slice(), samples);
+        assert!(tags.contains(&tag));
+        buffer.consume(samples.len());
+        assert!(output.eof());
+        for expected in ["", "hello", "雪"] {
+            let (value, tags) = strings.pop().expect("string received");
+            assert_eq!(value, expected);
+            assert!(tags.contains(&tag));
+        }
+        assert!(strings.eof());
+        let _ = stop.send(());
+        runtime
+            .block_on(serving)
+            .map_err(|e| err(e.to_string()))??;
+        Ok(())
+    }
+
+    #[test]
+    fn connect_rejects_invalid_requests() {
+        use super::super::IqStreamStringSource;
+        for (uri, source) in [("invalid URI", "bytes"), ("http://127.0.0.1:1", "")] {
+            assert!(IqStreamSource::<u8>::connect(uri, source, StreamOptions::default()).is_err());
+            assert!(IqStreamStringSource::connect(uri, source, StreamOptions::default()).is_err());
+        }
+    }
 
     fn open<T: IqSample>(options: &StreamOptions, name: &str) -> proto::Open {
         match options.open::<T>(name).unwrap().body.unwrap() {
@@ -921,13 +1074,13 @@ mod tests {
                 })
                 .await
         });
-        let (mut source_a, out_a, handle_a) = IqStreamSource::<f32>::connect(
+        let (mut source_a, out_a, handle_a) = IqStreamSource::<f32>::connect_async(
             format!("http://{address}"),
             "real",
             StreamOptions::default(),
         )
         .await?;
-        let (mut source_b, out_b, handle_b) = IqStreamSource::<crate::Complex>::connect(
+        let (mut source_b, out_b, handle_b) = IqStreamSource::<crate::Complex>::connect_async(
             format!("http://{address}"),
             "iq",
             StreamOptions::default(),
@@ -1102,7 +1255,7 @@ mod tests {
                     .await
             });
             let (mut source, output, handle) =
-                IqStreamSource::<u8>::connect(format!("http://{address}"), "bytes", options)
+                IqStreamSource::<u8>::connect_async(format!("http://{address}"), "bytes", options)
                     .await?;
             let tags = if samples.is_empty() {
                 vec![]
@@ -1253,7 +1406,8 @@ mod tests {
             ..Default::default()
         };
         let (mut source, output, handle) =
-            IqStreamStringSource::connect(format!("http://{address}"), "strings", options).await?;
+            IqStreamStringSource::connect_async(format!("http://{address}"), "strings", options)
+                .await?;
         let mut ws = WsClient::connect(address).await?;
         ws.send(StreamOptions::default().open_strings("ws-strings")?)
             .await?;

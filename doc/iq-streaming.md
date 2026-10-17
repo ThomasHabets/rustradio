@@ -504,6 +504,13 @@ client. The adapters support `Float` and `Complex` in little-endian FLOAT32
 layout, and `u8` in UINT8/NOT_APPLICABLE/REAL encoding. Each `u8` is one sample,
 preserved without scaling or normalization. They support the five scalar
 RustRadio tag kinds and ACCEPTED completion.
+
+Native sample and string sources provide `connect(uri, source, options)`
+for synchronous callers. It returns the source, output stream, and status handle
+once negotiation succeeds. A dedicated runtime thread drives each connection
+until completion, failure, or source cancellation. Async callers can use
+`connect_async` on their running Tokio runtime.
+
 Uploads and DURABLE completion return `UNIMPLEMENTED`. Structured values,
 provenance and terminal tags are not accepted by graph sources.
 
