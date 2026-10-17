@@ -449,13 +449,15 @@ impl<'a> Parsed<'a> {
         let in_tag_names = self.in_tag_names();
         let first = &in_names[0];
         let rest = &in_names[1..];
+        // Equal-length slices keep iterator termination checks out of the
+        // sample loop and let LLVM vectorize independent samples.
         let it = if in_names.len() == 1 {
-            quote! { #first.iter().take(n) }
+            quote! { #first.slice()[..n].iter() }
         } else {
-            quote! { #first.iter().take(n)#(.zip(#rest.iter()))* }
+            quote! { #first.slice()[..n].iter()#(.zip(#rest.slice()[..n].iter()))* }
         };
         let write_samples = quote! {
-            for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice().iter_mut()),*) {
+            for ((#(#out_names_samp),*), #(#out_names,)*) in itertools::izip!(it, #(#out_names.slice()[..n].iter_mut()),*) {
                 (#(*#out_names),*) = (#(#out_names_samp),*);
             }
         };

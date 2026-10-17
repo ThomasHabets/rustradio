@@ -60,6 +60,53 @@ mod tests {
     }
 
     #[test]
+    fn plain_tee_respects_short_output_windows_and_preserves_tags() -> Result<()> {
+        use crate::stream::{TagValue, new_stream};
+
+        let (writer, input) = new_stream()?;
+        let (mut tee, first, second) = super::Tee::new(input)?;
+        let mut padding = tee.dst2.write_buf()?;
+        let padding_len = padding.len() - 2;
+        padding.slice()[..padding_len].fill(0u32);
+        padding.produce(padding_len, &[]);
+        let samples = [11, 22, 33, 44, 55];
+        let tags = [
+            Tag::new(1, "early", TagValue::Bool(true)),
+            Tag::new(2, "boundary", TagValue::Bool(true)),
+            Tag::new(4, "late", TagValue::Bool(true)),
+        ];
+        let mut input = writer.write_buf()?;
+        input.fill_from_slice(&samples);
+        input.produce(samples.len(), &tags);
+        drop(writer);
+
+        assert!(matches!(tee.work()?, BlockRet::WaitForStream(_, 1)));
+        assert!(matches!(tee.work()?, BlockRet::WaitForStream(_, 1)));
+        second.read_buf()?.0.consume(padding_len);
+        for output in [&first, &second] {
+            let (window, output_tags) = output.read_buf()?;
+            assert_eq!(window.slice(), &samples[..2]);
+            assert_eq!(output_tags, &tags[..1]);
+            window.consume(2);
+        }
+        tee.work()?;
+        for output in [&first, &second] {
+            let (window, output_tags) = output.read_buf()?;
+            assert_eq!(window.slice(), &samples[2..]);
+            assert_eq!(
+                output_tags,
+                [
+                    Tag::new(0, "boundary", TagValue::Bool(true)),
+                    Tag::new(2, "late", TagValue::Bool(true)),
+                ]
+            );
+            window.consume(3);
+        }
+        assert!(tee.src.eof());
+        Ok(())
+    }
+
+    #[test]
     fn simple() -> Result<()> {
         // Set up input.
         let samps: Vec<_> = (0..10).map(|i| i as Float).collect();

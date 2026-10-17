@@ -2,11 +2,11 @@
 
 extern crate rustradio;
 extern crate test;
-use rustradio::Complex;
 use rustradio::block::{Block, BlockRet};
 use rustradio::blocks::*;
 use rustradio::stream::new_stream;
 use rustradio::window::WindowType;
+use rustradio::Complex;
 
 use test::Bencher;
 
@@ -184,6 +184,11 @@ fn bench_tee_256(b: &mut Bencher) {
 #[bench]
 fn bench_tee_4096(b: &mut Bencher) {
     bench_tee(b, 4096);
+}
+
+#[bench]
+fn bench_tee_40960(b: &mut Bencher) {
+    bench_tee(b, 40960);
 }
 
 fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
