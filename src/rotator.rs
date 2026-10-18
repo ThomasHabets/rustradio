@@ -68,7 +68,7 @@ impl Block for Rotator {
             self.translator
                 .mix(&input.slice()[..n], &mut output.slice()[..n])?;
             let tags: Vec<_> = tags.into_iter().take_while(|tag| tag.pos() < n).collect();
-            output.produce(n, &tags);
+            output.produce(n, tags);
             input.consume(n);
         }
     }

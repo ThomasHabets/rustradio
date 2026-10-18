@@ -43,7 +43,7 @@ impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
                 .into_iter()
                 .take_while(|tag| tag.pos() < len)
                 .collect::<Vec<_>>();
-            o.produce(len, &tags);
+            o.produce(len, tags);
             i.consume(len);
         }
     }

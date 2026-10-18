@@ -601,7 +601,7 @@ impl Block for PwmEncoder {
         );
         debug_assert_ne!(n, 0);
         let done = self.active.as_ref().is_some_and(ActiveTransmission::done);
-        output.produce(n, &tags);
+        output.produce(n, tags);
         if done {
             self.active = None;
             if self.src.eof() {

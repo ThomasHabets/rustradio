@@ -108,7 +108,7 @@ impl Block for Hilbert {
             .into_iter()
             .take_while(|tag| tag.pos() < n)
             .collect::<Vec<_>>();
-        oo.produce(n, &tags);
+        oo.produce(n, tags);
 
         self.history.clone_from_slice(&iv[n..len]);
         ii.consume(n);

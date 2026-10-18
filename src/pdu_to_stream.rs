@@ -113,7 +113,7 @@ impl<T: Sample> Block for PduToStream<T> {
             if self.buf.is_empty() {
                 tags.push(Tag::new(n - 1, TAG_END, TagValue::U64(self.pdu_len)));
             }
-            o.produce(n, &tags);
+            o.produce(n, tags);
         }
     }
 }

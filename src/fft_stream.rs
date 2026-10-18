@@ -117,7 +117,7 @@ impl Block for FftStream {
         }
 
         input.consume(len);
-        o.produce(len, &tags);
+        o.produce(len, tags);
         Ok(BlockRet::Again)
     }
 }

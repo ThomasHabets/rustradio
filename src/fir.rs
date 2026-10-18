@@ -693,12 +693,12 @@ where
         tags.retain(|tag| tag.pos() < n);
         input.consume(n);
         if self.deci == 1 {
-            out.produce(out_n, &tags);
+            out.produce(out_n, tags);
         } else {
             for t in &mut tags {
                 t.set_pos(t.pos() / self.deci);
             }
-            out.produce(out_n, &tags);
+            out.produce(out_n, tags);
         }
         // While we could keep track of which stream is the constraining factor,
         // the code is simpler if work() is just called again, and the right

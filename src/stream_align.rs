@@ -340,8 +340,8 @@ impl<T: Sample, U: Sample> Block for StreamAlign<T, U> {
                 .output_tags(right_tags, count, anchor, gap);
             left_out.fill_from_slice(&left.slice()[..count]);
             right_out.fill_from_slice(&right.slice()[..count]);
-            left_out.produce(count, &left_tags);
-            right_out.produce(count, &right_tags);
+            left_out.produce(count, left_tags);
+            right_out.produce(count, right_tags);
             left.consume(count);
             right.consume(count);
             self.left_position.consumed(end);

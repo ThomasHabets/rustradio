@@ -106,7 +106,7 @@ impl<T: Sample> Block for Delay<T> {
                 .into_iter()
                 .take_while(|tag| tag.pos() < n)
                 .collect::<Vec<_>>();
-            o.produce(n, &tags);
+            o.produce(n, tags);
             input.consume(n);
         }
     }

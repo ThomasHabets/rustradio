@@ -643,7 +643,7 @@ impl<T: IqSample> IqStreamSource<T> {
             ) {
                 *sample = T::parse(bytes)?;
             }
-            output.produce(n, &tags);
+            output.produce(n, tags);
             *offset += n;
             progress = true;
             if *offset == chunk.sample_count as usize {

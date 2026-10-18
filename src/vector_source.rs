@@ -132,7 +132,7 @@ where
                 tags.push(Tag::new(tag.pos() - self.pos, tag.key(), tag.val().clone()));
             }
         });
-        os.produce(n, &tags);
+        os.produce(n, tags);
 
         self.pos += n;
         if self.pos == self.data.len() {

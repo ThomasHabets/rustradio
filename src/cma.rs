@@ -112,7 +112,7 @@ impl Block for CmaEqualizer {
             .into_iter()
             .take_while(|tag| tag.pos() < len)
             .collect::<Vec<_>>();
-        output.produce(len, &tags);
+        output.produce(len, tags);
         input.consume(len);
 
         Ok(BlockRet::Again)

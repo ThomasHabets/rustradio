@@ -376,7 +376,7 @@ impl<T: Engine> Block for FftFilter<T> {
             self.buf.clear();
         }
         input.consume(consumed);
-        output.produce(produced, &output_tags);
+        output.produce(produced, output_tags);
         Ok(if wait_for_output {
             BlockRet::WaitForStream(&self.dst, self.nsamples)
         } else {
@@ -469,7 +469,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
                 .into_iter()
                 .take_while(|tag| tag.pos() < n)
                 .collect::<Vec<_>>();
-            inner_to.produce(n, &tags);
+            inner_to.produce(n, tags);
             outer_in.consume(n);
         }
 
@@ -495,7 +495,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
                 .take_while(|tag| tag.pos() < n)
                 .collect::<Vec<_>>();
             inner_from.consume(n);
-            outer_to.produce(n, &tags);
+            outer_to.produce(n, tags);
         }
 
         // Replace the inner stream wait with an outer stream wait.
