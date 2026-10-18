@@ -520,6 +520,15 @@ impl<'a> Parsed<'a> {
             impl #impl_generics #path::block::Block for #name #ty_generics #where_clause {
                 fn work(&mut self) -> #path::Result<#path::block::BlockRet> {
                     loop {
+                        // First check if there's input. Acquiring a read buffer
+                        // is more expensive than aquiring a write buf, but it
+                        // is expected that the source stream is empty way more
+                        // often than the output buffer being full.
+                        //
+                        // The output buffer should only be full if the machine
+                        // is overloaded, and if it's overloaded, then we're
+                        // already failing, and the small optimization won't
+                        // noticeably let us catch up faster.
                         #(let #in_names = self.#in_names.read_buf()?;)*
                         #(let #in_tag_names = #in_names.1;)*
                         #(let #in_names = #in_names.0;
@@ -531,6 +540,7 @@ impl<'a> Parsed<'a> {
                         let n = [#(#in_names.len()),*].iter().fold(usize::MAX, |min, &x|min.min(x));
                         assert_ne!(n, 0, "Input stream len 0, but we already checked that.");
 
+                        // Acquire all output buffers.
                         #(let mut #out_names = self.#out_names.write_buf()?;
                           if #out_names.len() == 0 {
                               return Ok(#path::block::BlockRet::WaitForStream(&self.#out_names, 1));
