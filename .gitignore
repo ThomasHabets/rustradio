@@ -20,3 +20,4 @@ wb2osz/
 tmp/
 *.swo
 TODO
+*.zst
