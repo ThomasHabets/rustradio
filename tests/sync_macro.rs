@@ -189,3 +189,72 @@ fn plain_sync_discards_tags_from_other_inputs() -> Result<()> {
     assert!(difference.read_buf()?.1.is_empty());
     Ok(())
 }
+
+#[derive(rustradio_macros::Block)]
+#[rustradio(new, sync_tag)]
+struct GeneratedTags {
+    #[rustradio(in)]
+    src: ReadStream<u32>,
+    #[rustradio(out)]
+    first: WriteStream<u32>,
+    #[rustradio(out)]
+    second: WriteStream<u32>,
+}
+
+impl GeneratedTags {
+    fn process_sync_tags(
+        &self,
+        sample: u32,
+        _: &[Tag],
+    ) -> (u32, Cow<'static, [Tag]>, u32, Vec<Tag>) {
+        (
+            sample,
+            Cow::Owned(vec![tag(0, &format!("first-{sample}"))]),
+            sample,
+            vec![
+                tag(0, &format!("second-{sample}")),
+                tag(0, &format!("duplicate-{sample}")),
+            ],
+        )
+    }
+}
+
+#[test]
+fn owned_callback_tags_keep_positions_and_order_across_batches() -> Result<()> {
+    for input_tags in [vec![], vec![tag(0, "input")]] {
+        let source = input(&[10, 20, 30], &input_tags)?;
+        let (mut block, first, second) = GeneratedTags::new(source)?;
+        let filler = fill_output(&block.first)?;
+        for (samples, padding) in [(&[10, 20][..], filler), (&[30][..], 0)] {
+            block.work()?;
+            let (window, tags) = first.read_buf()?;
+            assert_eq!(&window.slice()[padding..], samples);
+            assert_eq!(
+                tags,
+                samples
+                    .iter()
+                    .enumerate()
+                    .map(|(pos, sample)| { tag(padding + pos, &format!("first-{sample}")) })
+                    .collect::<Vec<_>>()
+            );
+            window.consume(padding + samples.len());
+            let (window, tags) = second.read_buf()?;
+            assert_eq!(window.slice(), samples);
+            assert_eq!(
+                tags,
+                samples
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(pos, sample)| {
+                        [
+                            tag(pos, &format!("second-{sample}")),
+                            tag(pos, &format!("duplicate-{sample}")),
+                        ]
+                    })
+                    .collect::<Vec<_>>()
+            );
+            window.consume(samples.len());
+        }
+    }
+    Ok(())
+}

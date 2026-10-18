@@ -463,6 +463,7 @@ impl<'a> Parsed<'a> {
         };
         let first_tags = &in_tag_names[0];
         let process = if matches!(self.attrs.sync, SyncBlock::Value) {
+            let (last_output, other_outputs) = out_names.split_last().unwrap();
             quote! {
                 let it = #it.map(|(#(#in_names),*)| self.process_sync(#(*#in_names),*));
                 #write_samples
@@ -472,7 +473,8 @@ impl<'a> Parsed<'a> {
                 #first_tags.truncate(#first_tags.partition_point(|tag| tag.pos() < n));
                 #(let _ = &#in_tag_names;)*
                 #(#in_names.consume(n);)*
-                #(#out_names.produce(n, &#first_tags);)*
+                #(#other_outputs.produce(n, &#first_tags);)*
+                #last_output.produce(n, #first_tags);
             }
         } else {
             let tag_iters: Vec<syn::Ident> = in_tag_names
@@ -481,9 +483,23 @@ impl<'a> Parsed<'a> {
                 .collect();
             let process_sample = quote! {
                 let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
-                #(for tag in #out_tag_names_tmp.iter() {
-                    #out_tag_names.push(#path::stream::Tag::new(pos, tag.key(), tag.val().clone()));
-                })*
+                #(
+                    let #out_tag_names_tmp: std::borrow::Cow<'_, [#path::stream::Tag]> = #out_tag_names_tmp.into();
+                    match #out_tag_names_tmp {
+                        std::borrow::Cow::Borrowed(tags) => {
+                            #out_tag_names.extend(tags.iter().cloned().map(|mut tag| {
+                                tag.set_pos(pos);
+                                tag
+                            }));
+                        }
+                        std::borrow::Cow::Owned(tags) => {
+                            #out_tag_names.extend(tags.into_iter().map(|mut tag| {
+                                tag.set_pos(pos);
+                                tag
+                            }));
+                        }
+                    }
+                )*
                 (#(#out_names),*)
             };
             quote! {
@@ -513,7 +529,7 @@ impl<'a> Parsed<'a> {
                     #write_samples
                 }
                 #(#in_names.consume(n);)*
-                #(#out_names.produce(n, &#out_tag_names);)*
+                #(#out_names.produce(n, #out_tag_names);)*
             }
         };
         Some(quote! {
