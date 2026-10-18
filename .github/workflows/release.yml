@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release, e.g. 1.2.3"
+        description: "Version to release, e.g. 1.2.3 (defaults to next version)"
         required: false
         type: string
 
@@ -30,6 +30,16 @@ jobs:
         run: test "$RELEASE_BRANCH" = main
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Download test fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download test-data-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern fixtures.tar.zst
+          sha256sum -c tests/fixtures.sha256
+          tar --zstd -xf fixtures.tar.zst
 
       - name: Cargo install
         run: cargo install --locked tickbox cargo-semver-checks
