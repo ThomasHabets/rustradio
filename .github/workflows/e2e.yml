@@ -1,0 +1,30 @@
+# tar -I 'zstd -T0 -19' -cf fixtures.tar.zst tests/testdata/
+# sha256sum fixtures.tar.zst > tests/fixtures.sha256
+# gh release create test-data-v${N?} fixtures.tar.zst --title "E2E test fixtures v${N?}" --notes "Test input data for end-to-end tests."
+# Then update the version number in the workflow below.
+name: E2E tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Download test fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download test-data-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern fixtures.tar.zst
+          sha256sum -c tests/fixtures.sha256
+          tar --zstd -xf fixtures.tar.zst
+      - name: Run E2E tests
+        run: cargo test --locked --workspace --release -- --ignored
