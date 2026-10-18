@@ -158,6 +158,34 @@ fn bench_fir_filter(b: &mut Bencher) {
     });
 }
 
+fn bench_tee(b: &mut Bencher, samples_per_batch: usize) {
+    let samples = vec![Complex::new(0.3, -0.7); samples_per_batch];
+    let (writer, input) = new_stream().unwrap();
+    let (mut tee, first, second) = Tee::new(input).unwrap();
+    b.bytes = std::mem::size_of_val(samples.as_slice()) as u64;
+    b.iter(|| {
+        let mut window = writer.write_buf().unwrap();
+        window.fill_from_slice(&samples);
+        window.produce(samples.len(), &[]);
+        assert!(matches!(tee.work().unwrap(), BlockRet::WaitForStream(_, 1)));
+        for output in [&first, &second] {
+            let (window, _) = output.read_buf().unwrap();
+            std::hint::black_box(window.slice());
+            window.consume(samples.len());
+        }
+    });
+}
+
+#[bench]
+fn bench_tee_256(b: &mut Bencher) {
+    bench_tee(b, 256);
+}
+
+#[bench]
+fn bench_tee_4096(b: &mut Bencher) {
+    bench_tee(b, 4096);
+}
+
 fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
     use rustradio::stream::{Tag, TagValue};
     use std::borrow::Cow;
