@@ -101,7 +101,7 @@ impl Block for FftStream {
             self.fft
                 .process_with_scratch(&mut oo[..len], &mut self.scratch);
         }
-        let mut tags = Vec::with_capacity((len / self.size) * 2);
+        let mut tags = Vec::with_capacity((len / self.size) * 3);
         for pos in (0..len).step_by(self.size) {
             tags.push(Tag::new(
                 pos,
