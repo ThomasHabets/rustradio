@@ -49,7 +49,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev libpipewire-0.3-dev libvolk-dev libuhd-dev
 
-      - name: Commit version bump
+      - name: Run release
         env:
           MANUAL_VERSION: ${{ inputs.version }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
