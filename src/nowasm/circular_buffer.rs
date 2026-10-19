@@ -178,6 +178,8 @@ struct BufferState {
     tags: StreamTags,
     reader_active: bool,
     writer_active: bool,
+    // The write endpoint is gone; a checked-out window may still commit.
+    producer_closed: bool,
 }
 
 impl BufferState {
@@ -361,10 +363,17 @@ impl<T: Copy> BufferWriter<T> {
 
 impl<T> Drop for BufferWriter<T> {
     fn drop(&mut self) {
-        if !self.released
-            && let Ok(mut state) = self.parent.state.lock.lock()
-        {
+        if !self.released {
+            let mut state = self
+                .parent
+                .state
+                .lock
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
             state.writer_active = false;
+            if state.producer_closed {
+                self.parent.metadata.set_ended();
+            }
         }
     }
 }
@@ -445,6 +454,7 @@ impl<T> Buffer<T> {
                     tags: StreamTags::default(),
                     reader_active: false,
                     writer_active: false,
+                    producer_closed: false,
                 }),
                 cv: Condvar::new(),
                 #[cfg(feature = "async")]
@@ -461,6 +471,14 @@ impl<T> Buffer<T> {
     #[must_use]
     pub(crate) fn metadata(&self) -> &crate::stream_metadata::Metadata {
         &self.metadata
+    }
+
+    pub(crate) fn close_writer(&self) {
+        let mut state = self.state.lock.lock().unwrap_or_else(|p| p.into_inner());
+        state.producer_closed = true;
+        if !state.writer_active {
+            self.metadata.set_ended();
+        }
     }
 
     #[must_use]
@@ -602,6 +620,9 @@ impl<T: Copy> Buffer<T> {
         let mut s = self.state.lock.lock().unwrap();
         if n == 0 {
             s.writer_active = false;
+            if s.producer_closed {
+                self.metadata.set_ended();
+            }
             if !tags.is_empty() {
                 error!("produce() called on a stream with 0 entries, but non-empty tags: {tags:?}");
             }
@@ -623,6 +644,9 @@ impl<T: Copy> Buffer<T> {
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
         s.writer_active = false;
+        if s.producer_closed {
+            self.metadata.set_ended();
+        }
         self.state.cv.notify_all();
         #[cfg(feature = "async")]
         self.state.acvr.notify_waiters();

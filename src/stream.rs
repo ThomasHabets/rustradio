@@ -220,6 +220,7 @@ impl<T: Default + Copy> ReadStream<T> {
         let mut wb = circ.clone().write_buf().unwrap();
         wb.fill_from_slice(data);
         wb.produce(data.len(), &[]);
+        circ.close_writer();
         Self { circ }
     }
 
@@ -640,6 +641,18 @@ impl<T: Len> NCReadStream<T> {
     }
 }
 
+impl<T> Drop for WriteStream<T> {
+    fn drop(&mut self) {
+        self.circ.close_writer();
+    }
+}
+
+impl<T> Drop for NCWriteStream<T> {
+    fn drop(&mut self) {
+        self.inner.metadata.set_ended();
+    }
+}
+
 macro_rules! stream_metadata {
     ($stream:ident, $field:ident) => {
         impl<T> $stream<T> {
@@ -687,6 +700,93 @@ impl<T> NCInner<T> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn producer_completion_does_not_wait_for_buffered_data_or_read_windows() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        assert!(!reader.circ.metadata().ended());
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&[1, 2]);
+        window.produce(2, &[]);
+        let (reading, _) = reader.read_buf()?;
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&[3, 4]);
+        drop(writer);
+        assert!(!reader.circ.metadata().ended());
+        window.produce(2, [Tag::new(0, "last", TagValue::Bool(true))].as_slice());
+        assert!(reader.circ.metadata().ended());
+        assert_eq!(reading.slice(), &[1, 2]);
+        drop(reading);
+        assert!(!reader.eof());
+        let (reading, tags) = reader.read_buf()?;
+        assert_eq!(reading.slice(), &[1, 2, 3, 4]);
+        assert_eq!(tags, [Tag::new(2, "last", TagValue::Bool(true))]);
+        reading.consume(4);
+        assert!(reader.eof());
+        Ok(())
+    }
+
+    #[test]
+    fn producer_completion_waits_for_dropped_or_zero_length_write_windows() -> Result<()> {
+        for produce_zero in [false, true] {
+            let (writer, reader) = new_stream::<u8>()?;
+            let window = writer.write_buf()?;
+            drop(writer);
+            assert!(!reader.circ.metadata().ended());
+            if produce_zero {
+                window.produce(0, &[]);
+            } else {
+                drop(window);
+            }
+            assert!(reader.circ.metadata().ended());
+            assert!(reader.eof());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn producer_completion_requires_writer_drop() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        drop(writer.write_buf()?);
+        assert!(!reader.circ.metadata().ended());
+        writer.write_buf()?.produce(0, &[]);
+        assert!(!reader.circ.metadata().ended());
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&[1]);
+        window.produce(1, &[]);
+        assert!(!reader.circ.metadata().ended());
+        reader.read_buf()?.0.consume(1);
+        drop(writer);
+        assert!(reader.circ.metadata().ended());
+        assert!(reader.eof());
+        Ok(())
+    }
+
+    #[test]
+    fn producer_completion_survives_write_window_unwinding() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        let mut window = writer.write_buf()?;
+        window.fill_from_slice(&[1]);
+        drop(writer);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            window.produce(1, [Tag::new(1, "invalid", TagValue::Bool(true))].as_slice());
+        }));
+        assert!(result.is_err());
+        assert!(reader.circ.metadata().ended());
+        Ok(())
+    }
+
+    #[test]
+    fn nocopy_producer_completion_precedes_queue_drain() {
+        let (writer, reader) = new_nocopy_stream::<String>();
+        assert!(!reader.inner.metadata.ended());
+        writer.push("message".into(), []);
+        drop(writer);
+        assert!(reader.inner.metadata.ended());
+        assert!(!reader.eof());
+        assert_eq!(reader.pop().unwrap().0, "message");
+        assert!(reader.eof());
+    }
 
     #[test]
     fn copy_read_wait_distinguishes_readiness_timeout_and_closure() -> Result<()> {

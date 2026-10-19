@@ -79,6 +79,8 @@ struct BufferState<T> {
     write_cache: Option<Vec<T>>,
     read_cache: Vec<T>,
     reader_active: bool,
+    // The write endpoint is gone; a checked-out window may still commit.
+    producer_closed: bool,
 
     // Extra accounting to ensure that we never read uninitialized content.
     #[cfg(debug_assertions)]
@@ -112,6 +114,7 @@ impl<T: Default> BufferState<T> {
             write_cache: Some(std::iter::repeat_with(T::default).take(size).collect()),
             read_cache: Vec::new(),
             reader_active: false,
+            producer_closed: false,
 
             #[cfg(debug_assertions)]
             initialized: vec![false; size],
@@ -191,6 +194,14 @@ impl<T: Default + Copy> Buffer<T> {
 impl<T> Buffer<T> {
     pub(crate) fn metadata(&self) -> &crate::stream_metadata::Metadata {
         &self.metadata
+    }
+
+    pub(crate) fn close_writer(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        state.producer_closed = true;
+        if state.write_cache.is_some() {
+            self.metadata.set_ended();
+        }
     }
 
     pub fn id(&self) -> usize {
@@ -449,15 +460,20 @@ impl<T: Copy> BufferWriter<T> {
             tags.into(),
         );
         state.write_cache = self.stream.take();
+        if state.producer_closed {
+            self.parent.metadata.set_ended();
+        }
     }
 }
 
 impl<T> Drop for BufferWriter<T> {
     fn drop(&mut self) {
-        if let Some(stream) = self.stream.take()
-            && let Ok(mut state) = self.parent.state.lock()
-        {
+        if let Some(stream) = self.stream.take() {
+            let mut state = self.parent.state.lock().unwrap_or_else(|p| p.into_inner());
             state.write_cache = Some(stream);
+            if state.producer_closed {
+                self.parent.metadata.set_ended();
+            }
         }
     }
 }
