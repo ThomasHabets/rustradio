@@ -3,7 +3,7 @@ use rustradio::Result;
 use rustradio::stream::{Tag, TagValue, new_nocopy_stream, new_stream};
 
 #[test]
-fn names_are_shared_and_explicit_names_are_preserved() -> Result<()> {
+fn names_are_shared_and_duplicates_are_disambiguated() -> Result<()> {
     let (writer, reader) = new_stream::<u8>()?;
     let (messages, receiver) = new_nocopy_stream::<String>();
     let original = reader.name();
@@ -13,18 +13,22 @@ fn names_are_shared_and_explicit_names_are_preserved() -> Result<()> {
     assert_eq!(messages.name(), receiver.name());
     let writer = writer.with_name("");
     assert_eq!(writer.name(), original);
-    let reader = reader.with_name("filtered");
-    assert_eq!(writer.name(), "filtered");
-    let writer = writer.with_name(String::from("output"));
-    assert_eq!(reader.name(), "output");
+    let filtered = format!("filtered-{original}");
+    let output = format!("output-{original}");
+    let reader = reader.with_name(&filtered);
+    assert_eq!(writer.name(), filtered);
+    let writer = writer.with_name(output.clone());
+    assert_eq!(reader.name(), output);
     let reader = reader.with_name("");
-    assert_eq!(reader.name(), "output");
-    assert_eq!(writer.name(), "output");
-    let messages = messages.with_name("output");
-    assert_eq!(messages.name(), "output");
-    assert_eq!(receiver.name(), "output");
-    let _receiver = receiver.with_name("messages");
-    assert_eq!(messages.name(), "messages");
+    assert_eq!(reader.name(), output);
+    assert_eq!(writer.name(), output);
+    let messages = messages.with_name(&output);
+    assert_ne!(messages.name(), output);
+    assert!(messages.name().starts_with(&output));
+    assert_eq!(receiver.name(), messages.name());
+    let name = format!("messages-{original}");
+    let _receiver = receiver.with_name(&name);
+    assert_eq!(messages.name(), name);
     Ok(())
 }
 
@@ -109,8 +113,9 @@ fn blockchain_arguments_accept_metadata() -> Result<()> {
         AddConst::new(prev.with_name("input").with_sample_rate(48_000.)?, 2.)?,
     ];
     assert_eq!(output.sample_rate(), None);
-    let output = output.with_name("filtered").with_sample_rate(48_000.)?;
-    assert_eq!(output.name(), "filtered");
+    let name = format!("filtered-{}", output.name());
+    let output = output.with_name(&name).with_sample_rate(48_000.)?;
+    assert_eq!(output.name(), name);
     assert_eq!(output.sample_rate(), Some(48_000.));
     Ok(())
 }

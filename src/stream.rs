@@ -6,9 +6,10 @@ streams, and write to zero or more output streams.
 Both endpoints share a generated name such as `stream-42` and an optional sample
 rate. Use `with_name("filtered")` and `with_sample_rate(48_000.)?` when connecting
 blocks, including in `blockchain!` constructor arguments. Read metadata with
-`name()` and `sample_rate()`. Explicit names may repeat; empty naming requests
-leave the name unchanged. Rates must be finite and positive; blocks do not infer
-or propagate them.
+`name()` and `sample_rate()`. Duplicate names receive a unique suffix; empty
+naming requests leave the name unchanged. Rates must be finite and positive;
+blocks do not infer or propagate them. Use [`streams()`] to list live process streams and their
+metadata. The inventory does not keep stream buffers or endpoints alive.
 */
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
@@ -401,7 +402,7 @@ struct NCEntry<T> {
 }
 
 struct NCInner<T> {
-    metadata: crate::stream_metadata::Metadata,
+    metadata: Arc<crate::stream_metadata::Metadata>,
     lock: Mutex<VecDeque<NCEntry<T>>>,
     cv: Condvar,
     capacity: usize,
@@ -521,7 +522,7 @@ pub struct NCWriteStream<T> {
 pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
     let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let inner = Arc::new(NCInner {
-        metadata: crate::stream_metadata::Metadata::new(id),
+        metadata: crate::stream_metadata::Metadata::new::<T>(id, true),
         lock: Mutex::new(VecDeque::new()),
         cv: Condvar::new(),
         capacity: DEFAULT_NOCOPY_CAPACITY,
@@ -653,6 +654,8 @@ impl<T> Drop for NCWriteStream<T> {
     }
 }
 
+pub use crate::stream_registry::{StreamInfo, streams};
+
 macro_rules! stream_metadata {
     ($stream:ident, $field:ident) => {
         impl<T> $stream<T> {
@@ -662,7 +665,7 @@ macro_rules! stream_metadata {
                 self.$field.metadata().name()
             }
             /// Name this stream. Both endpoints share the name.
-            /// Names are stored as supplied; duplicates are allowed.
+            /// Duplicate names receive a unique suffix; read `name()` for the result.
             /// Empty names leave the metadata unchanged.
             #[must_use]
             pub fn with_name(self, name: impl Into<String>) -> Self {

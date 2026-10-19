@@ -395,7 +395,7 @@ struct BufferInner {
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
-    metadata: crate::stream_metadata::Metadata,
+    metadata: Arc<crate::stream_metadata::Metadata>,
     id: usize,
     state: Arc<BufferInner>,
     circ: Circ,
@@ -443,7 +443,7 @@ impl<T> Buffer<T> {
         let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(Self {
             id,
-            metadata: crate::stream_metadata::Metadata::new(id),
+            metadata: crate::stream_metadata::Metadata::new::<T>(id, false),
             state: Arc::new(BufferInner {
                 lock: Mutex::new(BufferState {
                     rpos: 0,
