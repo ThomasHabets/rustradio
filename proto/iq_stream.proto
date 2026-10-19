@@ -22,6 +22,8 @@ service IqStreaming {
   // Record outgoing phase/grant changes before awaiting transport writes:
   // opposite-direction responses may arrive before a write completes.
   rpc Stream(stream ClientMessage) returns (stream ServerMessage);
+  // Discover explicitly registered IQ download streams.
+  rpc ListStreams(ListStreamsRequest) returns (ListStreamsResponse);
 }
 
 // The first client message must be Open. Other messages depend on direction.
@@ -447,4 +449,16 @@ message Cancel {
 message Failure {
   uint32 grpc_status_code = 1;        // A standard non-OK gRPC status, 1..16.
   string message = 2;
+}
+
+// Snapshot of explicitly registered IQ download streams.
+message ListStreamsRequest {}
+// A response is limited to 4096 entries and 2 MiB encoded bytes.
+message ListStreamsResponse { repeated StreamInfo streams = 1; }
+message StreamInfo {
+  string name = 1;             // Unique exposed name used for download.
+  bool messages = 2;          // Individually owned messages rather than samples.
+  optional double sample_rate_hz = 3; // Absent when unknown.
+  bool ended = 4;
+  Encoding encoding = 5;      // Sample or message format accepted by Open.
 }

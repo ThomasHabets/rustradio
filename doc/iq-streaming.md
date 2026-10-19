@@ -803,3 +803,18 @@ Compile the schema without adding a repository dependency:
 protoc -I proto -I /usr/include --include_imports \
   --descriptor_set_out=/tmp/iq_stream.pb proto/iq_stream.proto
 ```
+
+
+## Listing IQ streams
+
+`IqServer::streams()` lists the IQ sinks explicitly registered with that server,
+ordered by name. Clients can also use `GET /iq/v1/streams` (a JSON array) or the
+unary gRPC `rustradio.iq.v1.IqStreaming/ListStreams` RPC.
+
+Each entry contains the download name, message/sample distinction, sample rate,
+producer completion state, and the structured `Encoding` used by
+`Open.accepted_encodings`. Use the name in `Open.download.source` to download
+from that sink. Ended sinks remain listed with `ended = true` and reject new
+download sessions.
+
+A gRPC response permits at most 4096 entries and 2 MiB encoded bytes.

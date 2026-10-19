@@ -50,6 +50,12 @@ fn inspect(
     if depth > 256 {
         return Err(err("protobuf recursion limit"));
     }
+    if schema == STREAM_INFO {
+        budget.nodes += 1;
+        if budget.nodes > 4096 {
+            return Err(err("IQ catalog entry limit"));
+        }
+    }
     let tags = tags + usize::from(schema == TAG_VALUE);
     if tags > 32 {
         return Err(err("IQ tag nesting limit"));
@@ -158,6 +164,25 @@ pub(super) fn decode<T: Message + Default>(bytes: &[u8], client: bool) -> Result
         message,
         frame_bytes: budget.frame_bytes,
     })
+}
+// Catalogs have a fixed, shallow schema, but unknown protobuf groups must still
+// be rejected before prost's recursion-limit-free decoder sees the request.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn decode_catalog<T: Message + Default>(bytes: &[u8], schema: usize) -> Result<T> {
+    if bytes.len() > MAX_ENVELOPE {
+        return Err(err("IQ catalog byte limit"));
+    }
+    inspect(
+        bytes,
+        schema,
+        0,
+        0,
+        &mut Budget {
+            nodes: 0,
+            frame_bytes: None,
+        },
+    )?;
+    T::decode(bytes).map_err(|e| err(format!("invalid IQ catalog: {e}")))
 }
 /// Decode a binary WebSocket client envelope, enforcing allocation budgets.
 pub fn decode_client(bytes: &[u8]) -> Result<Decoded<super::proto::ClientMessage>> {

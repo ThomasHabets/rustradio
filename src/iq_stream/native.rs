@@ -30,6 +30,32 @@ impl IqServer {
     pub fn new() -> Self {
         Self::default()
     }
+    /// List this server's explicitly registered IQ download streams by name.
+    pub fn streams(&self) -> Vec<proto::StreamInfo> {
+        let mut entries = Vec::new();
+        let manual = self.resources.lock().unwrap_or_else(|p| p.into_inner());
+        for (name, resource) in manual.iter() {
+            let state = resource.lock();
+            entries.push(proto::StreamInfo {
+                name: name.clone(),
+                encoding: state.description.encoding.clone(),
+                messages: state
+                    .description
+                    .encoding
+                    .as_ref()
+                    .is_some_and(|e| e.component_type == proto::ComponentType::Utf8 as i32),
+                sample_rate_hz: Some(state.description.sample_rate_hz),
+                ended: state.eof,
+            });
+        }
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        entries
+    }
+    pub(super) fn catalog(&self) -> proto::ListStreamsResponse {
+        proto::ListStreamsResponse {
+            streams: self.streams(),
+        }
+    }
     pub(super) fn register(&self, name: String, resource: Arc<Resource>) -> crate::Result<()> {
         let mut resources = self.resources.lock().unwrap_or_else(|p| p.into_inner());
         if resources.contains_key(&name) {
@@ -66,6 +92,10 @@ impl IqServer {
     pub fn router(&self) -> axum::Router {
         let grpc = super::rpc::RpcServer(self.clone());
         tonic::service::Routes::new(grpc).into_axum_router()
+            .route("/iq/v1/streams", axum::routing::get({
+                let server = self.clone();
+                move || { let server = server.clone(); async move { axum::Json(server.streams()) } }
+            }))
             .route("/iq/v1/stream", axum::routing::get({
                 let server = self.clone();
                 move |ws: WebSocketUpgrade, cancel: Option<axum::Extension<tokio::sync::watch::Receiver<bool>>>| {
@@ -1497,3 +1527,7 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "catalog_tests.rs"]
+mod catalog_tests;

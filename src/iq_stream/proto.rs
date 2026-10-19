@@ -144,7 +144,7 @@ pub struct StreamDescription {
     pub uses_tag_source_ids: bool,
 }
 
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, ::serde::Serialize, ::serde::Deserialize)]
 pub struct Encoding {
     #[prost(enumeration = "ComponentType", tag = "1")]
     pub component_type: i32,
@@ -346,6 +346,29 @@ pub struct Failure {
     pub grpc_status_code: u32,
     #[prost(string, tag = "2")]
     pub message: String,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListStreamsRequest {}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListStreamsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub streams: Vec<StreamInfo>,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message, ::serde::Serialize, ::serde::Deserialize)]
+pub struct StreamInfo {
+    #[prost(string, tag = "1")]
+    pub name: String,
+    #[prost(bool, tag = "2")]
+    pub messages: bool,
+    #[prost(double, optional, tag = "3")]
+    pub sample_rate_hz: Option<f64>,
+    #[prost(bool, tag = "4")]
+    pub ended: bool,
+    #[prost(message, optional, tag = "5")]
+    pub encoding: Option<Encoding>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ::prost::Enumeration)]

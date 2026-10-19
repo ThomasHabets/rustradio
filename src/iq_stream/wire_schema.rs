@@ -51,7 +51,7 @@ pub(super) const SCHEMA: &[&[(u32, usize, bool, u8)]] = &[
         (2, 0, false, 0),
         (3, 0, true, 0),
         (4, 0, false, 0),
-        (5, 28, false, 0),
+        (5, 31, false, 0),
         (6, 0, false, 0),
         (7, 0, false, 0),
         (8, 10, true, 0),
@@ -104,6 +104,15 @@ pub(super) const SCHEMA: &[&[(u32, usize, bool, u8)]] = &[
     &[(1, 0, false, 0), (2, 0, false, 0), (3, 0, false, 0)], // Complete
     &[(1, 0, false, 0)],                   // Cancel
     &[(1, 0, false, 0), (2, 0, false, 0)], // Failure
+    &[],                                   // ListStreamsRequest
+    &[(1, 30, true, 0)],                   // ListStreamsResponse
+    &[
+        (1, 0, false, 0),
+        (2, 0, false, 0),
+        (3, 0, false, 0),
+        (4, 0, false, 0),
+        (5, 9, false, 0),
+    ], // StreamInfo
     &[(1, 0, false, 0), (2, 0, false, 0)], // Timestamp
 ];
 pub(super) const CLIENT_MESSAGE: usize = 1;
@@ -111,3 +120,8 @@ pub(super) const SERVER_MESSAGE: usize = 2;
 pub(super) const FRAME: usize = 11;
 pub(super) const TAG_VALUE: usize = 15;
 pub(super) const TAG: usize = 14;
+pub(super) const STREAM_INFO: usize = 30;
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) const LIST_STREAMS_REQUEST: usize = 28;
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) const LIST_STREAMS_RESPONSE: usize = 29;

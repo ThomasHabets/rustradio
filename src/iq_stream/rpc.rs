@@ -203,6 +203,26 @@ where
             }
         }
         let server = self.0.clone();
+        if req.uri().path() == LIST_PATH {
+            struct ListService(super::IqServer);
+            impl tonic::server::UnaryService<proto::ListStreamsRequest> for ListService {
+                type Response = proto::ListStreamsResponse;
+                type Future = BoxFuture<Response<Self::Response>, Status>;
+                fn call(&mut self, _: Request<proto::ListStreamsRequest>) -> Self::Future {
+                    let catalog = self.0.catalog();
+                    Box::pin(async move { Ok(Response::new(catalog)) })
+                }
+            }
+            return Box::pin(async move {
+                let mut grpc = tonic::server::Grpc::new(CatalogCodec::<
+                    proto::ListStreamsResponse,
+                    proto::ListStreamsRequest,
+                >::default())
+                .max_decoding_message_size(MAX_CONTROL)
+                .max_encoding_message_size(MAX_ENVELOPE);
+                Ok(grpc.unary(ListService(server), req).await)
+            });
+        }
         if req.uri().path() != RPC_PATH {
             return Box::pin(async {
                 Ok(http::Response::builder()
@@ -226,4 +246,107 @@ where
 }
 impl tonic::server::NamedService for RpcServer {
     const NAME: &'static str = "rustradio.iq.v1.IqStreaming";
+}
+
+pub(super) const LIST_PATH: &str = "/rustradio.iq.v1.IqStreaming/ListStreams";
+
+pub(super) trait CatalogMessage: Message + Default {
+    const SCHEMA: usize;
+    fn validate(&self) -> Result<(), Status> {
+        Ok(())
+    }
+}
+impl CatalogMessage for proto::ListStreamsRequest {
+    const SCHEMA: usize = super::wire_schema::LIST_STREAMS_REQUEST;
+}
+impl CatalogMessage for proto::ListStreamsResponse {
+    const SCHEMA: usize = super::wire_schema::LIST_STREAMS_RESPONSE;
+    fn validate(&self) -> Result<(), Status> {
+        if self.streams.len() > 4096 {
+            return Err(Status::resource_exhausted("IQ catalog entry limit"));
+        }
+        Ok(())
+    }
+}
+
+// Catalogs use the same schema scan as streaming messages, with a separate byte
+// limit and at most 4096 entries rather than the streaming control budget.
+#[derive(Default)]
+pub(super) struct CatalogCodec<E, D>(PhantomData<(E, D)>);
+pub(super) struct CatalogEncoder<T>(PhantomData<T>);
+pub(super) struct CatalogDecoder<T>(PhantomData<T>);
+impl<E: CatalogMessage + Send + 'static, D: CatalogMessage + Send + 'static> tonic::codec::Codec
+    for CatalogCodec<E, D>
+{
+    type Encode = E;
+    type Decode = D;
+    type Encoder = CatalogEncoder<E>;
+    type Decoder = CatalogDecoder<D>;
+    fn encoder(&mut self) -> Self::Encoder {
+        CatalogEncoder(PhantomData)
+    }
+    fn decoder(&mut self) -> Self::Decoder {
+        CatalogDecoder(PhantomData)
+    }
+}
+impl<T: CatalogMessage> tonic::codec::Encoder for CatalogEncoder<T> {
+    type Item = T;
+    type Error = Status;
+    fn encode(&mut self, item: T, dst: &mut tonic::codec::EncodeBuf<'_>) -> Result<(), Status> {
+        if item.encoded_len() > MAX_ENVELOPE {
+            return Err(Status::resource_exhausted("IQ catalog byte limit"));
+        }
+        item.validate()?;
+        item.encode(dst)
+            .map_err(|e| Status::internal(e.to_string()))
+    }
+}
+impl<T: CatalogMessage> tonic::codec::Decoder for CatalogDecoder<T> {
+    type Item = T;
+    type Error = Status;
+    fn decode(&mut self, src: &mut tonic::codec::DecodeBuf<'_>) -> Result<Option<T>, Status> {
+        use prost::bytes::Buf;
+        if src.remaining() > MAX_ENVELOPE {
+            return Err(Status::resource_exhausted("IQ catalog byte limit"));
+        }
+        let bytes = src.copy_to_bytes(src.remaining());
+        super::wire::decode_catalog::<T>(&bytes, T::SCHEMA)
+            .map(Some)
+            .map_err(|e| Status::invalid_argument(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalog_rejects_groups_before_prost_decode() {
+        assert!(
+            super::super::wire::decode_catalog::<proto::ListStreamsRequest>(
+                &[0x0b, 0x0b, 0x0c, 0x0c],
+                proto::ListStreamsRequest::SCHEMA
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn catalog_entry_budget_is_checked_before_allocation() {
+        let mut bytes = [10, 0].repeat(4096);
+        let response = super::super::wire::decode_catalog::<proto::ListStreamsResponse>(
+            &bytes,
+            proto::ListStreamsResponse::SCHEMA,
+        )
+        .unwrap();
+        assert_eq!(response.streams.len(), 4096);
+        bytes.extend_from_slice(&[10, 0]);
+        assert!(
+            super::super::wire::decode_catalog::<proto::ListStreamsResponse>(
+                &bytes,
+                proto::ListStreamsResponse::SCHEMA
+            )
+            .is_err()
+        );
+    }
 }
