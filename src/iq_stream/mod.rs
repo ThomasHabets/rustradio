@@ -8,7 +8,7 @@
 //! Native graphs use gRPC clients and a shared gRPC/WebSocket server. Browser
 //! workers use the WebSocket client in `rustradio-ui`. All queues are bounded;
 //! graph `work()` methods never wait on sockets. Native servers can expose live
-//! numeric streams with `IqServer::register_all_streams`, without additional
+//! sample and String streams with `IqServer::register_all_streams`, without additional
 //! graph sinks. See `doc/iq-streaming.md`.
 
 #[allow(clippy::large_enum_variant)]

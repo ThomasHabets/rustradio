@@ -21,7 +21,7 @@ impl SamplePool {
             capacity,
         }
     }
-    fn take(&self, bytes: usize) -> Vec<u8> {
+    pub(super) fn take(&self, bytes: usize) -> Vec<u8> {
         let mut buffer = self
             .buffers
             .lock()

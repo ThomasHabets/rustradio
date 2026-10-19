@@ -811,9 +811,9 @@ protoc -I proto -I /usr/include --include_imports \
 
 `IqServer::streams()` lists the IQ sinks explicitly registered with that server,
 ordered by name. Calling `IqServer::register_all_streams()` also exposes current
-and future live copying streams of `Float`, `Complex`, and `u8`, including streams
-with generated names. Clients can also use `GET /iq/v1/streams` (a JSON array) or the
-unary gRPC `rustradio.iq.v1.IqStreaming/ListStreams` RPC.
+and future live copying streams of `Float`, `Complex`, and `u8`, plus no-copy
+`String` streams, including streams with generated names. Clients can also use
+`GET /iq/v1/streams` (a JSON array) or the unary gRPC `rustradio.iq.v1.IqStreaming/ListStreams` RPC.
 
 Each entry contains the download name, message/sample distinction, sample rate,
 producer completion state, and the structured `Encoding` used by
@@ -825,6 +825,13 @@ longer alive. Unsupported stream types are omitted from automatic discovery.
 Automatic observation requires `ALLOW_GAPS`. It attaches at producer commits
 after the download opens, without replaying buffered samples. The primary
 consumer receives its ordinary samples and tags independently of the observer.
+
+String observation preserves each pushed message as one frame, including empty
+strings. UTF-8 text, embedded NULs, and position-zero tags are preserved. Loss
+counts and reconnect positions count messages rather than bytes. A message and
+its tags must fit in one negotiated frame; an encoding error terminates that
+observer session while leaving the primary queue unchanged.
+
 No tap sink or Tee is needed, and streams without subscribers do not copy or
 encode samples for IQ download.
 
@@ -844,3 +851,15 @@ observed stream gets a unique alias in that server's listing. Clients should
 use the listed name when opening a download.
 
 A gRPC response permits at most 4096 entries and 2 MiB encoded bytes.
+
+The [iq_observer example](../examples/iq_observer.rs) serves named complex streams
+from an ordinary running graph:
+
+```sh
+cargo run --features unstable --example iq_observer
+```
+
+Open `http://127.0.0.1:50051/iq/v1/streams` for the catalog. Downloads use the same
+gRPC and WebSocket endpoints as registered sinks, with `ALLOW_GAPS`. Pass a
+listen address as the example's first argument to choose another interface or
+port. Stop the example with Ctrl-C.

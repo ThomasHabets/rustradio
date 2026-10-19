@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 use std::sync::Arc;
 
-use super::sink::{Resource, Session, queue_numeric};
+use super::sink::{Resource, Session, queue_numeric, queue_string};
 use super::{IqSample, proto};
 use crate::stream::Tag;
 use crate::stream_observer::{Kind, Observer, TypedControl};
@@ -30,7 +30,13 @@ pub(super) struct Tap {
     pub _metadata: Arc<crate::stream_metadata::Metadata>,
 }
 impl Tap {
-    fn observe<T: IqSample>(&self, input: &[T], tags: &[Tag], absolute: u64) -> crate::Result<()> {
+    fn observe(
+        &self,
+        count: usize,
+        tags: &[Tag],
+        absolute: u64,
+        queue: impl FnOnce(&Resource, &mut Session, &[Tag]) -> crate::Result<()>,
+    ) -> crate::Result<()> {
         let mut state = self.resource.lock();
         if state.stopped {
             return Ok(());
@@ -56,19 +62,17 @@ impl Tap {
                 sorted.sort_by_key(|tag| tag.pos());
                 &sorted
             };
-            if let Err(error) = numeric(&self.resource, session, input, tags, absolute) {
+            if let Err(error) = queue(&self.resource, session, tags) {
                 session.failure = Some(error.to_string());
             }
         }
-        state.position = super::advance(absolute, input.len() as u64)?;
+        state.position = super::advance(absolute, count as u64)?;
         drop(state);
         self.resource.notify.notify_one();
         Ok(())
     }
-}
-impl<T: IqSample> Observer<T> for Tap {
-    fn samples(&self, samples: &[T], tags: &[Tag], absolute: u64) {
-        if let Err(error) = self.observe(samples, tags, absolute) {
+    fn record_failure(&self, result: crate::Result<()>) {
+        if let Err(error) = result {
             if let Some(session) = self
                 .resource
                 .lock()
@@ -81,9 +85,56 @@ impl<T: IqSample> Observer<T> for Tap {
             self.resource.notify.notify_one();
         }
     }
-    fn end(&self) {
+    fn finish(&self) {
         self.resource.lock().eof = true;
         self.resource.notify.notify_one();
+    }
+}
+impl<T: IqSample> Observer<T> for Tap {
+    fn samples(&self, samples: &[T], tags: &[Tag], absolute: u64) {
+        self.record_failure(self.observe(
+            samples.len(),
+            tags,
+            absolute,
+            |resource, session, tags| numeric(resource, session, samples, tags, absolute),
+        ));
+    }
+    fn end(&self) {
+        self.finish();
+    }
+}
+impl Observer<String> for Tap {
+    fn samples(&self, messages: &[String], tags: &[Tag], absolute: u64) {
+        self.record_failure(self.observe(
+            messages.len(),
+            tags,
+            absolute,
+            |resource, session, tags| {
+                let [message] = messages else {
+                    return Err(super::err(
+                        "String observations require one message per push",
+                    ));
+                };
+                if tags.iter().any(|tag| tag.pos() != 0) {
+                    return Err(super::err("IQ string tags must have position zero"));
+                }
+                // Reject an oversized borrowed payload before allocating a copy.
+                // Full queues discard messages without copying or encoding them.
+                if session.queue.len() < session.limits.max_in_flight_frames as usize
+                    && message.len() > session.limits.max_frame_bytes as usize
+                {
+                    return Err(super::err("IQ string and tags exceed frame limit"));
+                }
+                queue_string(session, tags, absolute, || {
+                    let mut bytes = resource.pool.take(message.len());
+                    bytes.extend_from_slice(message.as_bytes());
+                    bytes
+                })
+            },
+        ));
+    }
+    fn end(&self) {
+        self.finish();
     }
 }
 fn numeric<T: IqSample>(
@@ -111,6 +162,7 @@ pub(super) fn encoding(kind: Kind) -> Option<proto::Encoding> {
         Kind::Float => crate::Float::encoding(),
         Kind::Complex => crate::Complex::encoding(),
         Kind::U8 => u8::encoding(),
-        Kind::String | Kind::Unsupported => return None,
+        Kind::String => super::string_encoding(),
+        Kind::Unsupported => return None,
     })
 }

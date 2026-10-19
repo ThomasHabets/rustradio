@@ -42,14 +42,15 @@ impl IqServer {
     pub fn new() -> Self {
         Self::default()
     }
-    /// Expose current and future Float, Complex, and u8 streams for IQ download.
+    /// Expose live Float, Complex, and u8 samples and owned String messages
+    /// for IQ download.
     /// Clients must select ALLOW_GAPS. Observation starts at producer commits
     /// after connection, without replay or changes to the primary consumer.
     pub fn register_all_streams(&self) {
         self.automatic.store(true, Ordering::Release);
     }
 
-    /// Discover registered sinks and, when enabled, supported live numeric streams.
+    /// Discover registered sinks and, when enabled, supported live process streams.
     pub fn streams(&self) -> Vec<proto::StreamInfo> {
         self.catalog_entries()
             .into_iter()
@@ -297,20 +298,27 @@ impl IqServer {
             Kind::U8 => {
                 self.open_observed::<u8>(id, entry.name, open.loss_policy, limits, download)
             }
-            _ => Err(Status::unimplemented("stream type has no IQ encoding")),
+            Kind::String => {
+                self.open_observed::<String>(id, entry.name, open.loss_policy, limits, download)
+            }
+            Kind::Unsupported => Err(Status::unimplemented("stream type has no IQ encoding")),
         }
     }
-    fn open_observed<T: IqSample>(
+    fn open_observed<T: 'static>(
         &self,
         id: usize,
         name: String,
         loss_policy: i32,
         limits: proto::Limits,
         download: proto::Download,
-    ) -> Result<(Connection, proto::Started), Status> {
+    ) -> Result<(Connection, proto::Started), Status>
+    where
+        super::observer::Tap: Observer<T>,
+    {
         let (metadata, control) = crate::stream_registry::lookup::<T>(id)
             .ok_or_else(|| Status::not_found("unknown source"))?;
-        let encoding = T::encoding();
+        let encoding = super::observer::encoding(metadata.kind)
+            .ok_or_else(|| Status::unimplemented("stream type has no IQ encoding"))?;
         let info = metadata.info();
         let resource = {
             let mut resources = self.observed.lock().unwrap();

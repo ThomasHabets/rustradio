@@ -183,3 +183,7 @@ required-features = ["unstable"]
 [[example]]
 name = "iq_waterfall"
 required-features = ["unstable"]
+
+[[example]]
+name = "iq_observer"
+required-features = ["unstable"]

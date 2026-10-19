@@ -1,6 +1,6 @@
 use super::*;
 use crate::block::Block;
-use crate::stream::{StreamWait, Tag, TagValue, new_stream};
+use crate::stream::{StreamWait, Tag, TagValue, new_nocopy_stream, new_stream};
 
 fn options() -> StreamOptions {
     StreamOptions {
@@ -514,7 +514,7 @@ fn automatic_catalog_lifetime_rates_and_supported_types() -> crate::Result<()> {
     drop(rx);
     assert!(server.streams().iter().all(|s| s.name != name));
     let (_tx, custom) = new_stream::<u64>()?;
-    let (_tx, messages) = crate::stream::new_nocopy_stream::<String>();
+    let (_tx, messages) = crate::stream::new_nocopy_stream::<Vec<u8>>();
     assert!(
         server
             .streams()
@@ -624,4 +624,267 @@ fn observer_aliases_do_not_steal_other_process_stream_names() -> crate::Result<(
             .any(|entry| entry.name == format!("{alias}-2"))
     );
     Ok(())
+}
+
+#[tokio::test]
+async fn string_observers_preserve_messages_and_primary_refcounts() {
+    let server = IqServer::new();
+    server.register_all_streams();
+    let (tx, rx) = new_nocopy_stream::<String>();
+    tx.push("before".into(), []);
+    let tags = vec![Tag::new(0, "label", TagValue::String("雪\0🦀".into()))];
+    let Some(proto::client_message::Body::Open(request)) =
+        options().open_strings(rx.name()).unwrap().body
+    else {
+        unreachable!()
+    };
+    let entry = server
+        .streams()
+        .into_iter()
+        .find(|entry| entry.name == rx.name())
+        .unwrap();
+    assert!(entry.messages);
+    assert_eq!(entry.encoding, Some(super::super::string_encoding()));
+    assert_eq!(entry.sample_rate_hz, None);
+    let (connection, started) = server.open(request).unwrap();
+    let description = started.description.unwrap();
+    assert_eq!(description.source_sample_offset, Some(1));
+    assert_eq!(description.sample_rate_hz, 0.);
+    credit(&connection, 8);
+    for message in ["", "雪", "hello", ""] {
+        tx.push(message.into(), tags.as_slice());
+    }
+    drop(tx);
+    assert_eq!(rx.pop().unwrap().0, "before");
+    for (index, message) in ["", "雪", "hello", ""].into_iter().enumerate() {
+        assert_eq!(rx.pop().unwrap(), (message.to_owned(), tags.clone()));
+        let proto::server_message::Body::Frame(frame) = next(&connection).await else {
+            panic!("frame")
+        };
+        let Some(proto::frame::Body::Chunk(chunk)) = frame.body else {
+            panic!("chunk")
+        };
+        assert_eq!(chunk.sample_count, 1);
+        assert_eq!(chunk.samples, message.as_bytes());
+        assert_eq!(chunk.first_sample, index as u64);
+        let tag = chunk.tags.iter().find(|tag| tag.key == "label").unwrap();
+        assert_eq!(tag.sample_index, index as u64);
+        assert_eq!(
+            tag.value.as_ref().unwrap().kind,
+            Some(proto::tag_value::Kind::StringValue("雪\0🦀".into()))
+        );
+    }
+    assert!(rx.eof());
+    assert!(matches!(
+        next(&connection).await,
+        proto::server_message::Body::End(_)
+    ));
+}
+
+#[tokio::test]
+async fn automatic_strings_over_both_transports() -> crate::Result<()> {
+    use super::super::{IqStreamStringSource, SourceStatus};
+    let server = IqServer::new();
+    server.register_all_streams();
+    let (tx, rx) = new_nocopy_stream::<String>();
+    let (ws_tx, ws_rx) = new_nocopy_stream::<String>();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let address = listener.local_addr()?;
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let serving = tokio::spawn(async move {
+        server
+            .serve(listener, async {
+                let _ = stopped.await;
+            })
+            .await
+    });
+    let (mut source, out, handle) =
+        IqStreamStringSource::connect_async(format!("http://{address}"), rx.name(), options())
+            .await?;
+    let mut ws = super::tests::WsClient::connect(address).await?;
+    ws.send(options().open_strings(ws_rx.name())?).await?;
+    assert!(matches!(
+        ws.receive().await?.unwrap().message.body,
+        Some(proto::server_message::Body::Started(_))
+    ));
+    ws.send(proto::ClientMessage {
+        body: Some(proto::client_message::Body::FlowControl(
+            proto::FlowControl { send_limit: 8 },
+        )),
+    })
+    .await?;
+    let messages = ["", "雪\0🦀", "hello", ""];
+    for message in messages {
+        tx.push(message.into(), []);
+        ws_tx.push(message.into(), []);
+    }
+    drop((tx, ws_tx));
+    let websocket = tokio::spawn(async move {
+        let mut received = vec![];
+        let mut complete = false;
+        while let Some(message) = ws.receive().await? {
+            match message.message.body.unwrap() {
+                proto::server_message::Body::Frame(frame) => {
+                    let Some(proto::frame::Body::Chunk(chunk)) = frame.body else {
+                        panic!("chunk")
+                    };
+                    assert_eq!(chunk.sample_count, 1);
+                    received.push(String::from_utf8(chunk.samples).unwrap());
+                }
+                proto::server_message::Body::End(end) => {
+                    ws.send(proto::ClientMessage {
+                        body: Some(proto::client_message::Body::Complete(proto::Complete {
+                            next_sequence: end.next_sequence,
+                            next_sample: end.next_sample,
+                            completion_mode: proto::CompletionMode::Accepted as i32,
+                        })),
+                    })
+                    .await?;
+                }
+                proto::server_message::Body::Complete(_) => complete = true,
+                other => panic!("unexpected message: {other:?}"),
+            }
+        }
+        assert!(complete);
+        assert_eq!(received, messages);
+        Ok::<_, crate::Error>(())
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while handle.status() != SourceStatus::Complete {
+            source.work()?;
+            tokio::task::yield_now().await;
+        }
+        Ok::<_, crate::Error>(())
+    })
+    .await
+    .unwrap()?;
+    websocket.await.unwrap()?;
+    for message in messages {
+        assert_eq!(out.pop().unwrap().0, message);
+        assert_eq!(rx.pop().unwrap().0, message);
+        assert_eq!(ws_rx.pop().unwrap().0, message);
+    }
+    let _ = stop.send(());
+    serving.await.unwrap()?;
+    Ok(())
+}
+
+fn open_strings(
+    server: &IqServer,
+    name: &str,
+    options: &StreamOptions,
+) -> (Connection, proto::Started) {
+    let Some(proto::client_message::Body::Open(request)) = options.open_strings(name).unwrap().body
+    else {
+        unreachable!()
+    };
+    server.open(request).unwrap()
+}
+
+#[tokio::test]
+async fn string_observer_overflow_counts_messages_and_reconnects_without_replay() {
+    let server = IqServer::new();
+    server.register_all_streams();
+    let (tx, rx) = new_nocopy_stream::<String>();
+    let mut opts = options();
+    opts.limits = proto::Limits {
+        max_frame_bytes: 256,
+        max_in_flight_frames: 1,
+    };
+    let (connection, _) = open_strings(&server, &rx.name(), &opts);
+    credit(&connection, 1);
+    let messages = [
+        String::new(),
+        "雪\0🦀".into(),
+        "lost".repeat(256),
+        String::new(),
+    ];
+    for message in &messages {
+        tx.push(message.clone(), []);
+    }
+    let proto::server_message::Body::Frame(frame) = next(&connection).await else {
+        panic!("frame")
+    };
+    let Some(proto::frame::Body::Chunk(chunk)) = frame.body else {
+        panic!("chunk")
+    };
+    assert_eq!(chunk.sample_count, 1);
+    assert!(chunk.samples.is_empty());
+    credit(&connection, 2);
+    let proto::server_message::Body::Frame(frame) = next(&connection).await else {
+        panic!("gap frame")
+    };
+    let Some(proto::frame::Body::Gap(gap)) = frame.body else {
+        panic!("gap")
+    };
+    assert_eq!((gap.first_sample, gap.sample_count), (1, 3));
+    drop(connection);
+    tx.push("disconnected".into(), []);
+    let (connection, started) = open_strings(&server, &rx.name(), &opts);
+    assert_eq!(started.description.unwrap().source_sample_offset, Some(5));
+    tx.push("".into(), []);
+    drop(tx);
+    credit(&connection, 1);
+    let proto::server_message::Body::Frame(frame) = next(&connection).await else {
+        panic!("frame")
+    };
+    let Some(proto::frame::Body::Chunk(chunk)) = frame.body else {
+        panic!("chunk")
+    };
+    assert_eq!(chunk.first_sample, 0);
+    assert_eq!(chunk.sample_count, 1);
+    assert!(chunk.samples.is_empty());
+    assert!(matches!(
+        next(&connection).await,
+        proto::server_message::Body::End(proto::End { next_sample: 1, .. })
+    ));
+    for message in messages
+        .iter()
+        .map(String::as_str)
+        .chain(["disconnected", ""])
+    {
+        assert_eq!(rx.pop().unwrap().0, message);
+    }
+    assert!(rx.eof());
+}
+
+#[tokio::test]
+async fn string_observer_errors_preserve_primary_messages_and_allow_reconnect() {
+    for (message, tags) in [
+        ("large".repeat(200), vec![]),
+        (
+            "tagged".into(),
+            vec![Tag::new(1, "invalid", TagValue::Bool(true))],
+        ),
+    ] {
+        let server = IqServer::new();
+        server.register_all_streams();
+        let (tx, rx) = new_nocopy_stream::<String>();
+        let mut opts = options();
+        opts.limits.max_frame_bytes = 256;
+        let (connection, _) = open_strings(&server, &rx.name(), &opts);
+        tx.push(message.clone(), tags.as_slice());
+        assert_eq!(
+            connection.next().await.err().unwrap().code(),
+            tonic::Code::DataLoss
+        );
+        assert_eq!(rx.pop().unwrap(), (message, tags));
+        assert!(!rx.closed());
+        drop(connection);
+        let (connection, started) = open_strings(&server, &rx.name(), &opts);
+        assert_eq!(started.description.unwrap().source_sample_offset, Some(1));
+        credit(&connection, 8);
+        tx.push(String::new(), []);
+        drop(tx);
+        assert!(matches!(
+            next(&connection).await,
+            proto::server_message::Body::Frame(_)
+        ));
+        assert!(matches!(
+            next(&connection).await,
+            proto::server_message::Body::End(_)
+        ));
+        assert_eq!(rx.pop().unwrap().0, "");
+        assert!(rx.eof());
+    }
 }

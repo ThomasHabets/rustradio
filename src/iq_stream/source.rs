@@ -18,7 +18,8 @@ use prost::Message;
 pub struct StreamOptions {
     /// Receiver's requested frame and credit bounds.
     pub limits: proto::Limits,
-    /// Must match the sink: LOSSLESS for blocking, ALLOW_GAPS otherwise.
+    /// LOSSLESS for blocking sinks; ALLOW_GAPS for nonblocking sinks and
+    /// automatic stream observers.
     pub loss_policy: proto::LossPolicy,
 }
 impl Default for StreamOptions {
