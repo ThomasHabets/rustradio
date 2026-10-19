@@ -2,7 +2,7 @@ use super::observer::{Subscription, TypedSubscription};
 use crate::stream_metadata::Metadata;
 use crate::stream_observer::{Kind, Observer};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 
 use axum::extract::{
@@ -29,9 +29,15 @@ use super::{
 #[derive(Clone, Default)]
 pub struct IqServer {
     resources: Arc<Mutex<HashMap<String, Arc<Resource>>>>,
-    automatic: Arc<AtomicBool>,
+    automatic: Arc<AtomicU8>,
     stopped: Arc<AtomicBool>,
     observed: Arc<Mutex<HashMap<usize, ObservedResource>>>,
+}
+#[repr(u8)]
+enum AutomaticStreams {
+    Disabled = 0,
+    Named,
+    All,
 }
 struct ObservedResource {
     metadata: Weak<Metadata>,
@@ -47,7 +53,19 @@ impl IqServer {
     /// Clients must select ALLOW_GAPS. Observation starts at producer commits
     /// after connection, without replay or changes to the primary consumer.
     pub fn register_all_streams(&self) {
-        self.automatic.store(true, Ordering::Release);
+        self.automatic
+            .store(AutomaticStreams::All as u8, Ordering::Release);
+    }
+
+    /// Expose supported streams with explicit names, including streams created
+    /// or named after this call. Generated names alone do not qualify.
+    ///
+    /// Selects named-only automatic discovery and new downloads. Existing
+    /// sessions continue, and manually registered sinks remain available.
+    /// Clients must select ALLOW_GAPS, as with `register_all_streams`.
+    pub fn register_named_streams(&self) {
+        self.automatic
+            .store(AutomaticStreams::Named as u8, Ordering::Release);
     }
 
     /// Discover registered sinks and, when enabled, supported live process streams.
@@ -62,12 +80,16 @@ impl IqServer {
             .lock()
             .unwrap()
             .retain(|_, r| r.metadata.strong_count() > 0);
-        let mut entries = if self.automatic.load(Ordering::Acquire) {
+        let automatic = self.automatic.load(Ordering::Acquire);
+        let mut entries = if automatic != AutomaticStreams::Disabled as u8 {
             crate::stream_registry::registered()
                 .into_iter()
                 .filter_map(|metadata| {
                     let encoding = super::observer::encoding(metadata.kind)?;
                     let info = metadata.info();
+                    if automatic == AutomaticStreams::Named as u8 && info.name.is_none() {
+                        return None;
+                    }
                     Some((
                         proto::StreamInfo {
                             name: info.name(),
@@ -271,7 +293,7 @@ impl IqServer {
         if let Some(resource) = manual {
             return Self::open_resource(resource, open.loss_policy, limits, download);
         }
-        if !self.automatic.load(Ordering::Acquire) {
+        if self.automatic.load(Ordering::Acquire) == AutomaticStreams::Disabled as u8 {
             return Err(Status::not_found("unknown source"));
         }
         let (entry, id) = self

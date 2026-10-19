@@ -815,6 +815,14 @@ and future live copying streams of `Float`, `Complex`, and `u8`, plus no-copy
 `String` streams, including streams with generated names. Clients can also use
 `GET /iq/v1/streams` (a JSON array) or the unary gRPC `rustradio.iq.v1.IqStreaming/ListStreams` RPC.
 
+Use `IqServer::register_named_streams()` to expose only supported streams with
+explicit names from `with_name()`. This also includes streams created or named
+later. A generated name alone does not qualify; unnamed streams are excluded
+from discovery and cannot be opened by guessing their generated name.
+Manually registered sinks remain available in either mode. Calling either
+registration function selects its mode for discovery and new downloads;
+existing sessions continue.
+
 Each entry contains the download name, message/sample distinction, sample rate,
 producer completion state, and the structured `Encoding` used by
 `Open.accepted_encodings`. Use the name in `Open.download.source` to download

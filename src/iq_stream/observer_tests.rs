@@ -888,3 +888,96 @@ async fn string_observer_errors_preserve_primary_messages_and_allow_reconnect() 
         assert!(rx.eof());
     }
 }
+
+#[test]
+fn named_registration_tracks_current_and_future_explicit_names() -> crate::Result<()> {
+    let server = IqServer::new();
+    let (_tx, unnamed) = new_stream::<u8>()?;
+    let (_tx, named) = new_stream::<f32>()?;
+    let name = format!("named-{}", named.name());
+    let named = named.with_name(name);
+    server.register_named_streams();
+    let entries = server.streams();
+    assert!(entries.iter().any(|entry| entry.name == named.name()));
+    assert!(entries.iter().all(|entry| entry.name != unnamed.name()));
+
+    let (_tx, messages) = new_nocopy_stream::<String>();
+    let generated = messages.name();
+    assert!(server.streams().iter().all(|entry| entry.name != generated));
+    let messages = messages.with_name("");
+    assert!(server.streams().iter().all(|entry| entry.name != generated));
+    // An explicitly assigned name qualifies even if it looks generated.
+    let messages = messages.with_name(&generated);
+    let entry = server
+        .streams()
+        .into_iter()
+        .find(|entry| entry.name == generated)
+        .unwrap();
+    assert!(entry.messages);
+    let (_connection, _) = open_strings(&server, &messages.name(), &options());
+    Ok(())
+}
+
+#[test]
+fn named_registration_controls_new_downloads_and_preserves_manual_sinks() -> crate::Result<()> {
+    let server = IqServer::new();
+    let clone = server.clone();
+    let (_tx, unnamed) = new_stream::<u8>()?;
+    let request = || {
+        let Some(proto::client_message::Body::Open(request)) =
+            options().open::<u8>(unnamed.name()).unwrap().body
+        else {
+            unreachable!()
+        };
+        request
+    };
+    clone.register_named_streams();
+    assert_eq!(
+        server.open(request()).err().unwrap().code(),
+        tonic::Code::NotFound
+    );
+
+    let (_tx, manual) = new_stream::<u8>()?;
+    let manual_name = format!("manual-{}", manual.name());
+    let _sink = super::super::IqStreamSink::builder(manual, &server, &manual_name, 1.).build()?;
+    assert!(
+        server
+            .streams()
+            .iter()
+            .any(|entry| entry.name == manual_name)
+    );
+    let (connection, _) = open::<u8>(&server, &manual_name, &StreamOptions::default());
+    drop(connection);
+
+    clone.register_all_streams();
+    assert!(
+        server
+            .streams()
+            .iter()
+            .any(|entry| entry.name == unnamed.name())
+    );
+    let (connection, _) = server.open(request()).unwrap();
+    clone.register_named_streams();
+    assert!(
+        server
+            .streams()
+            .iter()
+            .all(|entry| entry.name != unnamed.name())
+    );
+    assert_eq!(
+        server.open(request()).err().unwrap().code(),
+        tonic::Code::NotFound
+    );
+    // Selecting a discovery mode does not terminate an existing session.
+    assert_eq!(
+        connection
+            .resource
+            .lock()
+            .active
+            .as_ref()
+            .unwrap()
+            .generation,
+        connection.generation
+    );
+    Ok(())
+}
