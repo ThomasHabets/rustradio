@@ -85,12 +85,22 @@ async fn catalog_over_http_and_grpc() -> crate::Result<()> {
             .await
     });
     let mut http = tokio::net::TcpStream::connect(addr).await.unwrap();
-    http.write_all(b"GET /iq/v1/streams HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+    http.write_all(b"GET /iq/v1/streams HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost:8080\r\nConnection: close\r\n\r\n")
         .await
         .unwrap();
     let mut response = String::new();
     http.read_to_string(&mut response).await.unwrap();
     assert!(response.starts_with("HTTP/1.1 200"));
+    let headers = response
+        .split_once("\r\n\r\n")
+        .unwrap()
+        .0
+        .to_ascii_lowercase();
+    assert!(
+        headers
+            .lines()
+            .any(|line| line == "access-control-allow-origin: *")
+    );
     let body: serde_json::Value = serde_json::from_str(response.split_once("\r\n\r\n").unwrap().1)?;
     let entry = body
         .as_array()

@@ -211,7 +211,12 @@ impl IqServer {
         tonic::service::Routes::new(grpc).into_axum_router()
             .route("/iq/v1/streams", axum::routing::get({
                 let server = self.clone();
-                move || { let server = server.clone(); async move { axum::Json(server.streams()) } }
+                move || { let server = server.clone(); async move {
+                    (
+                        [(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")],
+                        axum::Json(server.streams()),
+                    )
+                } }
             }))
             .route("/iq/v1/stream", axum::routing::get({
                 let server = self.clone();

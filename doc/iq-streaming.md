@@ -814,6 +814,9 @@ ordered by name. Calling `IqServer::register_all_streams()` also exposes current
 and future live copying streams of `Float`, `Complex`, and `u8`, plus no-copy
 `String` streams, including streams with generated names. Clients can also use
 `GET /iq/v1/streams` (a JSON array) or the unary gRPC `rustradio.iq.v1.IqStreaming/ListStreams` RPC.
+The HTTP catalog allows cross-origin browser reads with
+`Access-Control-Allow-Origin: *`; it does not enable credentialed cross-origin
+requests.
 
 Use `IqServer::register_named_streams()` to expose only supported streams with
 explicit names from `with_name()`. This also includes streams created or named
