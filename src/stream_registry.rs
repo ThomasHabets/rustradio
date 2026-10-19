@@ -48,15 +48,21 @@ pub(crate) fn registry() -> &'static Mutex<Registry> {
 /// streams. Returned snapshots do not retain their stream's registration.
 #[must_use]
 pub fn streams() -> Vec<StreamInfo> {
-    let mut registry = registry().lock().unwrap();
-    registry.retain(|_, (metadata, _)| metadata.strong_count() > 0);
-    let mut entries: Vec<_> = registry
-        .values()
-        .filter_map(|(metadata, _)| metadata.upgrade())
+    let mut entries: Vec<_> = registered()
+        .into_iter()
         .map(|metadata| metadata.info())
         .collect();
     entries.sort_by_cached_key(StreamInfo::name);
     entries
+}
+
+pub(crate) fn registered() -> Vec<Arc<Metadata>> {
+    let mut registry = registry().lock().unwrap();
+    registry.retain(|_, (metadata, _)| metadata.strong_count() > 0);
+    registry
+        .values()
+        .filter_map(|(metadata, _)| metadata.upgrade())
+        .collect()
 }
 
 // Transport adapters use this to attach callbacks without retaining sample

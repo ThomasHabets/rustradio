@@ -1,5 +1,9 @@
+use super::observer::{Subscription, TypedSubscription};
+use crate::stream_metadata::Metadata;
+use crate::stream_observer::{Kind, Observer};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, Weak};
 
 use axum::extract::{
     State, WebSocketUpgrade,
@@ -18,37 +22,110 @@ use super::{
 
 /// Registry and shared HTTP/1 WebSocket + HTTP/2 gRPC server.
 ///
-/// Register sinks before starting their graphs. Run `serve` on the application's
-/// Tokio runtime; run a synchronous Graph using `spawn_blocking`. Applications
-/// can instead mount `router` in their own HTTP server, including TLS termination.
+/// Enable automatic observation or register sinks before starting graphs.
+/// Run `serve` on the application's Tokio runtime; run a synchronous Graph
+/// using `spawn_blocking`. Applications can instead mount `router` in their own
+/// HTTP server, including TLS termination.
 #[derive(Clone, Default)]
 pub struct IqServer {
     resources: Arc<Mutex<HashMap<String, Arc<Resource>>>>,
+    automatic: Arc<AtomicBool>,
+    stopped: Arc<AtomicBool>,
+    observed: Arc<Mutex<HashMap<usize, ObservedResource>>>,
+}
+struct ObservedResource {
+    metadata: Weak<Metadata>,
+    resource: Arc<Resource>,
 }
 impl IqServer {
     /// Empty named-stream registry.
     pub fn new() -> Self {
         Self::default()
     }
-    /// List this server's explicitly registered IQ download streams by name.
+    /// Expose current and future Float, Complex, and u8 streams for IQ download.
+    /// Clients must select ALLOW_GAPS. Observation starts at producer commits
+    /// after connection, without replay or changes to the primary consumer.
+    pub fn register_all_streams(&self) {
+        self.automatic.store(true, Ordering::Release);
+    }
+
+    /// Discover registered sinks and, when enabled, supported live numeric streams.
     pub fn streams(&self) -> Vec<proto::StreamInfo> {
-        let mut entries = Vec::new();
+        self.catalog_entries()
+            .into_iter()
+            .map(|(entry, _)| entry)
+            .collect()
+    }
+    fn catalog_entries(&self) -> Vec<(proto::StreamInfo, Option<(usize, Kind)>)> {
+        self.observed
+            .lock()
+            .unwrap()
+            .retain(|_, r| r.metadata.strong_count() > 0);
+        let mut entries = if self.automatic.load(Ordering::Acquire) {
+            crate::stream_registry::registered()
+                .into_iter()
+                .filter_map(|metadata| {
+                    let encoding = super::observer::encoding(metadata.kind)?;
+                    let info = metadata.info();
+                    Some((
+                        proto::StreamInfo {
+                            name: info.name(),
+                            messages: info.messages,
+                            sample_rate_hz: info.sample_rate_hz,
+                            ended: info.ended,
+                            encoding: Some(encoding),
+                        },
+                        Some((info.id, metadata.kind)),
+                    ))
+                })
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
         let manual = self.resources.lock().unwrap_or_else(|p| p.into_inner());
+        // Preserve process stream names unless a manually registered sink
+        // claims the same name. Aliases must not steal another stream's name.
+        let mut used: std::collections::HashSet<String> = manual
+            .keys()
+            .cloned()
+            .chain(entries.iter().map(|(entry, _)| entry.name.clone()))
+            .collect();
+        for (entry, id) in &mut entries {
+            if !manual.contains_key(&entry.name) {
+                continue;
+            }
+            let base = entry.name.clone();
+            let mut suffix = 0;
+            loop {
+                suffix += 1;
+                entry.name = if suffix == 1 {
+                    format!("{base}-{}", id.unwrap().0)
+                } else {
+                    format!("{base}-{}-{suffix}", id.unwrap().0)
+                };
+                if used.insert(entry.name.clone()) {
+                    break;
+                }
+            }
+        }
         for (name, resource) in manual.iter() {
             let state = resource.lock();
-            entries.push(proto::StreamInfo {
-                name: name.clone(),
-                encoding: state.description.encoding.clone(),
-                messages: state
-                    .description
-                    .encoding
-                    .as_ref()
-                    .is_some_and(|e| e.component_type == proto::ComponentType::Utf8 as i32),
-                sample_rate_hz: Some(state.description.sample_rate_hz),
-                ended: state.eof,
-            });
+            entries.push((
+                proto::StreamInfo {
+                    name: name.clone(),
+                    encoding: state.description.encoding.clone(),
+                    messages: state
+                        .description
+                        .encoding
+                        .as_ref()
+                        .is_some_and(|e| e.component_type == proto::ComponentType::Utf8 as i32),
+                    sample_rate_hz: Some(state.description.sample_rate_hz),
+                    ended: state.eof,
+                },
+                None,
+            ));
         }
-        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        entries.sort_by(|a, b| a.0.name.cmp(&b.0.name));
         entries
     }
     pub(super) fn catalog(&self) -> proto::ListStreamsResponse {
@@ -67,6 +144,15 @@ impl IqServer {
     /// Abort all sessions and fail registered graph sinks. Applications mounting
     /// `router` themselves call this alongside their HTTP server shutdown.
     pub fn shutdown(&self) {
+        self.stopped.store(true, Ordering::Release);
+        for entry in self.observed.lock().unwrap().values() {
+            let mut state = entry.resource.lock();
+            state.stopped = true;
+            state.eof = true;
+            state.active = None;
+            drop(state);
+            entry.resource.notify.notify_one();
+        }
         for resource in self
             .resources
             .lock()
@@ -87,6 +173,14 @@ impl IqServer {
             .unwrap_or_else(|p| p.into_inner())
             .get(name)
             .map(|r| r.pool.clone())
+            .or_else(|| {
+                self.observed
+                    .lock()
+                    .unwrap()
+                    .values()
+                    .find(|r| r.resource.lock().description.source_id == name)
+                    .map(|r| r.resource.pool.clone())
+            })
     }
     /// HTTP router suitable for mounting in an application-owned server.
     pub fn router(&self) -> axum::Router {
@@ -125,6 +219,9 @@ impl IqServer {
             .map_err(|e| err(e.to_string()))
     }
     fn open(&self, open: proto::Open) -> Result<(Connection, proto::Started), Status> {
+        if self.stopped.load(Ordering::Acquire) {
+            return Err(Status::unavailable("IQ server stopped"));
+        }
         let limits = open
             .limits
             .ok_or_else(|| Status::invalid_argument("missing limits"))?;
@@ -164,18 +261,131 @@ impl IqServer {
         if download.source.is_empty() {
             return Err(Status::invalid_argument("empty source ID"));
         }
-        let resource = self
+        let manual = self
             .resources
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .get(&download.source)
-            .cloned()
+            .cloned();
+        if let Some(resource) = manual {
+            return Self::open_resource(resource, open.loss_policy, limits, download);
+        }
+        if !self.automatic.load(Ordering::Acquire) {
+            return Err(Status::not_found("unknown source"));
+        }
+        let (entry, id) = self
+            .catalog_entries()
+            .into_iter()
+            .find(|(s, _)| s.name == download.source)
             .ok_or_else(|| Status::not_found("unknown source"))?;
+        let (id, kind) = id.ok_or_else(|| Status::not_found("unknown source"))?;
+        match kind {
+            Kind::Float => self.open_observed::<crate::Float>(
+                id,
+                entry.name,
+                open.loss_policy,
+                limits,
+                download,
+            ),
+            Kind::Complex => self.open_observed::<crate::Complex>(
+                id,
+                entry.name,
+                open.loss_policy,
+                limits,
+                download,
+            ),
+            Kind::U8 => {
+                self.open_observed::<u8>(id, entry.name, open.loss_policy, limits, download)
+            }
+            _ => Err(Status::unimplemented("stream type has no IQ encoding")),
+        }
+    }
+    fn open_observed<T: IqSample>(
+        &self,
+        id: usize,
+        name: String,
+        loss_policy: i32,
+        limits: proto::Limits,
+        download: proto::Download,
+    ) -> Result<(Connection, proto::Started), Status> {
+        let (metadata, control) = crate::stream_registry::lookup::<T>(id)
+            .ok_or_else(|| Status::not_found("unknown source"))?;
+        let encoding = T::encoding();
+        let info = metadata.info();
+        let resource = {
+            let mut resources = self.observed.lock().unwrap();
+            if self.stopped.load(Ordering::Acquire) {
+                return Err(Status::unavailable("IQ server stopped"));
+            }
+            resources.retain(|_, r| r.metadata.strong_count() > 0);
+            resources
+                .entry(id)
+                .or_insert_with(|| ObservedResource {
+                    metadata: Arc::downgrade(&metadata),
+                    resource: super::sink::new_resource(
+                        proto::StreamDescription {
+                            encoding: Some(encoding),
+                            sample_rate_hz: info.sample_rate_hz.unwrap_or(0.0),
+                            source_id: name.clone(),
+                            tag_kinds: super::TAG_KINDS.to_vec(),
+                            ..Default::default()
+                        },
+                        false,
+                        StreamOptions::default().limits,
+                    ),
+                })
+                .resource
+                .clone()
+        };
+        let mut tap = None;
+        let mut result = None;
+        let mut download = Some(download);
+        let mut limits = Some(limits);
+        control.with_state(&mut |observers, position, ended| {
+            {
+                let mut state = resource.lock();
+                if state.active.is_none() {
+                    state.description.source_id = name.clone();
+                    state.position = position;
+                    state.eof = ended;
+                    state.description.sample_rate_hz = info.sample_rate_hz.unwrap_or(0.0);
+                }
+            }
+            let opened = Self::open_resource(
+                resource.clone(),
+                loss_policy,
+                limits.take().unwrap(),
+                download.take().unwrap(),
+            );
+            if let Ok((connection, _)) = &opened {
+                let observer: Arc<dyn Observer<T>> = Arc::new(super::observer::Tap {
+                    resource: resource.clone(),
+                    generation: connection.generation,
+                    _metadata: metadata.clone(),
+                });
+                observers.0.push(Arc::downgrade(&observer));
+                tap = Some(observer);
+            }
+            result = Some(opened);
+        });
+        let (mut connection, started) = result.unwrap()?;
+        connection.observer = Some(Box::new(TypedSubscription {
+            control,
+            observer: tap.unwrap(),
+        }));
+        Ok((connection, started))
+    }
+    fn open_resource(
+        resource: Arc<Resource>,
+        loss_policy: i32,
+        limits: proto::Limits,
+        download: proto::Download,
+    ) -> Result<(Connection, proto::Started), Status> {
         let mut state = resource.lock();
         if state.active.is_some() {
             return Err(Status::already_exists("source has an active client"));
         }
-        if state.eof {
+        if state.eof || state.stopped {
             return Err(Status::failed_precondition("source has ended"));
         }
         let policy = if resource.blocking {
@@ -183,7 +393,7 @@ impl IqServer {
         } else {
             proto::LossPolicy::AllowGaps
         };
-        if open.loss_policy != policy as i32 {
+        if loss_policy != policy as i32 {
             return Err(Status::failed_precondition(
                 "loss policy must match sink blocking setting",
             ));
@@ -239,11 +449,13 @@ impl IqServer {
             lost: None,
             identity_pending: true,
             end_sent: false,
+            failure: None,
         });
         drop(state);
         let connection = Connection {
             resource,
             generation,
+            observer: None,
         };
         Ok((
             connection,
@@ -339,6 +551,7 @@ pub(super) async fn failure(
     .await;
 }
 struct Connection {
+    observer: Option<Box<dyn Subscription>>,
     resource: Arc<Resource>,
     generation: u64,
 }
@@ -401,6 +614,10 @@ impl Connection {
                     .as_mut()
                     .filter(|s| s.generation == self.generation)
                     .ok_or_else(|| Status::cancelled("session detached"))?;
+                if let Some(error) = &session.failure {
+                    return Err(Status::data_loss(error.clone()));
+                }
+                super::sink::flush_gap(&self.resource, session);
                 if session.next_sequence < session.send_limit
                     && let Some(body) = session.queue.pop_front()
                 {
@@ -461,6 +678,9 @@ impl Drop for Connection {
         }
         drop(state);
         self.resource.notify.notify_one();
+        if let Some(subscription) = self.observer.take() {
+            subscription.detach();
+        }
     }
 }
 async fn websocket(
@@ -1020,9 +1240,9 @@ mod tests {
         assert_eq!(connection.resource.lock().position, 0);
         Ok(())
     }
-    struct WsClient(tokio::net::TcpStream);
+    pub(super) struct WsClient(tokio::net::TcpStream);
     impl WsClient {
-        async fn connect(address: std::net::SocketAddr) -> crate::Result<Self> {
+        pub(super) async fn connect(address: std::net::SocketAddr) -> crate::Result<Self> {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut stream = tokio::net::TcpStream::connect(address).await?;
             let request = format!(
@@ -1039,7 +1259,7 @@ mod tests {
             assert!(response.starts_with(b"HTTP/1.1 101"));
             Ok(Self(stream))
         }
-        async fn send(&mut self, message: proto::ClientMessage) -> crate::Result<()> {
+        pub(super) async fn send(&mut self, message: proto::ClientMessage) -> crate::Result<()> {
             use tokio::io::AsyncWriteExt;
             let bytes = message.encode_to_vec();
             let mask = [1, 2, 3, 4];
@@ -1058,7 +1278,9 @@ mod tests {
             self.0.write_all(&frame).await?;
             Ok(())
         }
-        async fn receive(&mut self) -> crate::Result<Option<Decoded<proto::ServerMessage>>> {
+        pub(super) async fn receive(
+            &mut self,
+        ) -> crate::Result<Option<Decoded<proto::ServerMessage>>> {
             use tokio::io::AsyncReadExt;
             let op = self.0.read_u8().await?;
             let size = self.0.read_u8().await?;
@@ -1531,3 +1753,7 @@ mod tests {
 #[cfg(test)]
 #[path = "catalog_tests.rs"]
 mod catalog_tests;
+
+#[cfg(test)]
+#[path = "observer_tests.rs"]
+mod observer_tests;

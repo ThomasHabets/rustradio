@@ -810,13 +810,37 @@ protoc -I proto -I /usr/include --include_imports \
 ## Listing IQ streams
 
 `IqServer::streams()` lists the IQ sinks explicitly registered with that server,
-ordered by name. Clients can also use `GET /iq/v1/streams` (a JSON array) or the
+ordered by name. Calling `IqServer::register_all_streams()` also exposes current
+and future live copying streams of `Float`, `Complex`, and `u8`, including streams
+with generated names. Clients can also use `GET /iq/v1/streams` (a JSON array) or the
 unary gRPC `rustradio.iq.v1.IqStreaming/ListStreams` RPC.
 
 Each entry contains the download name, message/sample distinction, sample rate,
 producer completion state, and the structured `Encoding` used by
 `Open.accepted_encodings`. Use the name in `Open.download.source` to download
-from that sink. Ended sinks remain listed with `ended = true` and reject new
-download sessions.
+from that stream. Ended streams remain listed with `ended = true` and reject new
+download sessions. Automatic entries disappear when their stream metadata is no
+longer alive. Unsupported stream types are omitted from automatic discovery.
+
+Automatic observation requires `ALLOW_GAPS`. It attaches at producer commits
+after the download opens, without replaying buffered samples. The primary
+consumer receives its ordinary samples and tags independently of the observer.
+No tap sink or Tee is needed, and streams without subscribers do not copy or
+encode samples for IQ download.
+
+Each server admits one observer client per stream. Different servers can
+observe the same stream independently. A slow client fills a bounded frame queue;
+new samples are then discarded for that client and reported as exact gaps.
+Disconnecting removes its subscription; reconnecting starts at the current
+absolute producer position. A final outstanding write window can commit before
+completion is reported, even if the write endpoint has been dropped. Observation
+errors and server shutdown do not fail the primary graph.
+
+Stream names and optional sample rates come from `with_name()` and
+`with_sample_rate()`. A missing rate is reported as absent in discovery and zero
+in the download description. Names and rates are fixed for each accepted
+session. Manually registered sink names take precedence on a collision; the
+observed stream gets a unique alias in that server's listing. Clients should
+use the listed name when opening a download.
 
 A gRPC response permits at most 4096 entries and 2 MiB encoded bytes.

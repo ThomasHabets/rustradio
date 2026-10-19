@@ -7,7 +7,9 @@
 //!
 //! Native graphs use gRPC clients and a shared gRPC/WebSocket server. Browser
 //! workers use the WebSocket client in `rustradio-ui`. All queues are bounded;
-//! graph `work()` methods never wait on sockets. See `doc/iq-streaming.md`.
+//! graph `work()` methods never wait on sockets. Native servers can expose live
+//! numeric streams with `IqServer::register_all_streams`, without additional
+//! graph sinks. See `doc/iq-streaming.md`.
 
 #[allow(clippy::large_enum_variant)]
 pub mod proto;
@@ -17,6 +19,8 @@ mod wire_schema;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
+#[cfg(not(target_arch = "wasm32"))]
+mod observer;
 #[cfg(not(target_arch = "wasm32"))]
 mod rpc;
 #[cfg(not(target_arch = "wasm32"))]

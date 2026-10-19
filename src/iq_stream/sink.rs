@@ -80,6 +80,8 @@ pub(super) struct Session {
     // the first sample chunk so gaps cannot discard the sink identification.
     pub identity_pending: bool,
     pub end_sent: bool,
+    // Observer encoding errors terminate its session without failing the producer.
+    pub failure: Option<String>,
 }
 impl Resource {
     pub fn lock(&self) -> MutexGuard<'_, ResourceState> {
@@ -234,6 +236,7 @@ impl<T: IqSample> IqStreamSink<T> {
                 input.slice(),
                 &tags,
                 absolute_position,
+                0,
             )?
         } else {
             if self.resource.blocking {
@@ -469,14 +472,17 @@ impl Drop for IqStreamStringSink {
 }
 
 // Queue a retained or explicitly lost numeric prefix; zero means a blocking
-// sink must wait. The caller flushes pending gaps before queueing new input.
+// sink must wait. Tags retain their original batch positions; tag_offset is
+// the number of batch samples already framed.
 pub(super) fn queue_numeric<T: IqSample>(
     resource: &Resource,
     session: &mut Session,
     input: &[T],
     tags: &[crate::stream::Tag],
     absolute_position: u64,
+    tag_offset: usize,
 ) -> Result<usize> {
+    flush_gap(resource, session);
     if session.end_sent {
         return Err(err("IQ input after End"));
     }
@@ -522,8 +528,12 @@ pub(super) fn queue_numeric<T: IqSample>(
         } else {
             Vec::new()
         };
-        for tag in tags.iter().take_while(|t| t.pos() < n) {
-            wire_tags.push(tag_to_wire(tag, first)?);
+        for tag in tags
+            .iter()
+            .skip_while(|t| t.pos() < tag_offset)
+            .take_while(|t| t.pos() - tag_offset < n)
+        {
+            wire_tags.push(tag_to_wire(tag, first - tag_offset as u64)?);
         }
         // Account for all protobuf overhead. A sample and its tags are
         // indivisible, so find the largest fitting prefix by byte size.
