@@ -10,29 +10,16 @@ use crate::stream_registry::{StreamInfo, registry};
 /// for sample transfer; ordinary sample transfer does not acquire this mutex.
 #[derive(Debug)]
 pub(crate) struct Metadata {
-    pub id: usize,
     info: Mutex<StreamInfo>,
 }
 impl Metadata {
     pub fn new<T>(id: usize, messages: bool) -> Arc<Self> {
         let mut registry = registry().lock().unwrap();
         registry.retain(|_, m| m.strong_count() > 0);
-        let base = format!("stream-{id}");
-        let mut name = base.clone();
-        let mut suffix = 0;
-        while registry
-            .values()
-            .filter_map(|m| m.upgrade())
-            .any(|m| m.name() == name)
-        {
-            suffix += 1;
-            name = format!("{base}-{suffix}");
-        }
         let ret = Arc::new(Self {
-            id,
             info: Mutex::new(StreamInfo {
-                name,
-                named: false,
+                id,
+                name: None,
                 sample_type: std::any::type_name::<T>().into(),
                 messages,
                 sample_rate_hz: None,
@@ -46,7 +33,7 @@ impl Metadata {
         self.info.lock().unwrap().clone()
     }
     pub fn name(&self) -> String {
-        self.info.lock().unwrap().name.clone()
+        self.info.lock().unwrap().name()
     }
     pub fn set_name(&self, requested: impl Into<String>) {
         let requested = requested.into();
@@ -54,13 +41,22 @@ impl Metadata {
             return;
         }
         let registry = registry().lock().unwrap();
+        let id = self.info.lock().unwrap().id;
         let occupied = |name: &str| {
+            // Reserve every canonical generated name for its owner, including
+            // IDs that have not been allocated yet.
+            if let Some(suffix) = name.strip_prefix("stream-")
+                && let Ok(owner) = suffix.parse::<usize>()
+                && owner != id
+                && suffix == owner.to_string()
+            {
+                return true;
+            }
             registry.values().filter_map(|m| m.upgrade()).any(|m| {
                 if std::ptr::eq(m.as_ref(), self) {
                     return false;
                 }
-                let other = m.info();
-                other.name == name
+                m.name() == name
             })
         };
         let mut name = requested.clone();
@@ -68,14 +64,13 @@ impl Metadata {
         while occupied(&name) {
             suffix += 1;
             name = if suffix == 1 {
-                format!("{requested}-{}", self.id)
+                format!("{requested}-{id}")
             } else {
-                format!("{requested}-{}-{suffix}", self.id)
+                format!("{requested}-{id}-{suffix}")
             };
         }
         let mut info = self.info.lock().unwrap();
-        info.name = name;
-        info.named = true;
+        info.name = Some(name);
     }
     pub fn sample_rate(&self) -> Option<f64> {
         self.info.lock().unwrap().sample_rate_hz
@@ -103,13 +98,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generated_names_disambiguate_explicit_names() {
+    fn explicit_names_cannot_claim_another_streams_generated_name() {
         let first_id = crate::NEXT_STREAM_ID.fetch_add(2, std::sync::atomic::Ordering::Relaxed);
         let second_id = first_id + 1;
         let first = Metadata::new::<u8>(first_id, false);
-        first.set_name(format!("stream-{second_id}"));
+        let requested = format!("stream-{second_id}");
+        first.set_name(&requested);
+        assert_eq!(first.name(), format!("{requested}-{first_id}"));
+        assert!(first.info().name.is_some());
         let second = Metadata::new::<u8>(second_id, false);
-        assert_ne!(first.name(), second.name());
-        assert!(second.name().starts_with(&format!("stream-{second_id}-")));
+        assert_eq!(second.name(), requested);
+        assert!(second.info().name.is_none());
     }
 }

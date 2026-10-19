@@ -7,9 +7,10 @@ Both endpoints share a generated name such as `stream-42` and an optional sample
 rate. Use `with_name("filtered")` and `with_sample_rate(48_000.)?` when connecting
 blocks, including in `blockchain!` constructor arguments. Read metadata with
 `name()` and `sample_rate()`. Duplicate names receive a unique suffix; empty
-naming requests leave the name unchanged. Rates must be finite and positive;
-blocks do not infer or propagate them. Use [`streams()`] to list live process streams and their
-metadata. The inventory does not keep stream buffers or endpoints alive.
+naming requests leave the name unchanged. Generated `stream-{id}` names are
+reserved for their owning stream, including IDs not yet allocated. Rates must be
+finite and positive; blocks do not infer or propagate them. Use [`streams()`] to
+list live process streams and their metadata. The inventory does not keep stream buffers or endpoints alive.
 */
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};

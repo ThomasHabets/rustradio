@@ -7,10 +7,10 @@ use crate::stream_metadata::Metadata;
 /// Snapshot of a live process stream's metadata.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct StreamInfo {
-    /// Unique process-wide name.
-    pub name: String,
-    /// A nonempty name was explicitly supplied through `with_name`.
-    pub named: bool,
+    /// Process-wide stream identity, shared by both endpoints.
+    pub id: usize,
+    /// Explicit stream name; `None` uses the name derived from `id`.
+    pub name: Option<String>,
     /// Rust sample or message type.
     pub sample_type: String,
     /// Whether items are individually owned messages rather than copying samples.
@@ -20,6 +20,16 @@ pub struct StreamInfo {
     /// The producer and any outstanding write window have finished.
     /// Buffered items may still remain for the consumer to read.
     pub ended: bool,
+}
+
+impl StreamInfo {
+    /// Return the explicit name, or `stream-{id}` for an unnamed stream.
+    #[must_use]
+    pub fn name(&self) -> String {
+        self.name
+            .clone()
+            .unwrap_or_else(|| format!("stream-{}", self.id))
+    }
 }
 
 pub(crate) type Registry = HashMap<usize, Weak<Metadata>>;
@@ -43,6 +53,6 @@ pub fn streams() -> Vec<StreamInfo> {
         .filter_map(Weak::upgrade)
         .map(|metadata| metadata.info())
         .collect();
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    entries.sort_by_cached_key(StreamInfo::name);
     entries
 }
