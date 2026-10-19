@@ -386,6 +386,7 @@ struct BufferInner {
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
+    metadata: crate::stream_metadata::Metadata,
     id: usize,
     state: Arc<BufferInner>,
     circ: Circ,
@@ -430,8 +431,10 @@ impl<T> Buffer<T> {
             // owned here. Copy elements need no destructor on overwrite/unmap.
             unsafe { circ.map.base.cast::<T>().add(index).write(T::default()) };
         }
+        let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(Self {
-            id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            id,
+            metadata: crate::stream_metadata::Metadata::new(id),
             state: Arc::new(BufferInner {
                 lock: Mutex::new(BufferState {
                     rpos: 0,
@@ -453,6 +456,11 @@ impl<T> Buffer<T> {
             circ,
             dummy: std::marker::PhantomData,
         })
+    }
+
+    #[must_use]
+    pub(crate) fn metadata(&self) -> &crate::stream_metadata::Metadata {
+        &self.metadata
     }
 
     #[must_use]

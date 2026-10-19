@@ -2,6 +2,13 @@
 
 Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
+
+Both endpoints share a generated name such as `stream-42` and an optional sample
+rate. Use `with_name("filtered")` and `with_sample_rate(48_000.)?` when connecting
+blocks, including in `blockchain!` constructor arguments. Read metadata with
+`name()` and `sample_rate()`. Explicit names may repeat; empty naming requests
+leave the name unchanged. Rates must be finite and positive; blocks do not infer
+or propagate them.
 */
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
@@ -393,6 +400,7 @@ struct NCEntry<T> {
 }
 
 struct NCInner<T> {
+    metadata: crate::stream_metadata::Metadata,
     lock: Mutex<VecDeque<NCEntry<T>>>,
     cv: Condvar,
     capacity: usize,
@@ -510,7 +518,9 @@ pub struct NCWriteStream<T> {
 /// which you would not want to just copy willy nilly.
 #[must_use]
 pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
+    let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let inner = Arc::new(NCInner {
+        metadata: crate::stream_metadata::Metadata::new(id),
         lock: Mutex::new(VecDeque::new()),
         cv: Condvar::new(),
         capacity: DEFAULT_NOCOPY_CAPACITY,
@@ -523,7 +533,6 @@ pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
         #[cfg(feature = "async")]
         acvw: tokio::sync::Notify::new(),
     });
-    let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     (
         NCWriteStream {
             id,
@@ -628,6 +637,51 @@ impl<T: Len> NCReadStream<T> {
     #[must_use]
     pub fn peek_size(&self) -> Option<usize> {
         self.inner.lock.lock().unwrap().front().map(|e| e.val.len())
+    }
+}
+
+macro_rules! stream_metadata {
+    ($stream:ident, $field:ident) => {
+        impl<T> $stream<T> {
+            /// Snapshot of the stream's name, shared by both endpoints.
+            #[must_use]
+            pub fn name(&self) -> String {
+                self.$field.metadata().name()
+            }
+            /// Name this stream. Both endpoints share the name.
+            /// Names are stored as supplied; duplicates are allowed.
+            /// Empty names leave the metadata unchanged.
+            #[must_use]
+            pub fn with_name(self, name: impl Into<String>) -> Self {
+                self.$field.metadata().set_name(name);
+                self
+            }
+            /// Sample (or message) rate per second, when supplied.
+            #[must_use]
+            pub fn sample_rate(&self) -> Option<f64> {
+                self.$field.metadata().sample_rate()
+            }
+            /// Attach a finite, positive rate in samples (or messages) per second.
+            /// Both endpoints share the rate; blocks do not propagate it.
+            pub fn with_sample_rate(self, rate: impl Into<f64>) -> Result<Self> {
+                self.$field.metadata().set_sample_rate(rate.into())?;
+                Ok(self)
+            }
+            /// Attach a finite, positive sample (or message) rate to this stream.
+            pub fn with_sample_rate_hz(self, rate: f64) -> Result<Self> {
+                self.with_sample_rate(rate)
+            }
+        }
+    };
+}
+stream_metadata!(ReadStream, circ);
+stream_metadata!(WriteStream, circ);
+stream_metadata!(NCReadStream, inner);
+stream_metadata!(NCWriteStream, inner);
+
+impl<T> NCInner<T> {
+    fn metadata(&self) -> &crate::stream_metadata::Metadata {
+        &self.metadata
     }
 }
 

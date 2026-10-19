@@ -174,18 +174,25 @@ impl<T> BufferState<T> {
 
 #[derive(Debug)]
 pub struct Buffer<T> {
+    metadata: crate::stream_metadata::Metadata,
     id: usize,
     state: Mutex<BufferState<T>>,
 }
 impl<T: Default + Copy> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
+        let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(Self {
-            id: crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            id,
+            metadata: crate::stream_metadata::Metadata::new(id),
             state: Mutex::new(BufferState::new(size)?),
         })
     }
 }
 impl<T> Buffer<T> {
+    pub(crate) fn metadata(&self) -> &crate::stream_metadata::Metadata {
+        &self.metadata
+    }
+
     pub fn id(&self) -> usize {
         self.id
     }
