@@ -148,20 +148,7 @@ fn register_resource(
     if description.encoded_len() + 64 > super::MAX_CONTROL {
         return Err(err("IQ description byte limit"));
     }
-    let resource = Arc::new(Resource {
-        state: Mutex::new(ResourceState {
-            description,
-            position: 0,
-            active: None,
-            eof: false,
-            stopped: false,
-            generation: 0,
-        }),
-        pool: SamplePool::new(limits.max_in_flight_frames as usize),
-        notify: Notify::new(),
-        blocking,
-        limits,
-    });
+    let resource = new_resource(description, blocking, limits);
     server.register(name, resource.clone())?;
     Ok(resource)
 }
@@ -221,14 +208,7 @@ impl<T: IqSample> IqStreamSink<T> {
             return Err(err("IQ server stopped"));
         }
         if let Some(session) = state.active.as_mut() {
-            // Older retained frames precede the loss; any new chunk must follow
-            // it. The gap itself uses one queue slot and one frame of credit.
-            if session.queue.len() < session.limits.max_in_flight_frames as usize
-                && let Some(gap) = session.lost.take()
-            {
-                session.queue.push_back(proto::frame::Body::Gap(gap));
-                self.resource.notify.notify_one();
-            }
+            flush_gap(&self.resource, session);
         }
         let (input, tags) = self.src.read_buf()?;
         if input.is_empty() {
@@ -248,111 +228,22 @@ impl<T: IqSample> IqStreamSink<T> {
         // of the current input, including samples lost before this connection.
         let absolute_position = state.position;
         let n = if let Some(session) = state.active.as_mut() {
-            if session.end_sent {
-                return Err(err("IQ input after End"));
-            }
-            if session.queue.len() >= session.limits.max_in_flight_frames as usize {
-                if self.resource.blocking {
-                    return Ok(BlockRet::Pending);
-                }
-                // Drop new input rather than evicting queued frames. Adjacent
-                // overflow spans merge without allocating an unbounded queue.
-                let count = input.len() as u64;
-                let end = advance(session.cursor, count)?;
-                session.lost = Some(match session.lost.take() {
-                    Some(gap) => proto::Gap {
-                        sample_count: advance(gap.sample_count, count)?,
-                        ..gap
-                    },
-                    None => proto::Gap {
-                        first_sample: session.cursor,
-                        sample_count: count,
-                        reason: "sink overflow".into(),
-                    },
-                });
-                session.cursor = end;
-                input.len()
-            } else {
-                let first = session.cursor;
-                // Include queued frames when predicting this frame's sequence,
-                // because protobuf varint overhead grows with the sequence value.
-                let sequence = advance(session.next_sequence, session.queue.len() as u64)?;
-                if sequence == u64::MAX {
-                    return Err(err("IQ frame sequence exhausted"));
-                }
-                let mut n = input
-                    .len()
-                    .min(session.limits.max_frame_bytes as usize / T::ENCODED_SIZE);
-                let mut samples = self.resource.pool.take(n * T::ENCODED_SIZE.get());
-                for sample in &input.slice()[..n] {
-                    sample.serialize_into(&mut samples);
-                }
-                advance(first, n as u64)?;
-                let mut wire_tags = if session.identity_pending {
-                    identity_tags(first, absolute_position, env!("GIT_VERSION"))
-                } else {
-                    Vec::new()
-                };
-                for tag in tags.iter().take_while(|t| t.pos() < n) {
-                    wire_tags.push(tag_to_wire(tag, first)?);
-                }
-                // Account for all protobuf overhead. A sample and its tags are
-                // indivisible, so find the largest fitting prefix by byte size.
-                let fits = |count: usize| {
-                    let count_tags =
-                        wire_tags.partition_point(|t| t.sample_index < first + count as u64);
-                    let mut chunk_size = scalar_size(first) + scalar_size(count as u64);
-                    let bytes = count * T::ENCODED_SIZE.get();
-                    if bytes > 0 {
-                        chunk_size += 1 + varint_size(bytes as u64) + bytes;
-                    }
-                    for tag in &wire_tags[..count_tags] {
-                        let size = tag.encoded_len();
-                        chunk_size += 1 + varint_size(size as u64) + size;
-                    }
-                    let frame_size =
-                        scalar_size(sequence) + 1 + varint_size(chunk_size as u64) + chunk_size;
-                    count_tags <= 4096 && frame_size <= session.limits.max_frame_bytes as usize
-                };
-                if !fits(n) {
-                    let (mut low, mut high) = (0, n);
-                    while low < high {
-                        let middle = (low + high).div_ceil(2);
-                        if fits(middle) {
-                            low = middle;
-                        } else {
-                            high = middle - 1;
-                        }
-                    }
-                    n = low;
-                }
-                if n == 0 {
-                    return Err(err("IQ frame limit cannot fit one sample and its tags"));
-                }
-                let end = advance(first, n as u64)?;
-                samples.truncate(n * T::ENCODED_SIZE.get());
-                let tags = wire_tags
-                    .into_iter()
-                    .take_while(|t| t.sample_index < end)
-                    .collect();
-                session
-                    .queue
-                    .push_back(proto::frame::Body::Chunk(proto::SampleChunk {
-                        first_sample: first,
-                        sample_count: n as u32,
-                        samples,
-                        tags,
-                    }));
-                session.cursor = end;
-                session.identity_pending = false;
-                n
-            }
+            queue_numeric::<T>(
+                &self.resource,
+                session,
+                input.slice(),
+                &tags,
+                absolute_position,
+            )?
         } else {
             if self.resource.blocking {
                 return Ok(BlockRet::Pending);
             }
             input.len()
         };
+        if n == 0 {
+            return Ok(BlockRet::Pending);
+        }
         state.position = advance(state.position, n as u64)?;
         input.consume(n);
         self.resource.notify.notify_one();
@@ -510,12 +401,8 @@ impl IqStreamStringSink {
         if state.stopped {
             return Err(err("IQ server stopped"));
         }
-        if let Some(session) = state.active.as_mut()
-            && session.queue.len() < session.limits.max_in_flight_frames as usize
-            && let Some(gap) = session.lost.take()
-        {
-            session.queue.push_back(proto::frame::Body::Gap(gap));
-            self.resource.notify.notify_one();
+        if let Some(session) = state.active.as_mut() {
+            flush_gap(&self.resource, session);
         }
         if self.src.is_empty() {
             if self.src.eof() {
@@ -543,57 +430,7 @@ impl IqStreamStringSink {
         let absolute = state.position;
         let position = advance(absolute, 1)?;
         if let Some(session) = state.active.as_mut() {
-            if session.end_sent {
-                return Err(err("IQ input after End"));
-            }
-            let first = session.cursor;
-            let end = advance(first, 1)?;
-            if session.queue.len() >= session.limits.max_in_flight_frames as usize {
-                session.lost = Some(match session.lost.take() {
-                    Some(gap) => proto::Gap {
-                        sample_count: advance(gap.sample_count, 1)?,
-                        ..gap
-                    },
-                    None => proto::Gap {
-                        first_sample: first,
-                        sample_count: 1,
-                        reason: "sink overflow".into(),
-                    },
-                });
-            } else {
-                let sequence = advance(session.next_sequence, session.queue.len() as u64)?;
-                if sequence == u64::MAX {
-                    return Err(err("IQ frame sequence exhausted"));
-                }
-                let mut wire_tags = if session.identity_pending {
-                    identity_tags(first, absolute, env!("GIT_VERSION"))
-                } else {
-                    vec![]
-                };
-                for tag in &tags {
-                    wire_tags.push(tag_to_wire(tag, first)?);
-                }
-                let frame = proto::Frame {
-                    sequence,
-                    body: Some(proto::frame::Body::Chunk(proto::SampleChunk {
-                        first_sample: first,
-                        sample_count: 1,
-                        samples: message.into_bytes(),
-                        tags: wire_tags,
-                    })),
-                };
-                let tag_count = match frame.body.as_ref().unwrap() {
-                    proto::frame::Body::Chunk(chunk) => chunk.tags.len(),
-                    _ => unreachable!(),
-                };
-                if tag_count > 4096 || frame.encoded_len() > session.limits.max_frame_bytes as usize
-                {
-                    return Err(err("IQ string and tags exceed frame limit"));
-                }
-                session.queue.push_back(frame.body.unwrap());
-                session.identity_pending = false;
-            }
-            session.cursor = end;
+            queue_string(session, &tags, absolute, || message.into_bytes())?;
         }
         state.position = position;
         self.resource.notify.notify_one();
@@ -629,6 +466,207 @@ impl Drop for IqStreamStringSink {
         drop(state);
         self.resource.notify.notify_one();
     }
+}
+
+// Queue a retained or explicitly lost numeric prefix; zero means a blocking
+// sink must wait. The caller flushes pending gaps before queueing new input.
+pub(super) fn queue_numeric<T: IqSample>(
+    resource: &Resource,
+    session: &mut Session,
+    input: &[T],
+    tags: &[crate::stream::Tag],
+    absolute_position: u64,
+) -> Result<usize> {
+    if session.end_sent {
+        return Err(err("IQ input after End"));
+    }
+    if session.queue.len() >= session.limits.max_in_flight_frames as usize {
+        if resource.blocking {
+            return Ok(0);
+        }
+        // Drop new input rather than evicting queued frames. Adjacent
+        // overflow spans merge without allocating an unbounded queue.
+        let count = input.len() as u64;
+        let end = advance(session.cursor, count)?;
+        session.lost = Some(match session.lost.take() {
+            Some(gap) => proto::Gap {
+                sample_count: advance(gap.sample_count, count)?,
+                ..gap
+            },
+            None => proto::Gap {
+                first_sample: session.cursor,
+                sample_count: count,
+                reason: "sink overflow".into(),
+            },
+        });
+        session.cursor = end;
+        Ok(input.len())
+    } else {
+        let first = session.cursor;
+        // Include queued frames when predicting this frame's sequence,
+        // because protobuf varint overhead grows with the sequence value.
+        let sequence = advance(session.next_sequence, session.queue.len() as u64)?;
+        if sequence == u64::MAX {
+            return Err(err("IQ frame sequence exhausted"));
+        }
+        let mut n = input
+            .len()
+            .min(session.limits.max_frame_bytes as usize / T::ENCODED_SIZE);
+        let mut samples = resource.pool.take(n * T::ENCODED_SIZE.get());
+        for sample in &input[..n] {
+            sample.serialize_into(&mut samples);
+        }
+        advance(first, n as u64)?;
+        let mut wire_tags = if session.identity_pending {
+            identity_tags(first, absolute_position, env!("GIT_VERSION"))
+        } else {
+            Vec::new()
+        };
+        for tag in tags.iter().take_while(|t| t.pos() < n) {
+            wire_tags.push(tag_to_wire(tag, first)?);
+        }
+        // Account for all protobuf overhead. A sample and its tags are
+        // indivisible, so find the largest fitting prefix by byte size.
+        let fits = |count: usize| {
+            let count_tags = wire_tags.partition_point(|t| t.sample_index < first + count as u64);
+            let mut chunk_size = scalar_size(first) + scalar_size(count as u64);
+            let bytes = count * T::ENCODED_SIZE.get();
+            if bytes > 0 {
+                chunk_size += 1 + varint_size(bytes as u64) + bytes;
+            }
+            for tag in &wire_tags[..count_tags] {
+                let size = tag.encoded_len();
+                chunk_size += 1 + varint_size(size as u64) + size;
+            }
+            let frame_size =
+                scalar_size(sequence) + 1 + varint_size(chunk_size as u64) + chunk_size;
+            count_tags <= 4096 && frame_size <= session.limits.max_frame_bytes as usize
+        };
+        if !fits(n) {
+            let (mut low, mut high) = (0, n);
+            while low < high {
+                let middle = (low + high).div_ceil(2);
+                if fits(middle) {
+                    low = middle;
+                } else {
+                    high = middle - 1;
+                }
+            }
+            n = low;
+        }
+        if n == 0 {
+            return Err(err("IQ frame limit cannot fit one sample and its tags"));
+        }
+        let end = advance(first, n as u64)?;
+        samples.truncate(n * T::ENCODED_SIZE.get());
+        let tags = wire_tags
+            .into_iter()
+            .take_while(|t| t.sample_index < end)
+            .collect();
+        session
+            .queue
+            .push_back(proto::frame::Body::Chunk(proto::SampleChunk {
+                first_sample: first,
+                sample_count: n as u32,
+                samples,
+                tags,
+            }));
+        session.cursor = end;
+        session.identity_pending = false;
+        Ok(n)
+    }
+}
+// Older retained frames precede the loss; any new chunk must follow it. The
+// gap itself uses one queue slot and one frame of credit, including at EOF.
+pub(super) fn flush_gap(resource: &Resource, session: &mut Session) {
+    if session.queue.len() < session.limits.max_in_flight_frames as usize
+        && let Some(gap) = session.lost.take()
+    {
+        session.queue.push_back(proto::frame::Body::Gap(gap));
+        resource.notify.notify_one();
+    }
+}
+
+// Queue one complete message. The caller validates tag positions, flushes any
+// pending gap, and checks capacity before consuming input from a blocking sink.
+pub(super) fn queue_string(
+    session: &mut Session,
+    tags: &[crate::stream::Tag],
+    absolute: u64,
+    bytes: impl FnOnce() -> Vec<u8>,
+) -> Result<()> {
+    if session.end_sent {
+        return Err(err("IQ input after End"));
+    }
+    let first = session.cursor;
+    let end = advance(first, 1)?;
+    if session.queue.len() >= session.limits.max_in_flight_frames as usize {
+        session.lost = Some(match session.lost.take() {
+            Some(gap) => proto::Gap {
+                sample_count: advance(gap.sample_count, 1)?,
+                ..gap
+            },
+            None => proto::Gap {
+                first_sample: first,
+                sample_count: 1,
+                reason: "sink overflow".into(),
+            },
+        });
+    } else {
+        let sequence = advance(session.next_sequence, session.queue.len() as u64)?;
+        if sequence == u64::MAX {
+            return Err(err("IQ frame sequence exhausted"));
+        }
+        let mut wire_tags = if session.identity_pending {
+            identity_tags(first, absolute, env!("GIT_VERSION"))
+        } else {
+            vec![]
+        };
+        for tag in tags {
+            wire_tags.push(tag_to_wire(tag, first)?);
+        }
+        let frame = proto::Frame {
+            sequence,
+            body: Some(proto::frame::Body::Chunk(proto::SampleChunk {
+                first_sample: first,
+                sample_count: 1,
+                samples: bytes(),
+                tags: wire_tags,
+            })),
+        };
+        let tag_count = match frame.body.as_ref().unwrap() {
+            proto::frame::Body::Chunk(chunk) => chunk.tags.len(),
+            _ => unreachable!(),
+        };
+        if tag_count > 4096 || frame.encoded_len() > session.limits.max_frame_bytes as usize {
+            return Err(err("IQ string and tags exceed frame limit"));
+        }
+        session.queue.push_back(frame.body.unwrap());
+        session.identity_pending = false;
+    }
+    session.cursor = end;
+    Ok(())
+}
+
+pub(super) fn new_resource(
+    description: proto::StreamDescription,
+    blocking: bool,
+    limits: proto::Limits,
+) -> Arc<Resource> {
+    Arc::new(Resource {
+        state: Mutex::new(ResourceState {
+            description,
+            position: 0,
+            active: None,
+            eof: false,
+            stopped: false,
+            generation: 0,
+        }),
+        pool: SamplePool::new(limits.max_in_flight_frames as usize),
+        notify: Notify::new(),
+        blocking,
+        limits,
+    })
 }
 
 #[cfg(test)]
