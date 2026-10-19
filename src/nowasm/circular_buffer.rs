@@ -169,7 +169,7 @@ unsafe impl Send for Circ {}
 unsafe impl Sync for Circ {}
 
 #[derive(Debug)]
-struct BufferState {
+struct BufferState<T> {
     rpos: usize,        // In samples.
     wpos: usize,        // In samples.
     used: usize,        // In samples.
@@ -180,9 +180,10 @@ struct BufferState {
     writer_active: bool,
     // The write endpoint is gone; a checked-out window may still commit.
     producer_closed: bool,
+    observers: crate::stream_observer::Observers<T>,
 }
 
-impl BufferState {
+impl<T> BufferState<T> {
     // Return write range, in samples.
     #[must_use]
     fn write_range(&self) -> (usize, usize) {
@@ -372,15 +373,19 @@ impl<T> Drop for BufferWriter<T> {
                 .unwrap_or_else(|p| p.into_inner());
             state.writer_active = false;
             if state.producer_closed {
-                self.parent.metadata.set_ended();
+                self.parent.state.metadata.set_ended();
+                state.observers.end();
             }
         }
     }
 }
 
 #[derive(Debug)]
-struct BufferInner {
-    lock: Mutex<BufferState>,
+struct BufferInner<T> {
+    // Stream registry has a weak pointer to metadata. Other than that it's not
+    // shared.
+    metadata: Arc<crate::stream_metadata::Metadata>,
+    lock: Mutex<BufferState<T>>,
     cv: Condvar,
 
     // Waiting for read.
@@ -395,9 +400,10 @@ struct BufferInner {
 /// Type aware buffer.
 #[derive(Debug)]
 pub struct Buffer<T> {
-    metadata: Arc<crate::stream_metadata::Metadata>,
     id: usize,
-    state: Arc<BufferInner>,
+    // Typed observer controls share state without retaining the sample mapping.
+    state: Arc<BufferInner<T>>,
+    _control: Option<Arc<crate::stream_observer::TypedControl<T>>>,
     circ: Circ,
     member_size: usize,
     dummy: std::marker::PhantomData<T>,
@@ -411,7 +417,7 @@ impl<T> Buffer<T> {
     /// starts with valid default values; zero bits need not be valid for `T`.
     pub fn new(size: usize) -> Result<Self>
     where
-        T: Copy + Default,
+        T: Copy + Default + Send + 'static,
     {
         const {
             assert!(std::mem::size_of::<T>() != 0);
@@ -441,27 +447,35 @@ impl<T> Buffer<T> {
             unsafe { circ.map.base.cast::<T>().add(index).write(T::default()) };
         }
         let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let state = Arc::new(BufferInner {
+            metadata: crate::stream_metadata::Metadata::new::<T>(id, false),
+            lock: Mutex::new(BufferState {
+                rpos: 0,
+                wpos: 0,
+                used: 0,
+                circ_len: size,
+                member_size: std::mem::size_of::<T>(),
+                tags: StreamTags::default(),
+                reader_active: false,
+                writer_active: false,
+                producer_closed: false,
+                observers: Default::default(),
+            }),
+            cv: Condvar::new(),
+            #[cfg(feature = "async")]
+            acvr: tokio::sync::Notify::new(),
+            #[cfg(feature = "async")]
+            acvw: tokio::sync::Notify::new(),
+        });
+        let control = (state.metadata.kind != crate::stream_observer::Kind::Unsupported)
+            .then(|| Arc::new(crate::stream_observer::TypedControl(state.clone())));
+        if let Some(control) = &control {
+            crate::stream_metadata::Metadata::register(id, control.clone());
+        }
         Ok(Self {
             id,
-            metadata: crate::stream_metadata::Metadata::new::<T>(id, false),
-            state: Arc::new(BufferInner {
-                lock: Mutex::new(BufferState {
-                    rpos: 0,
-                    wpos: 0,
-                    used: 0,
-                    circ_len: size,
-                    member_size: std::mem::size_of::<T>(),
-                    tags: StreamTags::default(),
-                    reader_active: false,
-                    writer_active: false,
-                    producer_closed: false,
-                }),
-                cv: Condvar::new(),
-                #[cfg(feature = "async")]
-                acvr: tokio::sync::Notify::new(),
-                #[cfg(feature = "async")]
-                acvw: tokio::sync::Notify::new(),
-            }),
+            state,
+            _control: control,
             member_size: std::mem::size_of::<T>(),
             circ,
             dummy: std::marker::PhantomData,
@@ -470,14 +484,15 @@ impl<T> Buffer<T> {
 
     #[must_use]
     pub(crate) fn metadata(&self) -> &crate::stream_metadata::Metadata {
-        &self.metadata
+        &self.state.metadata
     }
 
     pub(crate) fn close_writer(&self) {
         let mut state = self.state.lock.lock().unwrap_or_else(|p| p.into_inner());
         state.producer_closed = true;
         if !state.writer_active {
-            self.metadata.set_ended();
+            self.state.metadata.set_ended();
+            state.observers.end();
         }
     }
 
@@ -621,7 +636,8 @@ impl<T: Copy> Buffer<T> {
         if n == 0 {
             s.writer_active = false;
             if s.producer_closed {
-                self.metadata.set_ended();
+                self.state.metadata.set_ended();
+                s.observers.end();
             }
             if !tags.is_empty() {
                 error!("produce() called on a stream with 0 entries, but non-empty tags: {tags:?}");
@@ -640,12 +656,22 @@ impl<T: Copy> Buffer<T> {
             s.write_capacity(),
             n
         );
+        if !s.observers.0.is_empty() {
+            assert!(
+                tags.iter().all(|t| t.pos() < n),
+                "tag outside produced samples"
+            );
+            let position = s.tags.position();
+            let samples = self.slice(s.wpos, s.wpos + n);
+            s.observers.samples(samples, &tags, position);
+        }
         s.tags.produce(n, tags);
         s.wpos = (s.wpos + n) % s.capacity();
         s.used += n;
         s.writer_active = false;
         if s.producer_closed {
-            self.metadata.set_ended();
+            self.state.metadata.set_ended();
+            s.observers.end();
         }
         self.state.cv.notify_all();
         #[cfg(feature = "async")]
@@ -690,6 +716,18 @@ impl<T: Copy> Buffer<T> {
         s.writer_active = true;
         drop(s);
         Ok(BufferWriter::new(self, start, end))
+    }
+}
+
+impl<T> crate::stream_observer::Control<T> for BufferInner<T> {
+    fn with_state(
+        &self,
+        action: &mut dyn FnMut(&mut crate::stream_observer::Observers<T>, u64, bool),
+    ) {
+        let mut s = self.lock.lock().unwrap();
+        let position = s.tags.position();
+        let ended = s.producer_closed && !s.writer_active;
+        action(&mut s.observers, position, ended);
     }
 }
 

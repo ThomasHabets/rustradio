@@ -4,7 +4,7 @@ use rustradio::stream::{NCReadStream, NCWriteStream, ReadStream, WriteStream, ne
 use rustradio::{Result, SampleEncoding};
 
 #[derive(rustradio_macros::Block)]
-#[rustradio(new, bound = "T: Copy + Default + Send + Sync")]
+#[rustradio(new, bound = "T: Copy + Default + Send + Sync + 'static")]
 struct Mixed<T> {
     #[rustradio(out)]
     samples: WriteStream<T>,

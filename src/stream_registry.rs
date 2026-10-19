@@ -1,8 +1,10 @@
 //! Process-wide inventory of live stream metadata.
+use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use crate::stream_metadata::Metadata;
+use crate::stream_observer::TypedControl;
 
 /// Snapshot of a live process stream's metadata.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -32,7 +34,7 @@ impl StreamInfo {
     }
 }
 
-pub(crate) type Registry = HashMap<usize, Weak<Metadata>>;
+pub(crate) type Registry = HashMap<usize, (Weak<Metadata>, Option<Weak<dyn Any + Send + Sync>>)>;
 pub(crate) fn registry() -> &'static Mutex<Registry> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     REGISTRY.get_or_init(Default::default)
@@ -47,12 +49,28 @@ pub(crate) fn registry() -> &'static Mutex<Registry> {
 #[must_use]
 pub fn streams() -> Vec<StreamInfo> {
     let mut registry = registry().lock().unwrap();
-    registry.retain(|_, metadata| metadata.strong_count() > 0);
+    registry.retain(|_, (metadata, _)| metadata.strong_count() > 0);
     let mut entries: Vec<_> = registry
         .values()
-        .filter_map(Weak::upgrade)
+        .filter_map(|(metadata, _)| metadata.upgrade())
         .map(|metadata| metadata.info())
         .collect();
     entries.sort_by_cached_key(StreamInfo::name);
     entries
+}
+
+// Transport adapters use this to attach callbacks without retaining sample
+// storage. A mismatched item type is rejected by the checked downcast.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn lookup<T: 'static>(id: usize) -> Option<(Arc<Metadata>, Arc<TypedControl<T>>)> {
+    let registry = registry().lock().unwrap();
+    let (metadata, control) = registry.get(&id)?;
+    Some((
+        metadata.upgrade()?,
+        control
+            .as_ref()?
+            .upgrade()?
+            .downcast::<TypedControl<T>>()
+            .ok()?,
+    ))
 }

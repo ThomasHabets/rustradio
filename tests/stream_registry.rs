@@ -69,20 +69,20 @@ fn inventory_lifetime_follows_outstanding_windows() -> Result<()> {
 
 #[test]
 fn inventory_includes_custom_message_types_without_retaining_them() {
-    use std::rc::Rc;
-    let value = Rc::new(String::from("custom"));
-    let (writer, reader) = new_nocopy_stream::<Rc<String>>();
+    use std::sync::Arc;
+    let value = Arc::new(String::from("custom"));
+    let (writer, reader) = new_nocopy_stream::<Arc<String>>();
     let name = reader.name();
     let entry = info(&name);
     assert!(entry.messages);
-    assert_eq!(entry.sample_type, std::any::type_name::<Rc<String>>());
+    assert_eq!(entry.sample_type, std::any::type_name::<Arc<String>>());
     writer.push(value.clone(), []);
-    assert_eq!(Rc::strong_count(&value), 2);
+    assert_eq!(Arc::strong_count(&value), 2);
     drop(writer);
     assert!(info(&name).ended);
     assert!(!reader.eof());
     drop(reader);
-    assert_eq!(Rc::strong_count(&value), 1);
+    assert_eq!(Arc::strong_count(&value), 1);
     assert!(!streams().iter().any(|s| s.name() == name));
 }
 

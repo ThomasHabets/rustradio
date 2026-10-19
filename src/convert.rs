@@ -51,7 +51,7 @@ impl<In, F> Inspect<In, F> {
 
 /// Block to convert from u8 to other sample types.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, bound = "T: Default + Copy")]
+#[rustradio(crate, new, bound = "T: Default + Copy + Send + 'static")]
 pub struct Parse<T> {
     #[rustradio(in)]
     src: ReadStream<u8>,
@@ -196,7 +196,7 @@ impl<In, Out, F> Map<In, Out, F> {
     custom_name,
     new,
     bound = "In: Send",
-    bound = "Out: Send",
+    bound = "Out: Send + 'static",
     bound = "F: FnMut(In, Vec<Tag>) -> Vec<(Out, Vec<Tag>)> + Send"
 )]
 pub struct NCMap<In, Out, F> {

@@ -13,6 +13,7 @@ finite and positive; blocks do not infer or propagate them. Use [`streams()`] to
 list live process streams and their metadata. The inventory does not keep stream buffers or endpoints alive.
 */
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use async_trait::async_trait;
@@ -217,7 +218,10 @@ impl<T: Default + Copy> ReadStream<T> {
     /// Create a new stream with initial data in it.
     #[cfg(test)]
     #[must_use]
-    pub fn from_slice(data: &[T]) -> Self {
+    pub fn from_slice(data: &[T]) -> Self
+    where
+        T: Send + 'static,
+    {
         let circ = Arc::new(crate::sys::Buffer::new(DEFAULT_STREAM_SIZE).unwrap()); // TODO
         let mut wb = circ.clone().write_buf().unwrap();
         wb.fill_from_slice(data);
@@ -299,7 +303,7 @@ pub struct WriteStream<T> {
     circ: Arc<crate::sys::Buffer<T>>,
 }
 
-impl<T: Default + Copy> WriteStream<T> {
+impl<T: Default + Copy + Send + 'static> WriteStream<T> {
     /// Create a stream pair, returning buffer creation errors.
     ///
     /// See [`new_stream`] for supported layouts and possible errors.
@@ -390,9 +394,11 @@ impl<T: Copy> WriteStream<T> {
 ///
 /// # Errors
 ///
+/// Items must be owned (`'static`) and transferable between threads (`Send`).
+///
 /// Returns buffer creation errors, including temporary-file or memory-mapping
 /// failures and element layouts incompatible with the fixed buffer size.
-pub fn new_stream<T: Default + Copy>() -> Result<(WriteStream<T>, ReadStream<T>)> {
+pub fn new_stream<T: Default + Copy + Send + 'static>() -> Result<(WriteStream<T>, ReadStream<T>)> {
     let circ = Arc::new(crate::sys::Buffer::new(DEFAULT_STREAM_SIZE)?);
     Ok((WriteStream { circ: circ.clone() }, ReadStream { circ }))
 }
@@ -402,9 +408,20 @@ struct NCEntry<T> {
     tags: Vec<Tag>,
 }
 
+struct NCState<T> {
+    queue: VecDeque<NCEntry<T>>,
+    observers: crate::stream_observer::Observers<T>,
+    position: u64,
+}
+
 struct NCInner<T> {
+    lock: Mutex<NCState<T>>,
+    // Observer access may temporarily retain this owner. Endpoint closure must
+    // therefore be independent of its Arc count; the mutex orders queue data.
+    reader_closed: AtomicBool,
+    writer_closed: AtomicBool,
+    _control: Option<Arc<crate::stream_observer::TypedControl<T>>>,
     metadata: Arc<crate::stream_metadata::Metadata>,
-    lock: Mutex<VecDeque<NCEntry<T>>>,
     cv: Condvar,
     capacity: usize,
 
@@ -429,16 +446,16 @@ impl<T: Send> StreamWait for NCReadStream<T> {
         self.id
     }
     fn wait(&self, need: usize) -> WaitOutcome {
-        let (queue, _) = self
+        let (s, _) = self
             .inner
             .cv
             .wait_timeout_while(
                 self.inner.lock.lock().unwrap(),
                 std::time::Duration::from_millis(100),
-                |queue| queue.len() < need && !self.closed(),
+                |s| s.queue.len() < need && !self.closed(),
             )
             .unwrap();
-        WaitOutcome::from_available(queue.len(), need, self.closed())
+        WaitOutcome::from_available(s.queue.len(), need, self.closed())
     }
 
     #[cfg(feature = "async")]
@@ -449,7 +466,7 @@ impl<T: Send> StreamWait for NCReadStream<T> {
                 tokio::pin!(notified);
                 notified.as_mut().enable();
                 let outcome = WaitOutcome::from_available(
-                    self.inner.lock.lock().unwrap().len(),
+                    self.inner.lock.lock().unwrap().queue.len(),
                     need,
                     self.closed(),
                 );
@@ -461,11 +478,15 @@ impl<T: Send> StreamWait for NCReadStream<T> {
         })
         .await
         .unwrap_or_else(|_| {
-            WaitOutcome::from_available(self.inner.lock.lock().unwrap().len(), need, self.closed())
+            WaitOutcome::from_available(
+                self.inner.lock.lock().unwrap().queue.len(),
+                need,
+                self.closed(),
+            )
         })
     }
     fn closed(&self) -> bool {
-        Arc::strong_count(&self.inner) == 1
+        self.inner.writer_closed.load(Ordering::Relaxed)
     }
 }
 
@@ -476,16 +497,16 @@ impl<T: Send> StreamWait for NCWriteStream<T> {
     }
     fn wait(&self, need: usize) -> WaitOutcome {
         let capacity = self.inner.capacity;
-        let (queue, _) = self
+        let (s, _) = self
             .inner
             .cv
             .wait_timeout_while(
                 self.inner.lock.lock().unwrap(),
                 std::time::Duration::from_millis(100),
-                |queue| capacity.saturating_sub(queue.len()) < need && !self.closed(),
+                |s| capacity.saturating_sub(s.queue.len()) < need && !self.closed(),
             )
             .unwrap();
-        WaitOutcome::from_available(capacity.saturating_sub(queue.len()), need, self.closed())
+        WaitOutcome::from_available(capacity.saturating_sub(s.queue.len()), need, self.closed())
     }
     #[cfg(feature = "async")]
     async fn wait_async(&self, need: usize) -> WaitOutcome {
@@ -505,7 +526,7 @@ impl<T: Send> StreamWait for NCWriteStream<T> {
         .unwrap_or_else(|_| WaitOutcome::from_available(self.remaining(), need, self.closed()))
     }
     fn closed(&self) -> bool {
-        Arc::strong_count(&self.inner) == 1
+        self.inner.reader_closed.load(Ordering::Relaxed)
     }
 }
 
@@ -518,24 +539,40 @@ pub struct NCWriteStream<T> {
 /// Create a new stream for data elements that do not implement Copy.
 ///
 /// This is likely going to be frames, packets, and (in GNU Radio) "messages",
-/// which you would not want to just copy willy nilly.
+/// which you would not want to just copy willy nilly. Messages must be owned
+/// (`'static`) and transferable between threads (`Send`).
 #[must_use]
-pub fn new_nocopy_stream<T>() -> (NCWriteStream<T>, NCReadStream<T>) {
+pub fn new_nocopy_stream<T: Send + 'static>() -> (NCWriteStream<T>, NCReadStream<T>) {
     let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let inner = Arc::new(NCInner {
-        metadata: crate::stream_metadata::Metadata::new::<T>(id, true),
-        lock: Mutex::new(VecDeque::new()),
-        cv: Condvar::new(),
-        capacity: DEFAULT_NOCOPY_CAPACITY,
-
-        // Waiting for read.
-        #[cfg(feature = "async")]
-        acvr: tokio::sync::Notify::new(),
-
-        // Waiting for write.
-        #[cfg(feature = "async")]
-        acvw: tokio::sync::Notify::new(),
+    let metadata = crate::stream_metadata::Metadata::new::<T>(id, true);
+    let inner = Arc::new_cyclic(|owner| {
+        let control = (metadata.kind != crate::stream_observer::Kind::Unsupported).then(|| {
+            Arc::new(crate::stream_observer::TypedControl(Arc::new(NCControl {
+                inner: owner.clone(),
+            })))
+        });
+        NCInner {
+            metadata,
+            lock: Mutex::new(NCState {
+                queue: VecDeque::new(),
+                observers: Default::default(),
+                position: 0,
+            }),
+            reader_closed: AtomicBool::new(false),
+            writer_closed: AtomicBool::new(false),
+            _control: control,
+            cv: Condvar::new(),
+            capacity: DEFAULT_NOCOPY_CAPACITY,
+            #[cfg(feature = "async")]
+            acvr: tokio::sync::Notify::new(),
+            #[cfg(feature = "async")]
+            acvw: tokio::sync::Notify::new(),
+        }
     });
+    // Publish only once the control's weak owner can be upgraded.
+    if let Some(control) = &inner._control {
+        crate::stream_metadata::Metadata::register(id, control.clone());
+    }
     (
         NCWriteStream {
             id,
@@ -557,6 +594,7 @@ impl<T> NCReadStream<T> {
             .lock
             .lock()
             .unwrap()
+            .queue
             .pop_front()
             .map(|v| (v.val, v.tags));
         self.inner.cv.notify_all();
@@ -568,8 +606,8 @@ impl<T> NCReadStream<T> {
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
-        if self.inner.lock.lock().unwrap().is_empty() {
-            Arc::strong_count(&self.inner) == 1
+        if self.inner.lock.lock().unwrap().queue.is_empty() {
+            self.inner.writer_closed.load(Ordering::Relaxed)
         } else {
             false
         }
@@ -578,7 +616,7 @@ impl<T> NCReadStream<T> {
     /// Return true is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        let has = self.inner.lock.lock().unwrap().len();
+        let has = self.inner.lock.lock().unwrap().queue.len();
         has == 0
     }
 }
@@ -596,7 +634,10 @@ impl<T> StreamReadSide for NCWriteStream<T> {
 impl<T> NCWriteStream<T> {
     /// Create a new stream pair.
     #[must_use]
-    pub fn new() -> (NCWriteStream<T>, NCReadStream<T>) {
+    pub fn new() -> (NCWriteStream<T>, NCReadStream<T>)
+    where
+        T: Send + 'static,
+    {
         new_nocopy_stream()
     }
     /// Push one sample, handing off ownership.
@@ -617,11 +658,19 @@ impl<T> NCWriteStream<T> {
             tags.windows(2).all(|pair| pair[0].pos() <= pair[1].pos()),
             "no-copy stream tags must be sorted by position"
         );
-        self.inner
-            .lock
-            .lock()
-            .unwrap()
-            .push_back(NCEntry { val, tags });
+        let mut state = self.inner.lock.lock().unwrap();
+        if !state.observers.0.is_empty() {
+            let position = state.position;
+            state
+                .observers
+                .samples(std::slice::from_ref(&val), &tags, position);
+        }
+        state.position = state
+            .position
+            .checked_add(1)
+            .expect("absolute stream position overflow");
+        state.queue.push_back(NCEntry { val, tags });
+        drop(state);
         self.inner.cv.notify_all();
         #[cfg(feature = "async")]
         self.inner.acvr.notify_waiters();
@@ -630,7 +679,7 @@ impl<T> NCWriteStream<T> {
     /// Remaining capacity.
     #[must_use]
     pub fn remaining(&self) -> usize {
-        let has = self.inner.lock.lock().unwrap().len();
+        let has = self.inner.lock.lock().unwrap().queue.len();
         self.inner.capacity.saturating_sub(has)
     }
 }
@@ -639,19 +688,52 @@ impl<T: Len> NCReadStream<T> {
     /// Get the size of the front packet.
     #[must_use]
     pub fn peek_size(&self) -> Option<usize> {
-        self.inner.lock.lock().unwrap().front().map(|e| e.val.len())
+        self.inner
+            .lock
+            .lock()
+            .unwrap()
+            .queue
+            .front()
+            .map(|e| e.val.len())
     }
 }
 
+struct NCControl<T> {
+    inner: std::sync::Weak<NCInner<T>>,
+}
+impl<T: Send> crate::stream_observer::Control<T> for NCControl<T> {
+    fn with_state(
+        &self,
+        action: &mut dyn FnMut(&mut crate::stream_observer::Observers<T>, u64, bool),
+    ) {
+        let Some(inner) = self.inner.upgrade() else {
+            action(&mut Default::default(), 0, true);
+            return;
+        };
+        let mut state = inner.lock.lock().unwrap();
+        let position = state.position;
+        let ended = inner.writer_closed.load(Ordering::Relaxed);
+        action(&mut state.observers, position, ended);
+    }
+}
 impl<T> Drop for WriteStream<T> {
     fn drop(&mut self) {
         self.circ.close_writer();
     }
 }
 
+impl<T> Drop for NCReadStream<T> {
+    fn drop(&mut self) {
+        self.inner.reader_closed.store(true, Ordering::Relaxed);
+    }
+}
+
 impl<T> Drop for NCWriteStream<T> {
     fn drop(&mut self) {
+        let mut state = self.inner.lock.lock().unwrap_or_else(|p| p.into_inner());
+        self.inner.writer_closed.store(true, Ordering::Relaxed);
         self.inner.metadata.set_ended();
+        state.observers.end();
     }
 }
 
@@ -704,6 +786,62 @@ impl<T> NCInner<T> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn observer_controls_do_not_retain_primary_storage() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        let buffer = Arc::downgrade(&writer.circ);
+        let (_metadata, control) = crate::stream_registry::lookup::<u8>(writer.id()).unwrap();
+        drop(writer);
+        assert!(reader.eof());
+        drop(reader);
+        assert!(buffer.upgrade().is_none());
+        control.with_state(&mut |_, _, ended| assert!(ended));
+
+        let (writer, reader) = new_nocopy_stream::<String>();
+        let queue = Arc::downgrade(&writer.inner);
+        let (_metadata, control) = crate::stream_registry::lookup::<String>(writer.id()).unwrap();
+        writer.push("pending".into(), []);
+        drop(writer);
+        drop(reader);
+        assert!(queue.upgrade().is_none());
+        control.with_state(&mut |_, _, ended| assert!(ended));
+        Ok(())
+    }
+
+    #[test]
+    fn observer_access_does_not_change_copying_endpoint_counts() -> Result<()> {
+        let (writer, reader) = new_stream::<u8>()?;
+        let (_, control) = crate::stream_registry::lookup::<u8>(writer.id()).unwrap();
+        control.with_state(&mut |_, _, _| {
+            assert_eq!(reader.refcount(), 2);
+            assert_eq!(writer.refcount(), 2);
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn observer_access_does_not_mask_nocopy_endpoint_closure() {
+        let (writer, reader) = new_nocopy_stream::<String>();
+        let (_, control) = crate::stream_registry::lookup::<String>(writer.id()).unwrap();
+        let mut reader = Some(reader);
+        control.with_state(&mut |_, _, _| {
+            drop(reader.take());
+            assert!(writer.closed());
+        });
+
+        let (writer, reader) = new_nocopy_stream::<String>();
+        let (_, control) = crate::stream_registry::lookup::<String>(writer.id()).unwrap();
+        writer.push("pending".into(), []);
+        drop(writer);
+        control.with_state(&mut |_, _, ended| {
+            assert!(ended);
+            assert!(reader.closed());
+        });
+        assert!(!reader.eof());
+        reader.pop().unwrap();
+        assert!(reader.eof());
+    }
 
     #[test]
     fn producer_completion_does_not_wait_for_buffered_data_or_read_windows() -> Result<()> {

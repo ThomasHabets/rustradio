@@ -81,6 +81,7 @@ struct BufferState<T> {
     reader_active: bool,
     // The write endpoint is gone; a checked-out window may still commit.
     producer_closed: bool,
+    observers: crate::stream_observer::Observers<T>,
 
     // Extra accounting to ensure that we never read uninitialized content.
     #[cfg(debug_assertions)]
@@ -115,6 +116,7 @@ impl<T: Default> BufferState<T> {
             read_cache: Vec::new(),
             reader_active: false,
             producer_closed: false,
+            observers: Default::default(),
 
             #[cfg(debug_assertions)]
             initialized: vec![false; size],
@@ -175,32 +177,53 @@ impl<T> BufferState<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct Buffer<T> {
+struct BufferInner<T> {
     metadata: Arc<crate::stream_metadata::Metadata>,
-    id: usize,
     state: Mutex<BufferState<T>>,
 }
-impl<T: Default + Copy> Buffer<T> {
+
+pub struct Buffer<T> {
+    id: usize,
+    // Observer access must not change the endpoint Buffer's Arc count, which
+    // is used for closure and buffer checkout checks.
+    inner: Arc<BufferInner<T>>,
+    _control: Option<Arc<crate::stream_observer::TypedControl<T>>>,
+}
+impl<T: Default + Copy + Send + 'static> Buffer<T> {
     pub fn new(size: usize) -> Result<Self> {
         let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let metadata = crate::stream_metadata::Metadata::new::<T>(id, false);
+        let state = Mutex::new(BufferState::new(size)?);
+        let inner = Arc::new(BufferInner { metadata, state });
+        let control =
+            (inner.metadata.kind != crate::stream_observer::Kind::Unsupported).then(|| {
+                Arc::new(crate::stream_observer::TypedControl(Arc::new(
+                    CopyControl {
+                        inner: Arc::downgrade(&inner),
+                    },
+                )))
+            });
+        if let Some(control) = &control {
+            crate::stream_metadata::Metadata::register(id, control.clone());
+        }
         Ok(Self {
             id,
-            metadata: crate::stream_metadata::Metadata::new::<T>(id, false),
-            state: Mutex::new(BufferState::new(size)?),
+            inner,
+            _control: control,
         })
     }
 }
 impl<T> Buffer<T> {
     pub(crate) fn metadata(&self) -> &crate::stream_metadata::Metadata {
-        &self.metadata
+        &self.inner.metadata
     }
 
     pub(crate) fn close_writer(&self) {
-        let mut state = self.state.lock().unwrap_or_else(|p| p.into_inner());
+        let mut state = self.inner.state.lock().unwrap_or_else(|p| p.into_inner());
         state.producer_closed = true;
         if state.write_cache.is_some() {
-            self.metadata.set_ended();
+            self.inner.metadata.set_ended();
+            state.observers.end();
         }
     }
 
@@ -208,17 +231,17 @@ impl<T> Buffer<T> {
         self.id
     }
     pub(crate) fn is_empty(&self) -> bool {
-        self.state.lock().unwrap().used == 0
+        self.inner.state.lock().unwrap().used == 0
     }
     /// Available space to write, in bytes(?).
     pub(crate) fn free(&self) -> usize {
-        self.state.lock().unwrap().free()
+        self.inner.state.lock().unwrap().free()
     }
     pub fn consume(&self, n: usize) {
-        self.state.lock().unwrap().consume(n);
+        self.inner.state.lock().unwrap().consume(n);
     }
     pub fn total_size(&self) -> usize {
-        self.state.lock().unwrap().capacity()
+        self.inner.state.lock().unwrap().capacity()
     }
     pub fn wait_for_write(&self, _need: usize) -> usize {
         // TODO
@@ -226,7 +249,7 @@ impl<T> Buffer<T> {
     }
     pub fn wait_for_read(&self, _need: usize) -> usize {
         // TODO
-        self.state.lock().unwrap().used
+        self.inner.state.lock().unwrap().used
     }
     #[cfg(feature = "async")]
     pub async fn wait_for_write_async(&self, _need: usize) -> usize {
@@ -239,7 +262,7 @@ impl<T> Buffer<T> {
         self.wait_for_read(_need)
     }
     pub fn write_buf(self: Arc<Self>) -> Result<BufferWriter<T>> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.inner.state.lock().unwrap();
         let len = state.free();
         let stream = state
             .write_cache
@@ -279,6 +302,13 @@ impl<T: Copy> BufferState<T> {
         }
         self.stream[first].copy_from_slice(&samples[..split]);
         self.stream[second].copy_from_slice(&samples[split..]);
+        if !self.observers.0.is_empty() {
+            assert!(
+                tags.iter().all(|tag| tag.pos() < samples.len()),
+                "tag outside produced samples"
+            );
+            self.observers.samples(samples, &tags, self.tags.position());
+        }
         self.tags.produce(samples.len(), tags);
         self.wpos = (self.wpos + samples.len()) % self.capacity();
         self.used += samples.len();
@@ -288,11 +318,15 @@ impl<T: Copy> BufferState<T> {
 impl<T: Copy> Buffer<T> {
     #[cfg(test)]
     fn produce<'a>(&self, samples: &[T], tags: impl Into<Cow<'a, [Tag]>>) {
-        self.state.lock().unwrap().produce(samples, tags.into());
+        self.inner
+            .state
+            .lock()
+            .unwrap()
+            .produce(samples, tags.into());
     }
 
     pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.inner.state.lock().unwrap();
         if state.reader_active {
             return Err(Error::msg(
                 "read_buf() called with an outstanding read buffer",
@@ -349,7 +383,7 @@ impl<T> BufferReader<T> {
             "trying to consume {n}, but read buffer only has {}",
             self.stream.len()
         );
-        let mut state = self.parent.state.lock().unwrap();
+        let mut state = self.parent.inner.state.lock().unwrap();
         state.consume(n);
         state.recycle_reader(std::mem::take(&mut self.stream));
         state.reader_active = false;
@@ -371,7 +405,7 @@ impl<T> BufferReader<T> {
 impl<T> Drop for BufferReader<T> {
     fn drop(&mut self) {
         if !self.released
-            && let Ok(mut state) = self.parent.state.lock()
+            && let Ok(mut state) = self.parent.inner.state.lock()
         {
             state.reader_active = false;
             state.recycle_reader(std::mem::take(&mut self.stream));
@@ -454,14 +488,15 @@ impl<T: Copy> BufferWriter<T> {
             "trying to produce {n} samples, but only {} samples were written",
             self.prepared
         );
-        let mut state = self.parent.state.lock().unwrap();
+        let mut state = self.parent.inner.state.lock().unwrap();
         state.produce(
             &self.stream.as_ref().expect("writer storage")[..n],
             tags.into(),
         );
         state.write_cache = self.stream.take();
         if state.producer_closed {
-            self.parent.metadata.set_ended();
+            self.parent.inner.metadata.set_ended();
+            state.observers.end();
         }
     }
 }
@@ -469,10 +504,16 @@ impl<T: Copy> BufferWriter<T> {
 impl<T> Drop for BufferWriter<T> {
     fn drop(&mut self) {
         if let Some(stream) = self.stream.take() {
-            let mut state = self.parent.state.lock().unwrap_or_else(|p| p.into_inner());
+            let mut state = self
+                .parent
+                .inner
+                .state
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
             state.write_cache = Some(stream);
             if state.producer_closed {
-                self.parent.metadata.set_ended();
+                self.parent.inner.metadata.set_ended();
+                state.observers.end();
             }
         }
     }
@@ -488,6 +529,35 @@ pub mod export {
     pub type BufferWriter<T> = super::BufferWriter<T>;
 }
 
+impl<T> std::fmt::Debug for Buffer<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Buffer")
+            .field("metadata", &self.inner.metadata)
+            .finish_non_exhaustive()
+    }
+}
+#[cfg_attr(
+    not(all(feature = "unstable", not(target_arch = "wasm32"))),
+    allow(dead_code)
+)]
+struct CopyControl<T> {
+    inner: std::sync::Weak<BufferInner<T>>,
+}
+impl<T: Send> crate::stream_observer::Control<T> for CopyControl<T> {
+    fn with_state(
+        &self,
+        action: &mut dyn FnMut(&mut crate::stream_observer::Observers<T>, u64, bool),
+    ) {
+        let Some(inner) = self.inner.upgrade() else {
+            action(&mut Default::default(), 0, true);
+            return;
+        };
+        let mut state = inner.state.lock().unwrap();
+        let position = state.tags.position();
+        let ended = state.producer_closed && state.write_cache.is_some();
+        action(&mut state.observers, position, ended);
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -650,7 +720,7 @@ mod tests {
         writer.fill_from_slice(&[2]);
         let tags = [Tag::new(1, "invalid", crate::stream::TagValue::Bool(true))];
         assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(1, &tags))).is_err());
-        assert!(buffer.state.is_poisoned());
+        assert!(buffer.inner.state.is_poisoned());
         drop(reader);
     }
 }

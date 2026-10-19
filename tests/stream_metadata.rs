@@ -88,11 +88,10 @@ fn metadata_preserves_data_tags_and_eof() -> Result<()> {
     buffer.consume(2);
     assert!(reader.eof());
 
-    // Borrowed messages need no 'static bound for metadata.
     let value = String::from("borrowed");
     let (writer, reader) = new_nocopy_stream();
     let writer = writer.with_name("messages").with_sample_rate(1.)?;
-    writer.push(value.as_str(), []);
+    writer.push(value, []);
     drop(writer);
     assert_eq!(reader.name(), "messages");
     assert_eq!(reader.pop().unwrap().0, "borrowed");

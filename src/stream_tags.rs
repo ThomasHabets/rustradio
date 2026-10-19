@@ -35,6 +35,10 @@ pub(crate) struct StreamTags {
 }
 
 impl StreamTags {
+    pub(crate) fn position(&self) -> u64 {
+        self.write_pos.0
+    }
+
     pub(crate) fn produce(&mut self, samples: usize, tags: Cow<'_, [Tag]>) {
         let end = self.write_pos.advance(samples);
         // An out-of-range tag could overlap a later batch and break FIFO order.

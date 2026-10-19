@@ -5,7 +5,7 @@ use crate::stream::NCWriteStream;
 
 /// Message strobe.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new)]
+#[rustradio(crate, new, bound = "T: 'static")]
 pub struct Strobe<T: Send + Clone> {
     #[rustradio(out)]
     dst: NCWriteStream<T>,

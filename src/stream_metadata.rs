@@ -1,6 +1,7 @@
 //! Metadata shared by the endpoints of a stream.
 use std::sync::{Arc, Mutex};
 
+use crate::stream_observer::{Kind, TypedControl};
 use crate::stream_registry::{StreamInfo, registry};
 
 /// Metadata shared by a stream's reader and writer through their `Arc`-owned
@@ -10,13 +11,15 @@ use crate::stream_registry::{StreamInfo, registry};
 /// for sample transfer; ordinary sample transfer does not acquire this mutex.
 #[derive(Debug)]
 pub(crate) struct Metadata {
+    pub kind: Kind,
     info: Mutex<StreamInfo>,
 }
 impl Metadata {
-    pub fn new<T>(id: usize, messages: bool) -> Arc<Self> {
+    pub fn new<T: 'static>(id: usize, messages: bool) -> Arc<Self> {
         let mut registry = registry().lock().unwrap();
-        registry.retain(|_, m| m.strong_count() > 0);
+        registry.retain(|_, (m, _)| m.strong_count() > 0);
         let ret = Arc::new(Self {
+            kind: Kind::of::<T>(messages),
             info: Mutex::new(StreamInfo {
                 id,
                 name: None,
@@ -26,8 +29,14 @@ impl Metadata {
                 ended: false,
             }),
         });
-        registry.insert(id, Arc::downgrade(&ret));
+        registry.insert(id, (Arc::downgrade(&ret), None));
         ret
+    }
+    pub fn register<T: 'static>(id: usize, control: Arc<TypedControl<T>>) {
+        let control: Arc<dyn std::any::Any + Send + Sync> = control;
+        if let Some(entry) = registry().lock().unwrap().get_mut(&id) {
+            entry.1 = Some(Arc::downgrade(&control));
+        }
     }
     pub fn info(&self) -> StreamInfo {
         self.info.lock().unwrap().clone()
@@ -52,7 +61,7 @@ impl Metadata {
             {
                 return true;
             }
-            registry.values().filter_map(|m| m.upgrade()).any(|m| {
+            registry.values().filter_map(|(m, _)| m.upgrade()).any(|m| {
                 if std::ptr::eq(m.as_ref(), self) {
                     return false;
                 }

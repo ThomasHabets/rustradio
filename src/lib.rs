@@ -268,6 +268,7 @@ pub mod graph;
 pub mod mtgraph;
 pub mod stream;
 mod stream_metadata;
+mod stream_observer;
 mod stream_registry;
 mod stream_tags;
 pub mod window;
