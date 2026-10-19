@@ -1,5 +1,6 @@
 //! Typed producer-side callbacks, serialized under the stream's existing lock.
 use std::any::TypeId;
+use std::panic::RefUnwindSafe;
 use std::sync::{Arc, Weak};
 
 use crate::stream::Tag;
@@ -33,7 +34,7 @@ impl Kind {
     }
 }
 
-pub(crate) trait Control<T>: Send + Sync {
+pub(crate) trait Control<T>: Send + Sync + RefUnwindSafe {
     // Lock order: stream state, then subscriber state. Never the reverse.
     #[cfg_attr(not(test), allow(dead_code))]
     fn with_state(&self, action: &mut dyn FnMut(&mut Observers<T>, u64, bool));
