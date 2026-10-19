@@ -124,6 +124,7 @@ impl SourceHandle {
         let _ = self.notify.try_send(());
     }
     /// Immutable negotiated metadata, including sample rate and source offset.
+    /// A sample rate of zero means unknown.
     pub fn description(&self) -> proto::StreamDescription {
         self.lock()
             .started
@@ -468,7 +469,7 @@ fn start_source(
         || started.initial_credit.is_some()
         || desc.encoding.as_ref() != Some(&encoding)
         || !desc.sample_rate_hz.is_finite()
-        || desc.sample_rate_hz <= 0.0
+        || desc.sample_rate_hz < 0.0
         || desc.uses_terminal_tags
         || desc.uses_tag_source_ids
         || !desc.opaque_codecs.is_empty()
@@ -1212,6 +1213,39 @@ mod tests {
         ));
         Ok(())
     }
+    #[test]
+    fn accepts_unknown_and_known_sample_rates() -> Result<()> {
+        let options = StreamOptions::default();
+        for rate in [0., 48_000.] {
+            let mut numeric = started::<f32>(&options);
+            numeric.description.as_mut().unwrap().sample_rate_hz = rate;
+            let (_source, _output, handle, _transport) =
+                IqStreamSource::<f32>::from_started(numeric, &options)?;
+            assert_eq!(handle.description().sample_rate_hz, rate);
+
+            let mut strings = string_started(&options);
+            strings.description.as_mut().unwrap().sample_rate_hz = rate;
+            let (_source, _output, handle, _transport) =
+                IqStreamStringSource::from_started(strings, &options)?;
+            assert_eq!(handle.description().sample_rate_hz, rate);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_negative_and_nonfinite_sample_rates() {
+        let options = StreamOptions::default();
+        for rate in [-1., f64::NEG_INFINITY, f64::INFINITY, f64::NAN] {
+            let mut numeric = started::<f32>(&options);
+            numeric.description.as_mut().unwrap().sample_rate_hz = rate;
+            assert!(IqStreamSource::<f32>::from_started(numeric, &options).is_err());
+
+            let mut strings = string_started(&options);
+            strings.description.as_mut().unwrap().sample_rate_hz = rate;
+            assert!(IqStreamStringSource::from_started(strings, &options).is_err());
+        }
+    }
+
     #[test]
     fn rejects_format_rate_and_metadata_changes_at_opening() {
         let options = StreamOptions::default();

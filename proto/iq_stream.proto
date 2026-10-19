@@ -159,7 +159,7 @@ message Limits {
 // for multiple channels. All required fields must be present.
 message StreamDescription {
   Encoding encoding = 1;
-  double sample_rate_hz = 2;          // Finite and strictly positive; immutable.
+  double sample_rate_hz = 2;          // Zero means unknown; otherwise finite and positive.
   // Set of every kind this source may use, including nested values, properties,
   // and terminal metadata. Sending an undeclared kind is an error.
   repeated TagKind tag_kinds = 3;      // All possible kinds, including nested ones.

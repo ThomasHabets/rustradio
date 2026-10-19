@@ -178,8 +178,9 @@ implement a separate canonical protobuf encoding.
 
 ## Samples and stream positions
 
-The description fixes the component type, byte order, sample layout, and finite,
-positive `sample_rate_hz`. `Encoding.layout` must explicitly be `REAL` or
+The description fixes the component type, byte order, sample layout, and
+`sample_rate_hz`. A rate of zero means unknown; otherwise it must be finite and
+positive. `Encoding.layout` must explicitly be `REAL` or
 `COMPLEX`; an omitted or `UNSPECIFIED` layout is invalid. Samples have no padding:
 
 - **REAL:** packed `x[0], x[1], ...`. One sample is one scalar component.
@@ -245,10 +246,11 @@ file operation can be restarted without duplicating side effects.
 
 `source_sample_offset`, if present, locates sample zero in the original source
 dataset; wire positions still start at zero. `sample_zero_time`, if known, is a
-nominal UTC anchor. At fixed rate, sample `n` nominally occurs at
+nominal UTC anchor. At a known, positive fixed rate, sample `n` nominally occurs at
 `sample_zero_time + n / sample_rate_hz`. It is not a promise of clock accuracy;
 capture/time tags can supply more accurate anchors. These optional fields do
-not change cursor validation.
+not change cursor validation. With an unknown rate, use sample indices; do not
+derive elapsed time or frequency scales from the rate field.
 
 Example: a FLOAT32/LE chunk starting at sample 4096 with 1024 samples has 4096
 sample bytes with REAL layout or 8192 bytes with COMPLEX layout. Either can
