@@ -100,8 +100,8 @@ fn string_encoding() -> proto::Encoding {
     }
 }
 // Advertise exactly the value types that crate::stream::TagValue can represent.
-// The protocol supports more kinds, but accepting them would require a lossless
-// graph representation. Protobuf enum fields store their wire values as i32.
+// Other wire value kinds are discarded before publishing tags to graph streams.
+// Protobuf enum fields store their wire values as i32.
 const TAG_KINDS: [i32; 5] = [
     proto::TagKind::Float32 as i32,
     proto::TagKind::Bool as i32,
@@ -178,10 +178,21 @@ fn value_kind(value: &proto::TagValue) -> Result<i32> {
     // Inspect by reference so checking a string tag does not clone its contents.
     Ok(match value.kind.as_ref() {
         Some(Kind::Float32Value(_)) => proto::TagKind::Float32 as i32,
+        Some(Kind::Float64Value(_)) => proto::TagKind::Float64 as i32,
         Some(Kind::BoolValue(_)) => proto::TagKind::Bool as i32,
         Some(Kind::Int64Value(_)) => proto::TagKind::Int64 as i32,
         Some(Kind::Uint64Value(_)) => proto::TagKind::Uint64 as i32,
         Some(Kind::StringValue(_)) => proto::TagKind::String as i32,
-        _ => return Err(err("unsupported IQ tag value")),
+        Some(Kind::BytesValue(_)) => proto::TagKind::Bytes as i32,
+        Some(Kind::SymbolValue(_)) => proto::TagKind::Symbol as i32,
+        Some(Kind::ComplexValue(_)) => proto::TagKind::Complex as i32,
+        Some(Kind::ListValue(_)) => proto::TagKind::List as i32,
+        Some(Kind::TupleValue(_)) => proto::TagKind::Tuple as i32,
+        Some(Kind::PairValue(_)) => proto::TagKind::Pair as i32,
+        Some(Kind::DictionaryValue(_)) => proto::TagKind::Dictionary as i32,
+        Some(Kind::NilValue(_)) => proto::TagKind::Nil as i32,
+        Some(Kind::JsonValue(_)) => proto::TagKind::Json as i32,
+        Some(Kind::OpaqueValue(_)) => proto::TagKind::Opaque as i32,
+        None => return Err(err("missing IQ tag value kind")),
     })
 }

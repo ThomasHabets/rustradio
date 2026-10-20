@@ -513,8 +513,11 @@ once negotiation succeeds. A dedicated runtime thread drives each connection
 until completion, failure, or source cancellation. Async callers can use
 `connect_async` on their running Tokio runtime.
 
-Uploads and DURABLE completion return `UNIMPLEMENTED`. Structured values,
-provenance and terminal tags are not accepted by graph sources.
+Uploads and DURABLE completion return `UNIMPLEMENTED`. Graph sources discard
+received tags whose value kinds cannot be represented by RustRadio's five scalar
+tag types, while preserving samples and supported tags. Unsupported kinds in
+the advertised description do not prevent a connection. Provenance and terminal
+tags are not accepted by graph sources.
 
 `IqStreamStringSink` and `IqStreamStringSource` transfer individual `String`
 messages using `NCReadStream<String>` and `NCWriteStream<String>`. Their API

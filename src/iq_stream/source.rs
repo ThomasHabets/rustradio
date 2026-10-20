@@ -1,5 +1,9 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use async_channel::{Receiver, Sender};
+use log::info;
+use prost::Message;
+
 use super::{
     Decoded, GAP_SAMPLES, IqSample, SAMPLE_INDEX, TAG_KINDS, advance, err, limits_valid, proto,
     reserved, value_from_wire, value_kind,
@@ -10,8 +14,6 @@ use crate::stream::{
     NCReadStream, NCWriteStream, ReadStream, StreamWait, Tag, TagValue, WriteStream,
     new_nocopy_stream, new_stream,
 };
-use async_channel::{Receiver, Sender};
-use prost::Message;
 
 /// Download policy and bounds. ALLOW_GAPS requires a gap-aware graph.
 #[derive(Clone, Debug)]
@@ -205,7 +207,7 @@ impl SourceTransport {
             return Err(err("message after terminal IQ status"));
         }
         match received.message.body {
-            Some(Body::Frame(frame)) => {
+            Some(Body::Frame(mut frame)) => {
                 let limits = s.started.limits.as_ref().expect("validated limits");
                 if s.end.is_some()
                     || frame.sequence != s.next_sequence
@@ -216,7 +218,7 @@ impl SourceTransport {
                 {
                     return Err(err("invalid IQ frame sequence, credit, or size"));
                 }
-                let count = match frame.body.as_ref() {
+                let count = match frame.body.as_mut() {
                     Some(proto::frame::Body::Chunk(chunk)) => {
                         let end = advance(chunk.first_sample, u64::from(chunk.sample_count))?;
                         if chunk.first_sample != s.next_sample
@@ -261,6 +263,12 @@ impl SourceTransport {
                             }
                             previous = tag.sample_index;
                         }
+                        // Keep the samples while discarding tag values that
+                        // cannot be represented by graph streams.
+                        chunk.tags.retain(|tag| {
+                            value_kind(tag.value.as_ref().expect("validated tag"))
+                                .is_ok_and(|kind| TAG_KINDS.contains(&kind))
+                        });
                         u64::from(chunk.sample_count)
                     }
                     Some(proto::frame::Body::Gap(gap)) => {
@@ -408,6 +416,7 @@ impl Drop for SourceTransport {
 /// Gaps produce [`super::GAP_SAMPLES`] and [`super::SAMPLE_INDEX`] on the next
 /// retained sample. Stateful DSP must handle those discontinuities explicitly.
 /// Terminal gaps are available on [`SourceHandle`]. No samples are zero-filled.
+/// Tags with value kinds outside RustRadio's five scalar kinds are discarded.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct IqStreamSource<T: IqSample> {
@@ -462,26 +471,83 @@ fn start_source(
         .description
         .as_ref()
         .ok_or_else(|| err("missing IQ description"))?;
-    if limits.max_frame_bytes > options.limits.max_frame_bytes
-        || limits.max_in_flight_frames > options.limits.max_in_flight_frames
-        || options.loss_policy == proto::LossPolicy::Unspecified
-        || started.loss_policy != options.loss_policy as i32
-        || started.completion_mode != proto::CompletionMode::Accepted as i32
-        || started.initial_credit.is_some()
-        || desc.encoding.as_ref() != Some(&encoding)
-        || !desc.sample_rate_hz.is_finite()
-        || desc.sample_rate_hz < 0.0
-        || desc.uses_terminal_tags
-        || desc.uses_tag_source_ids
-        || !desc.opaque_codecs.is_empty()
-        || desc.tag_kinds.iter().any(|kind| !TAG_KINDS.contains(kind))
-        || desc
-            .tag_kinds
-            .iter()
-            .enumerate()
-            .any(|(i, k)| desc.tag_kinds[..i].contains(k))
+    if limits.max_frame_bytes > options.limits.max_frame_bytes {
+        return Err(err(format!(
+            "IQ max_frame_bytes {} exceeds requested {}",
+            limits.max_frame_bytes, options.limits.max_frame_bytes
+        )));
+    }
+    if limits.max_in_flight_frames > options.limits.max_in_flight_frames {
+        return Err(err(format!(
+            "IQ max_in_flight_frames {} exceeds requested {}",
+            limits.max_in_flight_frames, options.limits.max_in_flight_frames
+        )));
+    }
+    if options.loss_policy == proto::LossPolicy::Unspecified {
+        return Err(err(
+            "IQ requested loss_policy is Unspecified; expected Lossless or AllowGaps",
+        ));
+    }
+    if started.loss_policy != options.loss_policy as i32 {
+        return Err(err(format!(
+            "IQ loss_policy {} does not match requested {} ({:?})",
+            started.loss_policy, options.loss_policy as i32, options.loss_policy
+        )));
+    }
+    if started.completion_mode != proto::CompletionMode::Accepted as i32 {
+        return Err(err(format!(
+            "IQ completion_mode {} does not match supported {} (Accepted)",
+            started.completion_mode,
+            proto::CompletionMode::Accepted as i32
+        )));
+    }
+    if started.initial_credit.is_some() {
+        return Err(err(format!(
+            "IQ initial_credit {:?} does not match expected None for a download",
+            started.initial_credit
+        )));
+    }
+    if desc.encoding.as_ref() != Some(&encoding) {
+        return Err(err(format!(
+            "IQ encoding {:?} does not match requested {:?}",
+            desc.encoding,
+            Some(&encoding)
+        )));
+    }
+    if !desc.sample_rate_hz.is_finite() {
+        return Err(err(format!(
+            "IQ sample_rate_hz {} is not finite; expected a finite rate",
+            desc.sample_rate_hz
+        )));
+    }
+    if desc.sample_rate_hz < 0.0 {
+        return Err(err(format!(
+            "IQ sample_rate_hz {} is below the supported minimum 0",
+            desc.sample_rate_hz
+        )));
+    }
+    if desc.uses_terminal_tags {
+        return Err(err("IQ uses_terminal_tags is true; expected false"));
+    }
+    if desc.uses_tag_source_ids {
+        info!("IQ uses_tag_source_ids is true; expected false");
+    }
+    if !desc.opaque_codecs.is_empty() {
+        return Err(err(format!(
+            "IQ opaque_codecs {:?} do not match supported []",
+            desc.opaque_codecs
+        )));
+    }
+    if let Some((_, kind)) = desc
+        .tag_kinds
+        .iter()
+        .enumerate()
+        .find(|(i, kind)| desc.tag_kinds[..*i].contains(kind))
     {
-        return Err(err("unsupported IQ description or policies"));
+        return Err(err(format!(
+            "IQ tag_kinds contains duplicate {kind} in {:?}; expected unique kinds",
+            desc.tag_kinds
+        )));
     }
     if let Some(time) = &desc.sample_zero_time
         && (!(-62135596800..=253402300799).contains(&time.seconds)
@@ -675,6 +741,7 @@ impl<T: IqSample> Drop for IqStreamSource<T> {
 ///
 /// Each item is one string, including empty strings; tags are at position zero.
 /// Positions, gaps, and the negotiated rate count messages rather than bytes.
+/// Tags with value kinds outside RustRadio's five scalar kinds are discarded.
 /// Gaps attach the same markers as [`IqStreamSource`]; trailing gaps remain on
 /// [`SourceHandle`]. Invalid UTF-8 or chunks containing multiple strings fail
 /// validation before publishing data. Each string and its tags must fit in one
@@ -1247,16 +1314,158 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn unsupported_tag_values_do_not_discard_samples_or_supported_tags() -> Result<()> {
+        use proto::tag_value::Kind;
+        let options = StreamOptions::default();
+        let mut numeric = started::<f32>(&options);
+        numeric
+            .description
+            .as_mut()
+            .unwrap()
+            .tag_kinds
+            .extend([proto::TagKind::Float64 as i32, proto::TagKind::List as i32]);
+        numeric
+            .description
+            .as_mut()
+            .unwrap()
+            .properties
+            .push(proto::Property {
+                key: "extra".into(),
+                value: Some(proto::TagValue {
+                    kind: Some(Kind::Float64Value(1.0)),
+                }),
+            });
+        let mut strings = string_started(&options);
+        strings.description.as_mut().unwrap().tag_kinds =
+            numeric.description.as_ref().unwrap().tag_kinds.clone();
+        let supported = super::super::tag_to_wire(&Tag::new(0, "keep", TagValue::Bool(true)), 0)?;
+        let tags = vec![
+            proto::Tag {
+                sample_index: 0,
+                key: "float64".into(),
+                value: Some(proto::TagValue {
+                    kind: Some(Kind::Float64Value(2.0)),
+                }),
+                source_id: None,
+            },
+            supported.clone(),
+            proto::Tag {
+                sample_index: 0,
+                key: "list".into(),
+                value: Some(proto::TagValue {
+                    kind: Some(Kind::ListValue(proto::SequenceValue { values: vec![] })),
+                }),
+                source_id: None,
+            },
+        ];
+        let (mut source, output, handle, transport) =
+            IqStreamSource::<f32>::from_started(numeric, &options)?;
+        transport.next_control().await.unwrap();
+        let mut undeclared = tags[0].clone();
+        undeclared.value.as_mut().unwrap().kind = Some(Kind::BytesValue(vec![1]));
+        assert!(accept(&transport, chunk(0, 0, &[1., 2.], vec![undeclared])).is_err());
+        let mut missing = tags[0].clone();
+        missing.value.as_mut().unwrap().kind = None;
+        assert!(accept(&transport, chunk(0, 0, &[1., 2.], vec![missing])).is_err());
+        accept(&transport, chunk(0, 0, &[1., 2.], tags.clone()))?;
+        source.work()?;
+        let (samples, actual) = output.read_buf()?;
+        assert_eq!(samples.slice(), [1., 2.]);
+        assert_eq!(actual, [Tag::new(0, "keep", TagValue::Bool(true))]);
+        assert_eq!(handle.lock().retired, 1);
+
+        let (mut source, output, handle, transport) =
+            IqStreamStringSource::from_started(strings, &options)?;
+        transport.next_control().await.unwrap();
+        accept(
+            &transport,
+            proto::server_message::Body::Frame(proto::Frame {
+                sequence: 0,
+                body: Some(proto::frame::Body::Chunk(proto::SampleChunk {
+                    first_sample: 0,
+                    sample_count: 1,
+                    samples: vec![],
+                    tags,
+                })),
+            }),
+        )?;
+        source.work()?;
+        assert_eq!(
+            output.pop().unwrap(),
+            (
+                String::new(),
+                vec![Tag::new(0, "keep", TagValue::Bool(true))]
+            )
+        );
+        assert_eq!(handle.lock().retired, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_unsupported_advertised_tag_kinds() -> Result<()> {
+        let options = StreamOptions::default();
+        let extras = [
+            proto::TagKind::Float64 as i32,
+            proto::TagKind::Bytes as i32,
+            99,
+        ];
+        let mut numeric = started::<f32>(&options);
+        numeric
+            .description
+            .as_mut()
+            .unwrap()
+            .tag_kinds
+            .extend(extras);
+        let (_source, _output, handle, _transport) =
+            IqStreamSource::<f32>::from_started(numeric, &options)?;
+        assert!(
+            extras
+                .iter()
+                .all(|kind| handle.description().tag_kinds.contains(kind))
+        );
+
+        let mut strings = string_started(&options);
+        strings
+            .description
+            .as_mut()
+            .unwrap()
+            .tag_kinds
+            .extend(extras);
+        let (_source, _output, _handle, _transport) =
+            IqStreamStringSource::from_started(strings, &options)?;
+        Ok(())
+    }
+
     #[test]
     fn rejects_format_rate_and_metadata_changes_at_opening() {
         let options = StreamOptions::default();
         let mut bad = started::<crate::Complex>(&options);
-        assert!(IqStreamSource::<f32>::from_started(bad.clone(), &options).is_err());
+        let error = IqStreamSource::<f32>::from_started(bad.clone(), &options)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("encoding"), "{error}");
+        assert!(
+            error.contains("layout: Complex") && error.contains("layout: Real"),
+            "{error}"
+        );
         bad.description.as_mut().unwrap().encoding = Some(f32::encoding());
         bad.description.as_mut().unwrap().sample_rate_hz = f64::NAN;
-        assert!(IqStreamSource::<f32>::from_started(bad.clone(), &options).is_err());
+        let error = IqStreamSource::<f32>::from_started(bad.clone(), &options)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("NaN") && error.contains("finite"), "{error}");
         bad.description.as_mut().unwrap().sample_rate_hz = 1.0;
         bad.description.as_mut().unwrap().uses_terminal_tags = true;
-        assert!(IqStreamSource::<f32>::from_started(bad, &options).is_err());
+        let error = IqStreamSource::<f32>::from_started(bad, &options)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(
+            error.contains("uses_terminal_tags") && error.contains("expected false"),
+            "{error}"
+        );
     }
 }
