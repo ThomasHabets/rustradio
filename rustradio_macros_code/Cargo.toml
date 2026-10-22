@@ -10,7 +10,7 @@ repository = "https://github.com/ThomasHabets/rustradio"
 [dependencies]
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
-syn = { version = "2.0.104", features = ["extra-traits"] }
+syn = { version = "3", features = ["extra-traits"] }
 
 [dev-dependencies]
 rustradio = { path = ".." }

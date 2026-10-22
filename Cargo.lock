@@ -2753,7 +2753,7 @@ dependencies = [
  "quote",
  "rustradio",
  "rustradio_macros_code",
- "syn 2.0.119",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -2763,7 +2763,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustradio",
- "syn 2.0.119",
+ "syn 3.0.9",
 ]
 
 [[package]]
