@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Aqua Signal R">
+ <defs><clipPath id="round"><rect width="256" height="256" rx="38"/></clipPath></defs>
+ <g clip-path="url(#round)">
+  <rect width="256" height="256" fill="#061b2b"/>
+  <path d="M0 256 256 45V256Z" fill="#26e9dc"/>
+  <path fill="#fff" fill-rule="evenodd" d="M35 39 H129 C166 39 184 57 184 83 C184 105 170 120 147 126 L174 165 L154 203 L111 139 H76 V191 H35 Z M76 71 V102 H126 C143 102 149 95 149 86 C149 77 141 71 126 71 Z"/>
+  <path d="M68 200 H99 L115 180 L135 226 L169 151 L193 202 L206 185 L219 200 H238" fill="none" stroke="#061b2b" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+ </g>
+</svg>
