@@ -120,19 +120,23 @@ impl Block for KissDecode {
             let port = (port >> 4) & 0xf;
             // Count encoded payload bytes without the possibly escaped command.
             let command_bytes = if x[0] == KISS_FESC { 2 } else { 1 };
-            tags.extend(vec![
-                Tag::new(0, "KissDecode:port", TagValue::U64(port.into())),
-                Tag::new(
-                    0,
-                    "KissDecode:input-bytes",
-                    TagValue::U64((x.len() - command_bytes).try_into().unwrap()),
-                ),
-                Tag::new(
-                    0,
-                    "KissDecode:output-bytes",
-                    TagValue::U64(out.len().try_into().unwrap()),
-                ),
-            ]);
+            let zeros = tags.partition_point(|tag| tag.pos() == 0);
+            tags.splice(
+                zeros..zeros,
+                [
+                    Tag::new(0, "KissDecode:port", TagValue::U64(port.into())),
+                    Tag::new(
+                        0,
+                        "KissDecode:input-bytes",
+                        TagValue::U64((x.len() - command_bytes).try_into().unwrap()),
+                    ),
+                    Tag::new(
+                        0,
+                        "KissDecode:output-bytes",
+                        TagValue::U64(out.len().try_into().unwrap()),
+                    ),
+                ],
+            );
             self.dst.push(out, tags);
         }
     }
@@ -247,7 +251,7 @@ impl Block for KissEncode {
             if self.dst.remaining() == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let Some((x, tags)) = self.src.pop() else {
+            let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
             let port = match tags
@@ -262,10 +266,11 @@ impl Block for KissEncode {
                 }
             };
             let out = escape(&x, port.try_into().unwrap());
-            let tags: Vec<_> = tags
-                .into_iter()
-                .filter(|t| t.key() != ENCODE_PORT_TAG)
-                .chain(vec![
+            tags.retain(|tag| tag.key() != ENCODE_PORT_TAG);
+            let zeros = tags.partition_point(|tag| tag.pos() == 0);
+            tags.splice(
+                zeros..zeros,
+                [
                     Tag::new(
                         0,
                         "KissEncode:input-bytes",
@@ -276,8 +281,8 @@ impl Block for KissEncode {
                         "KissEncode:output-bytes",
                         TagValue::U64(out.len().try_into().unwrap()),
                     ),
-                ])
-                .collect();
+                ],
+            );
             self.dst.push(out, tags);
         }
     }
@@ -313,7 +318,12 @@ mod tests {
         let (tx, rx) = new_nocopy_stream();
         tx.push(
             b"\xC0\x30foo\xDB\xDCA\xDB\xDD".to_vec(),
-            &[Tag::new(0, "foobar", TagValue::String("baz".to_string()))],
+            &[
+                Tag::new(0, "foobar", TagValue::String("baz".to_string())),
+                Tag::new(1, "first", TagValue::Bool(true)),
+                Tag::new(1, "second", TagValue::Bool(false)),
+                Tag::new(4, "later", TagValue::U64(42)),
+            ],
         );
         let (mut b, out) = KissDecode::new(rx);
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
@@ -331,6 +341,9 @@ mod tests {
                     "KissDecode:output-bytes",
                     TagValue::U64(want.len().try_into().unwrap())
                 ),
+                Tag::new(1, "first", TagValue::Bool(true)),
+                Tag::new(1, "second", TagValue::Bool(false)),
+                Tag::new(4, "later", TagValue::U64(42)),
             ]
         );
         Ok(())
@@ -371,6 +384,9 @@ mod tests {
             &[
                 Tag::new(0, "foobar", TagValue::String("baz".to_string())),
                 Tag::new(0, "KissEncode:port", TagValue::U64(1)),
+                Tag::new(1, "first", TagValue::Bool(true)),
+                Tag::new(1, "second", TagValue::Bool(false)),
+                Tag::new(4, "later", TagValue::U64(42)),
             ],
         );
         let (mut b, out) = KissEncode::new(rx);
@@ -391,6 +407,9 @@ mod tests {
                     "KissEncode:output-bytes",
                     TagValue::U64(want.len().try_into().unwrap())
                 ),
+                Tag::new(1, "first", TagValue::Bool(true)),
+                Tag::new(1, "second", TagValue::Bool(false)),
+                Tag::new(4, "later", TagValue::U64(42)),
             ]
         );
         Ok(())
