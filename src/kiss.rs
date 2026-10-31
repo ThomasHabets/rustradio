@@ -31,8 +31,7 @@ fn escape(bytes: &[u8], port: u8) -> Vec<u8> {
     // Add 10% capacity to leave room for escaped
     let mut ret = Vec::with_capacity((3 + bytes.len()) * 110 / 100);
     ret.push(KISS_FEND);
-    ret.push(port << 4);
-    for &b in bytes {
+    for b in std::iter::once(port << 4).chain(bytes.iter().copied()) {
         match b {
             KISS_FEND => ret.extend(vec![KISS_FESC, KISS_TFEND]),
             KISS_FESC => ret.extend(vec![KISS_FESC, KISS_TFESC]),
@@ -106,25 +105,27 @@ impl Block for KissDecode {
             if x.is_empty() {
                 continue;
             }
-            let (port, x) = (x[0], &x[1..]);
-            if port & 0xF != 0 {
-                debug!("KissDecode: non-data packet: {port:02x} {x:02x?}");
-                continue;
-            }
-            let port = (port >> 4) & 0xf;
-            let out = match unescape(x) {
+            let mut out = match unescape(x) {
                 Ok(o) => o,
                 Err(e) => {
                     log::debug!("Bad KISS packet: {e}");
                     continue;
                 }
             };
+            let port = out.remove(0);
+            if port & 0xF != 0 {
+                debug!("KissDecode: non-data packet: {port:02x} {out:02x?}");
+                continue;
+            }
+            let port = (port >> 4) & 0xf;
+            // Count encoded payload bytes without the possibly escaped command.
+            let command_bytes = if x[0] == KISS_FESC { 2 } else { 1 };
             tags.extend(vec![
                 Tag::new(0, "KissDecode:port", TagValue::U64(port.into())),
                 Tag::new(
                     0,
                     "KissDecode:input-bytes",
-                    TagValue::U64(x.len().try_into().unwrap()),
+                    TagValue::U64((x.len() - command_bytes).try_into().unwrap()),
                 ),
                 Tag::new(
                     0,
@@ -396,6 +397,74 @@ mod tests {
                 ),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn encode_escapes_port_12_command() -> Result<()> {
+        let (tx, rx) = new_nocopy_stream();
+        tx.push(
+            vec![1u8, KISS_FEND, KISS_FESC],
+            &[Tag::new(0, ENCODE_PORT_TAG, TagValue::U64(12))],
+        );
+        let (mut encode, output) = KissEncode::new(rx);
+        encode.work()?;
+        assert_eq!(
+            output.pop().unwrap().0,
+            [
+                KISS_FEND, KISS_FESC, KISS_TFEND, 1, KISS_FESC, KISS_TFEND, KISS_FESC, KISS_TFESC,
+                KISS_FEND,
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn decode_unescapes_port_12_command() -> Result<()> {
+        let (tx, rx) = new_nocopy_stream();
+        tx.push(
+            vec![
+                KISS_FEND, KISS_FESC, KISS_TFEND, 1, KISS_FESC, KISS_TFESC, KISS_FEND,
+            ],
+            &[],
+        );
+        let (mut decode, output) = KissDecode::new(rx);
+        decode.work()?;
+        let (data, tags) = output.pop().expect("port 12 data frame");
+        assert_eq!(data, [1, KISS_FESC]);
+        assert_eq!(
+            tags,
+            [
+                Tag::new(0, "KissDecode:port", TagValue::U64(12)),
+                Tag::new(0, "KissDecode:input-bytes", TagValue::U64(3)),
+                Tag::new(0, "KissDecode:output-bytes", TagValue::U64(2)),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn all_ports_roundtrip_through_framing() -> Result<()> {
+        for port in 0..16 {
+            for payload in [vec![], vec![0u8, KISS_FEND, KISS_FESC, 1]] {
+                let (tx, rx) = new_nocopy_stream();
+                tx.push(
+                    payload.clone(),
+                    &[Tag::new(0, ENCODE_PORT_TAG, TagValue::U64(port))],
+                );
+                let (mut encode, encoded) = KissEncode::new(rx);
+                encode.work()?;
+                let wire = encoded.pop().unwrap().0;
+                let (mut frame, framed) = KissFrame::new(ReadStream::from_slice(&wire));
+                frame.work()?;
+                let (mut decode, output) = KissDecode::new(framed);
+                decode.work()?;
+                let (data, tags) = output.pop().expect("data frame");
+                assert_eq!(data, payload, "port {port}");
+                assert_eq!(tags[0], Tag::new(0, "KissDecode:port", TagValue::U64(port)));
+                assert!(output.pop().is_none());
+            }
+        }
         Ok(())
     }
 
