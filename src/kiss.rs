@@ -169,13 +169,13 @@ impl Block for KissFrame {
             if self.dst.remaining() == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
+            let (i, _tags) = self.src.read_buf()?;
+            if i.is_empty() {
+                return Ok(BlockRet::WaitForStream(&self.src, 1));
+            }
             let old_state = std::mem::replace(&mut self.state, FrameState::Unsynced);
             self.state = match old_state {
                 FrameState::Unsynced => {
-                    let (i, _tags) = self.src.read_buf()?;
-                    if i.is_empty() {
-                        return Ok(BlockRet::WaitForStream(&self.src, 1));
-                    }
                     let mut n = 0;
                     let mut synced = false;
                     for sample in i.slice().iter().copied() {
@@ -193,10 +193,6 @@ impl Block for KissFrame {
                     }
                 }
                 FrameState::Synced(mut v) => {
-                    let (i, _tags) = self.src.read_buf()?;
-                    if i.is_empty() {
-                        return Ok(BlockRet::WaitForStream(&self.src, 1));
-                    }
                     let mut n = 0;
                     let mut done = false;
                     for sample in i.slice().iter().copied() {
@@ -476,6 +472,45 @@ mod tests {
         b.work()?;
         let (o, _) = prev.pop().unwrap();
         assert_eq!(o, &[0, 1, 2, 3]);
+        Ok(())
+    }
+
+    #[test]
+    fn frame_survives_every_input_split() -> Result<()> {
+        let wire = [KISS_FEND, 0, 1, KISS_FESC, KISS_TFEND, 3, KISS_FEND];
+        for split in 0..=wire.len() {
+            let (tx, rx) = crate::stream::new_stream()?;
+            let (mut frame, output) = KissFrame::new(rx);
+            for chunk in [&wire[..split], &wire[split..]] {
+                let mut window = tx.write_buf()?;
+                window.fill_from_slice(chunk);
+                window.produce(chunk.len(), &[]);
+                assert!(matches!(frame.work()?, BlockRet::WaitForStream(_, 1)));
+                assert!(matches!(frame.work()?, BlockRet::WaitForStream(_, 1)));
+            }
+            assert_eq!(
+                output.pop().expect("complete frame").0,
+                wire[1..wire.len() - 1],
+                "split at {split}",
+            );
+            assert!(output.pop().is_none());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn frames_share_a_delimiter_across_single_byte_batches() -> Result<()> {
+        let (tx, rx) = crate::stream::new_stream()?;
+        let (mut frame, output) = KissFrame::new(rx);
+        for byte in [KISS_FEND, 0, 1, KISS_FEND, 0, 2, KISS_FEND] {
+            let mut window = tx.write_buf()?;
+            window.fill_from_slice(&[byte]);
+            window.produce(1, &[]);
+            assert!(matches!(frame.work()?, BlockRet::WaitForStream(_, 1)));
+        }
+        assert_eq!(output.pop().expect("first frame").0, [0, 1]);
+        assert_eq!(output.pop().expect("second frame").0, [0, 2]);
+        assert!(output.pop().is_none());
         Ok(())
     }
 
