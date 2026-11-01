@@ -894,6 +894,21 @@ pub(super) fn connect_source_sync<B: Send + 'static, O: Send + 'static>(
     ready_rx.recv().map_err(|e| err(e.to_string()))?
 }
 
+fn source_endpoint(uri: &str) -> crate::Result<tonic::transport::Endpoint> {
+    let invalid = || {
+        err(format!(
+            "invalid IQ stream endpoint {uri:?}: expected an absolute URL starting with http:// or https:// (for example, http://localhost:9000)"
+        ))
+    };
+    let endpoint =
+        tonic::transport::Endpoint::from_shared(uri.to_owned()).map_err(|_| invalid())?;
+    let parsed = endpoint.uri();
+    if !matches!(parsed.scheme_str(), Some("http" | "https")) || parsed.host().is_none() {
+        return Err(invalid());
+    }
+    Ok(endpoint)
+}
+
 async fn start_source_connection<B, O>(
     uri: String,
     open: proto::ClientMessage,
@@ -903,7 +918,7 @@ async fn start_source_connection<B, O>(
         &StreamOptions,
     ) -> crate::Result<(B, O, SourceHandle, super::SourceTransport)>,
 ) -> crate::Result<((B, O, SourceHandle), tokio::task::JoinHandle<()>)> {
-    let endpoint = tonic::transport::Endpoint::from_shared(uri).map_err(|e| err(e.to_string()))?;
+    let endpoint = source_endpoint(&uri)?;
     let endpoint = if endpoint.uri().scheme_str() == Some("https") {
         endpoint
             .tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
@@ -1054,6 +1069,76 @@ mod tests {
         for (uri, source) in [("invalid URI", "bytes"), ("http://127.0.0.1:1", "")] {
             assert!(IqStreamSource::<u8>::connect(uri, source, StreamOptions::default()).is_err());
             assert!(IqStreamStringSource::connect(uri, source, StreamOptions::default()).is_err());
+        }
+    }
+
+    #[test]
+    fn endpoints_require_an_absolute_http_url() {
+        for uri in [
+            "localhost:9000",
+            "127.0.0.1:9000",
+            "[::1]:9000",
+            "ws://localhost:9000",
+            "http:/localhost:9000",
+            "http://",
+            "invalid URI",
+        ] {
+            let error = source_endpoint(uri).unwrap_err().to_string();
+            assert!(error.contains(uri), "{error}");
+            assert!(error.contains("http:// or https://"), "{error}");
+        }
+        for uri in [
+            "http://localhost:9000",
+            "https://localhost:9000",
+            "http://[::1]:9000",
+            "http://localhost",
+        ] {
+            assert_eq!(
+                source_endpoint(uri).unwrap().uri().to_string(),
+                format!("{uri}/")
+            );
+        }
+        for uri in ["unix:/tmp/iq.sock", "unix:///tmp/iq.sock"] {
+            assert!(source_endpoint(uri).is_ok());
+        }
+    }
+
+    #[test]
+    fn sync_sources_explain_missing_endpoint_scheme() {
+        let uri = "localhost:9000";
+        let numeric = IqStreamSource::<u8>::connect(uri, "bytes", StreamOptions::default())
+            .err()
+            .expect("bare host:port must fail");
+        let strings =
+            super::super::IqStreamStringSource::connect(uri, "strings", StreamOptions::default())
+                .err()
+                .expect("bare host:port must fail");
+        for error in [numeric, strings] {
+            let message = error.to_string();
+            assert!(message.contains(uri), "{message}");
+            assert!(message.contains("http:// or https://"), "{message}");
+        }
+    }
+
+    #[tokio::test]
+    async fn async_sources_explain_missing_endpoint_scheme() {
+        let uri = "localhost:9000";
+        let numeric = IqStreamSource::<u8>::connect_async(uri, "bytes", StreamOptions::default())
+            .await
+            .err()
+            .expect("bare host:port must fail");
+        let strings = super::super::IqStreamStringSource::connect_async(
+            uri,
+            "strings",
+            StreamOptions::default(),
+        )
+        .await
+        .err()
+        .expect("bare host:port must fail");
+        for error in [numeric, strings] {
+            let message = error.to_string();
+            assert!(message.contains(uri), "{message}");
+            assert!(message.contains("http:// or https://"), "{message}");
         }
     }
 
