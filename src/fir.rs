@@ -799,14 +799,14 @@ pub fn low_pass(
         ));
     }
     if !cutoff.is_finite() || cutoff <= 0.0 || cutoff > samp_rate / 2.0 {
-        return Err(Error::msg(
-            "Low pass cutoff must be finite, positive, and at most Nyquist",
-        ));
+        return Err(Error::msg(format!(
+            "Low pass cutoff ({cutoff}) must be finite, positive, and at most Nyquist."
+        )));
     }
     if !twidth.is_finite() || twidth <= 0.0 {
-        return Err(Error::msg(
-            "Low pass transition width must be finite and positive",
-        ));
+        return Err(Error::msg(format!(
+            "Low pass transition ({twidth}) width must be finite and positive"
+        )));
     }
     let window_type = window_type.borrow();
 
