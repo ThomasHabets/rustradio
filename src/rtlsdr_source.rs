@@ -100,6 +100,7 @@ impl RtlSdrSource {
         }
 
         let (dst, dr) = crate::stream::new_stream()?;
+        dst.initialize_sample_rate(Some(f64::from(samp_rate) * 2.0));
         let (tx, rx) = mpsc::sync_channel(MAX_CHUNKS_IN_FLIGHT);
         let (cmd_tx, cmd_rx) = mpsc::channel::<RtlSdrCommand>();
         let ctrl = RtlSdrControl { tx: cmd_tx };
@@ -163,7 +164,8 @@ impl RtlSdrSource {
                 dst,
                 buf: Vec::new(),
                 control_tx: ctrl,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

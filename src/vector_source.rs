@@ -84,7 +84,8 @@ impl<T: Sample> VectorSource<T> {
                 repeat: Repeat::finite(1),
                 pos: 0,
                 tags: vec![],
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

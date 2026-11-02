@@ -355,7 +355,8 @@ where
                 ntaps,
                 deci,
                 translation,
-            },
+            }
+            .with_output_metadata(),
             stream,
         ))
     }
@@ -580,7 +581,10 @@ pub struct FirFilter<T: Sample, C: Copy + Send = T> {
     translation: Option<Translation<T, C>>,
     #[rustradio(in)]
     src: ReadStream<T>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r / self.deci as f64)"
+    )]
     dst: WriteStream<T>,
 }
 

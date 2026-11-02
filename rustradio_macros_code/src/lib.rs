@@ -5,7 +5,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Attribute, Data, DeriveInput, Fields, Meta};
 
-static FIELD_ATTRS: &[&str] = &["in", "out", "default", "into"];
+static FIELD_ATTRS: &[&str] = &["in", "out", "default", "into", "sample_rate"];
 
 /// Check if named attribute is in the list of attributes.
 ///
@@ -33,6 +33,9 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
             let s = meta.path.get_ident().expect("path without ident");
             assert!(valid.iter().any(|v| s == v), "Invalid attr {s}");
             found |= meta.path.is_ident(name);
+            if meta.path.is_ident("sample_rate") {
+                let _: syn::LitStr = meta.value()?.parse()?;
+            }
             Ok(())
         })
         .expect("parse_nested_meta()");
@@ -647,13 +650,13 @@ impl<'a> Parsed<'a> {
                 }
             });
         let value = quote! {
-            (Self {
+            ({ let block = Self {
                 #(#in_names,)*
                 #(#out_names: #out_names.0,)*
                 #(#parm_into_names: #parm_into_names.into(),)*
                 #(#parm_no_into_names,)*
                 #(#fields_defaulted,)*
-            }#(,#out_names.1)*)
+            }; block.init_output_metadata(); block }#(,#out_names.1)*)
         };
         let value = if fallible {
             quote! { Ok(#value) }
@@ -727,6 +730,62 @@ impl<'a> Parsed<'a> {
              }
         })
     }
+    fn expand_output_metadata(&self) -> TokenStream {
+        let name = self.name;
+        let path = self.attrs.path();
+        let (ig, tg, wc) = &self.generics;
+        if self.outputs.is_empty() {
+            return if self.attrs.generate_new {
+                quote! { impl #ig #name #tg #wc { fn init_output_metadata(&self) {} } }
+            } else {
+                quote! {}
+            };
+        }
+        let inputs = self.in_names();
+        let default_rate = if matches!(
+            self.attrs.sync,
+            SyncBlock::Value | SyncBlock::Tag | SyncBlock::NoCopyTag
+        ) {
+            quote! { #path::stream::common_sample_rate([#(self.#inputs.sample_rate()),*]) }
+        } else {
+            quote! { None }
+        };
+        let outputs = self.outputs.iter().map(|field| {
+            let method = quote::format_ident!("init_{}_metadata", field.ident.as_ref().unwrap());
+            let id = field.ident.as_ref().unwrap();
+            let label = id.to_string();
+            let mut rate = default_rate.clone();
+            for attr in &field.attrs {
+                if attr.path().is_ident("rustradio") {
+                    attr.parse_nested_meta(|meta| {
+                        if meta.path.is_ident("sample_rate") {
+                            let value: syn::LitStr = meta.value()?.parse()?;
+                            let expr: syn::Expr = value.parse()?;
+                            rate = quote! { #expr };
+                        }
+                        Ok(())
+                    }).expect("output metadata attribute");
+                }
+            }
+            let optional = matches!(&field.ty, syn::Type::Path(p) if p.path.segments.last().unwrap().ident == "Option");
+            let body = if optional { quote! { if let Some(output) = &self.#id { output.initialize_block_output(block_name, #label, #rate); } } }
+            else { quote! { self.#id.initialize_block_output(block_name, #label, #rate); } };
+            quote! { #[allow(dead_code)] fn #method(&self) { let block_name = #path::block::BlockName::block_name(self); #body } }
+        });
+        let methods = self
+            .outputs
+            .iter()
+            .map(|f| quote::format_ident!("init_{}_metadata", f.ident.as_ref().unwrap()));
+        quote! { impl #ig #name #tg #wc {
+            #[allow(dead_code)]
+            fn init_output_metadata(&self) {
+                #(self.#methods();)*
+            }
+            #(#outputs)*
+            #[allow(dead_code)]
+            fn with_output_metadata(self) -> Self { self.init_output_metadata(); self }
+        } }
+    }
     #[must_use]
     fn expand(&self) -> TokenStream {
         let e: Vec<_> = [
@@ -735,6 +794,7 @@ impl<'a> Parsed<'a> {
             self.expand_sync_work(),
             self.expand_sync_tags(),
             Some(self.expand_blockname()),
+            Some(self.expand_output_metadata()),
             self.expand_eof(),
         ]
         .into_iter()
@@ -837,19 +897,30 @@ mod tests {
                     bar: Float,
                     baz: Intobaz) -> crate::Result<(Self, <WriteStream<Complex> as crate::stream::StreamReadSide>::ReadSide)> {
                     let dst = <WriteStream<Complex> >::new()?;
-                    Ok((Self {
+                    Ok(({ let block = Self {
                         src,
                         dst: dst.0,
                         baz: baz.into(),
                         bar,
                         foo: <u32>::default(),
-                    }, dst.1))
+                    }; block.init_output_metadata(); block }, dst.1))
                 }
             }
             impl crate::block::BlockName for MyBlock {
                 fn block_name(&self) -> &str {
                     self.custom_name()
                 }
+            }
+            impl MyBlock {
+                #[allow(dead_code)]
+                fn init_output_metadata(&self) { self.init_dst_metadata(); }
+                #[allow(dead_code)]
+                fn init_dst_metadata(&self) {
+                    let block_name = crate::block::BlockName::block_name(self);
+                    self.dst.initialize_block_output(block_name, "dst", None);
+                }
+                #[allow(dead_code)]
+                fn with_output_metadata(self) -> Self { self.init_output_metadata(); self }
             }
             impl crate::block::BlockEOF for MyBlock {
                 fn eof (& mut self) -> bool { self.src.eof() }

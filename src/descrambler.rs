@@ -56,7 +56,7 @@ impl Lfsr {
 pub struct Descrambler {
     #[rustradio(in)]
     src: ReadStream<u8>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<u8>,
     lfsr: Lfsr,
 }
@@ -75,7 +75,8 @@ impl Descrambler {
                 src,
                 dst,
                 lfsr: Lfsr::new(mask, seed, len)?,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -88,7 +89,8 @@ impl Descrambler {
                 src,
                 dst,
                 lfsr: Lfsr::g3ruh()?,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -104,7 +106,7 @@ impl Descrambler {
 pub struct Scrambler {
     #[rustradio(in)]
     src: ReadStream<u8>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<u8>,
     lfsr: Lfsr,
 }
@@ -117,7 +119,8 @@ impl Scrambler {
                 src,
                 dst,
                 lfsr: Lfsr::g3ruh()?,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

@@ -31,7 +31,8 @@ impl<T: SampleEncoding> TcpSource<T> {
                 stream,
                 buf: Vec::new(),
                 dst,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

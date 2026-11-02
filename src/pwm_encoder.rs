@@ -545,7 +545,8 @@ impl PwmEncoder {
                 active: None,
                 command_rx,
                 control_tx,
-            },
+            }
+            .with_output_metadata(),
             dst_read,
         ))
     }

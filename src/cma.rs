@@ -16,7 +16,7 @@ pub struct CmaEqualizer {
     step_size: Float,
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Complex>,
 }
 
@@ -58,7 +58,8 @@ impl CmaEqualizer {
                 step_size,
                 src,
                 dst,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

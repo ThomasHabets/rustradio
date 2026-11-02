@@ -32,7 +32,7 @@ pub struct FftStream {
     scratch: Box<[Complex]>,
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Complex>,
 }
 
@@ -60,7 +60,8 @@ impl FftStream {
                 src,
                 dst,
                 threaded: false,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

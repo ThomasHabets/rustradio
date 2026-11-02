@@ -51,11 +51,14 @@ impl<In, F> Inspect<In, F> {
 
 /// Block to convert from u8 to other sample types.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new, bound = "T: Default + Copy + Send + 'static")]
+#[rustradio(crate, new, bound = "T: SampleEncoding")]
 pub struct Parse<T> {
     #[rustradio(in)]
     src: ReadStream<u8>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r / T::ENCODED_SIZE.get() as f64)"
+    )]
     dst: WriteStream<T>,
 }
 

@@ -65,7 +65,8 @@ impl<T: SampleEncoding> ReaderSource<T> {
                 buf: Vec::new(),
                 dst,
                 rx,
-            },
+            }
+            .with_output_metadata(),
             r,
         ))
     }

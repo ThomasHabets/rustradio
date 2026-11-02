@@ -37,7 +37,7 @@ pub struct QuadratureDemod {
     gain: Float,
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Float>,
 
     #[rustradio(default)]

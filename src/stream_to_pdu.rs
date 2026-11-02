@@ -94,7 +94,8 @@ impl<T: Sample> StreamToPdu<T> {
                 state: State::Unsync,
                 max_size,
                 tail,
-            },
+            }
+            .with_output_metadata(),
             dr,
         )
     }

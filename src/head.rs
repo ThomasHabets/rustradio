@@ -10,7 +10,7 @@ use crate::stream::{ReadStream, WriteStream};
 pub struct Head<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<T>,
     remaining: u64,
 }

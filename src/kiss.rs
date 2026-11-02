@@ -241,7 +241,7 @@ impl Block for KissFrame {
 pub struct KissEncode {
     #[rustradio(in)]
     src: NCReadStream<Vec<u8>>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: NCWriteStream<Vec<u8>>,
 }
 

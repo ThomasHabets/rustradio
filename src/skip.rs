@@ -10,7 +10,7 @@ use crate::stream::{ReadStream, WriteStream};
 pub struct Skip<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<T>,
     skip: u64,
 }

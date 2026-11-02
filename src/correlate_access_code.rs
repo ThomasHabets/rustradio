@@ -10,7 +10,7 @@ use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 pub struct CorrelateAccessCode {
     #[rustradio(in)]
     src: ReadStream<u8>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<u8>,
 
     code: Box<[u8]>,
@@ -37,7 +37,8 @@ impl CorrelateAccessCode {
                 slide: Vec::with_capacity(code.len()),
                 code,
                 allowed_diffs,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -67,7 +68,7 @@ pub struct CorrelateAccessCodeTag {
     code: Box<[u8]>,
     #[rustradio(in)]
     src: ReadStream<u8>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<u8>,
     slide: Vec<u8>,
     allowed_diffs: usize,
@@ -95,7 +96,8 @@ impl CorrelateAccessCodeTag {
                 slide: Vec::with_capacity(code.len()),
                 code,
                 allowed_diffs,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

@@ -21,7 +21,7 @@ const SYNC: &[u8] = &[0, 1, 1, 1, 1, 1, 1, 0];
 pub struct FcsAdder {
     #[rustradio(in)]
     src: NCReadStream<Vec<u8>>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: NCWriteStream<Vec<u8>>,
 }
 
@@ -52,7 +52,7 @@ impl Block for FcsAdder {
 pub struct HdlcFramer {
     #[rustradio(in)]
     src: NCReadStream<Vec<u8>>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: NCWriteStream<Vec<u8>>,
 }
 

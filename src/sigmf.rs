@@ -278,7 +278,7 @@ pub struct SigMFSource<T: SampleEncoding> {
     left: u64,
     repeat: Repeat,
     buf: Vec<u8>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.meta.global.core_sample_rate")]
     dst: WriteStream<T>,
 }
 
@@ -431,7 +431,8 @@ impl<T: SampleEncoding + Type> SigMFSource<T> {
                 left: range.1,
                 buf: vec![],
                 dst,
-            },
+            }
+            .with_output_metadata(),
             rx,
         ))
     }
@@ -540,7 +541,8 @@ impl<T: SampleEncoding + Type> SigMFSource<T> {
                 left: range.1,
                 buf: vec![],
                 dst,
-            },
+            }
+            .with_output_metadata(),
             rx,
         ))
     }

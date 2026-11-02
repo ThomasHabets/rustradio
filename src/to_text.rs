@@ -40,14 +40,14 @@ pub struct ToText<T> {
     dst: WriteStream<u8>,
 }
 
-impl<T> ToText<T> {
+impl<T: Sample> ToText<T> {
     /// Create new `ToText` block.
     pub fn new(srcs: Vec<ReadStream<T>>) -> Result<(Self, ReadStream<u8>)> {
         if srcs.is_empty() {
             debug!("ToText set up with zero inputs. This is probably not intentional");
         }
         let (dst, dr) = crate::stream::new_stream()?;
-        Ok((Self { srcs, dst }, dr))
+        Ok((Self { srcs, dst }.with_output_metadata(), dr))
     }
 }
 

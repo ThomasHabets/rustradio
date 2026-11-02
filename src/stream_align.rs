@@ -67,9 +67,15 @@ pub struct StreamAlign<T: Sample, U: Sample> {
     left: ReadStream<T>,
     #[rustradio(in)]
     right: ReadStream<U>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "crate::stream::common_sample_rate([self.left.sample_rate(), self.right.sample_rate()])"
+    )]
     left_out: WriteStream<T>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "crate::stream::common_sample_rate([self.left.sample_rate(), self.right.sample_rate()])"
+    )]
     right_out: WriteStream<U>,
     left_position: Position,
     right_position: Position,
@@ -239,7 +245,8 @@ impl<T: Sample, U: Sample> StreamAlign<T, U> {
                 origin: None,
                 output_end: None,
                 done: false,
-            },
+            }
+            .with_output_metadata(),
             left_read,
             right_read,
         ))

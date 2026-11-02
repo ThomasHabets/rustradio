@@ -7,7 +7,7 @@ use crate::stream::NCWriteStream;
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, bound = "T: 'static")]
 pub struct Strobe<T: Send + Clone> {
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "Some(1.0 / self.period.as_secs_f64())")]
     dst: NCWriteStream<T>,
     #[rustradio(default)]
     last: Option<std::time::Instant>,

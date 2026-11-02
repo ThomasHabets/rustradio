@@ -54,7 +54,7 @@ pub struct AuEncode {
     #[rustradio(in)]
     src: ReadStream<Float>,
 
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate().map(|r| r * 2.0)")]
     dst: WriteStream<u8>,
 }
 
@@ -106,7 +106,8 @@ impl AuEncode {
                 header: Some(v),
                 src,
                 dst,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -169,7 +170,7 @@ enum DecodeState {
 pub struct AuDecode {
     #[rustradio(in)]
     src: ReadStream<u8>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "Some(f64::from(self.bitrate))")]
     dst: WriteStream<Float>,
     state: DecodeState,
     bitrate: u32,
@@ -185,7 +186,8 @@ impl AuDecode {
                 bitrate,
                 dst,
                 state: DecodeState::WaitingMagic,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

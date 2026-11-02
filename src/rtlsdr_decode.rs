@@ -11,7 +11,7 @@ use crate::{Complex, Float};
 pub struct RtlSdrDecode {
     #[rustradio(in)]
     src: ReadStream<u8>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate().map(|r| r / 2.0)")]
     dst: WriteStream<Complex>,
 }
 

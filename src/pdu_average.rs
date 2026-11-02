@@ -15,7 +15,7 @@ pub struct PduAverage {
 
     #[rustradio(in)]
     src: NCReadStream<Vec<Float>>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate().map(|r| r / self.n as f64)")]
     dst: NCWriteStream<Vec<Float>>,
 
     #[rustradio(default)]

@@ -13,6 +13,9 @@ pub struct StreamInfo {
     pub id: usize,
     /// Explicit stream name; `None` uses the name derived from `id`.
     pub name: Option<String>,
+    /// Automatic producer/output name, independent of explicit naming.
+    #[serde(default)]
+    pub auto_name: Option<String>,
     /// Rust sample or message type.
     pub sample_type: String,
     /// Whether items are individually owned messages rather than copying samples.
@@ -25,11 +28,12 @@ pub struct StreamInfo {
 }
 
 impl StreamInfo {
-    /// Return the explicit name, or `stream-{id}` for an unnamed stream.
+    /// Return the explicit name, automatic output name, or `stream-{id}`.
     #[must_use]
     pub fn name(&self) -> String {
         self.name
             .clone()
+            .or_else(|| self.auto_name.clone())
             .unwrap_or_else(|| format!("stream-{}", self.id))
     }
 }

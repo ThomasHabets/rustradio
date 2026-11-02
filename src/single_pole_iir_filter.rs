@@ -60,7 +60,7 @@ where
     iir: SinglePoleIir<T>,
     #[rustradio(in)]
     src: ReadStream<T>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<T>,
 }
 
@@ -80,7 +80,7 @@ where
             ))
         })?;
         let (dst, dr) = crate::stream::new_stream()?;
-        Ok((Self { src, dst, iir }, dr))
+        Ok((Self { src, dst, iir }.with_output_metadata(), dr))
     }
     fn process_sync(&mut self, a: T) -> T {
         self.iir.filter(a)

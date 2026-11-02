@@ -74,7 +74,8 @@ impl<T: SampleEncoding> FileSource<T> {
                 repeat: Repeat::finite(1),
                 buf: Vec::new(),
                 dst,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

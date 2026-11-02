@@ -23,6 +23,7 @@ impl Metadata {
             info: Mutex::new(StreamInfo {
                 id,
                 name: None,
+                auto_name: None,
                 sample_type: std::any::type_name::<T>().into(),
                 messages,
                 sample_rate_hz: None,
@@ -45,7 +46,12 @@ impl Metadata {
         self.info.lock().unwrap().name()
     }
     pub fn set_name(&self, requested: impl Into<String>) {
-        let requested = requested.into();
+        self.assign_name(requested.into(), true);
+    }
+    pub fn set_auto_name(&self, requested: String) {
+        self.assign_name(requested, false);
+    }
+    fn assign_name(&self, requested: String, explicit: bool) {
         if requested.is_empty() {
             return;
         }
@@ -79,7 +85,11 @@ impl Metadata {
             };
         }
         let mut info = self.info.lock().unwrap();
-        info.name = Some(name);
+        if explicit {
+            info.name = Some(name);
+        } else {
+            info.auto_name = Some(name);
+        }
     }
     pub fn sample_rate(&self) -> Option<f64> {
         self.info.lock().unwrap().sample_rate_hz

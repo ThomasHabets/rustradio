@@ -239,7 +239,7 @@ pub struct FftFilter<T: Engine> {
     engine: T,
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Complex>,
 }
 
@@ -302,7 +302,8 @@ impl<T: Engine> FftFilter<T> {
                 buf: Vec::with_capacity(fft_size),
                 tags: Vec::new(),
                 nsamples,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -399,8 +400,9 @@ pub struct FftFilterFloat<T: Engine> {
     complex: FftFilter<T>,
     #[rustradio(in)]
     src: ReadStream<Float>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Float>,
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     inner_in: WriteStream<Complex>,
     inner_out: ReadStream<Complex>,
 }
@@ -441,16 +443,17 @@ impl<T: Engine> FftFilterFloat<T> {
         assert_eq!(inner_in.id(), r.id(), "{}", inner_in.id() - r.id());
         let (complex, inner_out) = FftFilter::new_engine(r, engine)?;
         let (dst, dr) = crate::stream::new_stream()?;
-        Ok((
-            Self {
-                complex,
-                src,
-                dst,
-                inner_in,
-                inner_out,
-            },
-            dr,
-        ))
+        let block = Self {
+            complex,
+            src,
+            dst,
+            inner_in,
+            inner_out,
+        }
+        .with_output_metadata();
+        // The internal transform inherits the rate from the initialized bridge.
+        block.complex.init_output_metadata();
+        Ok((block, dr))
     }
 }
 

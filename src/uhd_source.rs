@@ -137,6 +137,13 @@ impl UhdSourceBuilder {
             .build();
         let stream = self.device.rx_stream(&stream_args)?;
         let (dst, output) = crate::stream::new_stream()?;
+        dst.initialize_sample_rate(Some(
+            self.device
+                .lock()
+                .ok()
+                .and_then(|device| device.get_rx_sample_rate(self.channel).ok())
+                .unwrap_or(self.sample_rate),
+        ));
         Ok((
             UhdSource {
                 // Keep this field before `_device`; stream must be dropped first.
@@ -146,7 +153,8 @@ impl UhdSourceBuilder {
                 timeout: self.timeout.as_secs_f64(),
                 pending_tags: initial_tags,
                 started: false,
-            },
+            }
+            .with_output_metadata(),
             output,
         ))
     }

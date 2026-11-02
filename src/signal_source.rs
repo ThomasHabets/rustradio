@@ -40,12 +40,14 @@ impl SignalSourceComplex {
         // The sine/-cosine waveform starts at sample one.
         let _ = oscillator.next();
         let (dst, dr) = crate::stream::new_stream()?;
+        dst.initialize_sample_rate(Some(f64::from(samp_rate)));
         Ok((
             Self {
                 dst,
                 amplitude,
                 oscillator,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -125,13 +127,15 @@ impl SignalSourceFloat {
             ));
         }
         let (dst, dr) = crate::stream::new_stream()?;
+        dst.initialize_sample_rate(Some(f64::from(samp_rate)));
         Ok((
             Self {
                 dst,
                 current: 0.0,
                 amplitude,
                 rad_per_sample: 2.0 * std::f64::consts::PI * f64::from(freq) / f64::from(samp_rate),
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

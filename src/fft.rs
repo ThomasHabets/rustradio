@@ -10,7 +10,7 @@ use crate::{Complex, Error, Float, Result};
 pub struct Fft {
     #[rustradio(in)]
     src: NCReadStream<Vec<Complex>>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: NCWriteStream<Vec<Complex>>,
     fft: Arc<dyn rustfft::Fft<Float>>,
     scratch: Box<[Complex]>,
@@ -30,7 +30,8 @@ impl Fft {
                 dst,
                 fft,
                 scratch,
-            },
+            }
+            .with_output_metadata(),
             out,
         )
     }

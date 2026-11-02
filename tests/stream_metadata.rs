@@ -111,7 +111,7 @@ fn blockchain_arguments_accept_metadata() -> Result<()> {
         prev,
         AddConst::new(prev.with_name("input").with_sample_rate(48_000.)?, 2.)?,
     ];
-    assert_eq!(output.sample_rate(), None);
+    assert_eq!(output.sample_rate(), Some(48_000.));
     let name = format!("filtered-{}", output.name());
     let output = output.with_name(&name).with_sample_rate(48_000.)?;
     assert_eq!(output.name(), name);

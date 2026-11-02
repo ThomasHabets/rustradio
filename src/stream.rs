@@ -3,13 +3,15 @@
 Blocks are connected with streams. A block can have zero or more input
 streams, and write to zero or more output streams.
 
-Both endpoints share a generated name such as `stream-42` and an optional sample
-rate. Use `with_name("filtered")` and `with_sample_rate(48_000.)?` when connecting
+Both endpoints share a name and an optional sample rate. Block outputs use
+`auto/<block-name>/<output-field>`; standalone streams use
+`stream-{id}`. Explicit names override automatic names, and only explicit
+names qualify for named-only IqStream discovery. Use `with_name("filtered")` and `with_sample_rate(48_000.)?` when connecting
 blocks, including in `blockchain!` constructor arguments. Read metadata with
 `name()` and `sample_rate()`. Duplicate names receive a unique suffix; empty
 naming requests leave the name unchanged. Generated `stream-{id}` names are
 reserved for their owning stream, including IDs not yet allocated. Rates must be
-finite and positive; blocks do not infer or propagate them. Use [`streams()`] to
+finite and positive; block constructors infer output rates when their relationship is known. Use [`streams()`] to
 list live process streams and their metadata. The inventory does not keep stream buffers or endpoints alive.
 */
 use std::collections::VecDeque;
@@ -742,6 +744,19 @@ pub use crate::stream_registry::{StreamInfo, streams};
 macro_rules! stream_metadata {
     ($stream:ident, $field:ident) => {
         impl<T> $stream<T> {
+            #[doc(hidden)]
+            pub fn initialize_block_output(&self, block: &str, output: &str, rate: Option<f64>) {
+                let metadata = self.$field.metadata();
+                metadata.set_auto_name(format!("auto/{block}/{output}"));
+                self.initialize_sample_rate(rate);
+            }
+            #[doc(hidden)]
+            pub fn initialize_sample_rate(&self, rate: Option<f64>) {
+                let metadata = self.$field.metadata();
+                if let Some(rate) = rate.filter(|r| r.is_finite() && *r > 0.0) {
+                    metadata.set_sample_rate(rate).expect("validated rate");
+                }
+            }
             /// Snapshot of the stream's name, shared by both endpoints.
             #[must_use]
             pub fn name(&self) -> String {
@@ -761,7 +776,7 @@ macro_rules! stream_metadata {
                 self.$field.metadata().sample_rate()
             }
             /// Attach a finite, positive rate in samples (or messages) per second.
-            /// Both endpoints share the rate; blocks do not propagate it.
+            /// Both endpoints share the rate. Block constructors may infer output rates.
             pub fn with_sample_rate(self, rate: impl Into<f64>) -> Result<Self> {
                 self.$field.metadata().set_sample_rate(rate.into())?;
                 Ok(self)
@@ -782,6 +797,14 @@ impl<T> NCInner<T> {
     fn metadata(&self) -> &crate::stream_metadata::Metadata {
         &self.metadata
     }
+}
+
+/// Infer a common rate from the known input rates; conflicts remain unknown.
+#[doc(hidden)]
+pub fn common_sample_rate(rates: impl IntoIterator<Item = Option<f64>>) -> Option<f64> {
+    let mut known = rates.into_iter().flatten();
+    let first = known.next()?;
+    known.all(|rate| rate == first).then_some(first)
 }
 
 #[cfg(test)]

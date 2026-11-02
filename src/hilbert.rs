@@ -24,7 +24,7 @@ use crate::{Complex, Error, Float, Result};
 pub struct Hilbert {
     #[rustradio(in)]
     src: ReadStream<Float>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Complex>,
     history: Box<[Float]>,
     filter: Fir<Float>,
@@ -56,7 +56,8 @@ impl Hilbert {
                 history: vec![0.0; ntaps].into_boxed_slice(),
                 filter: Fir::new(taps)?,
                 threaded: false,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

@@ -32,9 +32,15 @@ pub struct ZeroCrossing {
     counter: u64,
     #[rustradio(in)]
     src: ReadStream<Float>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r / f64::from(self.sps))"
+    )]
     dst: WriteStream<Float>,
-    // TODO: should this also be tagged `out`?
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r / f64::from(self.sps))"
+    )]
     out_clock: Option<WriteStream<Float>>,
 }
 
@@ -79,7 +85,8 @@ impl ZeroCrossing {
                 last_cross: 0.0,
                 counter: 0,
                 out_clock: None,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -94,6 +101,7 @@ impl ZeroCrossing {
         }
         let (w, r) = crate::stream::new_stream()?;
         self.out_clock = Some(w);
+        self.init_out_clock_metadata();
         Ok(r)
     }
 }

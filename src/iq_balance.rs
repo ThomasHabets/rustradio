@@ -18,7 +18,7 @@ pub struct IqBalance {
     mean: Complex,
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Complex>,
 }
 
@@ -76,7 +76,8 @@ impl IqBalance {
                 mean: Complex::default(),
                 src,
                 dst,
-            },
+            }
+            .with_output_metadata(),
             out,
         ))
     }

@@ -175,3 +175,24 @@ to not help over the fallback implementation.
 Once `std::simd` is in `stable`, it'll be fine to skip the default
 implementation. `std::simd` can help generate code faster than regular
 Rust even on non-vector capable hardware.
+
+## Output stream metadata
+
+Block constructors attach automatic `auto/<block>/<output>` names.
+Automatic names do not qualify for named-only IqStream discovery: use
+`with_name()` to opt a stream into that mode. Explicit names take precedence.
+
+Sync blocks copy the common known input rate at construction. Unknown input
+rates are ignored; conflicting known rates produce an unknown output rate.
+For another rate relationship, annotate an output with, for example,
+`#[rustradio(out, sample_rate = "self.src.sample_rate().map(|r| r / self.deci as f64)")]`.
+Expressions return `Option<f64>`; absent, nonfinite, or nonpositive inferred
+rates remain unknown. Rates on no-copy streams describe messages per second.
+
+Generated constructors initialize output metadata automatically. Manual
+constructors return `Self { ... }.with_output_metadata()`, using the same
+derived names and rate rules. Absolute source rates available only as constructor
+arguments can be attached once with `output.initialize_sample_rate(rate)`.
+When attaching an optional output field, call its derived initializer, such as
+`self.init_out_clock_metadata()`, to preserve overrides on existing outputs. Metadata is a construction-time snapshot;
+applications can override names and rates on the returned streams.

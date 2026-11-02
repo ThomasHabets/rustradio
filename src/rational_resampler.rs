@@ -115,7 +115,10 @@ pub struct RationalResampler<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
 
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r * self.interp as f64 / self.deci as f64)"
+    )]
     dst: WriteStream<T>,
 }
 
@@ -153,7 +156,8 @@ impl<T: Sample> RationalResampler<T> {
                 pending: None,
                 src,
                 dst,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

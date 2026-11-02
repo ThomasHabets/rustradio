@@ -69,7 +69,8 @@ impl AgcBuilder {
                 reference: self.reference,
                 gain: self.initial_gain,
                 max_gain: self.max_gain,
-            },
+            }
+            .with_output_metadata(),
             output,
         ))
     }
@@ -146,7 +147,7 @@ pub struct Agc {
 
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Complex>,
 }
 

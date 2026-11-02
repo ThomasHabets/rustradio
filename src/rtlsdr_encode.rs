@@ -14,7 +14,7 @@ const RTLSDR_SCALE: Float = 0.008;
 pub struct RtlSdrEncode {
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate().map(|r| r * 2.0)")]
     dst: WriteStream<u8>,
 }
 

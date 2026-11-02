@@ -55,9 +55,15 @@ pub struct SymbolSync {
     next_sym_middle: Float,
     #[rustradio(in)]
     src: ReadStream<Float>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r / f64::from(self.sps))"
+    )]
     dst: WriteStream<Float>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r / f64::from(self.sps))"
+    )]
     out_clock: Option<WriteStream<Float>>,
 }
 
@@ -107,7 +113,8 @@ impl SymbolSync {
                 last_sym_boundary_pos: 0.0,
                 next_sym_middle: sps / 2.0,
                 out_clock: None,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }
@@ -122,6 +129,7 @@ impl SymbolSync {
         }
         let (tx, rx) = crate::stream::new_stream()?;
         self.out_clock = Some(tx);
+        self.init_out_clock_metadata();
         Ok(rx)
     }
 }

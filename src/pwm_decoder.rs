@@ -751,7 +751,8 @@ impl PwmDecoder {
                 state: PwmState::new(settings),
                 pending: VecDeque::new(),
                 eof_finalized: false,
-            },
+            }
+            .with_output_metadata(),
             dst_read,
         )
     }

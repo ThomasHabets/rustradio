@@ -405,6 +405,10 @@ impl SoapySdrSourceBuilder<'_> {
                 .set_antenna(soapysdr::Direction::Rx, self.channel, a)?;
         }
         let (dst, dr) = crate::stream::new_stream()?;
+        dst.initialize_sample_rate(Some(
+            self.dev
+                .sample_rate(soapysdr::Direction::Rx, self.channel)?,
+        ));
         let mut stream = self.dev.rx_stream(&[self.channel])?;
         stream.activate(None)?;
         let sensor_poller = SensorPoller::new(self.dev.clone(), self.channel, allowed_sensors)?;
@@ -416,7 +420,8 @@ impl SoapySdrSourceBuilder<'_> {
                 dst,
                 tags,
                 last_time_tag: None,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

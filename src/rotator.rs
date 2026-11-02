@@ -17,7 +17,7 @@ pub struct Rotator {
     translator: ComplexOscillator,
     #[rustradio(in)]
     src: ReadStream<Complex>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<Complex>,
 }
 
@@ -37,7 +37,8 @@ impl Rotator {
                 translator: xlat,
                 dst,
                 src,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

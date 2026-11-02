@@ -9,7 +9,10 @@ use crate::{Error, Result, Sample};
 pub struct StreamChunks<T: Sample> {
     #[rustradio(in)]
     src: ReadStream<T>,
-    #[rustradio(out)]
+    #[rustradio(
+        out,
+        sample_rate = "self.src.sample_rate().map(|r| r / self.size as f64)"
+    )]
     dst: NCWriteStream<Vec<T>>,
     size: usize,
 }
@@ -28,7 +31,7 @@ impl<T: Sample> StreamChunks<T> {
             ));
         }
         let (dst, out) = crate::stream::new_nocopy_stream();
-        Ok((Self { src, dst, size }, out))
+        Ok((Self { src, dst, size }.with_output_metadata(), out))
     }
 }
 

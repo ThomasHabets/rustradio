@@ -46,7 +46,14 @@
 ///
 /// Field attributes:
 /// * `in`: Input stream.
-/// * `out`: Output stream.
+/// * `out`: Output stream. Constructors assign an automatic name containing
+///   the block name and output field, with a suffix for collisions.
+/// * `sample_rate = "expression"`: Output rate as an `Option<f64>` expression
+///   using `self`. Sync blocks default to the common known input rate; other
+///   outputs default to an unknown rate. Conflicting known input rates remain
+///   unknown. Manual constructors use `Self { ... }.with_output_metadata()`
+///   to apply the same derived rules. An optional output can be initialized
+///   when attached using its generated `init_<field>_metadata()` method.
 /// * `default`: Skip this field as arg for the `new()` function, and instead
 ///   default it.
 /// * `into`: When the `new()` function is generated, let non-stream values

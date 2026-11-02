@@ -18,7 +18,7 @@ pub struct Delay<T: Sample> {
 
     #[rustradio(in)]
     src: ReadStream<T>,
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: WriteStream<T>,
 }
 
@@ -33,7 +33,8 @@ impl<T: Sample> Delay<T> {
                 delay,
                 current_delay: delay,
                 skip: 0,
-            },
+            }
+            .with_output_metadata(),
             dr,
         ))
     }

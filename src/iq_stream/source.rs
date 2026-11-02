@@ -420,7 +420,7 @@ impl Drop for SourceTransport {
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct IqStreamSource<T: IqSample> {
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "Some(self.handle.description().sample_rate_hz)")]
     // Take the writer after End drains so consumers see EOF while the transport
     // completes its acknowledgement handshake.
     dst: Option<WriteStream<T>>,
@@ -448,7 +448,8 @@ impl<T: IqSample> IqStreamSource<T> {
                 current: None,
                 handle: handle.clone(),
                 done: false,
-            },
+            }
+            .with_output_metadata(),
             out,
             handle,
             transport,
@@ -749,7 +750,7 @@ impl<T: IqSample> Drop for IqStreamSource<T> {
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct IqStreamStringSource {
-    #[rustradio(out)]
+    #[rustradio(out, sample_rate = "Some(self.handle.description().sample_rate_hz)")]
     dst: Option<NCWriteStream<String>>,
     rx: Receiver<proto::Frame>,
     handle: SourceHandle,
@@ -772,7 +773,8 @@ impl IqStreamStringSource {
                 rx,
                 handle: handle.clone(),
                 done: false,
-            },
+            }
+            .with_output_metadata(),
             output,
             handle,
             transport,
