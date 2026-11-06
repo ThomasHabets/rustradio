@@ -42,7 +42,7 @@ impl FftStream {
     /// Returns an error for a zero FFT size or a frame larger than either
     /// stream's capacity. Validation precedes FFT planning and allocation.
     pub fn new(src: ReadStream<Complex>, size: usize) -> Result<(Self, ReadStream<Complex>)> {
-        let output_capacity = crate::stream::DEFAULT_STREAM_SIZE / std::mem::size_of::<Complex>();
+        let output_capacity = crate::stream::stream_size() / std::mem::size_of::<Complex>();
         if size == 0 || size > src.total_size() || size > output_capacity {
             return Err(Error::msg(
                 "FFT size must be nonzero and fit stream capacity",
