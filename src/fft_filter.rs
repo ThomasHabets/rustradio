@@ -283,15 +283,15 @@ impl<T: Engine> FftFilter<T> {
         // Set up FFT / batch size.
         let fft_size = calc_fft_size(engine.tap_len())?;
         let nsamples = fft_size - engine.tap_len();
+        let (dst, dr) = crate::stream::new_stream()?;
         // Each round needs one contiguous output window of this many samples.
         // Larger batches would wait for space that the output can never provide.
-        if nsamples > crate::stream::stream_size() / std::mem::size_of::<Complex>() {
+        if nsamples > dr.total_size() {
             return Err(crate::Error::msg(
                 "FFT filter batch exceeds output stream capacity",
             ));
         }
 
-        let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 src,

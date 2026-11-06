@@ -40,10 +40,11 @@ impl FftStream {
     /// Create a new `FftStream`.
     ///
     /// Returns an error for a zero FFT size or a frame larger than either
-    /// stream's capacity. Validation precedes FFT planning and allocation.
+    /// stream's capacity, or stream allocation failure. Validation precedes
+    /// FFT planning.
     pub fn new(src: ReadStream<Complex>, size: usize) -> Result<(Self, ReadStream<Complex>)> {
-        let output_capacity = crate::stream::stream_size() / std::mem::size_of::<Complex>();
-        if size == 0 || size > src.total_size() || size > output_capacity {
+        let (dst, dr) = crate::stream::new_stream()?;
+        if size == 0 || size > src.total_size() || size > dr.total_size() {
             return Err(Error::msg(
                 "FFT size must be nonzero and fit stream capacity",
             ));
@@ -51,7 +52,6 @@ impl FftStream {
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(size);
         let scratch = vec![Complex::default(); fft.get_inplace_scratch_len()].into_boxed_slice();
-        let (dst, dr) = crate::stream::new_stream()?;
         Ok((
             Self {
                 size,
