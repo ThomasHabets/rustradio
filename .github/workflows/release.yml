@@ -16,18 +16,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  checks:
+    name: Require successful commit checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main
+
+      - name: Wait for commit checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id="$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow runtests.yml --branch main --event push \
+            --commit "$GITHUB_SHA" --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -z "$run_id" ]; then
+            echo "::error::No Run tests workflow found for commit $GITHUB_SHA"
+            exit 1
+          fi
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30
+          conclusion="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" \
+            --json conclusion --jq '.conclusion')"
+          if [ "$conclusion" != success ]; then
+            echo "::error::Run tests for commit $GITHUB_SHA concluded: $conclusion"
+            exit 1
+          fi
+
   release:
+    needs: checks
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Require main
-        env:
-          RELEASE_BRANCH: ${{ github.ref_name }}
-        run: test "$RELEASE_BRANCH" = main
 
       - uses: dtolnay/rust-toolchain@stable
 
