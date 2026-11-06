@@ -83,6 +83,7 @@ impl crate::graph::GraphRunner for MTGraph {
                     let name = b.block_name().to_string();
                     let mut idle_sleep = MIN_IDLE_SLEEP;
                     let mut stats = BlockStats::default();
+                    let mut wait_state = crate::graph::StreamWaitState::default();
                     while !cancel_token.is_canceled() {
                         let st = Instant::now();
                         stats.work_calls += 1;
@@ -101,6 +102,7 @@ impl crate::graph::GraphRunner for MTGraph {
                                 break;
                             }
                             BlockRet::WaitForStream(stream, need) => {
+                                let need = wait_state.limit(&name, stream, need);
                                 let outcome = stream.wait(need);
                                 if b.eof() || outcome == crate::stream::WaitOutcome::Closed {
                                     break;

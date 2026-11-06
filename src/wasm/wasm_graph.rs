@@ -33,6 +33,9 @@ impl WasmGraph {
     }
     pub async fn run_async(&mut self, rx: async_channel::Receiver<()>) -> crate::Result<()> {
         let rx = Box::pin(rx);
+        let mut wait_states: Vec<_> = (0..self.blocks.len())
+            .map(|_| crate::graph::StreamWaitState::default())
+            .collect();
         loop {
             let mut done = true;
             let mut need_more = false;
@@ -57,7 +60,8 @@ impl WasmGraph {
                         progress = true;
                     }
                     // TODO: Skip calling next time if conditions not met?
-                    BlockRet::WaitForStream(s, _) => {
+                    BlockRet::WaitForStream(s, need) => {
+                        wait_states[n].limit(name, s, need);
                         let closed = s.closed();
                         if b.eof() && closed {
                             finished = true;

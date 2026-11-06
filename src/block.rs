@@ -54,6 +54,10 @@ pub enum BlockRet<'a> {
     /// Signal that we're waiting for a stream. Either an input or output
     /// stream.
     ///
+    /// The count is a scheduling hint. Graph runners cap waits at the stream's
+    /// hard capacity and warn once per block when a request exceeds it. Blocks
+    /// must handle being called with fewer samples or slots available.
+    ///
     /// If a block is waiting for two streams, then pick one for this return. If
     /// in the next invocation the other stream is the one preventing progress,
     /// then return that then. Don't worry about not being able to return a

@@ -8,6 +8,38 @@ use log::{info, trace};
 use crate::block::{Block, BlockRet};
 use crate::sys::{Instant, get_cpu_time, sleep};
 
+/// Per-block handling of wait requests that exceed a stream's hard capacity.
+#[derive(Default)]
+pub(crate) struct StreamWaitState {
+    warned: bool,
+}
+
+impl StreamWaitState {
+    pub(crate) fn limit(
+        &mut self,
+        name: &str,
+        stream: &dyn crate::stream::StreamWait,
+        need: usize,
+    ) -> usize {
+        let Some(capacity) = stream.wait_capacity() else {
+            return need;
+        };
+        if need > capacity {
+            if !self.warned {
+                log::warn!(
+                    "Block {name} requested {need} samples or slots on stream {}, \
+                     exceeding its capacity of {capacity}; limiting the wait to capacity",
+                    stream.id(),
+                );
+                self.warned = true;
+            }
+            capacity
+        } else {
+            need
+        }
+    }
+}
+
 /**
 Abstraction over graph executors.
 */
@@ -106,6 +138,9 @@ impl GraphRunner for Graph {
             .resize(self.blocks.len(), std::time::Duration::default());
         self.cpu_times
             .resize(self.blocks.len(), std::time::Duration::default());
+        let mut wait_states: Vec<_> = (0..self.blocks.len())
+            .map(|_| StreamWaitState::default())
+            .collect();
         loop {
             let mut done = true;
             let mut all_idle = true;
@@ -134,7 +169,8 @@ impl GraphRunner for Graph {
                     BlockRet::Pending => {
                         done = false;
                     }
-                    BlockRet::WaitForStream(stream, _need) => {
+                    BlockRet::WaitForStream(stream, need) => {
+                        wait_states[n].limit(name, stream, need);
                         let closed = stream.closed();
                         if b.eof() || closed {
                             finished = true;
@@ -325,6 +361,51 @@ impl Default for CancellationToken {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stream_waits_use_actual_capacity() -> Result<()> {
+        use crate::stream::{StreamWait, WaitOutcome, new_stream};
+
+        let (writer, reader) = new_stream::<u32>()?;
+        let capacity = reader.total_size();
+        let mut state = StreamWaitState::default();
+        assert_eq!(state.limit("test", &reader, capacity), capacity);
+        assert!(!state.warned);
+        assert_eq!(state.limit("test", &writer, 1), 1);
+        let need = state.limit("test", &writer, capacity + 1);
+        assert_eq!(need, capacity);
+        assert!(state.warned);
+        assert_eq!(writer.wait(need), WaitOutcome::Ready);
+
+        let mut window = writer.write_buf()?;
+        window.slice().fill(0);
+        window.produce(capacity, &[]);
+        let need = state.limit("test", &reader, usize::MAX);
+        assert_eq!(need, capacity);
+        assert_eq!(reader.wait(need), WaitOutcome::Ready);
+        drop(writer);
+        // Capping must preserve buffered input after its writer disconnects.
+        assert_eq!(reader.wait(need), WaitOutcome::Ready);
+        Ok(())
+    }
+
+    #[test]
+    fn nocopy_input_waits_preserve_advisory_capacity() {
+        use crate::stream::{StreamWait, WaitOutcome, new_nocopy_stream};
+
+        let (writer, reader) = new_nocopy_stream::<u8>();
+        let capacity = writer.wait_capacity().unwrap();
+        let mut state = StreamWaitState::default();
+        for _ in 0..=capacity {
+            writer.push(0, []);
+        }
+        let need = state.limit("test", &reader, capacity + 1);
+        assert_eq!(need, capacity + 1);
+        assert!(!state.warned);
+        assert_eq!(reader.wait(need), WaitOutcome::Ready);
+        assert_eq!(state.limit("test", &writer, capacity + 1), capacity);
+        assert!(state.warned);
+    }
 
     #[cfg(not(feature = "wasm"))]
     #[test]

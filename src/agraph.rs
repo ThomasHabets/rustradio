@@ -63,6 +63,7 @@ impl AsyncGraph {
             let name = b.block_name().to_string();
             tasks.push(spawn(&name, async move {
                 let name = b.block_name().to_string();
+                let mut wait_state = crate::graph::StreamWaitState::default();
                 while !cancel_token.is_canceled() {
                     //log::trace!("Still running: {name}");
                     let ret = match b.work() {
@@ -79,6 +80,7 @@ impl AsyncGraph {
                         }
                         BlockRet::EOF => break,
                         BlockRet::WaitForStream(stream, need) => {
+                            let need = wait_state.limit(&name, stream, need);
                             //debug!("{name} wait for stream");
                             let outcome = stream.wait_async(need).await;
                             if b.eof() || outcome == crate::stream::WaitOutcome::Closed {

@@ -189,6 +189,15 @@ pub trait StreamWait {
     #[must_use]
     fn id(&self) -> usize;
 
+    /// Maximum satisfiable wait count, in samples or message slots.
+    ///
+    /// `None` means there is no known hard limit. In particular, no-copy
+    /// input queues may grow beyond their advertised capacity.
+    #[must_use]
+    fn wait_capacity(&self) -> Option<usize> {
+        None
+    }
+
     /// Wait for "a while" or until `need` samples are available/space available.
     ///
     /// Buffered data that satisfies `need` returns [`WaitOutcome::Ready`]
@@ -215,6 +224,9 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
     fn id(&self) -> usize {
         self.circ.id()
     }
+    fn wait_capacity(&self) -> Option<usize> {
+        Some(self.circ.total_size())
+    }
     fn wait(&self, need: usize) -> WaitOutcome {
         self.wait_for_read(need)
     }
@@ -231,6 +243,9 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
 impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
     fn id(&self) -> usize {
         self.circ.id()
+    }
+    fn wait_capacity(&self) -> Option<usize> {
+        Some(self.circ.total_size())
     }
     fn wait(&self, need: usize) -> WaitOutcome {
         self.wait_for_write(need)
@@ -534,6 +549,9 @@ impl<T: Send> StreamWait for NCReadStream<T> {
 impl<T: Send> StreamWait for NCWriteStream<T> {
     fn id(&self) -> usize {
         self.id
+    }
+    fn wait_capacity(&self) -> Option<usize> {
+        Some(self.inner.capacity)
     }
     fn wait(&self, need: usize) -> WaitOutcome {
         let capacity = self.inner.capacity;
