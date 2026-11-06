@@ -430,9 +430,7 @@ impl<T> Buffer<T> {
         if !size.is_multiple_of(member_size) {
             return Err(Error::msg("buffer size must be a multiple of element size"));
         }
-        // SAFETY: sysconf takes no pointers and reads the system page size.
-        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-        if page_size <= 0 || !size.is_multiple_of(page_size as usize) {
+        if !size.is_multiple_of(crate::sys::page_size()?) {
             return Err(Error::msg("buffer size must be a multiple of page size"));
         }
         let circ = Circ::new(size)?;

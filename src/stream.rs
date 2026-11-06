@@ -15,7 +15,7 @@ finite and positive; block constructors infer output rates when their relationsh
 list live process streams and their metadata. The inventory does not keep stream buffers or endpoints alive.
 */
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use async_trait::async_trait;
@@ -104,17 +104,54 @@ impl Tag {
     }
 }
 
-/// Default stream size. Must be a multiple of the system page size.
+/// Default stream size in bytes. A multiple of the system page size.
+pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
+
+static STREAM_SIZE: AtomicUsize = AtomicUsize::new(DEFAULT_STREAM_SIZE);
+
+/// Set the buffer size, in bytes, of streams created by [`new_stream`].
+///
+/// The size applies to streams created after the call, so set it before
+/// building a graph. It is process wide. The default is 4 096 000 bytes.
 ///
 /// Larger means better batching, but more RAM used. Twice as much virtual
-/// address space as RAM is used.
+/// address space as RAM is used. Each stream's buffer becomes resident once
+/// the stream has cycled through it, however slow the stream is.
 ///
 /// Some experimentation with the multithreaded `GraphRunner` on 2025-02-15 with
 /// ax25-1200-rx, in real time:
 /// * 40_000KiB: 0.929s
 /// *  4_000KiB: 1.066
 /// *    400KiB: 1.228s
-pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
+///
+/// Blocks that need a whole frame of output space at once, such as
+/// [`FftStream`](crate::blocks::FftStream) and
+/// [`FftFilter`](crate::blocks::FftFilter), return an error from their
+/// constructor when the frame does not fit the stream size.
+///
+/// # Errors
+///
+/// Returns an error, leaving the size unchanged, if `bytes` is zero, too
+/// large to map twice, or not a multiple of the system page size.
+pub fn set_stream_size(bytes: usize) -> Result<()> {
+    if bytes == 0 || bytes > isize::MAX as usize / 2 {
+        return Err(Error::msg("unsupported stream size"));
+    }
+    #[cfg(not(feature = "wasm"))]
+    if !bytes.is_multiple_of(crate::sys::page_size()?) {
+        return Err(Error::msg("stream size must be a multiple of page size"));
+    }
+    STREAM_SIZE.store(bytes, Ordering::Relaxed);
+    Ok(())
+}
+
+/// Buffer size, in bytes, of streams created by [`new_stream`].
+///
+/// See [`set_stream_size`].
+#[must_use]
+pub fn stream_size() -> usize {
+    STREAM_SIZE.load(Ordering::Relaxed)
+}
 
 const DEFAULT_NOCOPY_CAPACITY: usize = 1_000;
 
@@ -224,7 +261,7 @@ impl<T: Default + Copy> ReadStream<T> {
     where
         T: Send + 'static,
     {
-        let circ = Arc::new(crate::sys::Buffer::new(DEFAULT_STREAM_SIZE).unwrap()); // TODO
+        let circ = Arc::new(crate::sys::Buffer::new(stream_size()).unwrap()); // TODO
         let mut wb = circ.clone().write_buf().unwrap();
         wb.fill_from_slice(data);
         wb.produce(data.len(), &[]);
@@ -399,9 +436,10 @@ impl<T: Copy> WriteStream<T> {
 /// Items must be owned (`'static`) and transferable between threads (`Send`).
 ///
 /// Returns buffer creation errors, including temporary-file or memory-mapping
-/// failures and element layouts incompatible with the fixed buffer size.
+/// failures and element layouts incompatible with the buffer size. The
+/// buffer size is [`stream_size`].
 pub fn new_stream<T: Default + Copy + Send + 'static>() -> Result<(WriteStream<T>, ReadStream<T>)> {
-    let circ = Arc::new(crate::sys::Buffer::new(DEFAULT_STREAM_SIZE)?);
+    let circ = Arc::new(crate::sys::Buffer::new(stream_size())?);
     Ok((WriteStream { circ: circ.clone() }, ReadStream { circ }))
 }
 
@@ -809,6 +847,20 @@ pub fn common_sample_rate(rates: impl IntoIterator<Item = Option<f64>>) -> Optio
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn rejected_stream_sizes_leave_the_size_unchanged() {
+        // Only rejected sizes here: other tests in this process rely on the default.
+        let before = stream_size();
+        let mut rejected = vec![0, usize::MAX];
+        if cfg!(not(feature = "wasm")) {
+            rejected.extend([1, 4095]);
+        }
+        for bytes in rejected {
+            assert!(set_stream_size(bytes).is_err(), "{bytes}");
+            assert_eq!(stream_size(), before);
+        }
+    }
 
     #[test]
     fn observer_controls_do_not_retain_primary_storage() -> Result<()> {
