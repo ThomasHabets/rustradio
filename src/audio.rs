@@ -1,4 +1,5 @@
 //! Device configuration and lifetime management shared by audio blocks.
+use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -89,7 +90,8 @@ pub(crate) fn device_config(
 pub(crate) struct AudioStream {
     commands: Option<Sender<Command>>,
     thread: Option<std::thread::JoinHandle<()>>,
-    errors: Receiver<cpal::StreamError>,
+    // Access uses &mut self; Mutex supplies Sync without locking when polled.
+    errors: Mutex<Receiver<cpal::StreamError>>,
     playing: bool,
 }
 
@@ -123,7 +125,7 @@ impl AudioStream {
         let owner = Self {
             commands: Some(commands),
             thread: Some(thread),
-            errors,
+            errors: Mutex::new(errors),
             playing: false,
         };
         ready_rx.recv()??;
@@ -144,8 +146,8 @@ impl AudioStream {
         Ok(())
     }
 
-    pub(crate) fn check_error(&self) -> Result<()> {
-        if let Ok(e) = self.errors.try_recv() {
+    pub(crate) fn check_error(&mut self) -> Result<()> {
+        if let Ok(e) = self.errors.get_mut().unwrap().try_recv() {
             return Err(Error::msg(format!("audio stream error: {e}")));
         }
         Ok(())

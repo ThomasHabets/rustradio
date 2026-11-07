@@ -186,6 +186,12 @@ mod tests {
     use crate::stream::new_stream;
 
     #[test]
+    fn is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<AudioSink>();
+    }
+
+    #[test]
     fn silence_and_stereo_playback_preserve_samples_under_backpressure() -> Result<()> {
         let (sender, receiver) = sync_channel(2);
         let state = Playback {
