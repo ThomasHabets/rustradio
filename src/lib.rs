@@ -103,7 +103,7 @@ g.run()?;
 ## Features
 
 * `async`: Add support for `AsyncGraph`.
-* `audio`: Add support for `AudioSink` (adds dependency).
+* `audio`: Add audio capture and playback (adds dependency).
 * `fast-math`: Add a dependency in order to speed up some math.
 * `fftw`: GPL code only: Add support to use `libfftw` instead of `rustfft`.
 * `pipewire`: Add support for pipewire blocks (adds dependency).
@@ -217,7 +217,11 @@ pub mod xor_const;
 pub mod zero_crossing;
 
 #[cfg(feature = "audio")]
+mod audio;
+#[cfg(feature = "audio")]
 pub mod audio_sink;
+#[cfg(feature = "audio")]
+pub mod audio_source;
 
 #[cfg(feature = "pipewire")]
 pub mod pipewire_sink;

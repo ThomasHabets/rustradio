@@ -88,6 +88,8 @@ pub use crate::uhd_source::{UhdSource, UhdSourceBuilder};
 
 #[cfg(feature = "audio")]
 pub use crate::audio_sink::AudioSink;
+#[cfg(feature = "audio")]
+pub use crate::audio_source::AudioSource;
 
 #[cfg(feature = "pipewire")]
 pub use crate::pipewire_sink::PipewireSink;

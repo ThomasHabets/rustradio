@@ -100,7 +100,6 @@ tokio-stream = { version = "0.1", optional = true }
 
 [[example]]
 name = "bell202"
-required-features = ["soapysdr"]
 
 [[example]]
 name = "g3ruh"
