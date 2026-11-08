@@ -110,6 +110,25 @@
 //! pactl unload-module "$to_direwolf_module"
 //! pactl unload-module "$from_direwolf_module"
 //! ```
+//!
+//! ### Radio PTT through rigctld
+//!
+//! Audio mode can key a radio through an existing rigctld TCP server:
+//!
+//! ```text
+//! cargo run --release --example bell202 --features audio -- \
+//!   --audio --rigctld 127.0.0.1:4532 \
+//!   --ptt-delay-ms 200 --ptt-tail-ms 100 --tcp-listen 127.0.0.1:7878
+//! ```
+//!
+//! Select audio devices connected to the radio, and configure rigctld's radio
+//! and PTT method separately. The connection uses rigctld's default non-VFO
+//! protocol, verifies each PTT acknowledgement, and starts with PTT off.
+//! Key-on precedes audio by `--ptt-delay-ms` (default 100 ms). Key-off follows
+//! the audio backend's estimated playback end plus `--ptt-tail-ms` (default
+//! 100 ms); increase the tail for additional buffering outside the backend.
+//! Queued packets may share one PTT interval. Shutdown and errors attempt to
+//! release PTT; network failure can prevent delivery of that command.
 use std::io::{Read, Write};
 
 use anyhow::Result;
@@ -123,6 +142,10 @@ use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::{parse_frequency, parse_verbosity};
+
+#[cfg(any(feature = "audio", test))]
+#[path = "bell202/rigctld.rs"]
+mod rigctld;
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -146,6 +169,18 @@ struct Opt {
     /// Audio device sample rate, in Hz.
     #[arg(long, requires = "audio", default_value_t = 48000, value_parser = clap::value_parser!(u32).range(8000..))]
     audio_rate: u32,
+
+    /// rigctld TCP address for audio-mode PTT; requires its default non-VFO mode.
+    #[arg(long, requires = "audio", value_name = "HOST:PORT")]
+    rigctld: Option<String>,
+
+    /// Wait after rigctld acknowledges PTT on, before queuing audio.
+    #[arg(long, requires = "rigctld", default_value_t = 100)]
+    ptt_delay_ms: u64,
+
+    /// Extra PTT hold time after the audio backend's estimated playback end.
+    #[arg(long, requires = "rigctld", default_value_t = 100)]
+    ptt_tail_ms: u64,
 
     /// Verbosity level.
     #[arg(short, value_parser=parse_verbosity, default_value = "info")]
@@ -326,10 +361,31 @@ fn receive_audio(
 #[cfg(feature = "audio")]
 fn connect_audio(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<ReadStream<Float>> {
     let mut sink = AudioSink::builder();
+    if let Some(address) = &opt.rigctld {
+        let mut rig = rigctld::Rigctld::connect(address)?;
+        let lead = std::time::Duration::from_millis(opt.ptt_delay_ms);
+        let tail = std::time::Duration::from_millis(opt.ptt_tail_ms);
+        sink = sink.transmit_control(move |on| {
+            if !on {
+                std::thread::sleep(tail);
+            }
+            rig.set_ptt(on)
+                .map_err(|e| rustradio::Error::msg(format!("rigctld PTT: {e:#}")))?;
+            if on {
+                std::thread::sleep(lead);
+            }
+            Ok(())
+        });
+    }
     if let Some(name) = &opt.audio_output {
         sink = sink.device(name);
     }
-    g.add(Box::new(sink.build(tx, opt.audio_rate as u64)?));
+    let cancel = g.cancel_token();
+    // Stop reception only after playback drains and PTT has been released.
+    g.add(Box::new(
+        sink.on_eof(move || cancel.cancel())
+            .build(tx, opt.audio_rate as u64)?,
+    ));
     let mut source = AudioSource::builder();
     if let Some(name) = &opt.audio_input {
         source = source.device(name);
@@ -422,8 +478,12 @@ pub fn main() -> Result<()> {
     g.add(Box::new(source));
     let tx_rate = if opt.audio { opt.audio_rate } else { 48000 };
     let tx = transmit_audio(&mut g, input, tx_rate)?;
-    let cancel = g.cancel_token();
-    let tx = blockchain![g, prev, Canary::new(tx, move || cancel.cancel())?];
+    let tx = if opt.audio {
+        tx
+    } else {
+        let cancel = g.cancel_token();
+        blockchain![g, prev, Canary::new(tx, move || cancel.cancel())?]
+    };
     let rx_audio = if opt.audio {
         connect_audio(&mut g, &opt, tx)?
     } else {
@@ -611,5 +671,9 @@ mod tests {
         assert!(Opt::try_parse_from(["bell202", "--audio", "--freq", "144.8m"]).is_err());
         assert!(Opt::try_parse_from(["bell202", "--audio-input", "cable"]).is_err());
         assert!(Opt::try_parse_from(["bell202", "--audio", "--audio-rate", "0"]).is_err());
+        assert!(Opt::try_parse_from(["bell202", "--audio", "--rigctld", "localhost:4532"]).is_ok());
+        assert!(Opt::try_parse_from(["bell202", "--rigctld", "localhost:4532"]).is_err());
+        assert!(Opt::try_parse_from(["bell202", "--audio", "--ptt-delay-ms", "100"]).is_err());
+        assert!(Opt::try_parse_from(["bell202", "--audio", "--ptt-tail-ms", "100"]).is_err());
     }
 }
