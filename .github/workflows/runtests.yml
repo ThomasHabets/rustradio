@@ -2,9 +2,7 @@ name: Run tests
 
 on:
   push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
 
 permissions:
   contents: read
@@ -20,6 +18,7 @@ env:
 
 jobs:
   lowdep:
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     name: Low dependency build
     steps:
@@ -48,6 +47,7 @@ jobs:
     - name: Build examples
       run: cargo build --locked --no-default-features --verbose --examples
   standard:
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     name: Standard tests
     steps:
@@ -88,6 +88,7 @@ jobs:
     - name: Run tickbox
       run: NODIFF=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1
   individual_features:
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     name: Individual features
     steps:
@@ -124,6 +125,7 @@ jobs:
     - name: Run tickbox
       run: SLOW=true NODIFF=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1 --matching '^(10|26)-.*'
   extended:
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     name: Default, minimal, nightly, and benchmark checks
     steps:
@@ -159,3 +161,58 @@ jobs:
         sudo apt-get install -y librtlsdr-dev libsoapysdr-dev libjack-dev libasound-dev libfftw3-dev libpipewire-0.3-dev libvolk-dev libuhd-dev
     - name: Run extended checks
       run: SLOW=true NODIFF=true tickbox --dir tickbox/precommit --disable-tui --max-concurrency=1 --matching '^(10|30|31|50|60)-.*'
+
+  msrv:
+    name: Test minimum supported Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        shell: bash
+        run: |
+          msrv="$(sed -n 's/^rust-version = "\([^"]*\)"/\1/p' Cargo.toml)"
+          test -n "$msrv"
+          echo "version=$msrv" >> "$GITHUB_OUTPUT"
+
+      - name: Install MSRV
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: rustup toolchain install "$MSRV" --profile minimal
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-msrv-${{ steps.msrv.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-msrv-${{ steps.msrv.outputs.version }}-
+
+      - name: Run native tests with MSRV
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+$MSRV" test --workspace --locked
+
+  # tar -I 'zstd -T0 -19' -cf fixtures.tar.zst tests/testdata/
+  # sha256sum fixtures.tar.zst > tests/fixtures.sha256
+  # gh release create test-data-v${N?} fixtures.tar.zst --title "E2E test fixtures v${N?}" --notes "Test input data for end-to-end tests."
+  # Then update the version number in the workflow below.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Download test fixtures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download test-data-v1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern fixtures.tar.zst
+          sha256sum -c tests/fixtures.sha256
+          tar --zstd -xf fixtures.tar.zst
+      - name: Run E2E tests
+        run: cargo test --locked --workspace --release -- --ignored
