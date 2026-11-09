@@ -418,9 +418,11 @@ fn connect_sdr(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<Read
             .build(prev)?,
         Vco::new(prev, 2.0 * std::f64::consts::PI * 5000.0 / opt.sample_rate)?,
     ];
+    let cancel = g.cancel_token();
     g.add(Box::new(
         SoapySdrSink::builder(&dev, freq, opt.sample_rate)
             .ogain(opt.ogain)?
+            .on_eof(move || cancel.cancel())
             .build(prev)?,
     ));
     Ok(blockchain![
@@ -478,12 +480,6 @@ pub fn main() -> Result<()> {
     g.add(Box::new(source));
     let tx_rate = if opt.audio { opt.audio_rate } else { 48000 };
     let tx = transmit_audio(&mut g, input, tx_rate)?;
-    let tx = if opt.audio {
-        tx
-    } else {
-        let cancel = g.cancel_token();
-        blockchain![g, prev, Canary::new(tx, move || cancel.cancel())?]
-    };
     let rx_audio = if opt.audio {
         connect_audio(&mut g, &opt, tx)?
     } else {
