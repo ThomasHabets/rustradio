@@ -102,6 +102,12 @@
 //! Connect a KISS client to bell202's port 7878 and another to Dire Wolf's KISS
 //! port (normally 8001). Frames sent by either client travel over audio to the
 //! other modem. bell202 supplies the FCS; KISS clients send frames without it.
+//! TCP clients share one modem graph. Complete packets from all clients are
+//! transmitted in turn, and received packets are broadcast to every client.
+//! Slow clients drop received packets rather than stalling other clients.
+//! The first client starts the graph; the last disconnect drains transmission
+//! and stops it. Connections arriving during drainage wait for a fresh graph.
+//! Ctrl-C stops both active and idle sessions.
 //!
 //! After stopping both programs, remove the virtual cables from the shell
 //! where they were created:
@@ -217,25 +223,20 @@ struct Opt {
     tty: Option<std::path::PathBuf>,
 }
 
-// Get a reader and a writer where we'll be talking KISS.
-fn get_kiss_stream(opt: &Opt) -> Result<(Box<dyn Write + Send>, Box<dyn Read + Send>)> {
-    if let Some(addr) = &opt.tcp_listen {
-        let listener = std::net::TcpListener::bind(addr)?;
-        info!("Awaiting connection");
-        let (tcp, addr) = listener.accept()?;
-        drop(listener);
-        info!("Connect from {addr}");
-        info!("Setting up device");
-        let rx = tcp.try_clone()?;
-        return Ok((Box::new(tcp), Box::new(rx)));
-    }
+type KissIo = (Box<dyn Write + Send>, Box<dyn Read + Send>);
+
+#[path = "bell202/kiss_hub.rs"]
+mod kiss_hub;
+
+// Get a reader and writer for a TTY-backed KISS session.
+fn get_kiss_stream(_opt: &Opt) -> Result<KissIo> {
     #[cfg(feature = "nix")]
     {
         use nix::pty::{OpenptyResult, openpty};
         use std::ffi::CStr;
         use std::fs::File;
         use std::os::fd::AsRawFd;
-        if let Some(path) = &opt.tty {
+        if let Some(path) = &_opt.tty {
             let OpenptyResult { master, slave } = openpty(None, None)?;
             // SAFETY:
             // Input is from a successful openpty().
@@ -474,26 +475,60 @@ pub fn main() -> Result<()> {
     #[cfg(feature = "soapysdr")]
     soapysdr::configure_logging();
 
-    let mut g = MTGraph::new();
-    let (kiss, rx) = get_kiss_stream(&opt)?;
+    let stop = rustradio::graph::CancellationToken::new();
+    let active = std::sync::Arc::new(std::sync::Mutex::new(
+        None::<rustradio::graph::CancellationToken>,
+    ));
+    let signal_stop = stop.clone();
+    let signal_active = active.clone();
+    ctrlc::set_handler(move || {
+        eprintln!("Received Ctrl+C!");
+        signal_stop.cancel();
+        if let Some(cancel) = signal_active.lock().unwrap().as_ref() {
+            cancel.cancel();
+        }
+    })?;
+    let session = |io| {
+        let mut graph = MTGraph::new();
+        *active.lock().unwrap() = Some(graph.cancel_token());
+        if stop.is_canceled() {
+            graph.cancel_token().cancel();
+        }
+        let result = run_session(&opt, io, &mut graph);
+        *active.lock().unwrap() = None;
+        result
+    };
+    if let Some(address) = &opt.tcp_listen {
+        kiss_hub::serve(
+            std::net::TcpListener::bind(address)?,
+            &stop,
+            session,
+            || {
+                if let Some(cancel) = active.lock().unwrap().as_ref() {
+                    cancel.cancel();
+                }
+            },
+        )
+    } else {
+        session(get_kiss_stream(&opt)?)
+    }
+}
+
+fn run_session(opt: &Opt, io: KissIo, g: &mut MTGraph) -> Result<()> {
+    info!("Setting up device");
+    let (kiss, rx) = io;
     let (source, input) = ReaderSource::new(rx)?;
     g.add(Box::new(source));
     let tx_rate = if opt.audio { opt.audio_rate } else { 48000 };
-    let tx = transmit_audio(&mut g, input, tx_rate)?;
+    let tx = transmit_audio(g, input, tx_rate)?;
     let rx_audio = if opt.audio {
-        connect_audio(&mut g, &opt, tx)?
+        connect_audio(g, opt, tx)?
     } else {
-        connect_sdr(&mut g, &opt, tx)?
+        connect_sdr(g, opt, tx)?
     };
     let rx_rate = if opt.audio { opt.audio_rate } else { 50000 };
-    let output = receive_audio(&mut g, rx_audio, rx_rate, &opt)?;
+    let output = receive_audio(g, rx_audio, rx_rate, opt)?;
     g.add(Box::new(WriterSink::new(output, kiss)));
-    let cancel = g.cancel_token();
-    ctrlc::set_handler(move || {
-        eprintln!("Received Ctrl+C!");
-        cancel.cancel();
-    })
-    .expect("Error setting Ctrl-C handler");
     g.run()?;
     println!("{}", g.generate_stats().expect("failed to generate stats"));
     Ok(())
