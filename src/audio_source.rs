@@ -2,6 +2,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_channel};
+use std::time::{Duration, Instant};
 
 use cpal::traits::DeviceTrait;
 use cpal::{FromSample, Sample, SampleFormat, SizedSample};
@@ -14,12 +15,20 @@ use crate::{Error, Float, Result};
 struct Capture {
     receiver: Receiver<Float>,
     overrun: Arc<AtomicBool>,
+    last_overrun_warning: Option<Instant>,
 }
 
 impl Capture {
-    fn work<'a>(&self, dst: &'a WriteStream<Float>) -> Result<BlockRet<'a>> {
-        if self.overrun.load(Ordering::Relaxed) {
-            return Err(Error::msg("audio input buffer overrun"));
+    fn work<'a>(&mut self, dst: &'a WriteStream<Float>) -> Result<BlockRet<'a>> {
+        // Report loss from the worker, never from the audio callback. Clear
+        // the flag so later callbacks can recover without stopping the graph.
+        if self.overrun.swap(false, Ordering::Relaxed)
+            && self
+                .last_overrun_warning
+                .is_none_or(|last| last.elapsed() >= Duration::from_secs(5))
+        {
+            log::warn!("Audio input buffer overrun; dropped capture samples");
+            self.last_overrun_warning = Some(Instant::now());
         }
         let mut output = dst.write_buf()?;
         if output.is_empty() {
@@ -124,6 +133,7 @@ impl AudioSourceBuilder {
         let capture = Capture {
             receiver,
             overrun: overrun.clone(),
+            last_overrun_warning: None,
         };
         let audio = AudioStream::new("audio_source_stream", move |errors| {
             match config.sample_format() {
@@ -149,9 +159,10 @@ impl AudioSourceBuilder {
 /// Audio capture, producing normalized mono `Float` samples without tags.
 ///
 /// Multichannel devices are averaged to mono. Supports f32, i16, and u16
-/// device formats. Capture uses a bounded 200 ms queue; a device error or
-/// capture overrun is reported by `work()`. The callback never waits for space.
-/// Capture starts on the first `work()` call, after the graph is constructed.
+/// device formats. Capture uses a bounded 200 ms queue. On overrun, excess
+/// samples are dropped and capture continues; the worker warns at most once
+/// every five seconds. The callback never waits for space. Device errors are
+/// reported by `work()`.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct AudioSource {
@@ -189,9 +200,10 @@ mod tests {
     #[test]
     fn captures_stereo_and_drains_before_eof() -> Result<()> {
         let (sender, receiver) = sync_channel(4);
-        let capture_state = Capture {
+        let mut capture_state = Capture {
             receiver,
             overrun: Arc::new(AtomicBool::new(false)),
+            last_overrun_warning: None,
         };
         let (dst, reader) = new_stream()?;
         assert!(matches!(capture_state.work(&dst)?, BlockRet::Pending));
@@ -214,11 +226,12 @@ mod tests {
     }
 
     #[test]
-    fn reports_overrun_and_preserves_queued_samples_under_backpressure() -> Result<()> {
+    fn recovers_from_overrun_and_preserves_queued_samples_under_backpressure() -> Result<()> {
         let (sender, receiver) = sync_channel(1);
-        let state = Capture {
+        let mut state = Capture {
             receiver,
             overrun: Arc::new(AtomicBool::new(false)),
+            last_overrun_warning: None,
         };
         let (dst, reader) = new_stream()?;
         let mut output = dst.write_buf()?;
@@ -231,7 +244,18 @@ mod tests {
         assert!(matches!(state.work(&dst)?, BlockRet::Again));
         assert_eq!(reader.read_buf()?.0.slice(), &[0.5]);
         capture(&[0.1f32, 0.2], 1, &sender, &state.overrun);
-        assert!(state.work(&dst).is_err());
+        assert!(matches!(state.work(&dst)?, BlockRet::Again));
+        assert!(!state.overrun.load(Ordering::Relaxed));
+        let warned = state.last_overrun_warning;
+        assert!(warned.is_some());
+        let (buf, _) = reader.read_buf()?;
+        assert_eq!(buf.slice(), &[0.5, 0.1]);
+        buf.consume(2);
+        // A later callback is accepted, and repeated overruns are throttled.
+        capture(&[0.3f32, 0.4], 1, &sender, &state.overrun);
+        assert!(matches!(state.work(&dst)?, BlockRet::Again));
+        assert_eq!(reader.read_buf()?.0.slice(), &[0.3]);
+        assert_eq!(state.last_overrun_warning, warned);
         Ok(())
     }
 }
