@@ -65,6 +65,16 @@ impl MTGraph {
     }
 }
 
+// A panicking worker must also wake peers so joining them can finish.
+struct CancelOnPanic(CancellationToken);
+impl Drop for CancelOnPanic {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.0.cancel();
+        }
+    }
+}
+
 impl crate::graph::GraphRunner for MTGraph {
     fn add(&mut self, b: Box<dyn Block + Send>) {
         self.blocks.push(b);
@@ -74,12 +84,14 @@ impl crate::graph::GraphRunner for MTGraph {
         let st = Instant::now();
         let run_start_cpu = get_cpu_time();
         let mut threads = Vec::new();
+        let mut failure = None;
         while let Some(mut b) = self.blocks.pop() {
             let cancel_token = self.cancel_token.clone();
             debug!("Starting thread {}", b.block_name());
             let th = std::thread::Builder::new()
                 .name(b.block_name().to_string())
                 .spawn(move || -> Result<BlockStats> {
+                    let _panic_guard = CancelOnPanic(cancel_token.clone());
                     let name = b.block_name().to_string();
                     let mut idle_sleep = MIN_IDLE_SLEEP;
                     let mut stats = BlockStats::default();
@@ -124,6 +136,7 @@ impl crate::graph::GraphRunner for MTGraph {
                 Err(x) => {
                     error!("Failed to spawn block thread: {x:?}");
                     self.cancel_token.cancel();
+                    failure = Some(x.into());
                     break;
                 }
                 Ok(x) => x,
@@ -134,12 +147,28 @@ impl crate::graph::GraphRunner for MTGraph {
         for (n, th) in threads.into_iter().rev().enumerate() {
             let name = th.thread().name().unwrap().to_string();
             debug!("Waiting for {name}");
-            let j = th
+            match th
                 .join()
-                .map_err(|e| crate::Error::msg(format!("thread {name} panicked: {e:?}")))??;
-            debug!("Thread {name} finished with {j:?}");
-            self.block_stats.insert((n, name), j);
+                .map_err(|e| crate::Error::msg(format!("thread {name} panicked: {e:?}")))
+                .and_then(|result| result)
+            {
+                Ok(stats) => {
+                    self.block_stats.insert((n, name), stats);
+                }
+                Err(e) => {
+                    self.cancel_token.cancel();
+                    if failure.is_none() {
+                        failure = Some(e);
+                    }
+                }
+            }
         }
+        // All workers (and their audio/SDR/PTT resources) must be gone before
+        // a caller can start another graph, including when one worker failed.
+        if let Some(error) = failure {
+            return Err(error);
+        }
+
         self.spent_time = Some(st.elapsed());
         self.spent_cpu_time = Some(get_cpu_time() - run_start_cpu);
         for line in self.generate_stats().expect("can't happen").split('\n') {
@@ -244,6 +273,68 @@ mod tests {
     use crate::stream::{Tag, TagValue};
     use crate::tests::assert_almost_equal_complex;
     use crate::{Complex, Float};
+
+    #[test]
+    fn failures_join_all_workers_before_returning() {
+        use std::sync::{
+            Arc, Barrier,
+            atomic::{AtomicBool, Ordering},
+        };
+
+        #[derive(rustradio_macros::Block)]
+        #[rustradio(crate, noeof)]
+        struct Worker {
+            failure: Option<bool>,
+            started: bool,
+            barrier: Arc<Barrier>,
+            released: Option<Arc<AtomicBool>>,
+        }
+        impl crate::block::BlockEOF for Worker {
+            fn eof(&mut self) -> bool {
+                false
+            }
+        }
+        impl Block for Worker {
+            fn work(&mut self) -> Result<BlockRet<'_>> {
+                if !self.started {
+                    self.started = true;
+                    self.barrier.wait();
+                }
+                match self.failure {
+                    Some(true) => panic!("simulated worker panic"),
+                    Some(false) => Err(crate::Error::msg("simulated worker error")),
+                    None => Ok(BlockRet::Pending),
+                }
+            }
+        }
+        impl Drop for Worker {
+            fn drop(&mut self) {
+                if let Some(released) = &self.released {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    released.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+        for panic in [false, true] {
+            let mut graph = MTGraph::new();
+            let barrier = Arc::new(Barrier::new(2));
+            let released = Arc::new(AtomicBool::new(false));
+            graph.add(Box::new(Worker {
+                failure: Some(panic),
+                started: false,
+                barrier: barrier.clone(),
+                released: None,
+            }));
+            graph.add(Box::new(Worker {
+                failure: None,
+                started: false,
+                barrier,
+                released: Some(released.clone()),
+            }));
+            assert!(graph.run().is_err());
+            assert!(released.load(Ordering::SeqCst));
+        }
+    }
 
     #[test]
     fn small_test() -> Result<()> {
