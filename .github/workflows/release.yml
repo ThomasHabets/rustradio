@@ -86,6 +86,7 @@ jobs:
           CLEANUP=true tickbox --dir tickbox/bump_version --disable-tui --max-concurrency=1
   github-release:
     needs: release
+    runs-on: ubuntu-latest
     steps:
       - name: Create GitHub Release
         env:
