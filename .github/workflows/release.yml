@@ -84,3 +84,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           CLEANUP=true tickbox --dir tickbox/bump_version --disable-tui --max-concurrency=1
+  github-release:
+    needs: release
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --verify-tag \
+            --generate-notes
