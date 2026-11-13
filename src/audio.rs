@@ -144,6 +144,10 @@ impl AudioStream {
         Ok(())
     }
 
+    pub(crate) fn now(&mut self) -> cpal::StreamInstant {
+        self.stream.get_mut().unwrap().now()
+    }
+
     pub(crate) fn check_error(&mut self) -> Result<()> {
         if let Ok(e) = self.errors.get_mut().unwrap().try_recv() {
             return Err(Error::msg(format!("audio stream error: {e}")));

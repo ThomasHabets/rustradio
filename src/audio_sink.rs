@@ -3,10 +3,10 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use cpal::traits::DeviceTrait;
-use cpal::{FromSample, Sample, SampleFormat, SizedSample};
+use cpal::{FromSample, Sample, SampleFormat, SizedSample, StreamInstant};
 
 use crate::audio::{AudioStream, device_config};
 use crate::block::{Block, BlockEOF, BlockRet};
@@ -15,32 +15,22 @@ use crate::{Error, Float, Result};
 
 // Shared by the graph worker and the device callback. An empty channel only
 // means samples have reached the backend; they may still be waiting to play.
+#[derive(Default)]
 struct PlaybackStatus {
     // Includes samples reserved by the worker and samples being copied by the
     // current callback. The callback retires them after publishing its deadline.
     queued: AtomicUsize,
-    // Common monotonic clock for the callback's deadline and the worker's poll.
-    origin: Instant,
-    // Nanoseconds since origin, at the estimated end of the last graph sample.
+    // Nanoseconds on CPAL's stream clock at the estimated end of the last
+    // graph sample. The callback and Stream::now() use the same time base.
     until: AtomicU64,
 }
 
-impl Default for PlaybackStatus {
-    fn default() -> Self {
-        Self {
-            queued: AtomicUsize::new(0),
-            origin: Instant::now(),
-            until: AtomicU64::new(0),
-        }
-    }
-}
-
 impl PlaybackStatus {
-    fn idle(&self) -> bool {
+    fn idle(&self, now: impl FnOnce() -> StreamInstant) -> bool {
         // The Acquire load pairs with the callback's queue decrement: seeing
         // that decrement also makes its preceding deadline update visible.
         self.queued.load(Ordering::Acquire) == 0
-            && self.origin.elapsed().as_nanos() >= self.until.load(Ordering::Acquire) as u128
+            && now().as_nanos() >= self.until.load(Ordering::Acquire) as u128
     }
 }
 
@@ -97,9 +87,10 @@ impl Playback {
         src: &ReadStream<Float>,
         control: Option<&TransmitControl>,
         on_eof: &mut Option<EofCallback>,
+        now: impl FnOnce() -> StreamInstant,
     ) -> bool {
         // Completion includes device playback and key-off, not just input EOF.
-        let eof = src.eof() && self.status.idle() && control.is_none_or(|c| !c.active);
+        let eof = src.eof() && self.status.idle(now) && control.is_none_or(|c| !c.active);
         if eof && let Some(callback) = on_eof.take() {
             // EOF may be queried repeatedly; taking the callback makes it once-only.
             callback();
@@ -111,10 +102,11 @@ impl Playback {
         &self,
         src: &'a ReadStream<Float>,
         mut control: Option<&mut TransmitControl>,
+        now: impl FnOnce() -> StreamInstant,
     ) -> Result<BlockRet<'a>> {
         let (input, _tags) = src.read_buf()?;
         if input.is_empty() {
-            return if self.status.idle() {
+            return if self.status.idle(now) {
                 if let Some(control) = control {
                     control.stop()?;
                 }
@@ -166,11 +158,10 @@ fn play<T>(
     receiver: &Receiver<Float>,
     status: &PlaybackStatus,
     rate: u32,
-    latency: Duration,
+    playback: StreamInstant,
 ) where
     T: Sample + FromSample<Float>,
 {
-    let now = status.origin.elapsed();
     let mut consumed = 0;
     let mut last_frame = 0;
     for (pos, frame) in data.chunks_mut(channels).enumerate() {
@@ -187,7 +178,7 @@ fn play<T>(
         frame.fill(T::from_sample(value));
     }
     if consumed != 0 {
-        let until = now + latency + Duration::from_secs_f64(last_frame as f64 / rate as f64);
+        let until = playback + Duration::from_secs_f64(last_frame as f64 / rate as f64);
         status.until.store(
             u64::try_from(until.as_nanos()).unwrap_or(u64::MAX),
             Ordering::Release,
@@ -214,12 +205,16 @@ where
     Ok(device.build_output_stream(
         config,
         move |data: &mut [T], info| {
-            let timestamp = info.timestamp();
-            // CPAL estimates when the first frame will reach the device. Use
-            // the difference between CPAL timestamps as a duration; their clock
-            // cannot be directly compared with std::time::Instant.
-            let latency = timestamp.playback.duration_since(timestamp.callback);
-            play(data, channels, &receiver, &status, rate, latency);
+            // The first frame's predicted playback time is on the same clock
+            // the graph worker queries when checking the final sample deadline.
+            play(
+                data,
+                channels,
+                &receiver,
+                &status,
+                rate,
+                info.timestamp().playback,
+            );
         },
         move |e| {
             let _ = errors.send(e);
@@ -370,7 +365,9 @@ impl BlockEOF for AudioSink {
         // The worker still needs to run after input EOF to drain playback and
         // invoke key-off. Neither handing samples to CPAL nor input EOF suffices.
         self.playback
-            .eof(&self.src, self.transmit.as_ref(), &mut self.on_eof)
+            .eof(&self.src, self.transmit.as_ref(), &mut self.on_eof, || {
+                self.audio.now()
+            })
     }
 }
 
@@ -378,7 +375,8 @@ impl Block for AudioSink {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         self.audio.play()?;
         self.audio.check_error()?;
-        self.playback.work(&self.src, self.transmit.as_mut())
+        self.playback
+            .work(&self.src, self.transmit.as_mut(), || self.audio.now())
     }
 }
 
@@ -386,6 +384,10 @@ impl Block for AudioSink {
 mod tests {
     use super::*;
     use crate::stream::new_stream;
+
+    fn now() -> StreamInstant {
+        StreamInstant::from_nanos(0)
+    }
 
     #[test]
     fn is_send_and_sync() {
@@ -425,9 +427,9 @@ mod tests {
             assert_eq!(*completion_events.lock().unwrap(), [true, false]);
             completed.fetch_add(1, Ordering::Relaxed);
         }));
-        assert!(!playback.eof(&reader, Some(&control), &mut on_eof));
+        assert!(!playback.eof(&reader, Some(&control), &mut on_eof, now));
         assert!(matches!(
-            playback.work(&reader, Some(&mut control))?,
+            playback.work(&reader, Some(&mut control), now)?,
             BlockRet::WaitForStream(_, 1)
         ));
         assert!(events.lock().unwrap().is_empty());
@@ -436,13 +438,13 @@ mod tests {
             window.slice()[0] = value;
             window.produce(1, &[]);
             assert!(matches!(
-                playback.work(&reader, Some(&mut control))?,
+                playback.work(&reader, Some(&mut control), now)?,
                 BlockRet::Again
             ));
         }
         drop(writer);
         assert_eq!(*events.lock().unwrap(), [true]);
-        assert!(!playback.eof(&reader, Some(&control), &mut on_eof));
+        assert!(!playback.eof(&reader, Some(&control), &mut on_eof, now));
         let mut output = [1.0f32; 4];
         play(
             &mut output,
@@ -450,27 +452,27 @@ mod tests {
             &receiver,
             &playback.status,
             48000,
-            Duration::from_secs(60),
+            StreamInstant::new(60, 0),
         );
         assert_eq!(output, [0.25, -0.5, 0.0, 0.0]);
         assert_eq!(playback.status.queued.load(Ordering::Acquire), 0);
         assert!(matches!(
-            playback.work(&reader, Some(&mut control))?,
+            playback.work(&reader, Some(&mut control), now)?,
             BlockRet::Pending
         ));
         assert_eq!(*events.lock().unwrap(), [true]);
-        assert!(!playback.eof(&reader, Some(&control), &mut on_eof));
+        assert!(!playback.eof(&reader, Some(&control), &mut on_eof, now));
         // Simulate passing the backend's playback deadline without sleeping.
-        playback.status.until.store(0, Ordering::Release);
-        assert!(!playback.eof(&reader, Some(&control), &mut on_eof));
+        let drained = StreamInstant::new(61, 0);
+        assert!(!playback.eof(&reader, Some(&control), &mut on_eof, || drained));
         assert!(matches!(
-            playback.work(&reader, Some(&mut control))?,
+            playback.work(&reader, Some(&mut control), || drained)?,
             BlockRet::WaitForStream(_, 1)
         ));
         assert_eq!(*events.lock().unwrap(), [true, false]);
         assert!(!control.active);
-        assert!(playback.eof(&reader, Some(&control), &mut on_eof));
-        assert!(playback.eof(&reader, Some(&control), &mut on_eof));
+        assert!(playback.eof(&reader, Some(&control), &mut on_eof, || drained));
+        assert!(playback.eof(&reader, Some(&control), &mut on_eof, || drained));
         assert_eq!(completions.load(Ordering::Relaxed), 1);
         drop(control);
         assert_eq!(*events.lock().unwrap(), [true, false]);
@@ -490,11 +492,11 @@ mod tests {
         let mut on_eof: Option<EofCallback> = Some(Box::new(move || {
             observed.fetch_add(1, Ordering::Relaxed);
         }));
-        assert!(!playback.eof(&reader, None, &mut on_eof));
+        assert!(!playback.eof(&reader, None, &mut on_eof, now));
         assert_eq!(calls.load(Ordering::Relaxed), 0);
         drop(writer);
-        assert!(playback.eof(&reader, None, &mut on_eof));
-        assert!(playback.eof(&reader, None, &mut on_eof));
+        assert!(playback.eof(&reader, None, &mut on_eof, now));
+        assert!(playback.eof(&reader, None, &mut on_eof, now));
         assert_eq!(calls.load(Ordering::Relaxed), 1);
         Ok(())
     }
@@ -525,7 +527,7 @@ mod tests {
         let mut window = writer.write_buf()?;
         window.slice()[0] = 0.5;
         window.produce(1, &[]);
-        assert!(playback.work(&reader, Some(&mut control)).is_err());
+        assert!(playback.work(&reader, Some(&mut control), now).is_err());
         assert_eq!(reader.read_buf()?.0.slice(), &[0.5]);
         assert_eq!(playback.status.queued.load(Ordering::Acquire), 0);
         drop(control);
@@ -542,50 +544,65 @@ mod tests {
         };
         let (writer, reader) = new_stream()?;
         let mut output = [1.0f32; 6];
-        play(
-            &mut output,
-            2,
-            &receiver,
-            &state.status,
-            48000,
-            Duration::ZERO,
-        );
+        play(&mut output, 2, &receiver, &state.status, 48000, now());
         assert_eq!(output, [0.0; 6]);
         let mut window = writer.write_buf()?;
         window.slice()[..3].copy_from_slice(&[0.25, -0.5, 0.75]);
         window.produce(3, &[]);
         drop(writer);
-        assert!(matches!(state.work(&reader, None)?, BlockRet::Again));
+        assert!(matches!(state.work(&reader, None, now)?, BlockRet::Again));
         assert_eq!(state.status.queued.load(Ordering::Relaxed), 2);
-        assert!(matches!(state.work(&reader, None)?, BlockRet::Pending));
+        assert!(matches!(state.work(&reader, None, now)?, BlockRet::Pending));
         assert_eq!(reader.read_buf()?.0.slice(), &[0.75]);
-        play(
-            &mut output,
-            2,
-            &receiver,
-            &state.status,
-            48000,
-            Duration::ZERO,
-        );
+        play(&mut output, 2, &receiver, &state.status, 48000, now());
         assert_eq!(output, [0.25, 0.25, -0.5, -0.5, 0.0, 0.0]);
-        assert!(matches!(state.work(&reader, None)?, BlockRet::Again));
-        assert!(matches!(state.work(&reader, None)?, BlockRet::Pending));
-        play(
-            &mut output,
-            2,
-            &receiver,
-            &state.status,
-            48000,
-            Duration::ZERO,
-        );
+        assert!(matches!(state.work(&reader, None, now)?, BlockRet::Again));
+        assert!(matches!(state.work(&reader, None, now)?, BlockRet::Pending));
+        play(&mut output, 2, &receiver, &state.status, 48000, now());
         assert_eq!(output, [0.75, 0.75, 0.0, 0.0, 0.0, 0.0]);
         assert_eq!(state.status.queued.load(Ordering::Relaxed), 0);
-        state.status.until.store(0, Ordering::Release);
         assert!(matches!(
-            state.work(&reader, None)?,
+            state.work(&reader, None, || StreamInstant::new(1, 0))?,
             BlockRet::WaitForStream(_, 1)
         ));
         Ok(())
+    }
+
+    #[test]
+    fn playback_deadline_uses_stream_time_and_excludes_padding() {
+        let (sender, receiver) = sync_channel(2);
+        let status = PlaybackStatus::default();
+        sender.send(0.25).unwrap();
+        // A queued zero is a real sample and must extend the deadline.
+        sender.send(0.0).unwrap();
+        status.queued.store(2, Ordering::Relaxed);
+        assert!(!status.idle(|| panic!("queued audio does not need a clock query")));
+
+        let mut output = [1.0f32; 8];
+        play(
+            &mut output,
+            2,
+            &receiver,
+            &status,
+            1000,
+            StreamInstant::new(10, 0),
+        );
+        assert_eq!(output, [0.25, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(status.until.load(Ordering::Acquire), 10_002_000_000);
+        assert!(!status.idle(|| StreamInstant::from_nanos(10_001_999_999)));
+        assert!(status.idle(|| StreamInstant::from_nanos(10_002_000_000)));
+
+        // A later all-silence callback must not keep an otherwise idle PTT on.
+        play(
+            &mut output,
+            2,
+            &receiver,
+            &status,
+            1000,
+            StreamInstant::new(20, 0),
+        );
+        assert_eq!(output, [0.0; 8]);
+        assert_eq!(status.until.load(Ordering::Acquire), 10_002_000_000);
     }
 
     #[test]
@@ -596,21 +613,14 @@ mod tests {
             status: Arc::new(PlaybackStatus::default()),
         };
         let mut data = [0u16; 2];
-        play(
-            &mut data,
-            1,
-            &receiver,
-            &state.status,
-            48000,
-            Duration::ZERO,
-        );
+        play(&mut data, 1, &receiver, &state.status, 48000, now());
         assert_eq!(data, [32768; 2]);
         drop(receiver);
         let (writer, reader) = new_stream()?;
         let mut window = writer.write_buf()?;
         window.slice()[0] = 0.1;
         window.produce(1, &[]);
-        assert!(state.work(&reader, None).is_err());
+        assert!(state.work(&reader, None, now).is_err());
         assert_eq!(state.status.queued.load(Ordering::Relaxed), 0);
         Ok(())
     }
