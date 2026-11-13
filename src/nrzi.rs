@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn long() -> Result<()> {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let len = 1000;
         let data: Vec<_> = (0..len).map(|_| rng.random_range(0..=1)).collect();

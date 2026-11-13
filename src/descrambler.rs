@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn long_random() {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let len = 2000;
         let input: Vec<_> = (0..len).map(|_| rng.random_range(0..=1)).collect();
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn long_random_nrzi_g3ruh() {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         let len = 2000;
         let input: Vec<_> = (0..len).map(|_| rng.random_range(0..=1)).collect();
