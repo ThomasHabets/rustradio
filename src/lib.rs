@@ -104,6 +104,8 @@ g.run()?;
 
 * `async`: Add support for `AsyncGraph`.
 * `audio`: Add audio capture and playback (adds dependency).
+* `audio-pipewire`: Enable native PipeWire for audio capture and playback on
+  Linux and BSD (includes `audio`; requires PipeWire development libraries).
 * `fast-math`: Add a dependency in order to speed up some math.
 * `fftw`: GPL code only: Add support to use `libfftw` instead of `rustfft`.
 * `pipewire`: Add support for pipewire blocks (adds dependency).

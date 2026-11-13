@@ -40,23 +40,15 @@
 //!   sink_name=from_direwolf rate=48000 channels=1 channel_map=mono)
 //! ```
 //!
-//! Each sink's monitor is the other modem's input. Expose all four ends as
-//! ALSA devices so both CPAL and Dire Wolf can select them by name. Create
-//! this local configuration file; system audio defaults stay unchanged:
+//! Bell202 accesses PipeWire directly using the `audio-pipewire` feature
+//! (build dependency: `libpipewire-0.3-dev` on Debian/Ubuntu). Capturing a
+//! PipeWire sink reads its monitor, so each sink is the other modem's input.
+//! Dire Wolf uses ALSA; expose its two endpoints in a local configuration
+//! file. System audio defaults stay unchanged:
 //!
 //! ```sh
 //! cat > bell202-alsa.conf <<'EOF'
 //! </usr/share/alsa/alsa.conf>
-//! pcm.to-direwolf {
-//!   type pulse
-//!   device "to_direwolf"
-//!   hint { show on description "bell202 output to Dire Wolf" }
-//! }
-//! pcm.from-direwolf {
-//!   type pulse
-//!   device "from_direwolf.monitor"
-//!   hint { show on description "bell202 input from Dire Wolf" }
-//! }
 //! pcm.from-bell202 {
 //!   type pulse
 //!   device "to_direwolf.monitor"
@@ -86,9 +78,9 @@
 //! Build and run without SoapySDR:
 //!
 //! ```text
-//! ALSA_CONFIG_PATH="$PWD/bell202-alsa.conf" \
-//! cargo run --release --example bell202 --features audio -- \
-//!   --audio --audio-input "from-direwolf" --audio-output "to-direwolf" \
+//! cargo run --release --example bell202 --features audio-pipewire -- \
+//!   --audio --audio-input "pipewire:from_direwolf" \
+//!   --audio-output "pipewire:to_direwolf" \
 //!   --audio-rate 48000 --tcp-listen 127.0.0.1:7878
 //! ```
 //!
@@ -96,9 +88,9 @@
 //! input using two independent virtual audio paths. Configure Dire Wolf with
 //! `MODEM 1200` and `ARATE 48000`, and select the opposite endpoints with
 //! `ADEVICE`. Device arguments are name substrings or exact `host:device` IDs;
-//! omit them to use the system
-//! defaults and route through the audio server. Disable audio processing such
-//! as echo cancellation or noise suppression on these paths.
+//! omit them to use the system defaults and route through the audio server.
+//! Disable audio processing such as echo cancellation or noise suppression
+//! on these paths.
 //!
 //! Connect a KISS client to bell202's port 7878 and another to Dire Wolf's KISS
 //! port (normally 8001). Frames sent by either client travel over audio to the
