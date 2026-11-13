@@ -1,9 +1,9 @@
 //! Clock recovery implementations
 /*
-* Study material:
-* https://youtu.be/jag3btxSsig
-* https://youtu.be/uMEfx_l5Oxk
-*/
+ * Study material:
+ * https://youtu.be/jag3btxSsig
+ * https://youtu.be/uMEfx_l5Oxk
+ */
 use log::trace;
 
 use crate::block::{Block, BlockRet};
