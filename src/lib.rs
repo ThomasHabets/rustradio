@@ -104,11 +104,11 @@ g.run()?;
 
 * `async`: Add support for `AsyncGraph`.
 * `audio`: Add audio capture and playback (adds dependency).
-* `audio-pipewire`: Enable native PipeWire for audio capture and playback on
-  Linux and BSD (includes `audio`; requires PipeWire development libraries).
 * `fast-math`: Add a dependency in order to speed up some math.
 * `fftw`: GPL code only: Add support to use `libfftw` instead of `rustfft`.
-* `pipewire`: Add support for pipewire blocks (adds dependency).
+* `pipewire`: Add PipeWire blocks and enable native PipeWire for audio capture
+  and playback on Linux and BSD (includes `audio`; requires PipeWire development
+  libraries).
 * `rtlsdr`: Enable `RtlSdrSource` block, and adds the `rtlsdr` crate as a
 * `simd` (only with `nightly` Rust): Enable some code using `std::simd`.
   dependency at build time, and thus `librtlsdr.so` as a dependency at runtime.

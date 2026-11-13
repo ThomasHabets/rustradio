@@ -40,7 +40,7 @@
 //!   sink_name=from_direwolf rate=48000 channels=1 channel_map=mono)
 //! ```
 //!
-//! Bell202 accesses PipeWire directly using the `audio-pipewire` feature
+//! Bell202 accesses PipeWire directly using the `pipewire` feature
 //! (build dependency: `libpipewire-0.3-dev` on Debian/Ubuntu). Capturing a
 //! PipeWire sink reads its monitor, so each sink is the other modem's input.
 //! Dire Wolf uses ALSA; expose its two endpoints in a local configuration
@@ -78,7 +78,7 @@
 //! Build and run without SoapySDR:
 //!
 //! ```text
-//! cargo run --release --example bell202 --features audio-pipewire -- \
+//! cargo run --release --example bell202 --features pipewire -- \
 //!   --audio --audio-input "pipewire:from_direwolf" \
 //!   --audio-output "pipewire:to_direwolf" \
 //!   --audio-rate 48000 --tcp-listen 127.0.0.1:7878
