@@ -204,24 +204,21 @@ fn start<T>(
     config: cpal::StreamConfig,
     receiver: Receiver<Float>,
     status: Arc<PlaybackStatus>,
-    errors: std::sync::mpsc::Sender<cpal::StreamError>,
+    errors: std::sync::mpsc::Sender<cpal::Error>,
 ) -> Result<cpal::Stream>
 where
     T: SizedSample + FromSample<Float>,
 {
     let channels = config.channels as usize;
-    let rate = config.sample_rate.0;
+    let rate = config.sample_rate;
     Ok(device.build_output_stream(
-        &config,
+        config,
         move |data: &mut [T], info| {
             let timestamp = info.timestamp();
             // CPAL estimates when the first frame will reach the device. Use
             // the difference between CPAL timestamps as a duration; their clock
             // cannot be directly compared with std::time::Instant.
-            let latency = timestamp
-                .playback
-                .duration_since(&timestamp.callback)
-                .unwrap_or_default();
+            let latency = timestamp.playback.duration_since(timestamp.callback);
             play(data, channels, &receiver, &status, rate, latency);
         },
         move |e| {

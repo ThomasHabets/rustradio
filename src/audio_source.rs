@@ -84,7 +84,7 @@ fn start<T>(
     config: cpal::StreamConfig,
     sender: SyncSender<Float>,
     overrun: Arc<AtomicBool>,
-    errors: std::sync::mpsc::Sender<cpal::StreamError>,
+    errors: std::sync::mpsc::Sender<cpal::Error>,
 ) -> Result<cpal::Stream>
 where
     T: SizedSample + Copy,
@@ -92,7 +92,7 @@ where
 {
     let channels = config.channels as usize;
     Ok(device.build_input_stream(
-        &config,
+        config,
         move |data: &[T], _| capture(data, channels, &sender, &overrun),
         move |e| {
             let _ = errors.send(e);

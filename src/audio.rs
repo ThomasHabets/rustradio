@@ -3,19 +3,11 @@ use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Device, SampleFormat, SampleRate, SupportedStreamConfig, SupportedStreamConfigRange};
+use cpal::{Device, SampleFormat, SupportedStreamConfig, SupportedStreamConfigRange};
 
 use crate::{Error, Result};
 
-crate::error_from!(
-    "audio",
-    cpal::PlayStreamError,
-    cpal::BuildStreamError,
-    cpal::DevicesError,
-    cpal::DeviceNameError,
-    cpal::SupportedStreamConfigsError,
-    cpal::DefaultStreamConfigError,
-);
+crate::error_from!("audio", cpal::Error);
 
 fn select_config(
     configs: impl Iterator<Item = SupportedStreamConfigRange>,
@@ -24,8 +16,7 @@ fn select_config(
     configs
         .filter(|c| {
             c.channels() > 0
-                && c.min_sample_rate().0 <= rate
-                && rate <= c.max_sample_rate().0
+                && c.contains_rate(rate)
                 && matches!(
                     c.sample_format(),
                     SampleFormat::F32 | SampleFormat::I16 | SampleFormat::U16
@@ -38,7 +29,7 @@ fn select_config(
                 c.channels(),
             )
         })
-        .map(|c| c.with_sample_rate(SampleRate(rate)))
+        .map(|c| c.with_sample_rate(rate))
         .ok_or_else(|| {
             Error::msg(format!(
                 "audio device has no supported configuration at {rate} Hz"
@@ -64,7 +55,7 @@ pub(crate) fn device_config(
             host.output_devices()?
         };
         devices
-            .find(|d| d.name().is_ok_and(|n| n.contains(name)))
+            .find(|d| d.description().is_ok_and(|d| d.name().contains(name)))
             .ok_or_else(|| {
                 Error::msg(format!(
                     "audio {direction} device matching {name:?} not found"
@@ -82,7 +73,10 @@ pub(crate) fn device_config(
     } else {
         select_config(device.supported_output_configs()?, rate)?
     };
-    log::info!("Audio {direction} device: {}, {config:?}", device.name()?);
+    log::info!(
+        "Audio {direction} device: {}, {config:?}",
+        device.description()?
+    );
     Ok((device, config))
 }
 
@@ -91,7 +85,7 @@ pub(crate) struct AudioStream {
     commands: Option<Sender<Command>>,
     thread: Option<std::thread::JoinHandle<()>>,
     // Access uses &mut self; Mutex supplies Sync without locking when polled.
-    errors: Mutex<Receiver<cpal::StreamError>>,
+    errors: Mutex<Receiver<cpal::Error>>,
     playing: bool,
 }
 
@@ -102,7 +96,7 @@ enum Command {
 impl AudioStream {
     pub(crate) fn new(
         name: &str,
-        start: impl FnOnce(Sender<cpal::StreamError>) -> Result<cpal::Stream> + Send + 'static,
+        start: impl FnOnce(Sender<cpal::Error>) -> Result<cpal::Stream> + Send + 'static,
     ) -> Result<Self> {
         let (ready_tx, ready_rx) = channel();
         let (commands, requests) = channel();
@@ -174,15 +168,15 @@ mod tests {
         let configs = [
             SupportedStreamConfigRange::new(
                 2,
-                SampleRate(44100),
-                SampleRate(48000),
+                44100,
+                48000,
                 cpal::SupportedBufferSize::Unknown,
                 SampleFormat::F32,
             ),
             SupportedStreamConfigRange::new(
                 1,
-                SampleRate(48000),
-                SampleRate(48000),
+                48000,
+                48000,
                 cpal::SupportedBufferSize::Unknown,
                 SampleFormat::I16,
             ),

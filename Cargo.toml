@@ -29,7 +29,7 @@ libc = "0.2.149"
 soapysdr = { version = "0.5.1", optional = true }
 serde_json = "1.0"
 serde = {version = "1.0", features = ["derive"]}
-cpal = { version = "0.15", features = ["jack"], optional=true }
+cpal = { version = "0.18.2", features = ["jack"], optional=true }
 rustradio_macros = { version = "0.20.2", path = "rustradio_macros" }
 rayon = "1.10"
 itertools = "0.14"

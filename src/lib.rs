@@ -547,12 +547,7 @@ impl Error {
 /// use rustradio::error_from;
 /// error_from!(
 ///     "audio",
-///     cpal::PlayStreamError,
-///     cpal::BuildStreamError,
-///     cpal::DevicesError,
-///     cpal::DeviceNameError,
-///     cpal::SupportedStreamConfigsError,
-///     cpal::DefaultStreamConfigError,
+///     cpal::Error,
 /// );
 /// ```
 #[macro_export]
