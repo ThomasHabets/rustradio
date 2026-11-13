@@ -80,61 +80,31 @@ pub(crate) fn device_config(
     Ok((device, config))
 }
 
-/// CPAL streams stay on their owning thread because they need not be `Send`.
+/// Owns a paused CPAL stream and forwards callback errors to the graph worker.
 pub(crate) struct AudioStream {
-    commands: Option<Sender<Command>>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    // CPAL backends are not unwind-safe. Mutex preserves the blocks' unwind
+    // traits; exclusive worker access uses get_mut(), without taking a lock.
+    stream: Mutex<cpal::Stream>,
     // Access uses &mut self; Mutex supplies Sync without locking when polled.
     errors: Mutex<Receiver<cpal::Error>>,
     playing: bool,
 }
 
-enum Command {
-    Play(Sender<Result<()>>),
-}
-
 impl AudioStream {
     pub(crate) fn new(
-        name: &str,
-        start: impl FnOnce(Sender<cpal::Error>) -> Result<cpal::Stream> + Send + 'static,
+        start: impl FnOnce(Sender<cpal::Error>) -> Result<cpal::Stream>,
     ) -> Result<Self> {
-        let (ready_tx, ready_rx) = channel();
-        let (commands, requests) = channel();
         let (error_tx, errors) = channel();
-        let thread = std::thread::Builder::new()
-            .name(name.into())
-            .spawn(move || match start(error_tx) {
-                Ok(stream) => {
-                    if ready_tx.send(Ok(())).is_ok() {
-                        while let Ok(Command::Play(reply)) = requests.recv() {
-                            let _ = reply.send(stream.play().map_err(Into::into));
-                        }
-                    }
-                    drop(stream);
-                }
-                Err(e) => {
-                    let _ = ready_tx.send(Err(e));
-                }
-            })?;
-        let owner = Self {
-            commands: Some(commands),
-            thread: Some(thread),
+        Ok(Self {
+            stream: Mutex::new(start(error_tx)?),
             errors: Mutex::new(errors),
             playing: false,
-        };
-        ready_rx.recv()??;
-        Ok(owner)
+        })
     }
 
     pub(crate) fn play(&mut self) -> Result<()> {
         if !self.playing {
-            let (tx, rx) = channel();
-            self.commands
-                .as_ref()
-                .unwrap()
-                .send(Command::Play(tx))
-                .map_err(|_| Error::msg("audio stream thread stopped"))?;
-            rx.recv()??;
+            self.stream.get_mut().unwrap().play()?;
             self.playing = true;
         }
         Ok(())
@@ -145,17 +115,6 @@ impl AudioStream {
             return Err(Error::msg(format!("audio stream error: {e}")));
         }
         Ok(())
-    }
-}
-
-impl Drop for AudioStream {
-    fn drop(&mut self) {
-        self.commands.take();
-        if let Some(thread) = self.thread.take()
-            && let Err(e) = thread.join()
-        {
-            log::error!("Audio stream thread panicked: {e:?}");
-        }
     }
 }
 
@@ -189,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_errors_are_returned_and_thread_is_joined() {
-        assert!(AudioStream::new("audio_test", |_| Err(Error::msg("test failure"))).is_err());
+    fn startup_errors_are_returned() {
+        assert!(AudioStream::new(|_| Err(Error::msg("test failure"))).is_err());
     }
 }

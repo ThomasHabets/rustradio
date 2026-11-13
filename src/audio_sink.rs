@@ -305,8 +305,8 @@ impl AudioSinkBuilder {
 /// Mono is copied to every device channel. Supports f32, i16, and u16 device
 /// formats. The callback outputs silence when no samples are queued, and never
 /// waits for input. Tags are discarded. Playback uses a bounded 200 ms queue;
-/// queued samples drain before input EOF completes the block. Device errors
-/// are reported by `work()`.
+/// queued samples drain before input EOF completes the block. Playback starts
+/// on the first `work()` call. Device errors are reported by `work()`.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct AudioSink {
@@ -346,15 +346,12 @@ impl AudioSink {
             sender,
             status: status.clone(),
         };
-        let mut audio = AudioStream::new("audio_sink_stream", move |errors| {
-            match config.sample_format() {
-                SampleFormat::F32 => start::<f32>(device, config.into(), receiver, status, errors),
-                SampleFormat::I16 => start::<i16>(device, config.into(), receiver, status, errors),
-                SampleFormat::U16 => start::<u16>(device, config.into(), receiver, status, errors),
-                _ => Err(Error::msg("unsupported audio output sample format")),
-            }
+        let audio = AudioStream::new(move |errors| match config.sample_format() {
+            SampleFormat::F32 => start::<f32>(device, config.into(), receiver, status, errors),
+            SampleFormat::I16 => start::<i16>(device, config.into(), receiver, status, errors),
+            SampleFormat::U16 => start::<u16>(device, config.into(), receiver, status, errors),
+            _ => Err(Error::msg("unsupported audio output sample format")),
         })?;
-        audio.play()?;
         Ok(Self {
             src,
             playback,
@@ -376,6 +373,7 @@ impl BlockEOF for AudioSink {
 
 impl Block for AudioSink {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        self.audio.play()?;
         self.audio.check_error()?;
         self.playback.work(&self.src, self.transmit.as_mut())
     }
@@ -393,6 +391,7 @@ mod tests {
         assert_send_sync::<AudioSink>();
         assert_send_sync::<AudioSinkBuilder>();
         assert_unwind_safe::<AudioSinkBuilder>();
+        assert_unwind_safe::<AudioSink>();
     }
 
     #[test]

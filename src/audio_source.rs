@@ -135,13 +135,11 @@ impl AudioSourceBuilder {
             overrun: overrun.clone(),
             last_overrun_warning: None,
         };
-        let audio = AudioStream::new("audio_source_stream", move |errors| {
-            match config.sample_format() {
-                SampleFormat::F32 => start::<f32>(device, config.into(), sender, overrun, errors),
-                SampleFormat::I16 => start::<i16>(device, config.into(), sender, overrun, errors),
-                SampleFormat::U16 => start::<u16>(device, config.into(), sender, overrun, errors),
-                _ => Err(Error::msg("unsupported audio input sample format")),
-            }
+        let audio = AudioStream::new(move |errors| match config.sample_format() {
+            SampleFormat::F32 => start::<f32>(device, config.into(), sender, overrun, errors),
+            SampleFormat::I16 => start::<i16>(device, config.into(), sender, overrun, errors),
+            SampleFormat::U16 => start::<u16>(device, config.into(), sender, overrun, errors),
+            _ => Err(Error::msg("unsupported audio input sample format")),
         })?;
         dst.initialize_sample_rate(Some(sample_rate as f64));
         Ok((
@@ -161,8 +159,8 @@ impl AudioSourceBuilder {
 /// Multichannel devices are averaged to mono. Supports f32, i16, and u16
 /// device formats. Capture uses a bounded 200 ms queue. On overrun, excess
 /// samples are dropped and capture continues; the worker warns at most once
-/// every five seconds. The callback never waits for space. Device errors are
-/// reported by `work()`.
+/// every five seconds. Capture starts on the first `work()` call. The callback
+/// never waits for space. Device errors are reported by `work()`.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct AudioSource {
@@ -196,6 +194,13 @@ impl Block for AudioSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_send_and_unwind_safe() {
+        fn assert_traits<T: Send + std::panic::UnwindSafe + std::panic::RefUnwindSafe>() {}
+        assert_traits::<AudioSource>();
+        assert_traits::<AudioSourceBuilder>();
+    }
 
     #[test]
     fn captures_stereo_and_drains_before_eof() -> Result<()> {
