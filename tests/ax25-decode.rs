@@ -33,8 +33,12 @@ fn e2e_test_wa8lmf_intact() -> Result<()> {
             }
             hasher.update(&buffer[..rc]);
         }
-        let hash = hasher.finalize();
-        assert_eq!(format!("{hash:x}"), want);
+        let hash: String = hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(hash, want);
     }
     Ok(())
 }

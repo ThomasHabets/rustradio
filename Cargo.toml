@@ -34,7 +34,7 @@ rustradio_macros = { version = "0.20.2", path = "rustradio_macros" }
 rayon = "1.10"
 itertools = "0.14"
 tar = "0.4"
-sha2 = "0.10"
+sha2 = "0.11.1"
 thiserror = "2.0"
 async-trait = "0.1"
 nix = { version = "0.31", optional = true, features = ["term"] }
