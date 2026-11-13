@@ -243,7 +243,10 @@ impl AudioSinkBuilder {
         Self::default()
     }
 
-    /// Select the first output device whose name contains this string.
+    /// Select an output device by name substring or exact `host:device` ID.
+    ///
+    /// A colon selects an exact CPAL device ID, including its backend. Plain
+    /// strings select the first matching description on the default backend.
     #[must_use]
     pub fn device(mut self, name: impl Into<String>) -> Self {
         self.dev = Some(name.into());

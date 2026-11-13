@@ -46,13 +46,42 @@ pub(crate) fn device_config(
         .ok()
         .filter(|&r| r != 0)
         .ok_or_else(|| Error::msg("audio sample rate must be nonzero and fit u32"))?;
-    let host = cpal::default_host();
+    // A host-prefixed ID selects its backend explicitly; plain strings match
+    // descriptions on the default backend. Never fall back for a missing ID.
+    let id = name
+        .filter(|name| name.contains(':'))
+        .map(str::parse::<cpal::DeviceId>)
+        .transpose()?;
+    let host = match &id {
+        Some(id) => cpal::host_from_id(id.host())?,
+        None => cpal::default_host(),
+    };
     let direction = if input { "input" } else { "output" };
-    let device = if let Some(name) = name {
+    let device = if let Some(id) = id {
+        host.device_by_id(&id)
+            .filter(|d| {
+                if input {
+                    d.supports_input()
+                } else {
+                    d.supports_output()
+                }
+            })
+            .ok_or_else(|| {
+                Error::msg(format!(
+                    "audio {direction} device {id} not found or does not support {direction}"
+                ))
+            })?
+    } else if let Some(name) = name {
+        let query_error = |e| {
+            Error::device(
+                e,
+                format!("enumerating audio {direction} devices on {}", host.id()),
+            )
+        };
         let mut devices = if input {
-            host.input_devices()?
+            host.input_devices().map_err(query_error)?
         } else {
-            host.output_devices()?
+            host.output_devices().map_err(query_error)?
         };
         devices
             .find(|d| d.description().is_ok_and(|d| d.name().contains(name)))
@@ -68,15 +97,20 @@ pub(crate) fn device_config(
         host.default_output_device()
             .ok_or_else(|| Error::msg("no default audio output device"))?
     };
+    let description = device.description()?;
+    let id = device.id()?;
+    let context = format!("audio {direction} device {description} ({id}) at {rate} Hz");
+    let query_error = |e| Error::device(e, format!("querying {context}"));
     let config = if input {
-        select_config(device.supported_input_configs()?, rate)?
+        select_config(device.supported_input_configs().map_err(query_error)?, rate)
     } else {
-        select_config(device.supported_output_configs()?, rate)?
-    };
-    log::info!(
-        "Audio {direction} device: {}, {config:?}",
-        device.description()?
-    );
+        select_config(
+            device.supported_output_configs().map_err(query_error)?,
+            rate,
+        )
+    }
+    .map_err(|e| Error::wrap(e, format!("configuring {context}")))?;
+    log::info!("Audio {direction} device: {description} ({id}), {config:?}");
     Ok((device, config))
 }
 
@@ -145,6 +179,15 @@ mod tests {
         assert!(select_config(configs.into_iter(), 96000).is_err());
         assert!(select_config(configs.into_iter(), 0).is_err());
         Ok(())
+    }
+
+    #[test]
+    fn invalid_device_ids_are_rejected_without_using_the_default_device() {
+        for input in [false, true] {
+            let error = device_config(48000, Some("unknown-backend:device"), input)
+                .expect_err("invalid device ID must fail");
+            assert!(error.to_string().contains("unknown-backend"));
+        }
     }
 
     #[test]

@@ -95,7 +95,8 @@
 //! Route bell202 output into Dire Wolf input, and Dire Wolf output into bell202
 //! input using two independent virtual audio paths. Configure Dire Wolf with
 //! `MODEM 1200` and `ARATE 48000`, and select the opposite endpoints with
-//! `ADEVICE`. Device arguments are name substrings; omit them to use the system
+//! `ADEVICE`. Device arguments are name substrings or exact `host:device` IDs;
+//! omit them to use the system
 //! defaults and route through the audio server. Disable audio processing such
 //! as echo cancellation or noise suppression on these paths.
 //!
@@ -164,11 +165,11 @@ struct Opt {
     #[arg(long)]
     audio: bool,
 
-    /// Input device name substring; defaults to the system input device.
+    /// Input device name substring or host:device ID; defaults to system input.
     #[arg(long, requires = "audio")]
     audio_input: Option<String>,
 
-    /// Output device name substring; defaults to the system output device.
+    /// Output device name substring or host:device ID; defaults to system output.
     #[arg(long, requires = "audio")]
     audio_output: Option<String>,
 

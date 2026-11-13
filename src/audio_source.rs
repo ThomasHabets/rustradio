@@ -114,7 +114,10 @@ impl AudioSourceBuilder {
         Self::default()
     }
 
-    /// Select the first input device whose name contains this string.
+    /// Select an input device by name substring or exact `host:device` ID.
+    ///
+    /// A colon selects an exact CPAL device ID, including its backend. Plain
+    /// strings select the first matching description on the default backend.
     #[must_use]
     pub fn device(mut self, name: impl Into<String>) -> Self {
         self.device = Some(name.into());
