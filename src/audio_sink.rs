@@ -304,7 +304,8 @@ impl AudioSinkBuilder {
 /// formats. The callback outputs silence when no samples are queued, and never
 /// waits for input. Tags are discarded. Playback uses a bounded 200 ms queue;
 /// queued samples drain before input EOF completes the block. Playback starts
-/// on the first `work()` call. Device errors are reported by `work()`.
+/// on the first `work()` call. Backend overruns/underruns and denied real-time
+/// scheduling are logged; other device errors are reported by `work()`.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, noeof)]
 pub struct AudioSink {

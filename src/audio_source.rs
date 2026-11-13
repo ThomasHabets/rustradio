@@ -163,7 +163,8 @@ impl AudioSourceBuilder {
 /// device formats. Capture uses a bounded 200 ms queue. On overrun, excess
 /// samples are dropped and capture continues; the worker warns at most once
 /// every five seconds. Capture starts on the first `work()` call. The callback
-/// never waits for space. Device errors are reported by `work()`.
+/// never waits for space. Backend overruns/underruns and denied real-time
+/// scheduling are logged; other device errors are reported by `work()`.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct AudioSource {

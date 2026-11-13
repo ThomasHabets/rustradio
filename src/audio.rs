@@ -149,11 +149,22 @@ impl AudioStream {
     }
 
     pub(crate) fn check_error(&mut self) -> Result<()> {
-        if let Ok(e) = self.errors.get_mut().unwrap().try_recv() {
-            return Err(Error::msg(format!("audio stream error: {e}")));
-        }
-        Ok(())
+        check_stream_errors(self.errors.get_mut().unwrap())
     }
+}
+
+// CPAL delivers recoverable backend notifications through the same callback as
+// fatal device errors. Drain notifications so a later fatal error is not hidden.
+fn check_stream_errors(errors: &Receiver<cpal::Error>) -> Result<()> {
+    for error in errors.try_iter() {
+        match error.kind() {
+            cpal::ErrorKind::Xrun | cpal::ErrorKind::RealtimeDenied => {
+                log::warn!("Audio stream notification: {error}");
+            }
+            _ => return Err(Error::device(error, "audio stream")),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -192,6 +203,28 @@ mod tests {
                 .expect_err("invalid device ID must fail");
             assert!(error.to_string().contains("unknown-backend"));
         }
+    }
+
+    #[test]
+    fn recoverable_notifications_do_not_hide_device_errors() {
+        use cpal::ErrorKind;
+
+        let (sender, errors) = channel();
+        for kind in [ErrorKind::Xrun, ErrorKind::RealtimeDenied] {
+            sender.send(cpal::Error::new(kind)).unwrap();
+        }
+        assert!(check_stream_errors(&errors).is_ok());
+        sender.send(cpal::Error::new(ErrorKind::Xrun)).unwrap();
+        sender
+            .send(cpal::Error::new(ErrorKind::DeviceNotAvailable))
+            .unwrap();
+        let Error::DeviceError { source, .. } = check_stream_errors(&errors).unwrap_err() else {
+            panic!("device error must preserve the CPAL error");
+        };
+        assert_eq!(
+            source.downcast_ref::<cpal::Error>().unwrap().kind(),
+            ErrorKind::DeviceNotAvailable
+        );
     }
 
     #[test]
