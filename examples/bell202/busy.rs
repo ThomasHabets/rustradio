@@ -1,4 +1,9 @@
 //! Receive-power carrier detection and its optional graph branch.
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 use anyhow::{Result, ensure};
 use rustradio::Sample;
 use rustradio::blocks::{Map, Tee};
@@ -7,6 +12,22 @@ use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 
 pub(super) type Receive<T> = (ReadStream<T>, Option<ReadStream<u8>>);
+
+/// Shared with the audio sink's transmit-control callback. Its lifetime is one
+/// modem graph, so a restarted session always begins with transmission idle.
+#[derive(Clone, Default)]
+pub(super) struct Transmit(Arc<AtomicBool>);
+
+impl Transmit {
+    #[cfg(any(feature = "audio", test))]
+    pub(super) fn set(&self, active: bool) {
+        self.0.store(active, Ordering::Relaxed);
+    }
+
+    fn active(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
 
 /// A 10 ms power average with 3 dB of clearance hysteresis. Power is relative
 /// to unit samples, not calibrated receiver dBm. The state starts clear.
@@ -74,23 +95,34 @@ pub(super) fn tap<T: Sample>(
     input: ReadStream<T>,
     rate: f64,
     threshold: Option<f64>,
+    transmit: Option<Transmit>,
     power: fn(T) -> f64,
 ) -> Result<Receive<T>> {
-    let Some(threshold) = threshold else {
+    if threshold.is_none() && transmit.is_none() {
         return Ok((input, None));
-    };
-    let mut detector = Detector::new(rate, threshold)?;
+    }
+    let mut detector = threshold
+        .map(|threshold| Detector::new(rate, threshold))
+        .transpose()?;
+    let mut previous_busy = false;
     let mut state_samples = 0u64;
     let (tee, data, level) = Tee::new(input)?;
     graph.add(Box::new(tee));
     let (map, busy) = Map::keep_tags(level, "ChannelBusy", move |value| {
-        let was_busy = detector.busy;
-        let state = detector.process(power(value));
-        if detector.busy != was_busy {
-            let (current, previous) = if detector.busy {
-                ("busy", "idle")
-            } else {
-                ("idle", "busy")
+        // Keep receive detection running during TX, so TX-off cannot falsely
+        // clear a channel that still has a received carrier.
+        let received = detector
+            .as_mut()
+            .is_some_and(|d| d.process(power(value)) != 0);
+        let transmitting = transmit.as_ref().is_some_and(Transmit::active);
+        let active = received || transmitting;
+        let state = u8::from(active);
+        if active != previous_busy {
+            let (current, previous) = match (transmitting, received) {
+                (true, true) => ("busy (TX+RX)", "idle"),
+                (true, false) => ("busy (TX)", "idle"),
+                (false, true) => ("busy (RX)", "idle"),
+                (false, false) => ("idle", "busy"),
             };
             // Use sample time so buffering and scheduler delays do not distort
             // the length of the received busy or idle period.
@@ -101,6 +133,7 @@ pub(super) fn tap<T: Sample>(
             state_samples = 0;
         }
         state_samples += 1;
+        previous_busy = active;
         state
     })?;
     graph.add(Box::new(map));
@@ -157,9 +190,14 @@ mod tests {
         let mut graph = MTGraph::new();
         let (source, input) = VectorSource::new(samples)?;
         graph.add(Box::new(source));
-        let (data, busy) = tap(&mut graph, input, rate as f64, Some(-30.0), |sample| {
-            f64::from(sample).powi(2)
-        })?;
+        let (data, busy) = tap(
+            &mut graph,
+            input,
+            rate as f64,
+            Some(-30.0),
+            None,
+            |sample| f64::from(sample).powi(2),
+        )?;
         graph.add(Box::new(NullSink::new(data)));
         let (writer, packets) = new_nocopy_stream();
         drop(writer);
@@ -187,11 +225,71 @@ mod tests {
         window.slice()[..2].copy_from_slice(&[0.25f32, -0.5]);
         window.produce(2, &[]);
         let mut graph = MTGraph::new();
-        let (data, busy) = tap(&mut graph, input, 48000.0, None, |sample| {
+        let (data, busy) = tap(&mut graph, input, 48000.0, None, None, |sample| {
             f64::from(sample).powi(2)
         })?;
         assert!(busy.is_none());
         assert_eq!(data.read_buf()?.0.slice(), &[0.25, -0.5]);
+        Ok(())
+    }
+
+    #[test]
+    fn transmit_busy_and_received_carrier_combine_independently() -> Result<()> {
+        use rustradio::blocks::NullSink;
+        use std::time::{Duration, Instant};
+
+        for (threshold, full_duplex) in [(None, false), (Some(-20.0), false), (Some(-20.0), true)] {
+            let transmit = Transmit::default();
+            let (writer, input) = rustradio::stream::new_stream()?;
+            let mut graph = MTGraph::new();
+            let (data, states) = tap(
+                &mut graph,
+                input,
+                1000.0,
+                threshold,
+                (!full_duplex).then(|| transmit.clone()),
+                |sample: f32| f64::from(sample).powi(2),
+            )?;
+            graph.add(Box::new(NullSink::new(data)));
+            let states = states.unwrap();
+            let worker = std::thread::spawn(move || graph.run());
+            // Wait for each segment to pass through the real graph before
+            // changing TX state; no sleeps determine the transition ordering.
+            for (tx, power, expected) in [
+                (false, 0.0, 0),
+                (true, 0.0, u8::from(!full_duplex)),
+                (true, 1.0, 1),
+                (false, 1.0, u8::from(threshold.is_some())),
+                (false, 0.0, 0),
+            ] {
+                transmit.set(tx);
+                let mut window = writer.write_buf()?;
+                window.slice()[..1000].fill(power);
+                window.produce(1000, &[]);
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let mut count = 0;
+                let mut last = 0;
+                while count < 1000 {
+                    let (window, _) = states.read_buf()?;
+                    if let Some(&value) = window.slice().last() {
+                        last = value;
+                    }
+                    let n = window.len();
+                    window.consume(n);
+                    count += n;
+                    assert!(Instant::now() < deadline, "busy stream stalled");
+                    if n == 0 {
+                        std::thread::yield_now();
+                    }
+                }
+                assert_eq!(
+                    last, expected,
+                    "threshold={threshold:?}, full_duplex={full_duplex}, tx={tx}"
+                );
+            }
+            drop(writer);
+            worker.join().unwrap()?;
+        }
         Ok(())
     }
 

@@ -112,20 +112,26 @@
 //!
 //! ### Channel-busy notifications
 //!
+//! Audio transmission reports busy by default, from transmit-control start
+//! through playback drainage and any PTT tail. Use `--full-duplex` to disable
+//! this transmit contribution. Receive-power detection remains independent.
+//!
 //! Add `--busy-threshold-db=-30` to report receive-power carrier detection to
 //! KISS clients. The threshold is dB relative to unit sample power, not dBm:
 //! SDR mode measures filtered IQ before FM demodulation; audio mode measures
 //! input audio power. Tune the threshold to your receiver's signal and noise.
 //! A 10 ms power average asserts busy at the threshold and clears 3 dB below it.
 //! Each transition is printed to stdout with the previous busy or idle period's
-//! duration, measured from the received samples.
+//! duration, measured from the received samples. Busy transitions identify the
+//! cause as TX, RX, or TX+RX.
 //!
 //! The first state and subsequent changes produce MeshCore-compatible KISS
 //! SetHardware ChannelBusy frames: `C0 06 8E state C0` (0 clear, 1 busy).
 //! TCP clients receive the current state when joining an active graph. Slow
 //! clients retain the latest pending state; intermediate updates may coalesce.
 //! This reports carrier state; it does not inhibit transmission or run CSMA.
-//! Without this option, no detector branch or status frames are created.
+//! Without a receive threshold, only audio transmission contributes busy state
+//! (unless `--full-duplex` is set).
 //!
 //! ### Radio PTT through rigctld
 //!
@@ -193,6 +199,10 @@ struct Opt {
     /// Uses a 10 ms power average; clears 3 dB below this threshold. Not dBm.
     #[arg(long, allow_hyphen_values = true, value_parser = busy::parse_threshold)]
     busy_threshold_db: Option<f64>,
+
+    /// Do not report audio transmission as channel busy.
+    #[arg(long)]
+    full_duplex: bool,
 
     /// rigctld TCP address for audio-mode PTT; requires its default non-VFO mode.
     #[arg(long, requires = "audio", value_name = "HOST:PORT")]
@@ -384,20 +394,39 @@ fn receive_audio(
 }
 
 #[cfg(feature = "audio")]
-fn connect_audio(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<ReadStream<Float>> {
+fn connect_audio(
+    g: &mut MTGraph,
+    opt: &Opt,
+    tx: ReadStream<Float>,
+    transmit: Option<busy::Transmit>,
+) -> Result<ReadStream<Float>> {
     let mut sink = AudioSink::builder();
-    if let Some(address) = &opt.rigctld {
-        let mut rig = rigctld::Rigctld::connect(address)?;
+    let mut rig = opt
+        .rigctld
+        .as_deref()
+        .map(rigctld::Rigctld::connect)
+        .transpose()?;
+    if rig.is_some() || transmit.is_some() {
         let lead = std::time::Duration::from_millis(opt.ptt_delay_ms);
         let tail = std::time::Duration::from_millis(opt.ptt_tail_ms);
         sink = sink.transmit_control(move |on| {
-            if !on {
-                std::thread::sleep(tail);
+            // Assert before key-on and its lead delay. Release only after
+            // playback, the tail delay, and successful key-off have completed.
+            if on && let Some(transmit) = &transmit {
+                transmit.set(true);
             }
-            rig.set_ptt(on)
-                .map_err(|e| rustradio::Error::msg(format!("rigctld PTT: {e:#}")))?;
-            if on {
-                std::thread::sleep(lead);
+            if let Some(rig) = &mut rig {
+                if !on {
+                    std::thread::sleep(tail);
+                }
+                rig.set_ptt(on)
+                    .map_err(|e| rustradio::Error::msg(format!("rigctld PTT: {e:#}")))?;
+                if on {
+                    std::thread::sleep(lead);
+                }
+            }
+            if !on && let Some(transmit) = &transmit {
+                transmit.set(false);
             }
             Ok(())
         });
@@ -425,6 +454,7 @@ fn connect_audio(
     _g: &mut MTGraph,
     _opt: &Opt,
     _tx: ReadStream<Float>,
+    _transmit: Option<busy::Transmit>,
 ) -> Result<ReadStream<Float>> {
     anyhow::bail!("audio mode requires building with --features audio")
 }
@@ -468,7 +498,7 @@ fn connect_sdr(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<busy
             .interp(50000)
             .build(prev)?,
     ];
-    let (prev, busy) = busy::tap(g, prev, 50_000.0, opt.busy_threshold_db, |sample| {
+    let (prev, busy) = busy::tap(g, prev, 50_000.0, opt.busy_threshold_db, None, |sample| {
         f64::from(sample.re).powi(2) + f64::from(sample.im).powi(2)
     })?;
     let audio = blockchain![g, prev, QuadratureDemod::new(prev, 1.0)?];
@@ -554,12 +584,14 @@ fn run_session(opt: &Opt, io: KissIo, g: &mut MTGraph) -> Result<()> {
     let tx_rate = if opt.audio { opt.audio_rate } else { 48000 };
     let tx = transmit_audio(g, input, tx_rate)?;
     let (rx_audio, busy) = if opt.audio {
-        let input = connect_audio(g, opt, tx)?;
+        let transmit = (!opt.full_duplex).then(busy::Transmit::default);
+        let input = connect_audio(g, opt, tx, transmit.clone())?;
         busy::tap(
             g,
             input,
             opt.audio_rate as f64,
             opt.busy_threshold_db,
+            transmit,
             |sample| f64::from(sample).powi(2),
         )?
     } else {
@@ -731,6 +763,20 @@ mod tests {
         audio.resize(audio.len() + 24000, 0.0);
         assert_eq!(demodulate(audio, 48000)?, bytes);
         Ok(())
+    }
+
+    #[test]
+    fn transmit_busy_is_enabled_by_default_and_full_duplex_is_opt_in() {
+        assert!(
+            !Opt::try_parse_from(["bell202", "--audio"])
+                .unwrap()
+                .full_duplex
+        );
+        assert!(
+            Opt::try_parse_from(["bell202", "--audio", "--full-duplex"])
+                .unwrap()
+                .full_duplex
+        );
     }
 
     #[test]
