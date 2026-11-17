@@ -934,6 +934,128 @@ pub fn parse_duration(in_s: &str) -> std::result::Result<std::time::Duration, St
     Ok(total)
 }
 
+/// Parse an RFC3339 timestamp into [`std::time::SystemTime`].
+///
+/// Accepts a four-digit Gregorian year, a `T` separator, seconds, optional
+/// fractional seconds, and a required `Z` or `±HH:MM` UTC offset. `T` and `Z`
+/// are case insensitive. Fractional digits beyond nanoseconds are truncated.
+/// Leap seconds (`:60`) map to the following second; announced leap-second
+/// dates are not checked.
+///
+/// ```rust
+/// use rustradio::parse_timestamp;
+/// use std::time::{Duration, UNIX_EPOCH};
+/// assert_eq!(parse_timestamp("1970-01-01T00:00:01Z")?,
+///            UNIX_EPOCH + Duration::from_secs(1));
+/// # Ok::<(), String>(())
+/// ```
+///
+/// # Errors
+///
+/// If the syntax, date, time, or UTC offset is invalid, or the timestamp
+/// cannot be represented by the platform's [`std::time::SystemTime`].
+pub fn parse_timestamp(in_s: &str) -> std::result::Result<std::time::SystemTime, String> {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let invalid = || format!("Invalid RFC3339 timestamp {in_s:?}");
+    let bytes = in_s.as_bytes();
+    if bytes.len() < 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || !matches!(bytes[10], b'T' | b't')
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+    {
+        return Err(invalid());
+    }
+    let number = |digits: &[u8]| -> std::result::Result<i64, String> {
+        digits.iter().try_fold(0, |n, &digit| {
+            if digit.is_ascii_digit() {
+                Ok(n * 10 + i64::from(digit - b'0'))
+            } else {
+                Err(invalid())
+            }
+        })
+    };
+    let year = number(&bytes[..4])?;
+    let month = number(&bytes[5..7])?;
+    let day = number(&bytes[8..10])?;
+    let hour = number(&bytes[11..13])?;
+    let minute = number(&bytes[14..16])?;
+    let second = number(&bytes[17..19])?;
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let month_days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    if !(1..=12).contains(&month)
+        || !(1..=month_days[(month - 1) as usize]).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
+        return Err(invalid());
+    }
+
+    let mut pos = 19;
+    let mut nanos = 0;
+    if bytes[pos] == b'.' {
+        pos += 1;
+        let start = pos;
+        let mut place = 100_000_000;
+        while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+            nanos += u32::from(bytes[pos] - b'0') * place;
+            place /= 10;
+            pos += 1;
+        }
+        if pos == start {
+            return Err(invalid());
+        }
+    }
+    let offset = match &bytes[pos..] {
+        [b'Z' | b'z'] => 0,
+        [sign @ (b'+' | b'-'), h1, h2, b':', m1, m2] => {
+            let hours = number(&[*h1, *h2])?;
+            let minutes = number(&[*m1, *m2])?;
+            if hours > 23 || minutes > 59 {
+                return Err(invalid());
+            }
+            (hours * 3600 + minutes * 60) * if *sign == b'+' { 1 } else { -1 }
+        }
+        _ => return Err(invalid()),
+    };
+
+    // Count Gregorian days before this year, relative to 1970-01-01.
+    // Euclidean division also handles the year 0000's preceding year.
+    let preceding_year = year - 1;
+    let days = preceding_year * 365 + preceding_year.div_euclid(4) - preceding_year.div_euclid(100)
+        + preceding_year.div_euclid(400)
+        - 719_162
+        + month_days[..(month - 1) as usize].iter().sum::<i64>()
+        + day
+        - 1;
+    let seconds = days * 86400 + hour * 3600 + minute * 60 + second - offset;
+    // Add the nonnegative fractional part after applying signed whole seconds,
+    // so fractions before the Unix epoch still move forward within the second.
+    let time = if seconds < 0 {
+        UNIX_EPOCH.checked_sub(Duration::from_secs(seconds.unsigned_abs()))
+    } else {
+        UNIX_EPOCH.checked_add(Duration::from_secs(seconds as u64))
+    };
+    time.and_then(|t| t.checked_add(Duration::from_nanos(u64::from(nanos))))
+        .ok_or_else(|| format!("Timestamp {in_s:?} exceeds the platform's supported range"))
+}
+
 /// An in-memory sample that can be carried by processing blocks.
 ///
 /// Automatically implemented for types satisfying the storage and threading
@@ -1245,6 +1367,65 @@ pub mod tests {
             "10000000000000000000s 10000000000000000000s",
         ] {
             assert!(parse_duration(input).is_err(), "{input:?}");
+        }
+    }
+
+    #[test]
+    fn timestamp() {
+        use std::time::{Duration, UNIX_EPOCH};
+        for (input, seconds, nanos) in [
+            ("1970-01-01T00:00:00Z", 0i64, 0),
+            ("1970-01-01t00:00:01z", 1, 0),
+            ("1970-01-01T01:30:00+01:30", 0, 0),
+            ("1969-12-31T22:30:00-01:30", 0, 0),
+            ("1970-01-01T00:00:00-00:00", 0, 0),
+            ("1969-12-31T23:59:59.5Z", -1, 500_000_000),
+            ("1970-01-01T00:00:00.123456789123Z", 0, 123_456_789),
+            ("2000-02-29T00:00:00Z", 951_782_400, 0),
+            ("1900-03-01T00:00:00Z", -2_203_891_200, 0),
+            ("0000-01-01T00:00:00Z", -62_167_219_200, 0),
+            ("9999-12-31T23:59:59Z", 253_402_300_799, 0),
+            ("2016-12-31T23:59:60Z", 1_483_228_800, 0),
+        ] {
+            let expected = if seconds < 0 {
+                UNIX_EPOCH.checked_sub(Duration::from_secs(seconds.unsigned_abs()))
+            } else {
+                UNIX_EPOCH.checked_add(Duration::from_secs(seconds as u64))
+            }
+            .and_then(|time| time.checked_add(Duration::from_nanos(nanos)));
+            match expected {
+                Some(expected) => assert_eq!(parse_timestamp(input).unwrap(), expected, "{input}"),
+                None => assert!(parse_timestamp(input).is_err(), "{input}"),
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_timestamps() {
+        for input in [
+            "",
+            "invalid",
+            "2026-02-29T00:00:00Z",
+            "1900-02-29T00:00:00Z",
+            "2024-04-31T00:00:00Z",
+            "2026-00-01T00:00:00Z",
+            "2026-13-01T00:00:00Z",
+            "2026-01-00T00:00:00Z",
+            "2026-01-01T24:00:00Z",
+            "2026-01-01T00:60:00Z",
+            "2026-01-01T00:00:61Z",
+            "2026-01-01T00:00:00",
+            "2026-01-01T00:00:00.Z",
+            "2026-01-01T00:00:00+24:00",
+            "2026-01-01T00:00:00+00:60",
+            "2026-01-01T00:00:00+0000",
+            "2026-01-01T00:00:00Zjunk",
+            "2026-01-01T00:00:00Z ",
+            " 2026-01-01T00:00:00Z",
+            "２０２６-01-01T00:00:00Z",
+            "2026-01-01T00:00:0éZ",
+        ] {
+            assert!(parse_timestamp(input).is_err(), "{input:?}");
         }
     }
 

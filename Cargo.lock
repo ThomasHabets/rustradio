@@ -2771,7 +2771,6 @@ dependencies = [
  "async-channel",
  "async-trait",
  "axum",
- "chrono",
  "clap",
  "cpal",
  "crossterm",

@@ -57,7 +57,6 @@ optional = true
 [dev-dependencies]
 rand = "0.10.3"
 anyhow = "1.0"
-chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 stderrlog = "0.6"
 ctrlc = "3.4"

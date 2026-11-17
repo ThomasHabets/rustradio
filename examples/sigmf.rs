@@ -27,10 +27,10 @@ struct CreateOpts {
     #[arg(long, default_value = "cf32_le")]
     datatype: String,
 
-    /// Capture start time in ISO8601 format.
+    /// Capture start time in RFC3339 format.
     ///
     /// YYYY-MM-DDTHH:MM:SS.SSSZ
-    #[arg(long, value_parser = validate_iso8601)]
+    #[arg(long, value_parser = parse_capture_datetime)]
     datetime: Option<String>,
 
     /// Frequency of capture.
@@ -88,11 +88,8 @@ struct CheckOpts {
     archive: std::path::PathBuf,
 }
 
-fn validate_iso8601(s: &str) -> Result<String, String> {
-    match chrono::DateTime::parse_from_rfc3339(s) {
-        Ok(_) => Ok(s.to_string()),
-        Err(e) => Err(format!("Invalid ISO8601 datetime: {e}")),
-    }
+fn parse_capture_datetime(s: &str) -> Result<String, String> {
+    rustradio::parse_timestamp(s).map(|_| s.to_string())
 }
 
 fn parse_float_with_underscores(s: &str) -> Result<f64, String> {
@@ -233,4 +230,17 @@ fn cmd_create(opt: CreateOpts) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_datetime_preserves_rfc3339_text() {
+        let input = "2026-11-17T12:34:56.123456789123+02:00";
+        assert_eq!(parse_capture_datetime(input).unwrap(), input);
+        assert!(parse_capture_datetime("2026-02-30T00:00:00Z").is_err());
+        assert!(parse_capture_datetime("2026-11-17T12:34:56").is_err());
+    }
 }
