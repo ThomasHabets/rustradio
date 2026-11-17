@@ -1,4 +1,4 @@
-use crate::block::{Block, BlockRet};
+use crate::block::{Block, BlockEOF, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
 use crate::{Error, Result};
 use log::debug;
@@ -8,6 +8,8 @@ const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
 const KISS_TFEND: u8 = 0xDC;
 const KISS_TFESC: u8 = 0xDD;
+const KISS_SET_HARDWARE: u8 = 0x06;
+const MESHCORE_CHANNEL_BUSY: u8 = 0x8e;
 const ENCODE_PORT_TAG: &str = "KissEncode:port";
 
 fn strip_fend(data: &[u8]) -> &[u8] {
@@ -25,13 +27,13 @@ fn strip_fend(data: &[u8]) -> &[u8] {
     &data[start..end]
 }
 
-/// Escape KISS data stream.
+/// Escape and frame a complete KISS type byte and its payload.
 #[must_use]
-fn escape(bytes: &[u8], port: u8) -> Vec<u8> {
+fn escape(bytes: &[u8], command: u8) -> Vec<u8> {
     // Add 10% capacity to leave room for escaped
     let mut ret = Vec::with_capacity((3 + bytes.len()) * 110 / 100);
     ret.push(KISS_FEND);
-    for b in std::iter::once(port << 4).chain(bytes.iter().copied()) {
+    for b in std::iter::once(command).chain(bytes.iter().copied()) {
         match b {
             KISS_FEND => ret.extend(vec![KISS_FESC, KISS_TFEND]),
             KISS_FESC => ret.extend(vec![KISS_FESC, KISS_TFESC]),
@@ -229,61 +231,153 @@ impl Block for KissFrame {
     }
 }
 
-/// Kiss encode.
+/// Encode packet PDUs as KISS data frames.
 ///
-/// Takes bytes and creates a KISS frame.
-///
-/// <https://en.wikipedia.org/wiki/KISS_(amateur_radio_protocol)>
-///
-/// TODO: Take channel from a tag.
+/// `KissEncode:port` tags select the data port (default zero). Other packet
+/// tags retain their ordering. An optional busy stream reports channel state
+/// independently of packets using MeshCore SetHardware ChannelBusy frames on
+/// port zero: `C0 06 8E state C0`. Busy-input tags are discarded.
 #[derive(rustradio_macros::Block)]
-#[rustradio(crate, new)]
+#[rustradio(crate, new, noeof)]
 pub struct KissEncode {
     #[rustradio(in)]
     src: NCReadStream<Vec<u8>>,
+    #[rustradio(in, default)]
+    busy: Option<ReadStream<u8>>,
     #[rustradio(out, sample_rate = "self.src.sample_rate()")]
     dst: NCWriteStream<Vec<u8>>,
+    #[rustradio(default)]
+    last_busy: Option<bool>,
+    // After a control frame fills the output, give a waiting packet the next
+    // slot rather than repeatedly filling it with more control transitions.
+    #[rustradio(default)]
+    packet_turn: bool,
+}
+
+impl KissEncode {
+    /// Attach channel state: zero means clear, any nonzero value means busy.
+    ///
+    /// The first sample and subsequent state changes produce status frames.
+    /// Both inputs advance independently; completion waits for both to drain.
+    /// With two live, empty inputs the scheduler polls for either input.
+    #[must_use]
+    pub fn with_busy(mut self, busy: ReadStream<u8>) -> Self {
+        self.busy = Some(busy);
+        self.last_busy = None;
+        self.packet_turn = false;
+        self
+    }
+
+    fn encode_packet(&self, x: Vec<u8>, mut tags: Vec<Tag>) {
+        let port = match tags
+            .iter()
+            .find(|t| t.key() == ENCODE_PORT_TAG)
+            .map_or(&TagValue::U64(0), super::stream::Tag::val)
+        {
+            TagValue::U64(port) if *port < 0x10 => *port & 0xf,
+            other => {
+                debug!("KissEncode: invalid port tag value: {other:?}");
+                0
+            }
+        };
+        let out = escape(&x, (port as u8) << 4);
+        tags.retain(|tag| tag.key() != ENCODE_PORT_TAG);
+        let zeros = tags.partition_point(|tag| tag.pos() == 0);
+        tags.splice(
+            zeros..zeros,
+            [
+                Tag::new(
+                    0,
+                    "KissEncode:input-bytes",
+                    TagValue::U64(x.len().try_into().unwrap()),
+                ),
+                Tag::new(
+                    0,
+                    "KissEncode:output-bytes",
+                    TagValue::U64(out.len().try_into().unwrap()),
+                ),
+            ],
+        );
+        self.dst.push(out, tags);
+    }
+}
+
+impl BlockEOF for KissEncode {
+    fn eof(&mut self) -> bool {
+        self.src.eof() && self.busy.as_ref().is_none_or(|busy| busy.eof())
+    }
 }
 
 impl Block for KissEncode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        loop {
+        let Some(busy) = &self.busy else {
+            // The packet-only path can wait directly on its single input.
+            loop {
+                if self.dst.remaining() == 0 {
+                    return Ok(BlockRet::WaitForStream(&self.dst, 1));
+                }
+                let Some((packet, tags)) = self.src.pop() else {
+                    return Ok(BlockRet::WaitForStream(&self.src, 1));
+                };
+                self.encode_packet(packet, tags);
+            }
+        };
+        if self.dst.remaining() == 0 {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
+        let mut progressed = false;
+        let mut packet_sent = false;
+        if self.packet_turn
+            && let Some((packet, tags)) = self.src.pop()
+        {
+            self.encode_packet(packet, tags);
+            self.packet_turn = false;
+            progressed = true;
+            packet_sent = true;
             if self.dst.remaining() == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let Some((x, mut tags)) = self.src.pop() else {
-                return Ok(BlockRet::WaitForStream(&self.src, 1));
-            };
-            let port = match tags
-                .iter()
-                .find(|t| t.key() == ENCODE_PORT_TAG)
-                .map_or(&TagValue::U64(0), super::stream::Tag::val)
-            {
-                TagValue::U64(port) if *port < 0x10 => *port & 0xf,
-                other => {
-                    debug!("KissEncode: invalid port tag value: {other:?}");
-                    0
+        }
+        let (input, _tags) = busy.read_buf()?;
+        let mut consumed = 0;
+        // Bound control work so a continuous busy stream cannot starve packets.
+        for &value in input.iter().take(1024) {
+            let state = value != 0;
+            if self.last_busy != Some(state) {
+                if self.dst.remaining() == 0 {
+                    break;
                 }
-            };
-            let out = escape(&x, port.try_into().unwrap());
-            tags.retain(|tag| tag.key() != ENCODE_PORT_TAG);
-            let zeros = tags.partition_point(|tag| tag.pos() == 0);
-            tags.splice(
-                zeros..zeros,
-                [
-                    Tag::new(
-                        0,
-                        "KissEncode:input-bytes",
-                        TagValue::U64(x.len().try_into().unwrap()),
-                    ),
-                    Tag::new(
-                        0,
-                        "KissEncode:output-bytes",
-                        TagValue::U64(out.len().try_into().unwrap()),
-                    ),
-                ],
-            );
-            self.dst.push(out, tags);
+                self.dst.push(
+                    escape(&[MESHCORE_CHANNEL_BUSY, u8::from(state)], KISS_SET_HARDWARE),
+                    &[],
+                );
+                self.last_busy = Some(state);
+                self.packet_turn = true;
+            }
+            consumed += 1;
+        }
+        input.consume(consumed);
+        if self.dst.remaining() == 0 {
+            return Ok(BlockRet::WaitForStream(&self.dst, 1));
+        }
+        progressed |= consumed != 0;
+        if !packet_sent && let Some((packet, tags)) = self.src.pop() {
+            self.encode_packet(packet, tags);
+            self.packet_turn = false;
+            progressed = true;
+        }
+        if self.src.eof() && busy.eof() {
+            Ok(BlockRet::EOF)
+        } else if progressed {
+            Ok(BlockRet::Again)
+        } else if busy.eof() {
+            Ok(BlockRet::WaitForStream(&self.src, 1))
+        } else if self.src.eof() {
+            Ok(BlockRet::WaitForStream(busy, 1))
+        } else {
+            // Waiting on either stream alone would delay the other stream's
+            // independent events. Pending also keeps an empty pair alive.
+            Ok(BlockRet::Pending)
         }
     }
 }
@@ -293,6 +387,175 @@ mod tests {
     use super::*;
     use crate::blocks::VectorSource;
     use crate::stream::new_nocopy_stream;
+
+    #[test]
+    fn busy_changes_are_normalized_and_independent_of_packets() -> Result<()> {
+        let (packets, input) = new_nocopy_stream();
+        let (states, busy) = crate::stream::new_stream()?;
+        let (encoder, output) = KissEncode::new(input);
+        let mut encoder = encoder.with_busy(busy);
+        assert!(matches!(encoder.work()?, BlockRet::Pending));
+        packets.push(vec![0xc0], &[]);
+        assert!(matches!(encoder.work()?, BlockRet::Again));
+        assert_eq!(output.pop().unwrap().0, [0xc0, 0, 0xdb, 0xdc, 0xc0]);
+        drop(packets);
+        assert!(!encoder.eof());
+        let mut window = states.write_buf()?;
+        window.slice()[..6].copy_from_slice(&[0, 0, 1, 2, 255, 0]);
+        window.produce(6, &[]);
+        assert!(matches!(encoder.work()?, BlockRet::Again));
+        for state in [0, 1, 0] {
+            let (frame, tags) = output.pop().unwrap();
+            assert_eq!(frame, [0xc0, 6, 0x8e, state, 0xc0]);
+            assert!(tags.is_empty());
+        }
+        assert!(output.pop().is_none());
+        assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
+        drop(states);
+        assert!(encoder.eof());
+        assert!(matches!(encoder.work()?, BlockRet::EOF));
+        Ok(())
+    }
+
+    #[test]
+    fn busy_backpressure_preserves_transitions_and_packets() -> Result<()> {
+        let (packets, input) = new_nocopy_stream();
+        let (states, busy) = crate::stream::new_stream()?;
+        let (encoder, output) = KissEncode::new(input);
+        let mut encoder = encoder.with_busy(busy);
+        let capacity = encoder.dst.remaining();
+        for _ in 0..capacity {
+            encoder.dst.push(vec![], &[]);
+        }
+        packets.push(vec![42], &[]);
+        let mut window = states.write_buf()?;
+        window.slice()[..4].copy_from_slice(&[0, 0, 1, 0]);
+        window.produce(4, &[]);
+        drop(states);
+        assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
+        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.0.len(), 4);
+        output.pop().unwrap();
+        assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
+        assert!(!encoder.src.is_empty());
+        assert_eq!(
+            encoder.busy.as_ref().unwrap().read_buf()?.0.slice(),
+            &[1, 0]
+        );
+        // Even with only one free slot, a packet gets a turn before more
+        // queued control transitions. Neither input can monopolize output.
+        assert!(output.pop().unwrap().0.is_empty());
+        assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
+        assert!(encoder.src.is_empty());
+        assert_eq!(
+            encoder.busy.as_ref().unwrap().read_buf()?.0.slice(),
+            &[1, 0]
+        );
+        for _ in 2..capacity {
+            assert!(output.pop().unwrap().0.is_empty());
+        }
+        assert_eq!(output.pop().unwrap().0, [0xc0, 6, 0x8e, 0, 0xc0]);
+        assert_eq!(output.pop().unwrap().0, [0xc0, 0, 42, 0xc0]);
+        assert!(matches!(encoder.work()?, BlockRet::Again));
+        for state in [1, 0] {
+            assert_eq!(output.pop().unwrap().0, [0xc0, 6, 0x8e, state, 0xc0]);
+        }
+        // An ended control stream does not close a live packet input.
+        assert!(!encoder.eof());
+        assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
+        drop(packets);
+        assert!(encoder.eof());
+        Ok(())
+    }
+
+    #[test]
+    fn continuous_busy_samples_do_not_starve_packets() -> Result<()> {
+        let (packets, input) = new_nocopy_stream();
+        let (states, busy) = crate::stream::new_stream()?;
+        let (encoder, output) = KissEncode::new(input);
+        let mut encoder = encoder.with_busy(busy);
+        let mut window = states.write_buf()?;
+        window.slice()[..2048].fill(1);
+        window.produce(2048, &[]);
+        packets.push(vec![42], &[]);
+        assert!(matches!(encoder.work()?, BlockRet::Again));
+        assert_eq!(output.pop().unwrap().0, [0xc0, 6, 0x8e, 1, 0xc0]);
+        assert_eq!(output.pop().unwrap().0, [0xc0, 0, 42, 0xc0]);
+        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.0.len(), 1024);
+        Ok(())
+    }
+
+    #[cfg(not(feature = "wasm"))]
+    #[test]
+    fn busy_encoder_finishes_in_single_and_multi_thread_graphs() -> Result<()> {
+        use crate::blocks::{PduToStream, VectorSink};
+        use crate::graph::{Graph, GraphRunner};
+        fn check(mut graph: impl GraphRunner) -> Result<()> {
+            let (packets, input) = new_nocopy_stream();
+            packets.push(vec![42], &[]);
+            drop(packets);
+            let (encoder, frames) = KissEncode::new(input);
+            graph.add(Box::new(
+                encoder.with_busy(ReadStream::from_slice(&[0, 1, 0])),
+            ));
+            let (flatten, wire) = PduToStream::new(frames)?;
+            graph.add(Box::new(flatten));
+            let sink = VectorSink::new(wire, 100);
+            let hook = sink.hook();
+            graph.add(Box::new(sink));
+            graph.run()?;
+            assert_eq!(
+                hook.data().samples(),
+                &[
+                    0xc0, 6, 0x8e, 0, 0xc0, 0xc0, 6, 0x8e, 1, 0xc0, 0xc0, 6, 0x8e, 0, 0xc0, 0xc0,
+                    0, 42, 0xc0
+                ]
+            );
+            Ok(())
+        }
+        check(Graph::new())?;
+        #[cfg(not(feature = "wasm"))]
+        check(crate::mtgraph::MTGraph::new())?;
+        Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_busy_encoder_wakes_for_both_inputs_and_drains() -> Result<()> {
+        use crate::agraph::AsyncGraph;
+        use crate::blocks::{PduToStream, VectorSink};
+        use crate::graph::GraphRunner;
+        let (packets, input) = new_nocopy_stream();
+        let (states, busy) = crate::stream::new_stream()?;
+        let (encoder, frames) = KissEncode::new(input);
+        let mut graph = AsyncGraph::new();
+        graph.add(Box::new(encoder.with_busy(busy)));
+        let (flatten, wire) = PduToStream::new(frames)?;
+        graph.add(Box::new(flatten));
+        let sink = VectorSink::new(wire, 100);
+        let hook = sink.hook();
+        graph.add(Box::new(sink));
+        let producer = async move {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            let mut window = states.write_buf()?;
+            window.slice()[..2].copy_from_slice(&[0, 1]);
+            window.produce(2, &[]);
+            drop(states);
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            packets.push(vec![42], &[]);
+            drop(packets);
+            Ok::<(), crate::Error>(())
+        };
+        let (result, produced) = tokio::join!(graph.run_async(), producer);
+        result?;
+        produced?;
+        assert_eq!(
+            hook.data().samples(),
+            &[
+                0xc0, 6, 0x8e, 0, 0xc0, 0xc0, 6, 0x8e, 1, 0xc0, 0xc0, 0, 42, 0xc0
+            ]
+        );
+        Ok(())
+    }
 
     #[test]
     fn decode_nothing() -> Result<()> {

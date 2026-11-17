@@ -41,10 +41,18 @@ impl Framer {
     }
 }
 
+fn is_busy(frame: &[u8]) -> bool {
+    // Port-zero MeshCore ChannelBusy contains no bytes requiring KISS escapes.
+    matches!(frame, [0xc0, 0x06, 0x8e, 0..=1, 0xc0])
+}
+
 struct Queues {
     connected: bool,
     tx: VecDeque<Frame>,
     rx: VecDeque<Frame>,
+    // Latest control state has its own slot so data congestion cannot lose a
+    // clear indication. A frame already being written is never replaced.
+    pending_busy: Option<Frame>,
     warned: Option<Instant>,
 }
 #[derive(Default)]
@@ -53,6 +61,7 @@ struct State {
     last: u64,
     draining: bool,
     closed: bool,
+    busy: Option<Frame>,
 }
 /// Queues belong to one graph generation. Disconnected senders keep their
 /// accepted TX frames until drained; received frames are only for live clients.
@@ -63,12 +72,15 @@ struct Hub {
 }
 impl Hub {
     fn add(&self, id: u64) {
-        self.state.lock().unwrap().clients.insert(
+        let mut state = self.state.lock().unwrap();
+        let pending_busy = state.busy.clone();
+        state.clients.insert(
             id,
             Queues {
                 connected: true,
                 tx: VecDeque::new(),
                 rx: VecDeque::new(),
+                pending_busy,
                 warned: None,
             },
         );
@@ -78,6 +90,7 @@ impl Hub {
         if let Some(client) = state.clients.get_mut(&id) {
             client.connected = false;
             client.rx.clear();
+            client.pending_busy = None;
         }
         // Once drainage begins, clients can only join the next generation.
         if !state.clients.values().any(|c| c.connected) {
@@ -95,11 +108,20 @@ impl Hub {
         if state.closed {
             return Err(io::ErrorKind::BrokenPipe.into());
         }
+        let busy = is_busy(&frame);
+        if busy {
+            state.busy = Some(frame.clone());
+        }
         for (id, client) in &mut state.clients {
             if !client.connected {
                 continue;
             }
-            if client.rx.len() < QUEUE {
+            if busy && (client.pending_busy.is_some() || client.rx.len() >= QUEUE) {
+                // Only coalesce under congestion. Remove queued old statuses
+                // so none can undo the newer snapshot after it is delivered.
+                client.rx.retain(|frame| !is_busy(frame));
+                client.pending_busy = Some(frame.clone());
+            } else if client.rx.len() < QUEUE {
                 client.rx.push_back(frame.clone());
             } else if client
                 .warned
@@ -272,7 +294,14 @@ impl Client {
                 .unwrap()
                 .clients
                 .get_mut(&self.id)
-                .and_then(|c| c.rx.pop_front())
+                .and_then(|c| {
+                    c.pending_busy.take().or_else(|| {
+                        // Preserve control transition order while letting it
+                        // bypass a data backlog. The queue has at most QUEUE frames.
+                        let position = c.rx.iter().position(|frame| is_busy(frame)).unwrap_or(0);
+                        c.rx.remove(position)
+                    })
+                })
                 .map(|f| (f, 0));
         }
         write_frame(&mut self.stream, &mut self.output)?;
@@ -452,6 +481,109 @@ mod tests {
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
         stream
+    }
+
+    fn busy(state: u8) -> Frame {
+        vec![0xc0, 6, 0x8e, state, 0xc0].into()
+    }
+
+    #[test]
+    fn busy_state_survives_data_congestion_and_initializes_late_clients() -> Result<()> {
+        let hub = Hub::default();
+        hub.add(1);
+        for _ in 0..QUEUE {
+            hub.broadcast(frame(42))?;
+        }
+        hub.broadcast(busy(1))?;
+        hub.broadcast(busy(0))?;
+        hub.add(2);
+        {
+            let state = hub.state.lock().unwrap();
+            assert_eq!(state.clients[&1].rx.len(), QUEUE);
+            for id in [1, 2] {
+                assert_eq!(
+                    state.clients[&id].pending_busy.as_deref(),
+                    Some(busy(0).as_ref())
+                );
+            }
+        }
+        // Other hardware commands are ordinary frames, not cached state.
+        hub.broadcast(vec![0xc0, 6, 0x8d, 1, 0xc0].into())?;
+        hub.add(3);
+        assert_eq!(
+            hub.state.lock().unwrap().clients[&3]
+                .pending_busy
+                .as_deref(),
+            Some(busy(0).as_ref())
+        );
+        // Each new graph starts without a status snapshot from the old graph.
+        let next = Hub::default();
+        next.add(1);
+        assert!(
+            next.state.lock().unwrap().clients[&1]
+                .pending_busy
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn uncongested_clients_keep_each_transition() -> Result<()> {
+        let hub = Hub::default();
+        hub.add(1);
+        hub.broadcast(busy(1))?;
+        hub.broadcast(busy(0))?;
+        let state = hub.state.lock().unwrap();
+        let client = &state.clients[&1];
+        assert!(client.pending_busy.is_none());
+        assert_eq!(
+            client.rx.iter().map(|f| f.as_ref()).collect::<Vec<_>>(),
+            [busy(1).as_ref(), busy(0).as_ref()]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn latest_busy_replaces_queued_statuses_under_congestion() -> Result<()> {
+        let hub = Hub::default();
+        hub.add(1);
+        hub.broadcast(busy(1))?;
+        for _ in 1..QUEUE {
+            hub.broadcast(frame(42))?;
+        }
+        hub.broadcast(busy(0))?;
+        let state = hub.state.lock().unwrap();
+        let client = &state.clients[&1];
+        assert_eq!(client.pending_busy.as_deref(), Some(busy(0).as_ref()));
+        assert!(client.rx.iter().all(|frame| !is_busy(frame)));
+        Ok(())
+    }
+
+    #[test]
+    fn pending_busy_does_not_replace_a_partial_frame() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let mut peer = connect(listener.local_addr()?);
+        let (stream, _) = listener.accept()?;
+        let hub = Hub::default();
+        let mut client = Client::new(1, stream, &hub)?;
+        let first = busy(1);
+        client.stream.write_all(&first[..2])?;
+        client.output = Some((first.clone(), 2));
+        hub.broadcast(frame(42))?;
+        hub.broadcast(busy(0))?;
+        client.poll(&hub)?;
+        client.poll(&hub)?;
+        client.poll(&hub)?;
+        let mut received = vec![0; first.len() + busy(0).len() + frame(42).len()];
+        peer.read_exact(&mut received)?;
+        let expected: Vec<_> = first
+            .iter()
+            .chain(busy(0).iter())
+            .chain(frame(42).iter())
+            .copied()
+            .collect();
+        assert_eq!(received, expected);
+        Ok(())
     }
 
     #[test]

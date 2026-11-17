@@ -110,6 +110,21 @@
 //! pactl unload-module "$from_direwolf_module"
 //! ```
 //!
+//! ### Channel-busy notifications
+//!
+//! Add `--busy-threshold-db=-30` to report receive-power carrier detection to
+//! KISS clients. The threshold is dB relative to unit sample power, not dBm:
+//! SDR mode measures filtered IQ before FM demodulation; audio mode measures
+//! input audio power. Tune the threshold to your receiver's signal and noise.
+//! A 10 ms power average asserts busy at the threshold and clears 3 dB below it.
+//!
+//! The first state and subsequent changes produce MeshCore-compatible KISS
+//! SetHardware ChannelBusy frames: `C0 06 8E state C0` (0 clear, 1 busy).
+//! TCP clients receive the current state when joining an active graph. Slow
+//! clients retain the latest pending state; intermediate updates may coalesce.
+//! This reports carrier state; it does not inhibit transmission or run CSMA.
+//! Without this option, no detector branch or status frames are created.
+//!
 //! ### Radio PTT through rigctld
 //!
 //! Audio mode can key a radio through an existing rigctld TCP server:
@@ -142,6 +157,9 @@ use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::{parse_frequency, parse_verbosity};
 
+#[path = "bell202/busy.rs"]
+mod busy;
+
 #[cfg(any(feature = "audio", test))]
 #[path = "bell202/rigctld.rs"]
 mod rigctld;
@@ -168,6 +186,11 @@ struct Opt {
     /// Audio device sample rate, in Hz.
     #[arg(long, requires = "audio", default_value_t = 48000, value_parser = clap::value_parser!(u32).range(8000..))]
     audio_rate: u32,
+
+    /// Report channel busy above this receive power (dB relative to unit samples).
+    /// Uses a 10 ms power average; clears 3 dB below this threshold. Not dBm.
+    #[arg(long, allow_hyphen_values = true, value_parser = busy::parse_threshold)]
+    busy_threshold_db: Option<f64>,
 
     /// rigctld TCP address for audio-mode PTT; requires its default non-VFO mode.
     #[arg(long, requires = "audio", value_name = "HOST:PORT")]
@@ -303,6 +326,7 @@ fn receive_audio(
     g: &mut MTGraph,
     input: ReadStream<Float>,
     audio_rate: u32,
+    busy: Option<ReadStream<u8>>,
     opt: &Opt,
 ) -> Result<ReadStream<u8>> {
     // Keep the Hilbert transform's window and symbol timing at a fixed rate.
@@ -320,7 +344,7 @@ fn receive_audio(
                 .build(input)?,
         ]
     };
-    Ok(blockchain![
+    let prev = blockchain![
         g,
         prev,
         Hilbert::new(prev, 65, &rustradio::window::WindowType::Hamming)?,
@@ -347,9 +371,14 @@ fn receive_audio(
         BinarySlicer::new(prev)?,
         NrziDecode::new(prev)?,
         HdlcDeframer::new(prev, 10, 1500),
-        KissEncode::new(prev),
-        PduToStream::new(prev)?,
-    ])
+    ];
+    let (encoder, prev) = KissEncode::new(prev);
+    let encoder = match busy {
+        Some(busy) => encoder.with_busy(busy),
+        None => encoder,
+    };
+    g.add(Box::new(encoder));
+    Ok(blockchain![g, prev, PduToStream::new(prev)?])
 }
 
 #[cfg(feature = "audio")]
@@ -399,7 +428,7 @@ fn connect_audio(
 }
 
 #[cfg(feature = "soapysdr")]
-fn connect_sdr(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<ReadStream<Float>> {
+fn connect_sdr(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<busy::Receive<Float>> {
     let dev = soapysdr::Device::new(opt.driver.as_deref().unwrap())?;
     let freq = opt.freq.unwrap();
     let prev = tx;
@@ -419,7 +448,7 @@ fn connect_sdr(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<Read
             .on_eof(move || cancel.cancel())
             .build(prev)?,
     ));
-    Ok(blockchain![
+    let prev = blockchain![
         g,
         prev,
         SoapySdrSource::builder(&dev, freq, opt.sample_rate).build()?,
@@ -436,12 +465,20 @@ fn connect_sdr(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<Read
             .deci(opt.sample_rate as usize)
             .interp(50000)
             .build(prev)?,
-        QuadratureDemod::new(prev, 1.0)?,
-    ])
+    ];
+    let (prev, busy) = busy::tap(g, prev, 50_000.0, opt.busy_threshold_db, |sample| {
+        f64::from(sample.re).powi(2) + f64::from(sample.im).powi(2)
+    })?;
+    let audio = blockchain![g, prev, QuadratureDemod::new(prev, 1.0)?];
+    Ok((audio, busy))
 }
 
 #[cfg(not(feature = "soapysdr"))]
-fn connect_sdr(_g: &mut MTGraph, _opt: &Opt, _tx: ReadStream<Float>) -> Result<ReadStream<Float>> {
+fn connect_sdr(
+    _g: &mut MTGraph,
+    _opt: &Opt,
+    _tx: ReadStream<Float>,
+) -> Result<busy::Receive<Float>> {
     anyhow::bail!("SDR mode requires building with --features soapysdr")
 }
 
@@ -514,13 +551,20 @@ fn run_session(opt: &Opt, io: KissIo, g: &mut MTGraph) -> Result<()> {
     g.add(Box::new(source));
     let tx_rate = if opt.audio { opt.audio_rate } else { 48000 };
     let tx = transmit_audio(g, input, tx_rate)?;
-    let rx_audio = if opt.audio {
-        connect_audio(g, opt, tx)?
+    let (rx_audio, busy) = if opt.audio {
+        let input = connect_audio(g, opt, tx)?;
+        busy::tap(
+            g,
+            input,
+            opt.audio_rate as f64,
+            opt.busy_threshold_db,
+            |sample| f64::from(sample).powi(2),
+        )?
     } else {
         connect_sdr(g, opt, tx)?
     };
     let rx_rate = if opt.audio { opt.audio_rate } else { 50000 };
-    let output = receive_audio(g, rx_audio, rx_rate, opt)?;
+    let output = receive_audio(g, rx_audio, rx_rate, busy, opt)?;
     g.add(Box::new(WriterSink::new(output, kiss)));
     g.run()?;
     println!("{}", g.generate_stats().expect("failed to generate stats"));
@@ -573,7 +617,7 @@ mod tests {
         let mut g = MTGraph::new();
         let (source, input) = VectorSource::new(audio)?;
         g.add(Box::new(source));
-        let bytes = receive_audio(&mut g, input, rate, &opt)?;
+        let bytes = receive_audio(&mut g, input, rate, None, &opt)?;
         let sink = VectorSink::new(bytes, 10000);
         let hook = sink.hook();
         g.add(Box::new(sink));
@@ -685,6 +729,28 @@ mod tests {
         audio.resize(audio.len() + 24000, 0.0);
         assert_eq!(demodulate(audio, 48000)?, bytes);
         Ok(())
+    }
+
+    #[test]
+    fn busy_threshold_is_opt_in_and_validated_by_cli() {
+        assert!(
+            Opt::try_parse_from(["bell202", "--audio"])
+                .unwrap()
+                .busy_threshold_db
+                .is_none()
+        );
+        assert_eq!(
+            Opt::try_parse_from(["bell202", "--audio", "--busy-threshold-db", "-30"])
+                .unwrap()
+                .busy_threshold_db,
+            Some(-30.0)
+        );
+        for threshold in ["NaN", "inf", "-10000", "10000"] {
+            assert!(
+                Opt::try_parse_from(["bell202", "--audio", "--busy-threshold-db", threshold])
+                    .is_err()
+            );
+        }
     }
 
     #[test]
