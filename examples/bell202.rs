@@ -117,6 +117,8 @@
 //! SDR mode measures filtered IQ before FM demodulation; audio mode measures
 //! input audio power. Tune the threshold to your receiver's signal and noise.
 //! A 10 ms power average asserts busy at the threshold and clears 3 dB below it.
+//! Each transition is printed to stdout with the previous busy or idle period's
+//! duration, measured from the received samples.
 //!
 //! The first state and subsequent changes produce MeshCore-compatible KISS
 //! SetHardware ChannelBusy frames: `C0 06 8E state C0` (0 clear, 1 busy).

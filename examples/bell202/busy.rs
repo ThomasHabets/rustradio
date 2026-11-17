@@ -80,10 +80,28 @@ pub(super) fn tap<T: Sample>(
         return Ok((input, None));
     };
     let mut detector = Detector::new(rate, threshold)?;
+    let mut state_samples = 0u64;
     let (tee, data, level) = Tee::new(input)?;
     graph.add(Box::new(tee));
     let (map, busy) = Map::keep_tags(level, "ChannelBusy", move |value| {
-        detector.process(power(value))
+        let was_busy = detector.busy;
+        let state = detector.process(power(value));
+        if detector.busy != was_busy {
+            let (current, previous) = if detector.busy {
+                ("busy", "idle")
+            } else {
+                ("idle", "busy")
+            };
+            // Use sample time so buffering and scheduler delays do not distort
+            // the length of the received busy or idle period.
+            println!(
+                "Channel {current} ({previous} for {:.3}s)",
+                state_samples as f64 / rate
+            );
+            state_samples = 0;
+        }
+        state_samples += 1;
+        state
     })?;
     graph.add(Box::new(map));
     Ok((data, Some(busy)))
