@@ -18,7 +18,7 @@ use rustradio::blocks::*;
 use rustradio::graph::GraphRunner;
 use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, Float};
-use rustradio::{parse_frequency, parse_verbosity};
+use rustradio::{parse_duration, parse_frequency, parse_verbosity};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -56,11 +56,11 @@ struct Opt {
     clock_source: Option<String>,
 
     /// Message repeat interval.
-    #[arg(long, value_parser=humantime::parse_duration, default_value = "10s")]
+    #[arg(long, value_parser=parse_duration, default_value = "10s")]
     interval: std::time::Duration,
 
     /// GPS status interval.
-    #[arg(long, value_parser=humantime::parse_duration, default_value = "5s")]
+    #[arg(long, value_parser=parse_duration, default_value = "5s")]
     gps_interval: std::time::Duration,
 
     /// Message to beacon out.

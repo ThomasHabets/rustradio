@@ -63,7 +63,6 @@ stderrlog = "0.6"
 ctrlc = "3.4"
 ratatui = { version = "0.30", features = ["all-widgets"]}
 crossterm = "0.29"
-humantime = "2.2.0"
 rustyline = { version = "19.0.0", default-features = false, features = ["custom-bindings"] }
 # apt install libgoogle-perftools-dev google-perftools
 # Uncomment the PROFILER stuff in examples/ax25-1200-rx.rs

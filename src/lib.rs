@@ -866,6 +866,74 @@ pub fn parse_frequency(in_s: &str) -> std::result::Result<f64, String> {
     })? * mul)
 }
 
+/// Parse durations like "10s", "1.5ms", or "2m 30s".
+///
+/// Units are `ns`, `us` (also `µs`), `ms`, `s`, `m`, `h`, `d`, and `w`.
+/// Their full names, including plurals, are also accepted. Days are 24 hours
+/// and weeks are seven days. Multiple components are added together, with
+/// optional whitespace between numbers and units. Fractions are rounded to
+/// the nearest nanosecond.
+///
+/// For use with clap:
+///
+/// ```rust
+/// use rustradio::parse_duration;
+/// #[derive(clap::Parser)]
+/// struct Opt {
+///     #[arg(long, value_parser=parse_duration, default_value="10s")]
+///     interval: std::time::Duration,
+/// }
+/// ```
+///
+/// # Errors
+///
+/// If the input is empty, contains an invalid number or unit, is negative,
+/// or exceeds [`std::time::Duration`]'s range. Every number needs a unit.
+pub fn parse_duration(in_s: &str) -> std::result::Result<std::time::Duration, String> {
+    use std::time::Duration;
+    let mut remaining = in_s.trim();
+    if remaining.is_empty() {
+        return Err("empty string is not a duration".into());
+    }
+    let mut total = Duration::ZERO;
+    while !remaining.is_empty() {
+        let number_end = remaining
+            .find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(remaining.len());
+        let number = &remaining[..number_end];
+        let value = number
+            .parse::<f64>()
+            .map_err(|e| format!("Invalid duration number in {remaining:?}: {e}"))?;
+        remaining = remaining[number_end..].trim_start();
+        let unit_end = remaining
+            .find(|c: char| !c.is_alphabetic())
+            .unwrap_or(remaining.len());
+        let unit = &remaining[..unit_end];
+        let seconds = match unit {
+            "ns" | "nanosecond" | "nanoseconds" => 1e-9,
+            "us" | "µs" | "μs" | "microsecond" | "microseconds" => 1e-6,
+            "ms" | "millisecond" | "milliseconds" => 1e-3,
+            "s" | "sec" | "second" | "seconds" => 1.0,
+            "m" | "min" | "minute" | "minutes" => 60.0,
+            "h" | "hr" | "hour" | "hours" => 3600.0,
+            "d" | "day" | "days" => 86400.0,
+            "w" | "week" | "weeks" => 604800.0,
+            _ => {
+                return Err(format!(
+                    "Invalid duration unit {unit:?}; use ns/us/ms/s/m/h/d/w"
+                ));
+            }
+        };
+        let component = Duration::try_from_secs_f64(value * seconds)
+            .map_err(|e| format!("Invalid duration {number}{unit}: {e}"))?;
+        total = total
+            .checked_add(component)
+            .ok_or_else(|| format!("Duration {in_s:?} exceeds the supported range"))?;
+        remaining = remaining[unit_end..].trim_start();
+    }
+    Ok(total)
+}
+
 /// An in-memory sample that can be carried by processing blocks.
 ///
 /// Automatically implemented for types satisfying the storage and threading
@@ -1127,6 +1195,56 @@ pub mod tests {
                 (Ok(got), Some(want)) if got == *want => {}
                 (Ok(got), Some(want)) => panic!("For {i} got {got} want {want}"),
             }
+        }
+    }
+
+    #[test]
+    fn duration() {
+        use std::time::Duration;
+        for (input, expected) in [
+            ("0s", Duration::ZERO),
+            ("10s", Duration::from_secs(10)),
+            ("1.5ms", Duration::from_micros(1500)),
+            (".5s", Duration::from_millis(500)),
+            ("1ns", Duration::from_nanos(1)),
+            ("1us", Duration::from_micros(1)),
+            ("1µs", Duration::from_micros(1)),
+            ("1μs", Duration::from_micros(1)),
+            ("2m30s", Duration::from_secs(150)),
+            (
+                " 2 minutes 500 milliseconds ",
+                Duration::from_millis(120_500),
+            ),
+            ("1h 1d 1w", Duration::from_secs(3600 + 86400 + 604800)),
+            ("1.000000001s", Duration::from_nanos(1_000_000_001)),
+        ] {
+            assert_eq!(parse_duration(input).unwrap(), expected, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn invalid_durations() {
+        for input in [
+            "",
+            " ",
+            "s",
+            "10",
+            "-1s",
+            "+1s",
+            "NaNs",
+            "infs",
+            ".s",
+            "1..5s",
+            "10fortnights",
+            "1s garbage",
+            "1s -2s",
+            "1s 2",
+            "1e3s",
+            "1秒",
+            "99999999999999999999999999999999999999w",
+            "10000000000000000000s 10000000000000000000s",
+        ] {
+            assert!(parse_duration(input).is_err(), "{input:?}");
         }
     }
 
