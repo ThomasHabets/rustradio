@@ -54,8 +54,10 @@
 ///   unknown. Manual constructors use `Self { ... }.with_output_metadata()`
 ///   to apply the same derived rules. An optional output can be initialized
 ///   when attached using its generated `init_<field>_metadata()` method.
-/// * `default`: Skip this field as arg for the `new()` function, and instead
-///   default it.
+/// * `default`: Initialize this field with `Default` instead of accepting it
+///   as a `new()` argument. Can be combined with `in`; the field still counts
+///   as an input for processing and EOF. Optional inputs need custom EOF logic
+///   using `noeof`.
 /// * `into`: When the `new()` function is generated, let non-stream values
 ///   accept anything `.into()`-convertable into the given type, not just the
 ///   generated type directly.

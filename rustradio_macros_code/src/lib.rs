@@ -239,17 +239,6 @@ impl<'a> Parsed<'a> {
         })
     }
     #[must_use]
-    fn in_name_types(&self) -> Vec<proc_macro2::TokenStream> {
-        self.inputs
-            .iter()
-            .map(|field| {
-                let n = &field.ident;
-                let ty = &field.ty;
-                quote! { #n: #ty }
-            })
-            .collect()
-    }
-    #[must_use]
     fn parm_name_types(&self) -> Vec<proc_macro2::TokenStream> {
         self.parms
             .iter()
@@ -615,8 +604,19 @@ impl<'a> Parsed<'a> {
         }
         let name = self.name;
         let (impl_generics, ty_generics, where_clause) = &self.generics;
-        let in_names = self.in_names();
-        let in_name_types = self.in_name_types();
+        // Defaulted inputs still participate in processing and EOF generation,
+        // but their constructor values come only from Default.
+        let inputs: Vec<_> = self
+            .inputs
+            .iter()
+            .filter(|field| !has_attr(&field.attrs, "default", FIELD_ATTRS))
+            .collect();
+        let in_names = inputs.iter().map(|field| field.ident.as_ref().unwrap());
+        let in_name_types = inputs.iter().map(|field| {
+            let name = &field.ident;
+            let ty = &field.ty;
+            quote! { #name: #ty }
+        });
         let out_names = self.out_names();
         let parm_into_types = self.parm_into_types();
         let parm_into_names = self.parm_into_names();
@@ -930,6 +930,37 @@ mod tests {
     }
 
     #[test]
+    fn defaulted_inputs_are_not_constructor_arguments() {
+        for output in [quote! { WriteStream<u8> }, quote! { NCWriteStream<u8> }] {
+            let expansion = derive_block(quote! {
+                #[rustradio(new)]
+                struct MyBlock {
+                    #[rustradio(in)]
+                    src: ReadStream<u8>,
+                    #[rustradio(in, default)]
+                    auxiliary: DefaultInput,
+                    #[rustradio(out)]
+                    dst: #output,
+                    parameter: usize,
+                    #[rustradio(default)]
+                    state: bool,
+                }
+            });
+            let expansion = expansion.to_string();
+            let signature = quote! { pub fn new(src: ReadStream<u8>, parameter: usize) };
+            assert!(expansion.contains(&signature.to_string()), "{expansion}");
+            assert_eq!(
+                expansion
+                    .matches("auxiliary : < DefaultInput > :: default ()")
+                    .count(),
+                1
+            );
+            // The default annotation must not remove an input from EOF logic.
+            assert!(expansion.contains("self . auxiliary . eof ()"));
+        }
+    }
+
+    #[test]
     fn derive_custom_name() {
         let input = quote! { #[rustradio(custom_name)] struct MyBlock {} };
         let actual = derive_block(input);
@@ -1078,10 +1109,6 @@ mod tests {
             // In and.
             ("in and out", quote! {struct B { #[rustradio(in, out)] } }),
             ("in and into", quote! {struct B { #[rustradio(in, into)] } }),
-            (
-                "in and default",
-                quote! {struct B { #[rustradio(in, default)] } },
-            ),
             // Out and.
             (
                 "out and default",
