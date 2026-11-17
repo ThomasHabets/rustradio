@@ -261,11 +261,17 @@ fn get_kiss_stream(_opt: &Opt) -> Result<KissIo> {
     #[cfg(feature = "nix")]
     {
         use nix::pty::{OpenptyResult, openpty};
+        use nix::sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr};
         use std::ffi::CStr;
         use std::fs::File;
         use std::os::fd::AsRawFd;
         if let Some(path) = &_opt.tty {
             let OpenptyResult { master, slave } = openpty(None, None)?;
+            // KISS is binary. Disable line buffering, echo, and byte translation
+            // before exposing the slave to clients.
+            let mut settings = tcgetattr(&slave)?;
+            cfmakeraw(&mut settings);
+            tcsetattr(&slave, SetArg::TCSANOW, &settings)?;
             // SAFETY:
             // Input is from a successful openpty().
             let ptr = unsafe { libc::ptsname(master.as_raw_fd()) };
