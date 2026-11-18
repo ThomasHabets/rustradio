@@ -1,4 +1,9 @@
 use std::io::Read;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::Duration;
 
 use log::debug;
 
@@ -9,15 +14,16 @@ use crate::{Result, SampleEncoding};
 fn reader_thread<R: Read + Send + 'static>(
     mut reader: R,
     tx: std::sync::mpsc::SyncSender<Result<Vec<u8>>>,
+    stopped: &AtomicBool,
 ) {
-    loop {
-        let mut buf = vec![0; 1024];
+    let mut buf = [0; 1024];
+    while !stopped.load(Ordering::Relaxed) {
         let n = match reader.read(&mut buf) {
             Ok(n) => n,
             Err(e) => match e.kind() {
                 std::io::ErrorKind::Interrupted => continue,
                 std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => {
-                    // TODO: sleep?
+                    std::thread::sleep(Duration::from_millis(10));
                     continue;
                 }
                 _ => {
@@ -28,8 +34,7 @@ fn reader_thread<R: Read + Send + 'static>(
                 }
             },
         };
-        buf.truncate(n);
-        if let Err(e) = tx.send(Ok(buf)) {
+        if let Err(e) = tx.send(Ok(buf[..n].to_vec())) {
             debug!("ReaderSource reader thread failed to send data: {e}");
             return;
         }
@@ -42,8 +47,8 @@ fn reader_thread<R: Read + Send + 'static>(
 
 /// Arbitrary reader source.
 ///
-/// The underlying reader must periodically time out, or the graph will block on
-/// e.g. Ctrl-C.
+/// Use a reader that returns periodically if the worker must stop promptly
+/// when the block is dropped. An in-progress blocking read cannot be interrupted.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
 pub struct ReaderSource<T: SampleEncoding> {
@@ -51,24 +56,34 @@ pub struct ReaderSource<T: SampleEncoding> {
     #[rustradio(out)]
     dst: WriteStream<T>,
     rx: std::sync::mpsc::Receiver<Result<Vec<u8>>>,
+    stopped: Arc<AtomicBool>,
 }
 
 impl<T: SampleEncoding> ReaderSource<T> {
     pub fn new<R: Read + Send + 'static>(reader: R) -> Result<(Self, ReadStream<T>)> {
         let (dst, r) = crate::stream::new_stream()?;
         let (tx, rx) = std::sync::mpsc::sync_channel(2);
+        let stopped = Arc::new(AtomicBool::new(false));
+        let worker_stop = Arc::clone(&stopped);
         std::thread::Builder::new()
             .name("ReaderSourceReader".to_string())
-            .spawn(move || reader_thread(reader, tx))?;
+            .spawn(move || reader_thread(reader, tx, &worker_stop))?;
         Ok((
             Self {
                 buf: Vec::new(),
                 dst,
                 rx,
+                stopped,
             }
             .with_output_metadata(),
             r,
         ))
+    }
+}
+
+impl<T: SampleEncoding> Drop for ReaderSource<T> {
+    fn drop(&mut self) {
+        self.stopped.store(true, Ordering::Relaxed);
     }
 }
 
@@ -123,6 +138,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dropping_idle_reader_source_stops_worker() -> Result<()> {
+        struct IdleReader {
+            started: std::sync::mpsc::Sender<()>,
+            _lifetime: std::sync::mpsc::Sender<()>,
+        }
+        impl Read for IdleReader {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                let _ = self.started.send(());
+                Err(std::io::ErrorKind::WouldBlock.into())
+            }
+        }
+        let (started, reading) = std::sync::mpsc::channel();
+        let (lifetime, stopped) = std::sync::mpsc::channel();
+        let (source, _out) = ReaderSource::<u8>::new(IdleReader {
+            started,
+            _lifetime: lifetime,
+        })?;
+        reading.recv_timeout(Duration::from_secs(2)).unwrap();
+        drop(source);
+        assert_eq!(
+            stopped.recv_timeout(Duration::from_secs(2)),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
+        );
+        Ok(())
+    }
+
+    #[test]
     fn retries_interrupted_reads() -> Result<()> {
         struct InterruptedOnce(bool);
         impl Read for InterruptedOnce {
@@ -135,7 +177,7 @@ mod tests {
             }
         }
         let (tx, rx) = std::sync::mpsc::sync_channel(2);
-        reader_thread(InterruptedOnce(true), tx);
+        reader_thread(InterruptedOnce(true), tx, &AtomicBool::new(false));
         assert!(rx.recv().unwrap()?.is_empty());
         Ok(())
     }
