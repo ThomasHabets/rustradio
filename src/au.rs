@@ -103,6 +103,7 @@ impl AuEncode {
         v.extend(&[0, 0, 0, 0]);
 
         let (dst, dr) = crate::stream::new_stream()?;
+        dst.initialize_sample_rate(Some(f64::from(bitrate) * 2.0));
         Ok((
             Self {
                 header: Some(v),
