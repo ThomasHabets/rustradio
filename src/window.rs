@@ -142,7 +142,7 @@ fn blackman(m: usize) -> Window {
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
-        let m = m as Float;
+        let m = (m - 1) as Float;
 
         // Parameters.
         //
@@ -187,7 +187,7 @@ fn blackman_harris(m: usize) -> Window {
     let mut b = Vec::with_capacity(m);
     for n in 0..m {
         let n = n as Float;
-        let m = m as Float;
+        let m = (m - 1) as Float;
 
         // Formula.
         let t1 = 2.0 * PI * n / m;
