@@ -25,7 +25,10 @@ pub struct Vco {
 
 impl Vco {
     fn process_sync(&mut self, a: Float) -> Complex {
-        self.phase = (self.phase + self.k * f64::from(a)).rem_euclid(MX);
+        let phase = (self.phase + self.k * f64::from(a)).rem_euclid(MX);
+        if phase.is_finite() {
+            self.phase = phase;
+        }
         Complex::new(self.phase.cos() as Float, self.phase.sin() as Float)
     }
 }
