@@ -619,14 +619,27 @@ impl<'a> Parsed<'a> {
             let ty = &field.ty;
             quote! { #name: #ty }
         });
-        let out_names = self.out_names();
+
+        // Extract non-default outputs. They'll be parameters to `new()`, while
+        // the defaulted ones will just be defaulted. Their output status is not
+        // needed here.
+        let outputs: Vec<_> = self
+            .outputs
+            .iter()
+            .filter(|field| !has_attr(&field.attrs, "default", FIELD_ATTRS))
+            .collect();
+        let out_names: Vec<_> = outputs
+            .iter()
+            .map(|field| field.ident.as_ref().unwrap())
+            .collect();
+        let out_types: Vec<_> = outputs.iter().map(|field| &field.ty).collect();
+
         let parm_into_types = self.parm_into_types();
         let parm_into_names = self.parm_into_names();
         let parm_no_into_names = self.parm_no_into_names();
         let parm_name_types = self.parm_name_types();
         let fields_defaulted = self.fields_defaulted();
         let path = self.attrs.path();
-        let out_types: Vec<_> = self.outputs.iter().map(|field| &field.ty).collect();
         // Only copying outputs allocate a system buffer. No-copy queues keep
         // their infallible constructors.
         let copying_outputs: Vec<_> = out_types.iter().map(|ty| {
@@ -1116,10 +1129,6 @@ mod tests {
             ("in and out", quote! {struct B { #[rustradio(in, out)] } }),
             ("in and into", quote! {struct B { #[rustradio(in, into)] } }),
             // Out and.
-            (
-                "out and default",
-                quote! {struct B { #[rustradio(default, out)] } },
-            ),
             (
                 "out and into",
                 quote! {struct B { #[rustradio(out, into)] } },
