@@ -258,7 +258,7 @@ impl SoapySdrSourceBuilder<'_> {
     ///
     /// Normalized to 0.0 to 1.0.
     pub fn igain(mut self, igain: f64) -> Result<Self> {
-        if igain < 0.0 || igain > 1.0 {
+        if !(0.0..=1.0).contains(&igain) {
             return Err(Error::msg("input gain must be in range 0.0 - 1.0"));
         }
         self.igain = igain;

@@ -174,7 +174,7 @@ impl SoapySdrSinkBuilder<'_> {
     ///
     /// Normalized to 0.0 to 1.0.
     pub fn ogain(mut self, gain: f64) -> Result<Self> {
-        if gain < 0.0 || gain > 1.0 {
+        if !(0.0..=1.0).contains(&gain) {
             return Err(Error::msg("output gain must be in range 0.0 - 1.0"));
         }
         self.ogain = gain;
