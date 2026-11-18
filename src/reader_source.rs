@@ -90,6 +90,16 @@ where
                 };
                 let buf = buf?;
                 if buf.is_empty() {
+                    if !self.buf.is_empty() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::UnexpectedEof,
+                            format!(
+                                "Reader ended with {} of {size} bytes of a sample",
+                                self.buf.len()
+                            ),
+                        )
+                        .into());
+                    }
                     debug!("ReaderSource: input closed");
                     return Ok(BlockRet::EOF);
                 }

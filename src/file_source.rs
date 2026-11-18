@@ -113,6 +113,16 @@ where
                     self.filename.display(),
                     self.repeat
                 );
+                if !self.buf.is_empty() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        format!(
+                            "File ended with {} of {sample_size} bytes of a sample",
+                            self.buf.len()
+                        ),
+                    )
+                    .into());
+                }
                 if self.repeat.again() {
                     // If the file is empty, then this will basically busyloop.
                     // But who knows, the user may start writing to it later?
@@ -263,8 +273,7 @@ mod tests {
         let (mut src, src_out) = FileSource::<Float>::new(&tmpfn)?;
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
-        let ret = src.work()?;
-        assert!(matches![ret, BlockRet::EOF], "{ret:?}");
+        assert!(src.work().unwrap_err().to_string().contains("3 of 4 bytes"));
 
         let (res, _) = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
@@ -309,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn source_repeat_discards_partial_tail() -> Result<()> {
+    fn source_repeat_rejects_partial_tail() -> Result<()> {
         let tmpd = tempfile::tempdir()?;
         let tmpfn = tmpd.path().join("delme.bin");
         std::fs::write(&tmpfn, [1, 0, 0, 0, 0xff])?;
@@ -317,10 +326,11 @@ mod tests {
         let (mut src, src_out) = FileSource::<u32>::builder(&tmpfn)
             .repeat(crate::Repeat::finite(2))
             .build()?;
-        while !matches!(src.work()?, BlockRet::EOF) {}
+        assert!(matches!(src.work()?, BlockRet::Again));
+        assert!(src.work().unwrap_err().to_string().contains("1 of 4 bytes"));
 
         let (res, _) = src_out.read_buf()?;
-        assert_eq!(res.slice(), &[1, 1]);
+        assert_eq!(res.slice(), &[1]);
         Ok(())
     }
 
