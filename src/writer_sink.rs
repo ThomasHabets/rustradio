@@ -35,6 +35,9 @@ where
             if !self.buf.is_empty() {
                 let rc = match self.writer.write(&self.buf) {
                     Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        return Ok(BlockRet::Pending);
+                    }
                     result => result?,
                 };
                 if rc == 0 {
