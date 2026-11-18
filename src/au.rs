@@ -75,7 +75,9 @@ impl AuEncode {
             Encoding::Pcm16,
             "only encoding supported is PCM16"
         );
-        assert_eq!(channels, 1, "only mono supported at the moment");
+        if channels != 1 {
+            return Err(Error::msg("AU encoder only supports one channel"));
+        }
 
         let mut v = Vec::with_capacity(28);
 
