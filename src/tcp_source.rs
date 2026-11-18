@@ -22,8 +22,11 @@ pub struct TcpSource<T: SampleEncoding> {
 impl<T: SampleEncoding> TcpSource<T> {
     /// Connect to an address (such as a `SocketAddr` or `(host, port)`) and
     /// create a TCP source block.
-    pub fn new(addr: impl std::net::ToSocketAddrs) -> Result<(Self, ReadStream<T>)> {
-        let stream = std::net::TcpStream::connect(addr)?;
+    pub fn new(
+        addr: impl std::net::ToSocketAddrs + std::fmt::Debug,
+    ) -> Result<(Self, ReadStream<T>)> {
+        let stream = std::net::TcpStream::connect(&addr)
+            .map_err(|e| crate::Error::wrap(e, format!("connecting TCP source to {addr:?}")))?;
         stream.set_nonblocking(true)?;
         let (dst, dr) = crate::stream::new_stream()?;
         Ok((
