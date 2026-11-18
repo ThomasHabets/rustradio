@@ -1,5 +1,5 @@
 use crate::block::{Block, BlockEOF, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue};
+use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, TagValue, WriteStream};
 use crate::{Error, Result};
 use log::debug;
 
@@ -8,6 +8,7 @@ const KISS_FEND: u8 = 0xC0;
 const KISS_FESC: u8 = 0xDB;
 const KISS_TFEND: u8 = 0xDC;
 const KISS_TFESC: u8 = 0xDD;
+const KISS_DATA: u8 = 0x00;
 const KISS_SET_HARDWARE: u8 = 0x06;
 const MESHCORE_CHANNEL_BUSY: u8 = 0x8e;
 const ENCODE_PORT_TAG: &str = "KissEncode:port";
@@ -92,11 +93,37 @@ pub struct KissDecode {
     src: NCReadStream<Vec<u8>>,
     #[rustradio(out)]
     dst: NCWriteStream<Vec<u8>>,
+
+    // Optional edge-triggered output indicating channel busy.
+    #[rustradio(out, default)]
+    busy: Option<WriteStream<u8>>,
+    #[rustradio(default)]
+    busy_state: Option<u8>,
+}
+
+impl KissDecode {
+    /// Attach channel state: zero means clear, any nonzero value means busy.
+    pub fn busy(&mut self) -> Result<ReadStream<u8>> {
+        let (tx, rx) = crate::stream::new_stream()?;
+        self.busy = Some(tx);
+        Ok(rx)
+    }
 }
 
 impl Block for KissDecode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
+            if let Some(ref busy) = self.busy
+                && self.busy_state.is_some()
+            {
+                let mut o = busy.write_buf()?;
+                if o.is_empty() {
+                    return Ok(BlockRet::WaitForStream(busy, 1));
+                }
+                let b = self.busy_state.take().expect("impossible: we checked");
+                o.slice()[0] = b;
+                o.produce(1, vec![]);
+            }
             if self.dst.remaining() == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
@@ -114,12 +141,26 @@ impl Block for KissDecode {
                     continue;
                 }
             };
-            let port = out.remove(0);
-            if port & 0xF != 0 {
-                debug!("KissDecode: non-data packet: {port:02x} {out:02x?}");
-                continue;
+            let cmd = out.remove(0);
+            let port = (cmd >> 4) & 0xf;
+            match cmd & 0xf {
+                // Data.
+                KISS_DATA => {}
+                // Set hardware, channel busy.
+                KISS_SET_HARDWARE
+                    if out.len() == 2 && out[0] == MESHCORE_CHANNEL_BUSY && out[1] < 2 =>
+                {
+                    // We don't get here if there's a `busy` output and it's
+                    // already set, so no data is lost by blindly overwriting.
+                    self.busy_state = Some(out[1]);
+                    continue;
+                }
+                _ => {
+                    debug!("KissDecode: non-data/busy packet: {cmd:02x} {out:02x?}");
+                    continue;
+                }
             }
-            let port = (port >> 4) & 0xf;
+
             // Count encoded payload bytes without the possibly escaped command.
             let command_bytes = if x[0] == KISS_FESC { 2 } else { 1 };
             let zeros = tags.partition_point(|tag| tag.pos() == 0);
