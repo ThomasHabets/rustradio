@@ -158,7 +158,7 @@ enum DecodeState {
     WaitingMagic,
     WaitingSize,
     WaitingHeader(usize),
-    Data,
+    Data(Option<usize>),
 }
 
 /// .au file decoder.
@@ -195,6 +195,9 @@ impl AuDecode {
 
 impl Block for AuDecode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
+        if matches!(self.state, DecodeState::Data(Some(0))) {
+            return Ok(BlockRet::EOF);
+        }
         let (i, _tags) = self.src.read_buf()?;
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
@@ -249,11 +252,23 @@ impl Block for AuDecode {
                         "AU block only supports one channel currently, got {channels}"
                     )));
                 }
+                let size = u32::from_be_bytes(head[..4].try_into().unwrap());
+                let remaining = if size == u32::MAX {
+                    None
+                } else {
+                    if !size.is_multiple_of(2) {
+                        return Err(Error::msg("AU data length splits a PCM16 sample"));
+                    }
+                    Some(size as usize)
+                };
                 i.consume(header_rest_len);
-                self.state = DecodeState::Data;
+                self.state = DecodeState::Data(remaining);
             }
-            DecodeState::Data => {
-                let n = std::cmp::min(i.len(), o.len() * 2); // Bytes.
+            DecodeState::Data(remaining) => {
+                let n = i
+                    .len()
+                    .min(o.len() * 2)
+                    .min(remaining.unwrap_or(usize::MAX));
                 let n = n - (n & 1);
                 if n == 0 {
                     // Two bytes input, or one sample output.
@@ -278,6 +293,7 @@ impl Block for AuDecode {
                 o.fill_from_iter(v);
                 o.produce(n / 2, &[]);
                 i.consume(n);
+                self.state = DecodeState::Data(remaining.map(|left| left - n));
             }
         }
         Ok(BlockRet::Again)
@@ -287,6 +303,38 @@ impl Block for AuDecode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decode_respects_data_length() -> Result<()> {
+        for size in [0, 2, 3, u32::MAX] {
+            let bytes: Vec<_> = [AU_MAGIC, 24, size, Encoding::Pcm16 as u32, 48000, 1]
+                .into_iter()
+                .flat_map(u32::to_be_bytes)
+                .chain([0, 1, 0, 2])
+                .collect();
+            let (mut decoder, out) = AuDecode::new(ReadStream::from_slice(&bytes), 48000)?;
+            decoder.work()?;
+            decoder.work()?;
+            if size == 3 {
+                assert!(decoder.work().is_err());
+                continue;
+            }
+            decoder.work()?;
+            let result = decoder.work()?;
+            if size == 0 {
+                assert!(matches!(result, BlockRet::EOF));
+            } else if size == 2 {
+                assert!(matches!(decoder.work()?, BlockRet::EOF));
+            }
+            let expected = match size {
+                0 => 0,
+                2 => 1,
+                _ => 2,
+            };
+            assert_eq!(out.read_buf()?.0.len(), expected);
+        }
+        Ok(())
+    }
 
     #[test]
     fn encoder_waits_for_a_complete_sample() -> Result<()> {
