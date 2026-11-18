@@ -50,9 +50,15 @@ pub struct SymbolSync {
     _ted: Box<dyn Ted>,
     clock_filter: Box<dyn ClampedFilter<Float>>,
     last_sign: bool,
-    stream_pos: Float,
-    last_sym_boundary_pos: Float,
-    next_sym_middle: Float,
+    // A long run without a crossing can prevent rebasing. Keep enough
+    // precision to advance the clock one sample at a time on those runs.
+    //
+    // This will work for about 2^53 samples, or almost three years at 100Msps
+    // with the same symbol. If the symbol hasn't changed in three years, it
+    // won't.
+    stream_pos: f64,
+    last_sym_boundary_pos: f64,
+    next_sym_middle: f64,
     #[rustradio(in)]
     src: ReadStream<Float>,
     #[rustradio(
@@ -111,7 +117,7 @@ impl SymbolSync {
                 last_sign: false,
                 stream_pos: 0.0,
                 last_sym_boundary_pos: 0.0,
-                next_sym_middle: sps / 2.0,
+                next_sym_middle: f64::from(sps) / 2.0,
                 out_clock: None,
             }
             .with_output_metadata(),
@@ -168,7 +174,7 @@ impl Block for SymbolSync {
                     s.slice()[opos] = self.clock;
                 }
                 opos += 1;
-                self.next_sym_middle += self.clock;
+                self.next_sym_middle += f64::from(self.clock);
             }
             let sign = *sample > 0.0;
             if sign != self.last_sign {
@@ -179,13 +185,13 @@ impl Block for SymbolSync {
                         self.stream_pos,
                         self.last_sym_boundary_pos
                     );
-                    let mi = self.sps - self.max_deviation;
-                    let mx = self.sps + self.max_deviation;
+                    let mi = f64::from(self.sps - self.max_deviation);
+                    let mx = f64::from(self.sps + self.max_deviation);
                     let mut t = self.stream_pos - self.last_sym_boundary_pos;
-                    let pre = self.clock;
+                    let pre = f64::from(self.clock);
                     while t > mx {
-                        let t2 = t - self.clock;
-                        if (t - self.clock).abs() < (t2 - self.clock).abs() {
+                        let t2 = t - pre;
+                        if (t - pre).abs() < (t2 - pre).abs() {
                             break;
                         }
                         t = t2;
@@ -198,13 +204,14 @@ impl Block for SymbolSync {
                             self.last_sym_boundary_pos
                         );
                         self.clock = self.clock_filter.filter_clamped(
-                            t - self.sps,
-                            mi - self.sps,
-                            mx - self.sps,
+                            t as Float - self.sps,
+                            mi as Float - self.sps,
+                            mx as Float - self.sps,
                         ) + self.sps;
-                        self.next_sym_middle = self.last_sym_boundary_pos + self.clock / 2.0;
+                        self.next_sym_middle =
+                            self.last_sym_boundary_pos + f64::from(self.clock) / 2.0;
                         while self.next_sym_middle < self.stream_pos {
-                            self.next_sym_middle += self.clock;
+                            self.next_sym_middle += f64::from(self.clock);
                         }
                         trace!(
                             "SymbolSync: clock@{} pre={pre} now={t} min={mi} max={mx} => {}",
@@ -217,7 +224,7 @@ impl Block for SymbolSync {
             }
             self.stream_pos += 1.0;
             // Stay around zero so that we don't lose float precision.
-            let step_back = 10.0 * self.clock;
+            let step_back = 10.0 * f64::from(self.clock);
             if self.stream_pos > step_back
                 && self.last_sym_boundary_pos > step_back
                 && self.next_sym_middle > step_back
@@ -243,6 +250,24 @@ impl Block for SymbolSync {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn clock_advances_after_long_run_without_crossings() -> Result<()> {
+        let (mut block, samples) = SymbolSync::new(
+            ReadStream::from_slice(&[1.0; 16]),
+            4.0,
+            0.0,
+            Box::new(TedZeroCrossing::new()),
+            Box::new(crate::iir_filter::IirFilter::new([1.0])?),
+        )?;
+        // Resume at the point where an f32 position stops advancing by one.
+        block.last_sign = true;
+        block.stream_pos = 16_777_216.0;
+        block.next_sym_middle = block.stream_pos + 2.0;
+        block.work()?;
+        assert_eq!(samples.read_buf()?.0.slice(), &[1.0; 4]);
+        Ok(())
+    }
+
     #[test]
     fn repeated_clock_creation_preserves_the_existing_output() -> Result<()> {
         let (mut block, _samples) = SymbolSync::new(
