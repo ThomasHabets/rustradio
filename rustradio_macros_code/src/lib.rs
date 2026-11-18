@@ -78,6 +78,7 @@ enum SyncBlock {
 }
 
 #[derive(Default)]
+#[allow(clippy::struct_excessive_bools)]
 struct StructAttrs {
     internal: bool,
     custom_name: bool,
@@ -424,6 +425,7 @@ impl<'a> Parsed<'a> {
         })
     }
 
+    #[allow(clippy::too_many_lines)]
     #[must_use]
     fn expand_sync_work(&self) -> Option<TokenStream> {
         match self.attrs.sync {
@@ -809,6 +811,10 @@ impl<'a> Parsed<'a> {
 /// Backend function for the `rustradio_macros::Block` derive macro.
 ///
 /// Use the macro, not this function.
+///
+/// # Panics
+///
+/// Checks that there's at least one input and output for sync.
 #[must_use]
 pub fn derive_block(input: TokenStream) -> TokenStream {
     let input = syn::parse2::<syn::DeriveInput>(input).unwrap();
@@ -816,8 +822,8 @@ pub fn derive_block(input: TokenStream) -> TokenStream {
     // Sanity check.
     match p.attrs.sync {
         SyncBlock::Value | SyncBlock::Tag | SyncBlock::NoCopyTag => {
-            assert!(!p.inputs.is_empty());
-            assert!(!p.outputs.is_empty());
+            assert_ne!(p.inputs, [] as [&syn::Field; 0]);
+            assert_ne!(p.outputs, [] as [&syn::Field; 0]);
         }
         SyncBlock::General => {}
     }
