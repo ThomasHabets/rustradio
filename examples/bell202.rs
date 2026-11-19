@@ -552,18 +552,26 @@ pub fn main() -> Result<()> {
     ctrlc::set_handler(move || {
         eprintln!("Received Ctrl+C!");
         signal_stop.cancel();
-        if let Some(cancel) = signal_active.lock().unwrap().as_ref() {
+        if let Some(cancel) = signal_active
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+        {
             cancel.cancel();
         }
     })?;
     let session = |io| {
         let mut graph = MTGraph::new();
-        *active.lock().unwrap() = Some(graph.cancel_token());
+        *active
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(graph.cancel_token());
         if stop.is_canceled() {
             graph.cancel_token().cancel();
         }
         let result = run_session(&opt, io, &mut graph);
-        *active.lock().unwrap() = None;
+        *active
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         result
     };
     if let Some(address) = &opt.tcp_listen {
@@ -572,7 +580,11 @@ pub fn main() -> Result<()> {
             &stop,
             session,
             || {
-                if let Some(cancel) = active.lock().unwrap().as_ref() {
+                if let Some(cancel) = active
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .as_ref()
+                {
                     cancel.cancel();
                 }
             },
