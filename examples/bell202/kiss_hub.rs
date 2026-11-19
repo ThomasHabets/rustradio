@@ -99,7 +99,10 @@ impl Hub {
         self.ready.notify_all();
     }
     fn close(&self) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.closed = true;
         self.ready.notify_all();
     }
