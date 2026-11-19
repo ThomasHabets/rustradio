@@ -78,7 +78,7 @@ impl IqServer {
     fn catalog_entries(&self) -> Vec<(proto::StreamInfo, Option<(usize, Kind)>)> {
         self.observed
             .lock()
-            .unwrap()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .retain(|_, r| r.metadata.strong_count() > 0);
         let automatic = self.automatic.load(Ordering::Acquire);
         let mut entries = if automatic != AutomaticStreams::Disabled as u8 {
@@ -168,7 +168,12 @@ impl IqServer {
     /// `router` themselves call this alongside their HTTP server shutdown.
     pub fn shutdown(&self) {
         self.stopped.store(true, Ordering::Release);
-        for entry in self.observed.lock().unwrap().values() {
+        for entry in self
+            .observed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .values()
+        {
             let mut state = entry.resource.lock();
             state.stopped = true;
             state.eof = true;
@@ -199,7 +204,7 @@ impl IqServer {
             .or_else(|| {
                 self.observed
                     .lock()
-                    .unwrap()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .values()
                     .find(|r| r.resource.lock().description.source_id == name)
                     .map(|r| r.resource.pool.clone())
@@ -348,7 +353,10 @@ impl IqServer {
             .ok_or_else(|| Status::unimplemented("stream type has no IQ encoding"))?;
         let info = metadata.info();
         let resource = {
-            let mut resources = self.observed.lock().unwrap();
+            let mut resources = self
+                .observed
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if self.stopped.load(Ordering::Acquire) {
                 return Err(Status::unavailable("IQ server stopped"));
             }
