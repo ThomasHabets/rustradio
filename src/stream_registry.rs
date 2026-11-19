@@ -61,7 +61,9 @@ pub fn streams() -> Vec<StreamInfo> {
 }
 
 pub(crate) fn registered() -> Vec<Arc<Metadata>> {
-    let mut registry = registry().lock().unwrap();
+    let mut registry = registry()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     registry.retain(|_, (metadata, _)| metadata.strong_count() > 0);
     registry
         .values()
@@ -73,7 +75,9 @@ pub(crate) fn registered() -> Vec<Arc<Metadata>> {
 // storage. A mismatched item type is rejected by the checked downcast.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn lookup<T: 'static>(id: usize) -> Option<(Arc<Metadata>, Arc<TypedControl<T>>)> {
-    let registry = registry().lock().unwrap();
+    let registry = registry()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let (metadata, control) = registry.get(&id)?;
     Some((
         metadata.upgrade()?,

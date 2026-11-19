@@ -16,7 +16,9 @@ pub(crate) struct Metadata {
 }
 impl Metadata {
     pub fn new<T: 'static>(id: usize, messages: bool) -> Arc<Self> {
-        let mut registry = registry().lock().unwrap();
+        let mut registry = registry()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         registry.retain(|_, (m, _)| m.strong_count() > 0);
         let ret = Arc::new(Self {
             kind: Kind::of::<T>(messages),
@@ -35,15 +37,25 @@ impl Metadata {
     }
     pub fn register<T: 'static>(id: usize, control: Arc<TypedControl<T>>) {
         let control: Arc<dyn std::any::Any + Send + Sync> = control;
-        if let Some(entry) = registry().lock().unwrap().get_mut(&id) {
+        if let Some(entry) = registry()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get_mut(&id)
+        {
             entry.1 = Some(Arc::downgrade(&control));
         }
     }
     pub fn info(&self) -> StreamInfo {
-        self.info.lock().unwrap().clone()
+        self.info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
     pub fn name(&self) -> String {
-        self.info.lock().unwrap().name()
+        self.info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .name()
     }
     pub fn set_name(&self, requested: impl Into<String>) {
         self.assign_name(requested.into(), true);
@@ -55,8 +67,14 @@ impl Metadata {
         if requested.is_empty() {
             return;
         }
-        let registry = registry().lock().unwrap();
-        let id = self.info.lock().unwrap().id;
+        let registry = registry()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let id = self
+            .info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .id;
         let occupied = |name: &str| {
             // Reserve every canonical generated name for its owner, including
             // IDs that have not been allocated yet.
@@ -84,7 +102,10 @@ impl Metadata {
                 format!("{requested}-{id}-{suffix}")
             };
         }
-        let mut info = self.info.lock().unwrap();
+        let mut info = self
+            .info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if explicit {
             info.name = Some(name);
         } else {
@@ -92,23 +113,35 @@ impl Metadata {
         }
     }
     pub fn sample_rate(&self) -> Option<f64> {
-        self.info.lock().unwrap().sample_rate_hz
+        self.info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .sample_rate_hz
     }
     pub fn set_sample_rate(&self, rate: f64) -> crate::Result<()> {
         if !rate.is_finite() || rate <= 0.0 {
             return Err(crate::Error::msg("sample rate must be finite and positive"));
         }
-        self.info.lock().unwrap().sample_rate_hz = Some(rate);
+        self.info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .sample_rate_hz = Some(rate);
         Ok(())
     }
     /// Mark completion once the producer and any outstanding write window close.
     pub fn set_ended(&self) {
-        self.info.lock().unwrap_or_else(|p| p.into_inner()).ended = true;
+        self.info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .ended = true;
     }
 
     #[cfg(test)]
     pub fn ended(&self) -> bool {
-        self.info.lock().unwrap().ended
+        self.info
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .ended
     }
 }
 
