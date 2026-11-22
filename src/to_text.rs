@@ -25,7 +25,7 @@ use std::fmt::Write;
 use log::debug;
 
 use crate::block::{Block, BlockEOF, BlockRet};
-use crate::stream::{ReadStream, WriteStream};
+use crate::stream::{ReadStream, StreamWait, WriteStream};
 use crate::{Result, Sample};
 
 /// Turn samples into text.
@@ -88,6 +88,14 @@ impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
             }
             let out = (outs.join(" ") + "\n").into_bytes();
             let mut o = self.dst.write_buf()?;
+            if let Some(capacity) = self.dst.wait_capacity()
+                && out.len() > capacity
+            {
+                return Err(crate::Error::msg(format!(
+                    "ToText row of {} bytes exceeds buffer capacity of {capacity} bytes",
+                    out.len()
+                )));
+            }
             if out.len() > o.len() {
                 return Ok(BlockRet::WaitForStream(&self.dst, out.len()));
             }
