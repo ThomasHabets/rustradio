@@ -104,6 +104,9 @@ pub struct KissDecode {
 impl KissDecode {
     /// Attach channel state: zero means clear, any nonzero value means busy.
     pub fn busy(&mut self) -> Result<ReadStream<u8>> {
+        if self.busy.is_some() {
+            return Err(Error::msg("KissDecode busy output already created"));
+        }
         let (tx, rx) = crate::stream::new_stream()?;
         self.busy = Some(tx);
         Ok(rx)
