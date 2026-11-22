@@ -194,9 +194,7 @@ pub trait StreamWait {
     /// `None` means there is no known hard limit. In particular, no-copy
     /// input queues may grow beyond their advertised capacity.
     #[must_use]
-    fn wait_capacity(&self) -> Option<usize> {
-        None
-    }
+    fn wait_capacity(&self) -> Option<usize>;
 
     /// Wait for "a while" or until `need` samples are available/space available.
     ///
@@ -511,6 +509,9 @@ impl<T: Send> StreamWait for NCReadStream<T> {
             )
             .unwrap();
         WaitOutcome::from_available(s.queue.len(), need, self.closed())
+    }
+    fn wait_capacity(&self) -> Option<usize> {
+        None
     }
 
     #[cfg(feature = "async")]

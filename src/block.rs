@@ -144,6 +144,9 @@ mod tests {
         fn wait(&self, _need: usize) -> crate::stream::WaitOutcome {
             crate::stream::WaitOutcome::Closed
         }
+        fn wait_capacity(&self) -> Option<usize> {
+            None
+        }
         #[cfg(feature = "async")]
         async fn wait_async(&self, _need: usize) -> crate::stream::WaitOutcome {
             crate::stream::WaitOutcome::Closed
