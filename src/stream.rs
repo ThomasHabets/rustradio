@@ -104,6 +104,29 @@ impl Tag {
     }
 }
 
+/// A buffer allocation size, distinct from a count of stream items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ByteCount(pub(crate) usize);
+
+impl ByteCount {
+    /// Create a count of bytes.
+    #[must_use]
+    pub const fn new(bytes: usize) -> Self {
+        Self(bytes)
+    }
+
+    /// Return the count in bytes.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
+    /// Number of complete elements of the given byte size.
+    pub(crate) fn samples(self, element_size: usize) -> usize {
+        self.0 / element_size
+    }
+}
+
 /// Default stream size in bytes. A multiple of the system page size.
 pub(crate) const DEFAULT_STREAM_SIZE: usize = 4_096_000;
 
@@ -133,7 +156,7 @@ static STREAM_SIZE: AtomicUsize = AtomicUsize::new(DEFAULT_STREAM_SIZE);
 ///
 /// Returns an error, leaving the size unchanged, if `bytes` is zero, too
 /// large to map twice, or not a multiple of the system page size.
-pub fn set_stream_size(bytes: usize) -> Result<()> {
+pub fn set_stream_size(ByteCount(bytes): ByteCount) -> Result<()> {
     if bytes == 0 || bytes > isize::MAX as usize / 2 {
         return Err(Error::msg("unsupported stream size"));
     }
@@ -149,8 +172,8 @@ pub fn set_stream_size(bytes: usize) -> Result<()> {
 ///
 /// See [`set_stream_size`].
 #[must_use]
-pub fn stream_size() -> usize {
-    STREAM_SIZE.load(Ordering::Relaxed)
+pub fn stream_size() -> ByteCount {
+    ByteCount(STREAM_SIZE.load(Ordering::Relaxed))
 }
 
 const DEFAULT_NOCOPY_CAPACITY: usize = 1_000;
@@ -229,7 +252,7 @@ impl<T: Copy + Sync + Send + 'static> StreamWait for ReadStream<T> {
         self.circ.id()
     }
     fn wait_capacity(&self) -> Option<usize> {
-        Some(self.circ.total_size())
+        Some(self.capacity())
     }
     fn wait(&self, need: usize) -> WaitOutcome {
         self.wait_for_read(need)
@@ -249,7 +272,7 @@ impl<T: Copy + Send + Sync> StreamWait for WriteStream<T> {
         self.circ.id()
     }
     fn wait_capacity(&self) -> Option<usize> {
-        Some(self.circ.total_size())
+        Some(self.capacity())
     }
     fn wait(&self, need: usize) -> WaitOutcome {
         self.wait_for_write(need)
@@ -286,13 +309,6 @@ impl<T: Default + Copy> ReadStream<T> {
         wb.produce(data.len(), &[]);
         circ.close_writer();
         Self { circ }
-    }
-
-    /// Return total length of underlying circular buffer (before the
-    /// mapping doubling).
-    #[must_use]
-    pub fn total_size(&self) -> usize {
-        self.circ.total_size()
     }
 
     /// Return a `BufferReader` allowing you to read from the stream, and
@@ -336,6 +352,12 @@ impl<T: Copy> ReadStream<T> {
 }
 
 impl<T> ReadStream<T> {
+    /// Total buffer capacity in samples, regardless of current occupancy.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.circ.capacity()
+    }
+
     /// Return true if there is nothing more ever to read from the stream.
     #[must_use]
     pub fn eof(&self) -> bool {
@@ -375,6 +397,12 @@ impl<T> StreamReadSide for WriteStream<T> {
 }
 
 impl<T: Copy> WriteStream<T> {
+    /// Total buffer capacity in samples, regardless of current occupancy.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.circ.capacity()
+    }
+
     /// Return free space in the stream, in samples.
     #[must_use]
     pub fn free(&self) -> usize {
@@ -874,6 +902,19 @@ pub fn common_sample_rate(rates: impl IntoIterator<Item = Option<f64>>) -> Optio
 mod tests {
 
     #[test]
+    fn copying_stream_capacity_counts_samples() -> crate::Result<()> {
+        use super::{StreamWait, new_stream, stream_size};
+
+        let (writer, reader) = new_stream::<f32>()?;
+        let samples = stream_size().get() / size_of::<f32>();
+        assert_eq!(reader.capacity(), samples);
+        assert_eq!(reader.wait_capacity(), Some(samples));
+        assert_eq!(writer.capacity(), samples);
+        assert_eq!(writer.wait_capacity(), Some(samples));
+        Ok(())
+    }
+
+    #[test]
     fn rejected_stream_sizes_leave_the_size_unchanged() {
         // Only rejected sizes here: other tests in this process rely on the default.
         let before = stream_size();
@@ -882,7 +923,10 @@ mod tests {
             rejected.extend([1, 4095]);
         }
         for bytes in rejected {
-            assert!(set_stream_size(bytes).is_err(), "{bytes}");
+            assert!(
+                set_stream_size(crate::stream::ByteCount::new(bytes)).is_err(),
+                "{bytes}"
+            );
             assert_eq!(stream_size(), before);
         }
     }

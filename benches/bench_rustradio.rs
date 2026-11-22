@@ -326,12 +326,14 @@ fn bench_stream_tags_none(b: &mut Bencher) {
 
 #[cfg(feature = "wasm")]
 fn bench_wasm_window(b: &mut Bencher, count: usize, fill: u8, wrapped: bool) {
-    let buffer = std::sync::Arc::new(rustradio::sys::Buffer::<u32>::new(65536).unwrap());
+    let buffer = std::sync::Arc::new(
+        rustradio::sys::Buffer::<u32>::new(rustradio::stream::ByteCount::new(65536)).unwrap(),
+    );
     let samples = vec![42u32; count];
     b.bytes = (count * std::mem::size_of::<u32>()) as u64;
     b.iter(|| {
         if wrapped {
-            let capacity = buffer.total_size();
+            let capacity = buffer.capacity();
             let padding = capacity - count / 2;
             let mut writer = buffer.clone().write_buf().unwrap();
             writer.slice()[..padding].fill(0);
@@ -349,7 +351,7 @@ fn bench_wasm_window(b: &mut Bencher, count: usize, fill: u8, wrapped: bool) {
         std::hint::black_box(reader.slice());
         reader.consume(count);
         if wrapped {
-            let remaining = buffer.total_size() - count / 2;
+            let remaining = buffer.capacity() - count / 2;
             let mut writer = buffer.clone().write_buf().unwrap();
             writer.slice()[..remaining].fill(0);
             writer.produce(remaining, &[]);

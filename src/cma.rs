@@ -33,7 +33,7 @@ impl CmaEqualizer {
         step_size: Float,
         src: ReadStream<Complex>,
     ) -> Result<(Self, ReadStream<Complex>)> {
-        if ntaps == 0 || ntaps > src.total_size() {
+        if ntaps == 0 || ntaps > src.capacity() {
             return Err(crate::Error::msg(
                 "CMA tap count must fit the input stream capacity",
             ));
@@ -124,7 +124,7 @@ impl Block for CmaEqualizer {
 mod tests {
     #[test]
     fn rejects_invalid_configuration_before_processing() {
-        let capacity = ReadStream::<Complex>::from_slice(&[]).total_size();
+        let capacity = ReadStream::<Complex>::from_slice(&[]).capacity();
         for count in [0, capacity + 1, usize::MAX] {
             assert!(CmaEqualizer::new(count, 1.0, 0.0, ReadStream::from_slice(&[])).is_err());
         }

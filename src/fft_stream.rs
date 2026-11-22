@@ -44,7 +44,7 @@ impl FftStream {
     /// FFT planning.
     pub fn new(src: ReadStream<Complex>, size: usize) -> Result<(Self, ReadStream<Complex>)> {
         let (dst, dr) = crate::stream::new_stream()?;
-        if size == 0 || size > src.total_size() || size > dr.total_size() {
+        if size == 0 || size > src.capacity() || size > dr.capacity() {
             return Err(Error::msg(
                 "FFT size must be nonzero and fit stream capacity",
             ));

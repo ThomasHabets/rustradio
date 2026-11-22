@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use wasm_bindgen::prelude::*;
 
-use crate::stream::Tag;
+use crate::stream::{ByteCount, Tag};
 use crate::stream_tags::StreamTags;
 use crate::{Error, Result};
 
@@ -90,7 +90,8 @@ struct BufferState<T> {
 
 impl<T: Default> BufferState<T> {
     /// Size in bytes.
-    fn new(byte_size: usize) -> Result<Self> {
+    fn new(bytes: ByteCount) -> Result<Self> {
+        let byte_size = bytes.0;
         const {
             assert!(std::mem::size_of::<T>() != 0);
         }
@@ -99,7 +100,7 @@ impl<T: Default> BufferState<T> {
         if byte_size == 0 {
             return Err(Error::msg("byte size must not be zero"));
         }
-        let size = byte_size / member_size;
+        let size = bytes.samples(member_size);
         if !byte_size.is_multiple_of(member_size) {
             return Err(Error::msg(format!(
                 "Buffer size ({byte_size}) must be multiple of element size ({member_size})"
@@ -190,10 +191,11 @@ pub struct Buffer<T> {
     _control: Option<Arc<crate::stream_observer::TypedControl<T>>>,
 }
 impl<T: Default + Copy + Send + 'static> Buffer<T> {
-    pub fn new(size: usize) -> Result<Self> {
+    /// Create a buffer with the given byte capacity.
+    pub fn new(bytes: ByteCount) -> Result<Self> {
         let id = crate::NEXT_STREAM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let metadata = crate::stream_metadata::Metadata::new::<T>(id, false);
-        let state = Mutex::new(BufferState::new(size)?);
+        let state = Mutex::new(BufferState::new(bytes)?);
         let inner = Arc::new(BufferInner { metadata, state });
         let control =
             (inner.metadata.kind != crate::stream_observer::Kind::Unsupported).then(|| {
@@ -240,7 +242,9 @@ impl<T> Buffer<T> {
     pub fn consume(&self, n: usize) {
         self.inner.state.lock().unwrap().consume(n);
     }
-    pub fn total_size(&self) -> usize {
+    /// Total buffer capacity in samples.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
         self.inner.state.lock().unwrap().capacity()
     }
     pub fn wait_for_write(&self, _need: usize) -> usize {
@@ -564,7 +568,7 @@ mod tests {
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
     fn buffer() -> Arc<Buffer<u32>> {
-        Arc::new(Buffer::new(64).unwrap())
+        Arc::new(Buffer::new(ByteCount::new(64)).unwrap())
     }
 
     #[test]
@@ -579,7 +583,7 @@ mod tests {
                 Self(0)
             }
         }
-        let buffer = Arc::new(Buffer::<Sample>::new(64).unwrap());
+        let buffer = Arc::new(Buffer::<Sample>::new(ByteCount::new(64)).unwrap());
         assert_eq!(CALLS.load(Ordering::Relaxed), 32);
         let mut writer = buffer.clone().write_buf().unwrap();
         let allocation = writer.slice().as_ptr();

@@ -336,7 +336,7 @@ where
             .len()
             .checked_add(deci - 1)
             .ok_or_else(|| Error::msg("FIR input window size overflow"))?;
-        if need > src.total_size() {
+        if need > src.capacity() {
             return Err(Error::msg("FIR input window exceeds stream capacity"));
         }
         if let Some(translation) = &translation
@@ -950,7 +950,7 @@ mod tests {
                 .build(input())
                 .is_err()
         );
-        let capacity = input().total_size();
+        let capacity = input().capacity();
         assert!(
             FirFilter::builder([Complex::default(); 2])
                 .deci(capacity)

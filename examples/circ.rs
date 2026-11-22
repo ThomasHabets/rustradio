@@ -1,11 +1,12 @@
 //! Experimentation area for circular buffers.
 use anyhow::Result;
 
+use rustradio::stream::ByteCount;
 use rustradio::sys::circular_buffer::Buffer;
 use std::sync::Arc;
 
 fn main() -> Result<()> {
-    let b = Arc::new(Buffer::new(4096)?);
+    let b = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
     let b2 = b.clone();
     std::thread::spawn(move || {

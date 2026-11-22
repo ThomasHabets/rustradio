@@ -12,7 +12,7 @@ use libc::{MAP_FAILED, MAP_FIXED, MAP_SHARED, PROT_READ, PROT_WRITE};
 use libc::{c_uchar, c_void, size_t};
 use log::error;
 
-use crate::stream::Tag;
+use crate::stream::{ByteCount, Tag};
 use crate::stream_tags::StreamTags;
 use crate::{Error, Result};
 
@@ -89,14 +89,14 @@ impl Drop for Map {
 /// Circular buffer dealing in bytes.
 #[derive(Debug)]
 pub struct Circ {
-    len: usize,
+    len: ByteCount,
     map: Map,
     _map2: Map, // Held on to for the Drop.
 }
 
 impl Circ {
     /// Create a new circular buffer.
-    fn new(size: usize) -> Result<Self> {
+    fn new(ByteCount(size): ByteCount) -> Result<Self> {
         fn set_len(f: &std::fs::File, size: usize) -> Result<()> {
             f.set_len(size as u64)
                 .map_err(|e| Error::wrap(e, format!("circular buffer temp file set_len({size})")))
@@ -122,7 +122,7 @@ impl Circ {
         set_len(&f, size)?;
 
         Ok(Self {
-            len: size_x2,
+            len: ByteCount(size_x2),
             map,
             _map2: map2,
         })
@@ -130,11 +130,8 @@ impl Circ {
 
     /// Return length of buffer, *before* the double mapping, in bytes.
     #[must_use]
-    pub fn total_size(&self) -> usize {
-        // self.len is number of bytes in the entire buffer. The
-        // mapping is 2x the writable size when the buffer is empty,
-        // which is what's relevant to callers.
-        self.len / 2
+    pub fn capacity_bytes(&self) -> ByteCount {
+        ByteCount(self.len.0 / 2)
     }
 
     /// Borrow a mutable window of initialized elements.
@@ -147,16 +144,16 @@ impl Circ {
     #[must_use]
     unsafe fn full_buffer<T>(&self, start: usize, end: usize) -> &mut [T] {
         let ez = std::mem::size_of::<T>();
-        assert!(ez != 0 && self.len.is_multiple_of(ez));
+        assert!(ez != 0 && self.len.0.is_multiple_of(ez));
         assert!(start <= end);
         assert!(
-            end - start <= self.len / ez / 2,
+            end - start <= self.len.samples(ez) / 2,
             "requested {start} to {end} ({} entries) of {} but len is {}",
             end - start,
             ez,
-            self.len
+            self.len.0
         );
-        assert!(end <= self.len / ez);
+        assert!(end <= self.len.samples(ez));
         // SAFETY: the caller guarantees initialization and exclusive access;
         // the bounds above keep the slice inside the mapping.
         unsafe { std::slice::from_raw_parts_mut(self.map.base.cast::<T>().add(start), end - start) }
@@ -170,10 +167,10 @@ unsafe impl Sync for Circ {}
 
 #[derive(Debug)]
 struct BufferState<T> {
-    rpos: usize,        // In samples.
-    wpos: usize,        // In samples.
-    used: usize,        // In samples.
-    circ_len: usize,    // In bytes.
+    rpos: usize, // In samples.
+    wpos: usize, // In samples.
+    used: usize, // In samples.
+    circ_len: ByteCount,
     member_size: usize, // In bytes.
     tags: StreamTags,
     reader_active: bool,
@@ -200,7 +197,7 @@ impl<T> BufferState<T> {
     /// Total capacity of this buffer, ignoring fullness. In samples.
     #[must_use]
     fn capacity(&self) -> usize {
-        self.circ_len / self.member_size
+        self.circ_len.samples(self.member_size)
     }
 
     /// How many samples fit to be written.
@@ -415,7 +412,7 @@ impl<T> Buffer<T> {
     /// Size is in bytes and must be a positive multiple of the page size
     /// and element size. Elements must be nonzero sized. The write storage
     /// starts with valid default values; zero bits need not be valid for `T`.
-    pub fn new(size: usize) -> Result<Self>
+    pub fn new(bytes: ByteCount) -> Result<Self>
     where
         T: Copy + Default + Send + 'static,
     {
@@ -423,6 +420,7 @@ impl<T> Buffer<T> {
             assert!(std::mem::size_of::<T>() != 0);
         }
 
+        let size = bytes.0;
         let member_size = std::mem::size_of::<T>();
         if size == 0 || size > isize::MAX as usize / 2 {
             return Err(Error::msg("unsupported circular buffer size"));
@@ -433,13 +431,13 @@ impl<T> Buffer<T> {
         if !size.is_multiple_of(crate::sys::page_size()?) {
             return Err(Error::msg("buffer size must be a multiple of page size"));
         }
-        let circ = Circ::new(size)?;
+        let circ = Circ::new(bytes)?;
         if !(circ.map.base as usize).is_multiple_of(std::mem::align_of::<T>()) {
             return Err(Error::msg("element alignment exceeds mapping alignment"));
         }
         // Initialize through raw writes before creating any typed reference.
         // Only the first mapping needs initialization: the second aliases it.
-        for index in 0..size / member_size {
+        for index in 0..bytes.samples(member_size) {
             // SAFETY: the mapping is aligned, large enough, and exclusively
             // owned here. Copy elements need no destructor on overwrite/unmap.
             unsafe { circ.map.base.cast::<T>().add(index).write(T::default()) };
@@ -451,7 +449,7 @@ impl<T> Buffer<T> {
                 rpos: 0,
                 wpos: 0,
                 used: 0,
-                circ_len: size,
+                circ_len: bytes,
                 member_size: std::mem::size_of::<T>(),
                 tags: StreamTags::default(),
                 reader_active: false,
@@ -502,11 +500,11 @@ impl<T> Buffer<T> {
     /// Return length of buffer, ignoring how much is in use, and the
     /// double buffer.
     #[must_use]
-    pub fn total_size(&self) -> usize {
-        self.circ.total_size() / self.member_size
+    pub fn capacity(&self) -> usize {
+        self.circ.capacity_bytes().samples(self.member_size)
     }
 
-    /// Available space to write, in bytes.
+    /// Available space to write, in samples.
     #[must_use]
     pub fn free(&self) -> usize {
         self.state.lock.lock().unwrap().free()
@@ -646,7 +644,7 @@ impl<T: Copy> Buffer<T> {
             s.free() >= n,
             "tried to produce {n}, but only {} is free out of {}",
             s.free(),
-            self.total_size()
+            self.capacity()
         );
         assert!(
             s.write_capacity() >= n,
@@ -740,7 +738,7 @@ mod tests {
                 Self(std::num::NonZeroU8::new(7).unwrap())
             }
         }
-        let buffer = Arc::new(Buffer::<Nonzero>::new(4096)?);
+        let buffer = Arc::new(Buffer::<Nonzero>::new(ByteCount::new(4096))?);
         let mut writer = buffer.clone().write_buf()?;
         assert!(writer.slice().iter().all(|sample| sample.0.get() == 7));
         writer.produce(4096, &[]);
@@ -751,9 +749,9 @@ mod tests {
 
     #[test]
     fn rejects_invalid_buffer_layouts() {
-        assert!(Buffer::<u8>::new(0).is_err());
-        assert!(Buffer::<u8>::new(4095).is_err());
-        assert!(Buffer::<[u8; 3]>::new(4096).is_err());
+        assert!(Buffer::<u8>::new(ByteCount::new(0)).is_err());
+        assert!(Buffer::<u8>::new(ByteCount::new(4095)).is_err());
+        assert!(Buffer::<[u8; 3]>::new(ByteCount::new(4096)).is_err());
     }
 
     use super::*;
@@ -761,7 +759,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn async_read_wait_reports_buffered_samples() -> Result<()> {
-        let buffer = Arc::new(Buffer::<u8>::new(4096)?);
+        let buffer = Arc::new(Buffer::<u8>::new(ByteCount::new(4096))?);
         let mut writer = buffer.clone().write_buf()?;
         writer.fill_from_slice(&[1, 2, 3]);
         writer.produce(3, &[]);
@@ -780,7 +778,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn async_write_wait_reports_free_samples() -> Result<()> {
-        let buffer = Arc::new(Buffer::<u8>::new(4096)?);
+        let buffer = Arc::new(Buffer::<u8>::new(ByteCount::new(4096))?);
         let mut writer = buffer.clone().write_buf()?;
         writer.fill_from_slice(&[1, 2, 3]);
         writer.produce(3, &[]);
@@ -801,8 +799,8 @@ mod tests {
 
     #[test]
     fn circ_reqlen() -> Result<()> {
-        let circ = Circ::new(4096)?;
-        assert_eq!(circ.total_size(), 4096);
+        let circ = Circ::new(ByteCount(4096))?;
+        assert_eq!(circ.capacity_bytes().get(), 4096);
         // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
         // are retained, and invalid bounds panic before borrowing.
         assert!(unsafe { circ.full_buffer::<u32>(0, 0) }.is_empty());
@@ -825,20 +823,20 @@ mod tests {
     #[test]
     #[should_panic]
     fn circ_reqlen_too_big() {
-        let _ = Circ::new(usize::MAX);
+        let _ = Circ::new(ByteCount(usize::MAX));
     }
 
     // We can calculate it, but we either can't create that big a tempfile, or
     // we can't map it.
     #[test]
     fn circ_reqlen_too_big_half() {
-        assert!(Circ::new(usize::MAX >> 1).is_err());
+        assert!(Circ::new(ByteCount(usize::MAX >> 1)).is_err());
     }
 
     #[test]
     #[should_panic]
     fn circ_reqlen_too_big_beginning() {
-        if let Ok(circ) = Circ::new(4096) {
+        if let Ok(circ) = Circ::new(ByteCount(4096)) {
             // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
             // are retained, and invalid bounds panic before borrowing.
             let _ = unsafe { circ.full_buffer::<u32>(0, 1025) };
@@ -848,7 +846,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn circ_reqlen_too_big_middle() {
-        if let Ok(circ) = Circ::new(4096) {
+        if let Ok(circ) = Circ::new(ByteCount(4096)) {
             // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
             // are retained, and invalid bounds panic before borrowing.
             let _ = unsafe { circ.full_buffer::<u32>(10, 1024 + 11) };
@@ -858,7 +856,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn circ_past_end() {
-        if let Ok(circ) = Circ::new(4096) {
+        if let Ok(circ) = Circ::new(ByteCount(4096)) {
             // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
             // are retained, and invalid bounds panic before borrowing.
             let _ = unsafe { circ.full_buffer::<u32>(2040, 2049) };
@@ -867,8 +865,8 @@ mod tests {
 
     #[test]
     fn circ_circular() -> Result<()> {
-        let circ = Circ::new(4096)?;
-        assert_eq!(circ.total_size(), 4096);
+        let circ = Circ::new(ByteCount(4096))?;
+        assert_eq!(circ.capacity_bytes().get(), 4096);
         let first = {
             // SAFETY: fresh mappings contain valid zeroed u32s; no aliases
             // are retained, and invalid bounds panic before borrowing.
@@ -887,7 +885,7 @@ mod tests {
 
     #[test]
     fn typical() -> Result<()> {
-        let b = Arc::new(Buffer::new(4096)?);
+        let b = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
         // Initial.
         assert!(b.clone().read_buf()?.0.is_empty());
@@ -975,7 +973,7 @@ mod tests {
 
     #[test]
     fn two_writes() -> Result<()> {
-        let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(4096)?);
+        let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
         // Write 10 bytes.
         {
@@ -1022,7 +1020,7 @@ mod tests {
 
     #[test]
     fn exact_overflow() -> Result<()> {
-        let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(4096)?);
+        let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
         // Initial.
         assert!(b.clone().read_buf()?.0.is_empty());
@@ -1042,7 +1040,7 @@ mod tests {
 
     #[test]
     fn with_float() -> Result<()> {
-        let b: Arc<Buffer<Float>> = Arc::new(Buffer::new(4096)?);
+        let b: Arc<Buffer<Float>> = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
         // Initial.
         assert!(b.clone().read_buf()?.0.is_empty());

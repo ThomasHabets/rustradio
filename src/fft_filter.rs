@@ -286,7 +286,7 @@ impl<T: Engine> FftFilter<T> {
         let (dst, dr) = crate::stream::new_stream()?;
         // Each round needs one contiguous output window of this many samples.
         // Larger batches would wait for space that the output can never provide.
-        if nsamples > dr.total_size() {
+        if nsamples > dr.capacity() {
             return Err(crate::Error::msg(
                 "FFT filter batch exceeds output stream capacity",
             ));

@@ -367,7 +367,7 @@ mod tests {
         use crate::stream::{StreamWait, WaitOutcome, new_stream};
 
         let (writer, reader) = new_stream::<u32>()?;
-        let capacity = reader.total_size();
+        let capacity = reader.capacity();
         let mut state = StreamWaitState::default();
         assert_eq!(state.limit("test", &reader, capacity), capacity);
         assert!(!state.warned);

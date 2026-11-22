@@ -25,7 +25,7 @@ impl<T: Sample> StreamChunks<T> {
         src: ReadStream<T>,
         size: usize,
     ) -> Result<(Self, crate::stream::NCReadStream<Vec<T>>)> {
-        if size == 0 || size > src.total_size() {
+        if size == 0 || size > src.capacity() {
             return Err(Error::msg(
                 "StreamChunks size must be nonzero and fit input capacity",
             ));
@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn rejects_chunks_larger_than_input_capacity() {
         let (_tx, rx) = crate::stream::new_stream::<u32>().unwrap();
-        let size = rx.total_size() + 1;
+        let size = rx.capacity() + 1;
         assert!(StreamChunks::new(rx, size).is_err());
     }
 
