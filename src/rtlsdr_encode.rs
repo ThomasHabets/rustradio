@@ -37,16 +37,15 @@ impl Block for RtlSdrEncode {
                 return Ok(BlockRet::WaitForStream(&self.dst, 2));
             }
             let isamples = std::cmp::min(input.len(), out.len() / 2);
-            let osamples = isamples * 2;
             assert_ne!(isamples, 0);
 
-            out.fill_from_iter(
+            let osamples = out.fill_from_iter(
                 input
                     .slice()
                     .iter()
                     .take(isamples)
                     .flat_map(|sample| [encode_sample(sample.re), encode_sample(sample.im)]),
-            );
+            )?;
             input.consume(isamples);
             out.produce(osamples, &[]);
         }

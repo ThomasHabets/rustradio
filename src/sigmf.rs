@@ -608,7 +608,7 @@ where
             .take(samples)
             .map(T::parse)
             .collect::<Result<Vec<_>>>()?;
-        o.fill_from_iter(parsed);
+        let samples = o.fill_from_iter(parsed)?;
         // TODO: add tags just like FileSource.
         o.produce(samples, &[]);
         self.buf.drain(..(samples * sample_size));

@@ -29,18 +29,16 @@ impl Block for RtlSdrDecode {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
             let isamples = std::cmp::min(isamples, out.len() * 2);
-            let osamples = isamples / 2;
-            assert_ne!(osamples, 0);
+            assert_ne!(isamples, 0);
 
-            out.fill_from_iter(
-                input
-                    .slice()
+            let osamples = out.fill_from_iter(
+                input.slice()[..isamples]
                     .as_chunks::<2>()
                     .0
                     .iter()
                     .map(|e| (Float::from(e[0]), Float::from(e[1])))
                     .map(|(a, b)| Complex::new((a - 127.0) * 0.008, (b - 127.0) * 0.008)),
-            );
+            )?;
             input.consume(isamples);
             out.produce(osamples, &[]);
         }

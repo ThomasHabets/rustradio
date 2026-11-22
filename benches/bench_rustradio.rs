@@ -344,7 +344,9 @@ fn bench_wasm_window(b: &mut Bencher, count: usize, fill: u8, wrapped: bool) {
         match fill {
             0 => writer.slice()[..count].copy_from_slice(&samples),
             1 => writer.fill_from_slice(&samples[..]),
-            _ => writer.fill_from_iter(samples.iter().copied()),
+            _ => {
+                writer.fill_from_iter(samples.iter().copied()).unwrap();
+            }
         }
         writer.produce(count, &[]);
         let (reader, _) = buffer.clone().read_buf().unwrap();

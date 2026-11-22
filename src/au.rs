@@ -280,21 +280,13 @@ impl Block for AuDecode {
                     }
                     return Ok(BlockRet::WaitForStream(&self.dst, 1));
                 }
-                let v = i
-                    .iter()
-                    .take(n)
-                    .copied()
-                    .collect::<Vec<u8>>()
+                let samples = i.slice()[..n]
                     .as_chunks::<2>()
                     .0
                     .iter()
-                    .map(|chunk| {
-                        let bytes = [chunk[0], chunk[1]];
-                        Float::from(i16::from_be_bytes(bytes)) / 32767.0
-                    })
-                    .collect::<Vec<Float>>();
-                o.fill_from_iter(v);
-                o.produce(n / 2, &[]);
+                    .map(|bytes| Float::from(i16::from_be_bytes(*bytes)) / 32767.0);
+                let written = o.fill_from_iter(samples)?;
+                o.produce(written, &[]);
                 i.consume(n);
                 self.state = DecodeState::Data(remaining.map(|left| left - n));
             }

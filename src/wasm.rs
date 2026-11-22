@@ -426,14 +426,18 @@ pub struct BufferWriter<T> {
 }
 
 impl<T> BufferWriter<T> {
-    /// Copy from an iterator, stopping at the end of the write window.
-    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
+    /// Copy samples into this window and return the number written.
+    ///
+    /// # Errors
+    ///
+    /// If the input exceeds the window, the window has been filled and one
+    /// extra item has been taken from the iterator. Drop the window to discard
+    /// the write, or refill it before producing.
+    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) -> Result<usize> {
         self.prepared = 0;
         let stream = self.stream.as_mut().expect("writer storage");
-        for (place, item) in stream[..self.len].iter_mut().zip(src) {
-            *place = item;
-            self.prepared += 1;
-        }
+        self.prepared = crate::stream::fill_from_iter(&mut stream[..self.len], src)?;
+        Ok(self.prepared)
     }
 
     #[must_use]
@@ -633,7 +637,7 @@ mod tests {
         let (reader, _) = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice().as_ptr(), allocation);
         let mut writer = buffer.clone().write_buf().unwrap();
-        writer.fill_from_iter([16, 17]);
+        assert_eq!(writer.fill_from_iter([16, 17]).unwrap(), 2);
         writer.produce(2, &[]);
         // An outstanding reader owns a snapshot, independent of subsequent writes.
         assert_eq!(reader.slice(), [11, 12, 13, 14, 15]);
@@ -650,7 +654,7 @@ mod tests {
         let mut writer = buffer.clone().write_buf().unwrap();
         let allocation = writer.slice().as_ptr();
         writer.fill_from_slice(&[1, 2, 3, 4]);
-        writer.fill_from_iter([5, 6]);
+        assert_eq!(writer.fill_from_iter([5, 6]).unwrap(), 2);
         assert_eq!(writer.prepared, 2);
         assert_eq!(writer.stream.as_ref().unwrap().as_ptr(), allocation);
         writer.produce(2, &[]);
@@ -658,8 +662,8 @@ mod tests {
         assert_eq!(reader.slice(), [5, 6]);
         reader.consume(2);
         let mut writer = buffer.clone().write_buf().unwrap();
-        writer.fill_from_iter(0..100);
-        assert_eq!(writer.prepared, 16);
+        assert!(writer.fill_from_iter(0..100).is_err());
+        assert_eq!(writer.prepared, 0);
         writer.fill_from_slice(&[7]);
         assert_eq!(writer.prepared, 1);
         writer.produce(1, &[]);
@@ -677,7 +681,7 @@ mod tests {
         let writer = buffer.clone().write_buf().unwrap();
         assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(1, &[]))).is_err());
         let mut writer = buffer.clone().write_buf().unwrap();
-        writer.fill_from_iter([1, 2]);
+        assert_eq!(writer.fill_from_iter([1, 2]).unwrap(), 2);
         assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(3, &[]))).is_err());
         assert!(buffer.is_empty());
         assert!(buffer.clone().write_buf().is_ok());
@@ -687,7 +691,7 @@ mod tests {
     fn owned_tags_do_not_allow_producing_unprepared_samples() {
         let buffer = buffer();
         let mut writer = buffer.clone().write_buf().unwrap();
-        writer.fill_from_iter([1, 2]);
+        assert_eq!(writer.fill_from_iter([1, 2]).unwrap(), 2);
         assert!(catch_unwind(AssertUnwindSafe(|| writer.produce(3, vec![]))).is_err());
         assert!(buffer.is_empty());
         let mut writer = buffer.clone().write_buf().unwrap();

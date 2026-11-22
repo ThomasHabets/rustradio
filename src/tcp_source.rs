@@ -93,8 +93,7 @@ where
             v.push(T::parse(&buffer[pos..pos + size])?);
         }
         self.buf.extend(&buffer[n - remaining..n]);
-        let n = v.len();
-        o.fill_from_iter(v);
+        let n = o.fill_from_iter(v)?;
         o.produce(n, &[]);
         Ok(BlockRet::Again)
     }

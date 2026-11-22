@@ -311,12 +311,15 @@ impl<T: Copy> BufferWriter<T> {
         unsafe { self.parent.circ.full_buffer::<T>(self.start, self.end) }
     }
 
-    /// Shortcut to save typing for the common operation of copying
-    /// from an iterator.
-    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) {
-        for (place, item) in self.slice().iter_mut().zip(src) {
-            *place = item;
-        }
+    /// Copy samples into this window and return the number written.
+    ///
+    /// # Errors
+    ///
+    /// If the input exceeds the window, the window has been filled and one
+    /// extra item has been taken from the iterator. Drop the window to discard
+    /// the write, or refill it before producing.
+    pub fn fill_from_iter(&mut self, src: impl IntoIterator<Item = T>) -> Result<usize> {
+        crate::stream::fill_from_iter(self.slice(), src)
     }
 
     /// Shortcut to save typing for the common operation of copying

@@ -52,3 +52,24 @@ fn custom_sample_without_encoding_flows_through_processing_blocks() -> Result<()
     );
     Ok(())
 }
+
+#[test]
+fn iterator_fill_reports_count_and_rejects_overflow() -> Result<()> {
+    let (output, input) = rustradio::stream::new_stream::<u8>()?;
+    let mut window = output.write_buf()?;
+    let capacity = window.len();
+    let mut oversized = std::iter::repeat_n(7, capacity + 2);
+    assert!(window.fill_from_iter(&mut oversized).is_err());
+    assert_eq!(oversized.len(), 1);
+    drop(window);
+    assert!(input.read_buf()?.0.is_empty());
+
+    let mut window = output.write_buf()?;
+    assert_eq!(window.fill_from_iter([])?, 0);
+    assert_eq!(window.fill_from_iter([3, 4])?, 2);
+    let written = window.fill_from_iter(std::iter::repeat_n(5, capacity))?;
+    assert_eq!(written, capacity);
+    window.produce(written, &[]);
+    assert!(input.read_buf()?.0.iter().all(|sample| *sample == 5));
+    Ok(())
+}

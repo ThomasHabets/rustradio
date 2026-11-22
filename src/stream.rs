@@ -22,6 +22,23 @@ use async_trait::async_trait;
 
 use crate::{Error, Float, Len, Result};
 
+pub(crate) fn fill_from_iter<T>(dst: &mut [T], src: impl IntoIterator<Item = T>) -> Result<usize> {
+    let mut src = src.into_iter();
+    for (index, slot) in dst.iter_mut().enumerate() {
+        let Some(sample) = src.next() else {
+            return Ok(index);
+        };
+        *slot = sample;
+    }
+    if src.next().is_some() {
+        return Err(Error::msg(format!(
+            "input exceeds write window of {} samples",
+            dst.len()
+        )));
+    }
+    Ok(dst.len())
+}
+
 /// Tag position in the current stream.
 pub type TagPos = usize;
 
