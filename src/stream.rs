@@ -122,8 +122,10 @@ impl ByteCount {
     }
 
     /// Number of complete elements of the given byte size.
-    pub(crate) fn samples(self, element_size: usize) -> usize {
-        self.0 / element_size
+    pub(crate) fn samples<T>(self) -> usize {
+        let size = std::mem::size_of::<T>();
+        debug_assert!(self.0.is_multiple_of(size));
+        self.0 / size
     }
 }
 

@@ -100,12 +100,12 @@ impl<T: Default> BufferState<T> {
         if byte_size == 0 {
             return Err(Error::msg("byte size must not be zero"));
         }
-        let size = bytes.samples(member_size);
         if !byte_size.is_multiple_of(member_size) {
             return Err(Error::msg(format!(
                 "Buffer size ({byte_size}) must be multiple of element size ({member_size})"
             )));
         }
+        let size = bytes.samples::<T>();
         let stream = std::iter::repeat_with(T::default).take(size).collect();
         Ok(Self {
             rpos: 0,

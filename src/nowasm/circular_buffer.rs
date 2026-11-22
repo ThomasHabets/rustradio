@@ -147,13 +147,13 @@ impl Circ {
         assert!(ez != 0 && self.len.0.is_multiple_of(ez));
         assert!(start <= end);
         assert!(
-            end - start <= self.len.samples(ez) / 2,
+            end - start <= self.len.samples::<T>() / 2,
             "requested {start} to {end} ({} entries) of {} but len is {}",
             end - start,
             ez,
             self.len.0
         );
-        assert!(end <= self.len.samples(ez));
+        assert!(end <= self.len.samples::<T>());
         // SAFETY: the caller guarantees initialization and exclusive access;
         // the bounds above keep the slice inside the mapping.
         unsafe { std::slice::from_raw_parts_mut(self.map.base.cast::<T>().add(start), end - start) }
@@ -171,7 +171,6 @@ struct BufferState<T> {
     wpos: usize, // In samples.
     used: usize, // In samples.
     circ_len: ByteCount,
-    member_size: usize, // In bytes.
     tags: StreamTags,
     reader_active: bool,
     writer_active: bool,
@@ -197,7 +196,7 @@ impl<T> BufferState<T> {
     /// Total capacity of this buffer, ignoring fullness. In samples.
     #[must_use]
     fn capacity(&self) -> usize {
-        self.circ_len.samples(self.member_size)
+        self.circ_len.samples::<T>()
     }
 
     /// How many samples fit to be written.
@@ -402,7 +401,6 @@ pub struct Buffer<T> {
     state: Arc<BufferInner<T>>,
     _control: Option<Arc<crate::stream_observer::TypedControl<T>>>,
     circ: Circ,
-    member_size: usize,
     dummy: std::marker::PhantomData<T>,
 }
 
@@ -437,7 +435,7 @@ impl<T> Buffer<T> {
         }
         // Initialize through raw writes before creating any typed reference.
         // Only the first mapping needs initialization: the second aliases it.
-        for index in 0..bytes.samples(member_size) {
+        for index in 0..bytes.samples::<T>() {
             // SAFETY: the mapping is aligned, large enough, and exclusively
             // owned here. Copy elements need no destructor on overwrite/unmap.
             unsafe { circ.map.base.cast::<T>().add(index).write(T::default()) };
@@ -450,7 +448,6 @@ impl<T> Buffer<T> {
                 wpos: 0,
                 used: 0,
                 circ_len: bytes,
-                member_size: std::mem::size_of::<T>(),
                 tags: StreamTags::default(),
                 reader_active: false,
                 writer_active: false,
@@ -472,7 +469,6 @@ impl<T> Buffer<T> {
             id,
             state,
             _control: control,
-            member_size: std::mem::size_of::<T>(),
             circ,
             dummy: std::marker::PhantomData,
         })
@@ -501,7 +497,7 @@ impl<T> Buffer<T> {
     /// double buffer.
     #[must_use]
     pub fn capacity(&self) -> usize {
-        self.circ.capacity_bytes().samples(self.member_size)
+        self.circ.capacity_bytes().samples::<T>()
     }
 
     /// Available space to write, in samples.
