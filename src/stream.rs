@@ -183,6 +183,9 @@ impl WaitOutcome {
 ///
 /// For `ReadStream`, wait until there's enough to read.
 /// For `WriteStream`, wait until there's enough to write something.
+///
+/// This is used by graphs to be able to type-agnostically wait for whatever
+/// stream a block returns with `BlockRet::WaitForStream`.
 #[async_trait]
 pub trait StreamWait {
     /// ID shared between read and write side.
@@ -193,6 +196,11 @@ pub trait StreamWait {
     ///
     /// `None` means there is no known hard limit. In particular, no-copy
     /// input queues may grow beyond their advertised capacity.
+    ///
+    /// This is used to verify that what a block requests is even possible to
+    /// wait for. If a block truly requires that many samples, then it will
+    /// never be satisfied. It should then start buffering internally, or
+    /// otherwise become happy with making progress from fewer samples.
     #[must_use]
     fn wait_capacity(&self) -> Option<usize>;
 
@@ -211,8 +219,6 @@ pub trait StreamWait {
     /// Wait for "a while" or until `need` samples are available/space available.
     ///
     /// Returns the same outcomes as [`Self::wait`].
-    ///
-    /// `must_use` implied by async/Future.
     #[cfg(feature = "async")]
     async fn wait_async(&self, need: usize) -> WaitOutcome;
 }
