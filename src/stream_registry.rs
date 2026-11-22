@@ -11,8 +11,9 @@ use crate::stream_observer::TypedControl;
 pub struct StreamInfo {
     /// Process-wide stream identity, shared by both endpoints.
     pub id: usize,
-    /// Explicit stream name; `None` uses the name derived from `id`.
-    pub name: Option<String>,
+    /// Name assigned explicitly to this stream, if any.
+    #[serde(rename = "name")]
+    pub explicit_name: Option<String>,
     /// Automatic producer/output name, independent of explicit naming.
     #[serde(default)]
     pub auto_name: Option<String>,
@@ -31,7 +32,7 @@ impl StreamInfo {
     /// Return the explicit name, automatic output name, or `stream-{id}`.
     #[must_use]
     pub fn name(&self) -> String {
-        self.name
+        self.explicit_name
             .clone()
             .or_else(|| self.auto_name.clone())
             .unwrap_or_else(|| format!("stream-{}", self.id))

@@ -87,7 +87,7 @@ impl IqServer {
                 .filter_map(|metadata| {
                     let encoding = super::observer::encoding(metadata.kind)?;
                     let info = metadata.info();
-                    if automatic == AutomaticStreams::Named as u8 && info.name.is_none() {
+                    if automatic == AutomaticStreams::Named as u8 && info.explicit_name.is_none() {
                         return None;
                     }
                     Some((

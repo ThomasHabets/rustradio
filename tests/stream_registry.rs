@@ -11,12 +11,13 @@ fn inventory_tracks_metadata_updates_and_completion() -> Result<()> {
     let (writer, reader) = new_stream::<f32>()?;
     let name = reader.name();
     let original = info(&name);
-    assert!(original.name.is_none());
+    assert!(original.explicit_name.is_none());
     assert_eq!(original.id, writer.id());
     assert_eq!(original.name(), format!("stream-{}", original.id));
     let json = serde_json::to_value(&original)?;
     assert_eq!(json["id"], original.id);
-    assert!(json["name"].is_null());
+    assert_eq!(json.get("name"), Some(&serde_json::Value::Null));
+    assert!(json.get("explicit_name").is_none());
     assert!(json.get("named").is_none());
     assert!(!original.messages);
     assert!(!original.ended);
@@ -24,9 +25,9 @@ fn inventory_tracks_metadata_updates_and_completion() -> Result<()> {
     assert_eq!(original.sample_type, std::any::type_name::<f32>());
 
     let writer = writer.with_name("");
-    assert!(info(&name).name.is_none());
+    assert!(info(&name).explicit_name.is_none());
     let writer = writer.with_name(&name).with_sample_rate(48_000.)?;
-    assert_eq!(info(&name).name.as_deref(), Some(name.as_str()));
+    assert_eq!(info(&name).explicit_name.as_deref(), Some(name.as_str()));
     assert_eq!(info(&name).sample_rate_hz, Some(48_000.));
     let reader = reader.with_sample_rate(96_000.)?;
     assert_eq!(info(&name).sample_rate_hz, Some(96_000.));
@@ -35,7 +36,10 @@ fn inventory_tracks_metadata_updates_and_completion() -> Result<()> {
     assert!(!streams().iter().any(|s| s.name() == name));
     assert_eq!(reader.name(), renamed);
     let writer = writer.with_name("");
-    assert_eq!(info(&renamed).name.as_deref(), Some(renamed.as_str()));
+    assert_eq!(
+        info(&renamed).explicit_name.as_deref(),
+        Some(renamed.as_str())
+    );
     assert_eq!(info(&renamed).id, original.id);
     drop(writer);
     assert!(info(&renamed).ended);
@@ -121,7 +125,7 @@ fn concurrent_names_remain_unique_and_inventory_is_sorted() -> Result<()> {
             .iter()
             .find(|s| s.name() == reader.name())
             .unwrap();
-        assert!(entry.name.is_some());
+        assert!(entry.explicit_name.is_some());
     }
     Ok(())
 }

@@ -12,7 +12,7 @@ fn names_rates_overrides_and_snapshot() -> Result<()> {
     assert!(right.name().starts_with("auto/Tee/dst2"));
     assert_ne!(left.name(), right.name());
     let entry = streams().into_iter().find(|s| s.id == left.id()).unwrap();
-    assert!(entry.name.is_none());
+    assert!(entry.explicit_name.is_none());
     assert_eq!(entry.auto_name.as_deref(), Some(left.name().as_str()));
     assert_eq!(left.sample_rate(), Some(48_000.));
     let _writer = writer.with_sample_rate(96_000.)?;

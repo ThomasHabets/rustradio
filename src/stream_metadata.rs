@@ -24,7 +24,7 @@ impl Metadata {
             kind: Kind::of::<T>(messages),
             info: Mutex::new(StreamInfo {
                 id,
-                name: None,
+                explicit_name: None,
                 auto_name: None,
                 sample_type: std::any::type_name::<T>().into(),
                 messages,
@@ -107,7 +107,7 @@ impl Metadata {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if explicit {
-            info.name = Some(name);
+            info.explicit_name = Some(name);
         } else {
             info.auto_name = Some(name);
         }
@@ -157,9 +157,9 @@ mod tests {
         let requested = format!("stream-{second_id}");
         first.set_name(&requested);
         assert_eq!(first.name(), format!("{requested}-{first_id}"));
-        assert!(first.info().name.is_some());
+        assert!(first.info().explicit_name.is_some());
         let second = Metadata::new::<u8>(second_id, false);
         assert_eq!(second.name(), requested);
-        assert!(second.info().name.is_none());
+        assert!(second.info().explicit_name.is_none());
     }
 }
