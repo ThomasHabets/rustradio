@@ -55,9 +55,9 @@ impl Block for Midpointer {
         if self.dst.remaining() == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
-        let v = match self.src.pop() {
+        let (v, tags) = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
-            Some((x, _tags)) => x,
+            Some(burst) => burst,
         };
         let mean: Float = v.iter().sum::<Float>() / v.len() as Float;
         if mean.is_nan() {
@@ -75,7 +75,7 @@ impl Block for Midpointer {
             let offset = low + (high - low) / 2.0;
             // TODO: record position of burst.
             self.dst
-                .push(v.iter().map(|t| t - offset).collect::<Vec<_>>(), &[]);
+                .push(v.iter().map(|t| t - offset).collect::<Vec<_>>(), tags);
         }
         Ok(BlockRet::Again)
     }
@@ -270,5 +270,20 @@ mod tests {
         let (_, tags) = block.process_one(&samples).expect("periodic signal");
         let frequency = tags.iter().find(|tag| tag.key() == "frequency").unwrap();
         assert_eq!(frequency.val(), &TagValue::Float(1200.0));
+    }
+}
+
+#[cfg(test)]
+mod midpointer_tests {
+    use super::*;
+    #[test]
+    fn forwards_tags_on_recentered_samples() -> Result<()> {
+        let (writer, input) = crate::stream::new_nocopy_stream();
+        let (mut block, output) = Midpointer::new(input);
+        let tags = vec![Tag::new(1, "marker", TagValue::Bool(true))];
+        writer.push(vec![1.0, 3.0], tags.clone());
+        block.work()?;
+        assert_eq!(output.pop(), Some((vec![-1.0, 1.0], tags)));
+        Ok(())
     }
 }
