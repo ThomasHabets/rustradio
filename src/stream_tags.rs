@@ -64,6 +64,16 @@ impl ReadWindowTags {
         self.entries.iter().map(|(_, tag)| tag)
     }
 
+    #[inline]
+    pub(crate) fn take_at(&mut self, pos: usize) -> Vec<Tag> {
+        let mut tags = Vec::new();
+        while let Some((_, mut tag)) = self.entries.pop_front_if(|(_, tag)| tag.pos() == pos) {
+            tag.set_pos(0);
+            tags.push(tag);
+        }
+        tags
+    }
+
     pub(crate) fn drain_prefix(&mut self, samples: usize) -> impl Iterator<Item = Tag> + '_ {
         let start = self.start;
         let end = start.advance(samples);

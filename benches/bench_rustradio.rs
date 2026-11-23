@@ -191,9 +191,14 @@ fn bench_tee_40960(b: &mut Bencher) {
     bench_tee(b, 40960);
 }
 
-fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
+enum TagHandling {
+    Plain,
+    Forward,
+    AppendMarker,
+}
+
+fn bench_sync(b: &mut Bencher, tagged: bool, mode: TagHandling) {
     use rustradio::stream::{Tag, TagValue};
-    use std::borrow::Cow;
 
     let samples = vec![1u32; 8192];
     let tags: Vec<_> = if tagged {
@@ -205,15 +210,26 @@ fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
         vec![]
     };
     let (writer, reader) = new_stream().unwrap();
-    let (mut block, output): (Box<dyn Block>, _) = if tag_aware {
-        let (block, output) = Map::new(reader, "increment", |sample, tags| {
-            (sample + 1, Cow::Borrowed(tags))
-        })
-        .unwrap();
-        (Box::new(block), output)
-    } else {
-        let (block, output) = AddConst::new(reader, 1u32).unwrap();
-        (Box::new(block), output)
+    let (mut block, output): (Box<dyn Block>, _) = match mode {
+        TagHandling::AppendMarker => {
+            let (block, output) = Map::new(reader, "mark", |sample, mut tags| {
+                if !tags.is_empty() {
+                    tags.push(Tag::new(0, "extra", TagValue::U64(1)));
+                }
+                (sample + 1, tags)
+            })
+            .unwrap();
+            (Box::new(block), output)
+        }
+        TagHandling::Forward => {
+            let (block, output) =
+                Map::new(reader, "increment", |sample, tags| (sample + 1, tags)).unwrap();
+            (Box::new(block), output)
+        }
+        TagHandling::Plain => {
+            let (block, output) = AddConst::new(reader, 1u32).unwrap();
+            (Box::new(block), output)
+        }
     };
     b.bytes = (samples.len() * std::mem::size_of::<u32>()) as u64;
     b.iter(|| {
@@ -232,22 +248,27 @@ fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
 
 #[bench]
 fn bench_sync_plain_untagged(b: &mut Bencher) {
-    bench_sync(b, false, false);
+    bench_sync(b, false, TagHandling::Plain);
 }
 
 #[bench]
 fn bench_sync_plain_tagged(b: &mut Bencher) {
-    bench_sync(b, true, false);
+    bench_sync(b, true, TagHandling::Plain);
 }
 
 #[bench]
 fn bench_sync_tag_aware_untagged(b: &mut Bencher) {
-    bench_sync(b, false, true);
+    bench_sync(b, false, TagHandling::Forward);
 }
 
 #[bench]
 fn bench_sync_tag_aware_tagged(b: &mut Bencher) {
-    bench_sync(b, true, true);
+    bench_sync(b, true, TagHandling::Forward);
+}
+
+#[bench]
+fn bench_sync_tag_aware_appended_marker(b: &mut Bencher) {
+    bench_sync(b, true, TagHandling::AppendMarker);
 }
 
 fn bench_serialize(b: &mut Bencher, append: bool) {

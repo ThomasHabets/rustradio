@@ -19,7 +19,13 @@ But eventually you'll need to write a real block.
 Sync blocks produce exactly one output sample per input sample. This makes the
 API very simple.
 
-If tags should just be passed through as-is, it's even simpler.
+A `sync_tag` callback receives an owned `Vec<Tag>` per input sample.
+Each tag has position zero inside the callback. Return the vector to forward
+the tags, call `tags.push(marker)` to append a tag, or return `Vec::new()` to
+discard them. The macro sets the output positions and preserves vector order.
+If the callback panics, the block consumes each input through the sample passed
+to that callback. Later samples keep their tags. Outputs are published only
+after the batch succeeds.
 
 Sync blocks can have multiple inputs and outputs, but every operation consumes
 exactly one sample from each input, and produces one sample on each output.

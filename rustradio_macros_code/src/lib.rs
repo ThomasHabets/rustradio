@@ -415,58 +415,49 @@ impl<'a> Parsed<'a> {
                 #last_output.produce(n, #first_tags);
             }
         } else {
-            let tag_iters: Vec<syn::Ident> = in_tag_names
-                .iter()
-                .map(|name| syn::parse_str(&format!("{name}_iter")).unwrap())
-                .collect();
+            let span = proc_macro2::Span::mixed_site();
+            let consumed = syn::Ident::new("consumed", span);
+            let result = syn::Ident::new("result", span);
+            let pos = syn::Ident::new("pos", span);
             let process_sample = quote! {
-                let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, &#in_tag_names),*);
+                let (#(#out_names, #out_tag_names_tmp),*) = self.process_sync_tags(#(*#in_names, #in_tag_names),*);
                 #(
-                    let #out_tag_names_tmp: std::borrow::Cow<'_, [#path::stream::Tag]> = #out_tag_names_tmp.into();
-                    match #out_tag_names_tmp {
-                        std::borrow::Cow::Borrowed(tags) => {
-                            #out_tag_names.extend(tags.iter().cloned().map(|mut tag| {
-                                tag.set_pos(pos);
-                                tag
-                            }));
-                        }
-                        std::borrow::Cow::Owned(tags) => {
-                            #out_tag_names.extend(tags.into_iter().map(|mut tag| {
-                                tag.set_pos(pos);
-                                tag
-                            }));
-                        }
+                    let #out_tag_names_tmp: Vec<#path::stream::Tag> = #out_tag_names_tmp;
+                    for mut tag in #out_tag_names_tmp {
+                        tag.set_pos(#pos);
+                        #out_tag_names.push(tag);
                     }
                 )*
                 (#(#out_names),*)
             };
             quote! {
                 #(let mut #out_tag_names = Vec::new();)*
-                // Select the tag-free path once per batch, outside the sample loop.
-                if true #(&& #in_names.tags().len() == 0)* {
-                    let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                        #(let #in_tag_names: &[#path::stream::Tag] = &[];)*
-                        #process_sample
-                    });
-                    #write_samples
-                } else {
-                    #(let mut #tag_iters = #in_names.tags().peekable();)*
-                    // Reuse the temporary slice needed by each sample callback.
-                    #(let mut #in_tag_names = Vec::new();)*
-                    let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
-                        #(
-                            #in_tag_names.clear();
-                            while #tag_iters.peek().is_some_and(|tag| tag.pos() == pos) {
-                                let mut tag = #tag_iters.next().expect("peeked tag").clone();
-                                tag.set_pos(0);
-                                #in_tag_names.push(tag);
-                            }
-                        )*
-                        #process_sample
-                    });
-                    #write_samples
+                #(let mut #in_names = #in_names;)*
+                let mut #consumed = 0;
+                // A callback owns its tags even if it panics. Consume through the
+                // sample handed to it, leaving later samples and tags together.
+                let #result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    if true #(&& #in_names.tags().next().is_none_or(|tag| tag.pos() >= n))* {
+                        let it = #it.enumerate().map(|(#pos, (#(#in_names),*))| {
+                            #(let #in_tag_names = Vec::new();)*
+                            #consumed = #pos + 1;
+                            #process_sample
+                        });
+                        #write_samples
+                    } else {
+                        let it = (0..n).map(|#pos| {
+                            #consumed = #pos + 1;
+                            #(let #in_tag_names = #in_names.take_tags_at(#pos);
+                              let #in_names = &#in_names.slice()[#pos];)*
+                            #process_sample
+                        });
+                        #write_samples
+                    }
+                }));
+                #(#in_names.consume_discard_tags(#consumed);)*
+                if let Err(panic) = #result {
+                    std::panic::resume_unwind(panic);
                 }
-                #(#in_names.consume_discard_tags(n);)*
                 #(#out_names.produce(n, #out_tag_names);)*
             }
         };

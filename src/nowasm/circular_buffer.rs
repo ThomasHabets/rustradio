@@ -252,6 +252,14 @@ impl<T: Copy> BufferReader<T> {
         self.tags.iter()
     }
 
+    /// Move the tags at the front of the queue for this sample into its callback.
+    /// Call in sample order. This does not advance the read position.
+    #[doc(hidden)]
+    #[inline]
+    pub fn take_tags_at(&mut self, pos: usize) -> Vec<Tag> {
+        self.tags.take_at(pos)
+    }
+
     /// Consume the first `n` samples and discard their tags.
     pub fn consume_discard_tags(mut self, n: usize) {
         assert!(n <= self.len(), "consume exceeds checked-out read window");

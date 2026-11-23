@@ -3,8 +3,6 @@
 //! Add tags to a stream to indicate stand and end of a burst. Does not
 //! otherwise modify the stream.
 
-use std::borrow::Cow;
-
 use crate::stream::{ReadStream, Tag, TagValue, WriteStream};
 use crate::{Float, Sample};
 
@@ -65,22 +63,18 @@ pub struct BurstTagger<T: Sample> {
 }
 
 impl<T: Sample> BurstTagger<T> {
-    fn process_sync_tags<'a>(
+    fn process_sync_tags(
         &mut self,
         s: T,
-        tags: &'a [Tag],
+        mut tags: Vec<Tag>,
         tv: Float,
-        _tv_tags: &[Tag],
-    ) -> (T, Cow<'a, [Tag]>) {
+        _tv_tags: Vec<Tag>,
+    ) -> (T, Vec<Tag>) {
         let cur = tv > self.threshold;
-        let tags = if cur == self.last {
-            Cow::Borrowed(tags)
-        } else {
-            let mut owned_tags: Vec<Tag> = tags.to_vec();
-            owned_tags.push(Tag::new(0, self.tag.clone(), TagValue::Bool(cur)));
-            Cow::Owned(owned_tags)
-        };
-        self.last = cur;
+        if cur != self.last {
+            tags.push(Tag::new(0, self.tag.clone(), TagValue::Bool(cur)));
+            self.last = cur;
+        }
         (s, tags)
     }
 }

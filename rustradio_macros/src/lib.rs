@@ -110,8 +110,6 @@
 /// A version of `Tee` that only writes tags to the first stream could be:
 ///
 /// ```rust
-/// use std::borrow::Cow;
-///
 /// use rustradio::Float;
 /// use rustradio::stream::{ReadStream, WriteStream, Tag};
 /// #[derive(rustradio_macros::Block)]
@@ -126,12 +124,12 @@
 /// }
 ///
 /// impl Tee {
-///     fn process_sync_tags<'a>(
+///     fn process_sync_tags(
 ///         &self,
 ///         s: Float,
-///         ts: &'a [Tag],
-///     ) -> (Float, Cow<'a, [Tag]>, Float, Cow<'a, [Tag]>) {
-///         (s, Cow::Borrowed(ts), s, Cow::Owned(vec![]))
+///         ts: Vec<Tag>,
+///     ) -> (Float, Vec<Tag>, Float, Vec<Tag>) {
+///         (s, ts, s, Vec::new())
 ///     }
 /// }
 /// ```

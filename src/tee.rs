@@ -27,8 +27,6 @@ impl<T: Sample> Tee<T> {
 mod tests {
     use super::*;
 
-    use std::borrow::Cow;
-
     use crate::block::{Block, BlockRet};
     use crate::blocks::{VectorSink, VectorSource};
     use crate::stream::Tag;
@@ -50,12 +48,8 @@ mod tests {
     }
 
     impl<T: Sample> Tee<T> {
-        fn process_sync_tags<'a>(
-            &self,
-            s: T,
-            ts: &'a [Tag],
-        ) -> (T, Cow<'a, [Tag]>, T, Cow<'a, [Tag]>) {
-            (s, Cow::Borrowed(ts), s, Cow::Owned(vec![]))
+        fn process_sync_tags(&self, s: T, ts: Vec<Tag>) -> (T, Vec<Tag>, T, Vec<Tag>) {
+            (s, ts, s, vec![])
         }
     }
 

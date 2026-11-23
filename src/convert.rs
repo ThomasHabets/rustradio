@@ -1,5 +1,4 @@
 //! Blocks for making simple synchronous conversions/mappings.
-use std::borrow::Cow;
 
 use crate::block::{Block, BlockRet};
 use crate::stream::{NCReadStream, NCWriteStream, ReadStream, Tag, WriteStream};
@@ -37,9 +36,9 @@ where
     In: Sample,
     F: FnMut(In, &[Tag]) + Send,
 {
-    fn process_sync_tags<'a>(&mut self, s: In, tags: &'a [Tag]) -> (In, Cow<'a, [Tag]>) {
-        (self.f)(s, tags);
-        (s, Cow::Borrowed(tags))
+    fn process_sync_tags(&mut self, s: In, tags: Vec<Tag>) -> (In, Vec<Tag>) {
+        (self.f)(s, tags.as_slice());
+        (s, tags)
     }
 }
 impl<In, F> Inspect<In, F> {
@@ -95,13 +94,13 @@ impl<T: SampleEncoding> Block for Parse<T> {
 /// Arbitrary mapping using a lambda.
 ///
 /// A Map block transforms one sample at a time, from input to output. The input
-/// and output can be different types.
+/// and output can be different types. The callback owns the tags for its
+/// sample and can return them directly, retain selected tags, or push additional tags.
 ///
 /// If there's more than one input or output stream, then you have to make a
 /// dedicated block, like [`FloatToComplex`].
 ///
 /// ```
-/// use std::borrow::Cow;
 /// use rustradio::Complex;
 /// use rustradio::blocks::ConstantSource;
 /// use rustradio::convert::Map;
@@ -109,7 +108,7 @@ impl<T: SampleEncoding> Block for Parse<T> {
 /// let (b, out) = Map::new(
 ///     src,
 ///     "mymap",
-///     move |x, tags| (x.re + 10.0, Cow::Borrowed(tags)),
+///     move |x, tags| (x.re + 10.0, tags),
 /// ).unwrap();
 /// ```
 #[derive(rustradio_macros::Block)]
@@ -119,7 +118,7 @@ impl<T: SampleEncoding> Block for Parse<T> {
     sync_tag,
     new,
     bound = "In: Sample, Out: Sample",
-    bound = "F: for<'a> FnMut(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send"
+    bound = "F: FnMut(In, Vec<Tag>) -> (Out, Vec<Tag>) + Send"
 )]
 pub struct Map<In, Out, F> {
     #[rustradio(into)]
@@ -143,7 +142,7 @@ impl Map<(), (), ()> {
         name: Name,
         mut f: F2,
     ) -> crate::Result<(
-        Map<In, Out, impl for<'a> FnMut(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>)>,
+        Map<In, Out, impl FnMut(In, Vec<Tag>) -> (Out, Vec<Tag>)>,
         ReadStream<Out>,
     )>
     where
@@ -152,7 +151,7 @@ impl Map<(), (), ()> {
         Name: Into<String>,
         F2: FnMut(In) -> Out + Send,
     {
-        Map::new(src, name, move |s, tags| (f(s), Cow::Borrowed(tags)))
+        Map::new(src, name, move |s, tags| (f(s), tags))
     }
 }
 
@@ -160,9 +159,9 @@ impl<In, Out, F> Map<In, Out, F>
 where
     In: Sample,
     Out: Sample,
-    F: for<'a> FnMut(In, &'a [Tag]) -> (Out, Cow<'a, [Tag]>) + Send,
+    F: FnMut(In, Vec<Tag>) -> (Out, Vec<Tag>) + Send,
 {
-    fn process_sync_tags<'a>(&mut self, s: In, tags: &'a [Tag]) -> (Out, Cow<'a, [Tag]>) {
+    fn process_sync_tags(&mut self, s: In, tags: Vec<Tag>) -> (Out, Vec<Tag>) {
         (self.map)(s, tags)
     }
 }

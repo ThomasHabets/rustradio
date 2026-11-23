@@ -101,7 +101,7 @@ impl CorrelateAccessCodeTag {
             dr,
         ))
     }
-    fn process_sync_tags(&mut self, a: u8, tags: &[Tag]) -> (u8, Vec<Tag>) {
+    fn process_sync_tags(&mut self, a: u8, mut tags: Vec<Tag>) -> (u8, Vec<Tag>) {
         self.slide.push(a);
 
         if self.slide.len() > self.code.len() {
@@ -113,7 +113,6 @@ impl CorrelateAccessCodeTag {
             .zip(&self.code)
             .filter(|(a, b)| a != b)
             .count();
-        let mut tags = tags.to_vec();
         if self.slide.len() == self.code.len() && diffs <= self.allowed_diffs {
             tags.push(Tag::new(
                 0,

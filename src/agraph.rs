@@ -142,7 +142,6 @@ impl GraphRunner for AsyncGraph {
 mod tests {
     use super::*;
     use crate::Complex;
-    use std::borrow::Cow;
 
     #[tokio::test]
     async fn nullsink() -> Result<()> {
@@ -164,7 +163,7 @@ mod tests {
         use crate::blocks::{Map, VectorSink, VectorSource};
         use crate::graph::GraphRunnerExt;
         let (src, prev) = VectorSource::new(vec![1u8, 2, 3])?;
-        let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2, Cow::Borrowed(tags)))?;
+        let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2, tags))?;
         let sink = VectorSink::new(prev, 100);
         let hook = sink.hook();
         let mut g = AsyncGraph::new();
@@ -183,9 +182,7 @@ mod tests {
         use crate::graph::GraphRunnerExt;
         let n = 1_000_000;
         let (src, prev) = VectorSource::new(vec![Complex::new(1.0, 0.0); n])?;
-        let (mul, prev) = Map::new(prev, "double", move |x, tags| {
-            (x * 2.0, Cow::Borrowed(tags))
-        })?;
+        let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2.0, tags))?;
         let sink = VectorSink::new(prev, n * 2);
         let hook = sink.hook();
         let mut g = AsyncGraph::new();

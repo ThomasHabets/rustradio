@@ -1,5 +1,4 @@
 //! Add a constant value to every sample.
-use std::borrow::Cow;
 
 use crate::Sample;
 use crate::stream::{ReadStream, Tag, WriteStream};
@@ -13,7 +12,7 @@ pub fn add_const<T>(
     src: ReadStream<T>,
     val: T,
 ) -> crate::Result<(
-    crate::convert::Map<T, T, impl for<'a> FnMut(T, &'a [Tag]) -> (T, Cow<'a, [Tag]>)>,
+    crate::convert::Map<T, T, impl FnMut(T, Vec<Tag>) -> (T, Vec<Tag>)>,
     ReadStream<T>,
 )>
 where

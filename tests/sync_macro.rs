@@ -1,5 +1,4 @@
 //! Exercise both generated sync paths with tags and output backpressure.
-use std::borrow::Cow;
 
 use rustradio::Result;
 use rustradio::block::{Block, BlockRet};
@@ -38,18 +37,23 @@ struct Tagged {
 }
 
 impl Tagged {
-    fn process_sync_tags<'a>(
+    fn process_sync_tags(
         &self,
         a: u32,
-        a_tags: &'a [Tag],
+        a_tags: Vec<Tag>,
         b: u32,
-        b_tags: &'a [Tag],
-    ) -> (u32, Cow<'a, [Tag]>, u32, Cow<'a, [Tag]>) {
-        assert!(a_tags.iter().chain(b_tags).all(|tag| tag.pos() == 0));
-        let mut tags = b_tags.to_vec();
+        mut b_tags: Vec<Tag>,
+    ) -> (u32, Vec<Tag>, u32, Vec<Tag>) {
+        assert!(
+            a_tags
+                .iter()
+                .chain(b_tags.as_slice())
+                .all(|tag| tag.pos() == 0)
+        );
+
         // Generated tags must also work on samples without input tags.
-        tags.push(tag(0, "generated"));
-        (a + b, Cow::Borrowed(a_tags), a - b, Cow::Owned(tags))
+        b_tags.push(tag(0, "generated"));
+        (a + b, a_tags, a - b, b_tags)
     }
 }
 
@@ -208,14 +212,10 @@ struct GeneratedTags {
 }
 
 impl GeneratedTags {
-    fn process_sync_tags(
-        &self,
-        sample: u32,
-        _: &[Tag],
-    ) -> (u32, Cow<'static, [Tag]>, u32, Vec<Tag>) {
+    fn process_sync_tags(&self, sample: u32, _: Vec<Tag>) -> (u32, Vec<Tag>, u32, Vec<Tag>) {
         (
             sample,
-            Cow::Owned(vec![tag(0, &format!("first-{sample}"))]),
+            vec![tag(0, &format!("first-{sample}"))],
             sample,
             vec![
                 tag(0, &format!("second-{sample}")),
@@ -264,5 +264,60 @@ fn owned_callback_tags_keep_positions_and_order_across_batches() -> Result<()> {
             window.consume_discard_tags(samples.len());
         }
     }
+    Ok(())
+}
+
+#[test]
+fn map_appends_tag_and_moves_string_storage() -> Result<()> {
+    let (writer, reader) = new_stream()?;
+    let original = Tag::new(0, "channel", TagValue::String("packet".into()));
+    let TagValue::String(value) = original.val() else {
+        unreachable!()
+    };
+    let pointers = (original.key().as_ptr(), value.as_ptr());
+    let mut window = writer.write_buf()?;
+    window.fill_from_slice(&[42u32]);
+    window.produce(1, vec![original]);
+    let (mut block, output) = rustradio::convert::Map::new(reader, "mark", |sample, mut tags| {
+        tags.push(tag(0, "marker"));
+        (sample, tags)
+    })?;
+    block.work()?;
+    let tags = output.read_buf()?.consume(1);
+    assert_eq!(tags.len(), 2);
+    let TagValue::String(value) = tags[0].val() else {
+        unreachable!()
+    };
+    assert_eq!((tags[0].key().as_ptr(), value.as_ptr()), pointers);
+    assert_eq!(tags[1], tag(0, "marker"));
+    Ok(())
+}
+
+#[test]
+fn callback_panic_consumes_only_samples_handed_to_it() -> Result<()> {
+    let (writer, reader) = new_stream()?;
+    let mut window = writer.write_buf()?;
+    window.fill_from_slice(&[1u32, 2, 3]);
+    window.produce(3, vec![tag(1, "panicking"), tag(2, "remaining")]);
+    let (mut block, output) =
+        rustradio::convert::Map::new(reader, "panic once", |sample, tags| {
+            if sample == 2 {
+                assert_eq!(tags, [tag(0, "panicking")]);
+                panic!("callback panicked");
+            }
+            (sample, tags)
+        })?;
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        block.work().unwrap();
+    }));
+    assert_eq!(
+        panic.unwrap_err().downcast_ref::<&str>(),
+        Some(&"callback panicked")
+    );
+    assert!(output.read_buf()?.is_empty());
+    block.work()?;
+    let window = output.read_buf()?;
+    assert_eq!(window.slice(), &[3]);
+    assert_eq!(window.consume(1), [tag(0, "remaining")]);
     Ok(())
 }
