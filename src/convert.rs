@@ -49,6 +49,7 @@ impl<In, F> Inspect<In, F> {
 }
 
 /// Block to convert from u8 to other sample types.
+/// Each decoded item receives the tags on its encoded bytes, in byte order.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, bound = "T: SampleEncoding")]
 pub struct Parse<T> {
@@ -65,7 +66,6 @@ impl<T: SampleEncoding> Block for Parse<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         // TODO: make more efficient by doing batches.
         loop {
-            // TODO: handle tags.
             let i = self.src.read_buf()?;
             if i.len() < T::ENCODED_SIZE.get() {
                 return Ok(BlockRet::WaitForStream(&self.src, T::ENCODED_SIZE.get()));
@@ -85,8 +85,11 @@ impl<T: SampleEncoding> Block for Parse<T> {
             {
                 os[n] = s?;
             }
-            o.produce(items, &[]);
-            i.consume_discard_tags(items * T::ENCODED_SIZE.get());
+            let mut tags = i.consume(items * T::ENCODED_SIZE.get());
+            for tag in &mut tags {
+                tag.set_pos(tag.pos() / T::ENCODED_SIZE);
+            }
+            o.produce(items, tags);
         }
     }
 }
@@ -310,6 +313,36 @@ mod tests {
     use crate::block::BlockRet;
     use crate::blocks::VectorSinkNoCopy;
     use crate::stream::{Tag, TagValue, new_nocopy_stream, new_stream};
+
+    #[test]
+    fn parse_keeps_tags_on_incomplete_items_until_consumed() -> Result<()> {
+        use crate::stream::{TagValue, new_stream};
+        let (writer, input) = new_stream()?;
+        let (mut parse, out) = Parse::<Float>::new(input)?;
+        let mut w = writer.write_buf()?;
+        w.fill_from_slice(&[0; 5]);
+        w.produce(
+            5,
+            vec![
+                Tag::new(3, "first", TagValue::Bool(true)),
+                Tag::new(4, "second", TagValue::Bool(true)),
+            ],
+        );
+        parse.work()?;
+        assert_eq!(
+            out.read_buf()?.consume(1),
+            [Tag::new(0, "first", TagValue::Bool(true))]
+        );
+        let mut w = writer.write_buf()?;
+        w.fill_from_slice(&[0; 3]);
+        w.produce(3, &[]);
+        parse.work()?;
+        assert_eq!(
+            out.read_buf()?.consume(1),
+            [Tag::new(0, "second", TagValue::Bool(true))]
+        );
+        Ok(())
+    }
 
     #[test]
     fn parse_waits_for_full_sample() -> Result<()> {
