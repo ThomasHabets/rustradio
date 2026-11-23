@@ -8,7 +8,7 @@
 //! [aprs]: https://en.wikipedia.org/wiki/Automatic_Packet_Reporting_System
 use crate::Result;
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCReadStream, NCWriteStream};
+use crate::stream::{NCReadStream, NCWriteStream, Tag};
 
 const SYNC_BYTES: usize = 20;
 const SYNC: &[u8] = &[0, 1, 1, 1, 1, 1, 1, 0];
@@ -43,7 +43,8 @@ impl Block for FcsAdder {
 
 /// HDLC framer.
 ///
-/// Takes a packet of bytes, and outputs a packet of bits.
+/// Takes a packet of bytes, and outputs a packet of bits. Each byte tag is
+/// attached to its first data bit after the opening flags and any stuffing.
 ///
 /// It has to be a bunch of bits, because bit stuffing makes the output not
 /// necessarily be byte aligned.
@@ -57,13 +58,18 @@ pub struct HdlcFramer {
 }
 
 // TODO: confirm that I didn't get the bit order backwards.
-fn hdlc_encode(data: &[u8]) -> Vec<u8> {
+fn hdlc_encode(data: &[u8], tags: &mut Vec<Tag>) -> Vec<u8> {
     let mut out = Vec::with_capacity(data.len() * 8 + 32);
     for _ in 0..SYNC_BYTES {
         out.extend(SYNC);
     }
     let mut ones = 0;
-    for mut byte in data.iter().copied() {
+    tags.retain(|tag| tag.pos() < data.len());
+    let mut markers = tags.iter_mut().peekable();
+    for (pos, mut byte) in data.iter().copied().enumerate() {
+        while let Some(tag) = markers.next_if(|t| t.pos() == pos) {
+            tag.set_pos(out.len());
+        }
         for _ in 0..8 {
             if byte & 1 == 1 {
                 ones += 1;
@@ -91,10 +97,10 @@ impl Block for HdlcFramer {
             if self.dst.remaining() == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let Some((x, tags)) = self.src.pop() else {
+            let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            let out = hdlc_encode(&x);
+            let out = hdlc_encode(&x, &mut tags);
             self.dst.push(out, tags);
         }
     }
@@ -111,6 +117,84 @@ mod tests {
             s += if *b > 0 { "1" } else { "0" };
         }
         s
+    }
+
+    #[test]
+    fn tags_round_trip_across_flags_stuffing_and_read_windows() -> Result<()> {
+        use crate::stream::{TagValue, new_stream};
+        let marker = |pos, key| Tag::new(pos, key, TagValue::Bool(true));
+        let mut tags = vec![marker(0, "first"), marker(1, "second")];
+        let wire = hdlc_encode(&[0xff, 0], &mut tags);
+        let start = SYNC_BYTES * SYNC.len();
+        assert_eq!(tags, [marker(start, "first"), marker(start + 9, "second")]);
+        let (writer, input) = new_stream()?;
+        let (mut decoder, output) = crate::blocks::HdlcDeframer::new(input, 1, 64);
+        decoder.set_keep_checksum(true);
+        tags.extend([
+            marker(start + 5, "stuffing"),
+            marker(start + 10, "inside"),
+            marker(start + 17, "end flag"),
+        ]);
+        tags.sort_by_key(Tag::pos);
+        for (i, &bit) in wire.iter().enumerate() {
+            let mut w = writer.write_buf()?;
+            w.slice()[0] = bit;
+            w.produce(
+                1,
+                tags.iter()
+                    .filter(|t| t.pos() == i)
+                    .map(|t| Tag::new(0, t.key(), t.val().clone()))
+                    .collect::<Vec<_>>(),
+            );
+            decoder.work()?;
+        }
+        let (bytes, tags) = output.pop().unwrap();
+        assert_eq!(bytes, [0xff, 0]);
+        assert_eq!(
+            tags.iter()
+                .filter(|t| t.key() != "packet_pos")
+                .map(|t| (t.pos(), t.key()))
+                .collect::<Vec<_>>(),
+            [(0, "first"), (1, "second"), (1, "inside")]
+        );
+        Ok(())
+    }
+    #[test]
+    fn deframer_drops_tags_on_bad_frames_and_stripped_checksums() -> Result<()> {
+        use crate::stream::{TagValue, new_stream};
+        let (writer, input) = new_stream()?;
+        let (mut decoder, output) = crate::blocks::HdlcDeframer::new(input, 1, 64);
+        let payload = [0x7e, 0xff];
+        let crc = crate::hdlc_deframer::calc_crc(&payload);
+        for valid in [false, true] {
+            let mut bytes = payload.to_vec();
+            bytes.extend((if valid { crc } else { crc ^ 1 }).to_le_bytes());
+            let mut tags = vec![
+                Tag::new(
+                    1,
+                    if valid { "data" } else { "rejected" },
+                    TagValue::Bool(true),
+                ),
+                Tag::new(2, "checksum", TagValue::Bool(true)),
+            ];
+            let wire = hdlc_encode(&bytes, &mut tags);
+            let mut window = writer.write_buf()?;
+            window.fill_from_slice(&wire);
+            window.produce(wire.len(), tags);
+            decoder.work()?;
+            if !valid {
+                assert!(output.pop().is_none());
+            }
+        }
+        let (decoded, tags) = output.pop().unwrap();
+        assert_eq!(decoded, payload);
+        assert_eq!(
+            tags.iter()
+                .map(|tag| (tag.pos(), tag.key()))
+                .collect::<Vec<_>>(),
+            [(0, "packet_pos"), (1, "data")]
+        );
+        Ok(())
     }
 
     #[test]
@@ -132,7 +216,7 @@ mod tests {
                 .chain(o.chars().map(|b| if b == '0' { 0 } else { 1 }))
                 .chain(SYNC.repeat(SYNC_BYTES).iter().copied())
                 .collect();
-            let got = hdlc_encode(i);
+            let got = hdlc_encode(i, &mut vec![]);
             assert_eq!(
                 got,
                 want,

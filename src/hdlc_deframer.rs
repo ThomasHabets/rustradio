@@ -73,7 +73,8 @@ fn find_right_crc(data: &[u8], got: u16, fix_bits: bool) -> (Option<Vec<u8>>, u1
 /** HDLC Deframer block.
 
 This block takes a stream of bits (as u8), and outputs any HDLC frames
-found as `Vec<u8>`.
+found as `Vec<u8>`. Tags on retained data bits follow their decoded byte.
+Tags on flags, stuffed bits, removed checksums and rejected frames are discarded.
 */
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
@@ -84,6 +85,8 @@ pub struct HdlcDeframer {
     dst: NCWriteStream<Vec<u8>>,
     #[rustradio(default)]
     state: State,
+    #[rustradio(default)]
+    frame_tags: Vec<Tag>,
     min_size: usize,
     max_size: usize,
     #[rustradio(default)]
@@ -123,6 +126,7 @@ impl HdlcDeframer {
     fn update_state(
         &mut self,
         bit: u8,
+        tags: Vec<Tag>,
         stream_pos: u64,
         output_space: &mut usize,
     ) -> Result<State> {
@@ -142,7 +146,14 @@ impl HdlcDeframer {
                 // but we can swap its contents.
                 std::mem::swap(&mut bits, inbits);
                 if bits.len() > self.max_size * 8 {
+                    self.frame_tags.clear();
                     return Ok(State::Unsynced(0xff));
+                }
+                if bit > 0 || *ones != 5 {
+                    self.frame_tags.extend(tags.into_iter().map(|mut tag| {
+                        tag.set_pos(bits.len() / 8);
+                        tag
+                    }));
                 }
                 if bit > 0 {
                     bits.push(1);
@@ -160,6 +171,7 @@ impl HdlcDeframer {
                 }
             }
             State::FinalCheck(inbits) => {
+                let mut tags = std::mem::take(&mut self.frame_tags);
                 let mut bits: Vec<u8> = Vec::new();
                 // We can't move from `bits`, since it's only borrowed,
                 // but we can swap its contents.
@@ -190,7 +202,16 @@ impl HdlcDeframer {
                         .map(|i| bits2byte(&bits[i..i + 8]))
                         .collect();
                     debug!("HdlcDeframer: Captured packet: {bytes:0>2x?}");
-                    let tags = &[Tag::new(0, "packet_pos", TagValue::U64(stream_pos))];
+                    let retained = if self.keep_checksum {
+                        bytes.len()
+                    } else {
+                        bytes.len().saturating_sub(2)
+                    };
+                    tags.truncate(tags.partition_point(|t| t.pos() < retained));
+                    tags.insert(
+                        tags.partition_point(|t| t.pos() == 0),
+                        Tag::new(0, "packet_pos", TagValue::U64(stream_pos)),
+                    );
                     if self.keep_checksum {
                         self.decoded += 1;
                         self.dst.push(bytes, tags);
@@ -238,15 +259,17 @@ impl Block for HdlcDeframer {
             if output_space == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let input = self.src.read_buf()?;
+            let mut input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
             let mut to_consume = 0;
-            for bit in input.iter().copied() {
+            for pos in 0..input.len() {
+                let bit = input.slice()[pos];
+                let tags = input.take_tags_at(pos);
                 // This is a bit ugly in that it destructively creates the
                 // new state. The old state is moved from.
-                self.state = self.update_state(bit, self.stream_pos, &mut output_space)?;
+                self.state = self.update_state(bit, tags, self.stream_pos, &mut output_space)?;
                 self.stream_pos += 1;
                 to_consume += 1;
                 if output_space == 0 {
