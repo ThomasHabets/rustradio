@@ -9,6 +9,7 @@ const RTLSDR_OFFSET: Float = 127.0;
 const RTLSDR_SCALE: Float = 0.008;
 
 /// Encode Complex I/Q into RTL-SDR's byte based format.
+/// Sample tags are attached to the I byte.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
 pub struct RtlSdrEncode {
@@ -27,7 +28,6 @@ fn encode_sample(sample: Float) -> u8 {
 impl Block for RtlSdrEncode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
-            // TODO: handle tags.
             let input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
@@ -46,8 +46,11 @@ impl Block for RtlSdrEncode {
                     .take(isamples)
                     .flat_map(|sample| [encode_sample(sample.re), encode_sample(sample.im)]),
             )?;
-            input.consume_discard_tags(isamples);
-            out.produce(osamples, &[]);
+            let mut tags = input.consume(isamples);
+            for tag in &mut tags {
+                tag.set_pos(tag.pos() * 2);
+            }
+            out.produce(osamples, tags);
         }
     }
 }

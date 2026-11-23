@@ -6,6 +6,7 @@ use crate::stream::{ReadStream, WriteStream};
 use crate::{Complex, Float};
 
 /// Decode RTL-SDR's byte based format into Complex I/Q.
+/// Tags on either byte are attached to the corresponding complex sample.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
 pub struct RtlSdrDecode {
@@ -18,7 +19,6 @@ pub struct RtlSdrDecode {
 impl Block for RtlSdrDecode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
-            // TODO: handle tags.
             let input = self.src.read_buf()?;
             let isamples = input.len() & !1;
             if isamples == 0 {
@@ -39,8 +39,11 @@ impl Block for RtlSdrDecode {
                     .map(|e| (Float::from(e[0]), Float::from(e[1])))
                     .map(|(a, b)| Complex::new((a - 127.0) * 0.008, (b - 127.0) * 0.008)),
             )?;
-            input.consume_discard_tags(isamples);
-            out.produce(osamples, &[]);
+            let mut tags = input.consume(isamples);
+            for tag in &mut tags {
+                tag.set_pos(tag.pos() / 2);
+            }
+            out.produce(osamples, tags);
         }
     }
 }
@@ -50,6 +53,35 @@ mod tests {
     use super::*;
     use crate::Complex;
     use crate::blocks::VectorSource;
+
+    #[test]
+    fn maps_i_and_q_tags_to_the_same_sample_and_back() -> Result<()> {
+        use crate::stream::{Tag, TagValue, new_stream};
+        let (writer, input) = new_stream()?;
+        let mut w = writer.write_buf()?;
+        w.fill_from_slice(&[127; 4]);
+        w.produce(
+            4,
+            vec![
+                Tag::new(2, "I", TagValue::Bool(true)),
+                Tag::new(3, "Q", TagValue::Bool(true)),
+            ],
+        );
+        let (mut decode, iq) = RtlSdrDecode::new(input)?;
+        decode.work()?;
+        assert_eq!(
+            iq.read_buf()?.tags().map(Tag::pos).collect::<Vec<_>>(),
+            [1, 1]
+        );
+        let (mut encode, bytes) = crate::blocks::RtlSdrEncode::new(iq)?;
+        encode.work()?;
+        let tags = bytes.read_buf()?.consume(4);
+        assert_eq!(
+            tags.iter().map(|t| (t.pos(), t.key())).collect::<Vec<_>>(),
+            [(2, "I"), (2, "Q")]
+        );
+        Ok(())
+    }
 
     #[test]
     fn empty() -> crate::Result<()> {
