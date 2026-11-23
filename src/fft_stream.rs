@@ -21,6 +21,9 @@ pub const TAG_FRAME: &str = "FftStream::frame";
 pub const TAG_FRAME_SIZE: &str = "FftStream::size";
 
 /// Takes a stream of data, runs an FFT on it, and outputs it as a stream.
+/// Frame-start input metadata is attached to the first output bin. Interior
+/// time-domain markers are discarded. The frame and size keys are generated
+/// by this block.
 /// The consumer of the stream needs to know what the FFT size is, or it won't
 /// be able to make sense of it.
 #[derive(rustradio_macros::Block)]
@@ -102,6 +105,14 @@ impl Block for FftStream {
             self.fft
                 .process_with_scratch(&mut oo[..len], &mut self.scratch);
         }
+        let mut metadata = input
+            .consume(len)
+            .into_iter()
+            .filter(|tag| {
+                tag.pos().is_multiple_of(self.size)
+                    && !matches!(tag.key(), TAG_FRAME | TAG_FRAME_SIZE)
+            })
+            .peekable();
         let mut tags = Vec::with_capacity((len / self.size) * 3);
         for pos in (0..len).step_by(self.size) {
             tags.push(Tag::new(
@@ -110,6 +121,9 @@ impl Block for FftStream {
                 TagValue::U64(u64::try_from(self.size)?),
             ));
             tags.push(Tag::new(pos, TAG_FRAME, TagValue::Bool(true)));
+            while let Some(tag) = metadata.next_if(|tag| tag.pos() == pos) {
+                tags.push(tag);
+            }
             tags.push(Tag::new(
                 pos + self.size - 1,
                 TAG_FRAME,
@@ -117,7 +131,6 @@ impl Block for FftStream {
             ));
         }
 
-        input.consume_discard_tags(len);
         o.produce(len, tags);
         Ok(BlockRet::Again)
     }
@@ -137,7 +150,17 @@ mod tests {
 
     #[test]
     fn adds_frame_tags() -> Result<()> {
-        let src = ReadStream::from_slice(&[Complex::default(); 8]);
+        let (w, src) = crate::stream::new_stream()?;
+        let mut input = w.write_buf()?;
+        input.fill_from_slice(&[Complex::default(); 8]);
+        input.produce(
+            8,
+            vec![
+                Tag::new(1, "interior", TagValue::Bool(true)),
+                Tag::new(4, "time", TagValue::U64(123)),
+                Tag::new(4, TAG_FRAME, TagValue::Bool(false)),
+            ],
+        );
         let (mut fft, out) = FftStream::new(src, 4)?;
 
         assert!(matches!(fft.work()?, BlockRet::Again));
@@ -153,6 +176,7 @@ mod tests {
                 Tag::new(3, TAG_FRAME, TagValue::Bool(false)),
                 Tag::new(4, TAG_FRAME_SIZE, TagValue::U64(4)),
                 Tag::new(4, TAG_FRAME, TagValue::Bool(true)),
+                Tag::new(4, "time", TagValue::U64(123)),
                 Tag::new(7, TAG_FRAME, TagValue::Bool(false)),
             ]
         );
