@@ -192,7 +192,7 @@ impl Block for KissDecode {
 enum FrameState {
     #[default]
     Unsynced,
-    Synced(Vec<u8>),
+    Synced(Vec<u8>, Vec<Tag>),
 }
 
 impl FrameState {}
@@ -200,6 +200,7 @@ impl FrameState {}
 /// Kiss frame.
 ///
 /// Take stream of bytes and output the still KISS encoded frames.
+/// Tags on retained bytes have frame-relative positions. Delimiter tags are discarded.
 /// Should probably be followed by `KissDecode`.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
@@ -237,18 +238,21 @@ impl Block for KissFrame {
                     }
                     i.consume_discard_tags(n);
                     if synced {
-                        FrameState::Synced(vec![])
+                        FrameState::Synced(vec![], vec![])
                     } else {
                         FrameState::Unsynced
                     }
                 }
-                FrameState::Synced(mut v) => {
+                FrameState::Synced(mut v, mut tags) => {
+                    let previous_len = v.len();
+                    let mut skipped = 0;
                     let mut n = 0;
                     let mut done = false;
                     for sample in i.slice().iter().copied() {
                         n += 1;
                         if sample == KISS_FEND {
                             if v.is_empty() {
+                                skipped += 1;
                                 continue;
                             }
                             done = true;
@@ -259,15 +263,24 @@ impl Block for KissFrame {
                             break;
                         }
                     }
-                    i.consume_discard_tags(n);
+                    let input_tags = i.consume(n);
                     if v.len() > MAX_LEN {
                         FrameState::Unsynced
-                    } else if done {
-                        // TODO: add tags.
-                        self.dst.push(v, &[]);
-                        FrameState::Synced(vec![])
                     } else {
-                        FrameState::Synced(v)
+                        let end = n - usize::from(done);
+                        tags.extend(input_tags.into_iter().filter_map(|mut tag| {
+                            if !(skipped..end).contains(&tag.pos()) {
+                                return None;
+                            }
+                            tag.set_pos(previous_len + (tag.pos() - skipped));
+                            Some(tag)
+                        }));
+                        if done {
+                            self.dst.push(v, tags);
+                            FrameState::Synced(vec![], vec![])
+                        } else {
+                            FrameState::Synced(v, tags)
+                        }
                     }
                 }
             };
@@ -431,6 +444,36 @@ mod tests {
     use super::*;
     use crate::blocks::VectorSource;
     use crate::stream::new_nocopy_stream;
+
+    #[test]
+    fn frame_rebases_tags_across_windows_and_skips_delimiters() -> Result<()> {
+        let (w, input) = crate::stream::new_stream()?;
+        let (mut frame, out) = KissFrame::new(input);
+        for bytes in [&[0, KISS_FEND, KISS_FEND, 3][..], &[4, KISS_FEND]] {
+            let mut window = w.write_buf()?;
+            window.fill_from_slice(bytes);
+            window.produce(
+                bytes.len(),
+                bytes
+                    .iter()
+                    .enumerate()
+                    .map(|(pos, b)| Tag::new(pos, "byte", TagValue::U64(u64::from(*b))))
+                    .collect::<Vec<_>>(),
+            );
+            frame.work()?;
+        }
+        assert_eq!(
+            out.pop(),
+            Some((
+                vec![3, 4],
+                vec![
+                    Tag::new(0, "byte", TagValue::U64(3)),
+                    Tag::new(1, "byte", TagValue::U64(4))
+                ]
+            ))
+        );
+        Ok(())
+    }
 
     #[test]
     fn busy_changes_are_normalized_and_independent_of_packets() -> Result<()> {
