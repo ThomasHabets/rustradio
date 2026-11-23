@@ -8,7 +8,7 @@ use log::trace;
 
 use crate::block::{Block, BlockRet};
 use crate::iir_filter::ClampedFilter;
-use crate::stream::{ReadStream, WriteStream};
+use crate::stream::{ReadStream, Tag, WriteStream};
 use crate::{Float, Result};
 
 /// Timing Error Detector.
@@ -40,6 +40,9 @@ impl Ted for TedZeroCrossing {}
 Under development.
 
 TODO: implement real EOF handling.
+
+Input tags follow the first selected symbol at or after their sample on both
+the symbol and clock outputs. Trailing tags without a symbol expire at EOF.
 */
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
@@ -71,6 +74,7 @@ pub struct SymbolSync {
         sample_rate = "self.src.sample_rate().map(|r| r / f64::from(self.sps))"
     )]
     out_clock: Option<WriteStream<Float>>,
+    pending_tags: Vec<Tag>,
 }
 
 impl SymbolSync {
@@ -119,6 +123,7 @@ impl SymbolSync {
                 last_sym_boundary_pos: 0.0,
                 next_sym_middle: f64::from(sps) / 2.0,
                 out_clock: None,
+                pending_tags: Vec::new(),
             }
             .with_output_metadata(),
             dr,
@@ -138,6 +143,37 @@ impl SymbolSync {
         self.init_out_clock_metadata();
         Ok(rx)
     }
+}
+
+/// Map a tagged window using the sample indices selected by clock recovery.
+/// Untagged windows need only the output count to release pending tags.
+pub(crate) fn symbol_tags(
+    input: Vec<Tag>,
+    selected: &[usize],
+    count: usize,
+    pending: &mut Vec<Tag>,
+) -> Vec<Tag> {
+    if count == 0 {
+        pending.extend(input);
+        return Vec::new();
+    }
+    let mut output = std::mem::take(pending);
+    for tag in &mut output {
+        tag.set_pos(0);
+    }
+    let mut symbol = 0;
+    for mut tag in input {
+        while symbol < selected.len() && selected[symbol] < tag.pos() {
+            symbol += 1;
+        }
+        if symbol < selected.len() {
+            tag.set_pos(symbol);
+            output.push(tag);
+        } else {
+            pending.push(tag);
+        }
+    }
+    output
 }
 
 impl Block for SymbolSync {
@@ -165,6 +201,8 @@ impl Block for SymbolSync {
         let mut opos = 0; // Current output position.
         let olen = out_clock.as_ref().map_or(o.len(), |s| o.len().min(s.len()));
         let oslice = o.slice();
+        let tagged = input.tags().len() != 0;
+        let mut selected = Vec::new();
         for sample in input.iter() {
             n += 1;
             if self.stream_pos >= self.next_sym_middle {
@@ -172,6 +210,9 @@ impl Block for SymbolSync {
                 oslice[opos] = *sample;
                 if let Some(ref mut s) = out_clock {
                     s.slice()[opos] = self.clock;
+                }
+                if tagged {
+                    selected.push(n - 1);
                 }
                 opos += 1;
                 self.next_sym_middle += f64::from(self.clock);
@@ -237,11 +278,11 @@ impl Block for SymbolSync {
                 break;
             }
         }
-        input.consume_discard_tags(n);
-        o.produce(opos, &[]);
+        let tags = symbol_tags(input.consume(n), &selected, opos, &mut self.pending_tags);
         if let Some(s) = out_clock {
-            s.produce(opos, &[]);
+            s.produce(opos, tags.as_slice());
         }
+        o.produce(opos, tags);
         Ok(BlockRet::Again)
     }
 }
@@ -250,6 +291,39 @@ impl Block for SymbolSync {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn forwards_tags_to_symbols_and_clock_across_reads() -> Result<()> {
+        use crate::stream::{TagValue, new_stream};
+        let (writer, input) = new_stream()?;
+        let (mut block, symbols) = SymbolSync::new(
+            input,
+            4.0,
+            0.0,
+            Box::new(TedZeroCrossing::new()),
+            Box::new(crate::iir_filter::IirFilter::new([1.0])?),
+        )?;
+        let clock = block.out_clock()?;
+        let tag = |pos, key| Tag::new(pos, key, TagValue::Bool(true));
+        for (len, tags) in [
+            (2, vec![tag(1, "pending")]),
+            (2, vec![tag(0, "center"), tag(1, "next")]),
+            (3, vec![]),
+        ] {
+            let mut w = writer.write_buf()?;
+            w.fill_from_slice(&[1.0; 3][..len]);
+            w.produce(len, tags);
+            block.work()?;
+        }
+        for stream in [symbols, clock] {
+            let w = stream.read_buf()?;
+            assert_eq!(w.len(), 2);
+            assert_eq!(
+                w.consume(2),
+                [tag(0, "pending"), tag(0, "center"), tag(1, "next")]
+            );
+        }
+        Ok(())
+    }
     #[test]
     fn clock_advances_after_long_run_without_crossings() -> Result<()> {
         let (mut block, samples) = SymbolSync::new(

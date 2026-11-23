@@ -3,7 +3,7 @@ use crate::Result;
 
 use crate::Float;
 use crate::block::{Block, BlockRet};
-use crate::stream::{ReadStream, WriteStream};
+use crate::stream::{ReadStream, Tag, WriteStream};
 
 /** Very simple clock recovery by looking at zero crossings.
 
@@ -20,6 +20,9 @@ looping.
 
 But for now it's "good enough" to get simple 2FSK decoded pretty
 reliably.
+
+Input tags follow the first selected symbol at or after their sample on both
+the symbol and clock outputs. Trailing tags without a symbol expire at EOF.
 */
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate)]
@@ -42,6 +45,7 @@ pub struct ZeroCrossing {
         sample_rate = "self.src.sample_rate().map(|r| r / f64::from(self.sps))"
     )]
     out_clock: Option<WriteStream<Float>>,
+    pending_tags: Vec<Tag>,
 }
 
 impl ZeroCrossing {
@@ -85,6 +89,7 @@ impl ZeroCrossing {
                 last_cross: 0.0,
                 counter: 0,
                 out_clock: None,
+                pending_tags: Vec::new(),
             }
             .with_output_metadata(),
             dr,
@@ -133,12 +138,17 @@ impl Block for ZeroCrossing {
         } else {
             o.len()
         };
+        let tagged = input.tags().len() != 0;
+        let mut selected = Vec::new();
         for sample in input.iter() {
             n += 1;
             if self.counter == (self.last_cross + (self.clock / 2.0)) as u64 {
                 o.slice()[opos] = *sample;
                 if let Some(ref mut s) = out_clock {
                     s.slice()[opos] = self.clock;
+                }
+                if tagged {
+                    selected.push(n - 1);
                 }
                 opos += 1;
                 self.last_cross += self.clock;
@@ -163,17 +173,49 @@ impl Block for ZeroCrossing {
                 break;
             }
         }
-        input.consume_discard_tags(n);
-        o.produce(opos, &[]);
+        let tags = crate::symbol_sync::symbol_tags(
+            input.consume(n),
+            &selected,
+            opos,
+            &mut self.pending_tags,
+        );
         if let Some(s) = out_clock {
-            s.produce(opos, &[]);
+            s.produce(opos, tags.as_slice());
         }
+        o.produce(opos, tags);
         Ok(BlockRet::Again)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn forwards_tags_to_symbols_and_clock_across_reads() -> Result<()> {
+        use crate::stream::{TagValue, new_stream};
+        let (writer, input) = new_stream()?;
+        let (mut block, symbols) = ZeroCrossing::new(input, 4.0, 0.0)?;
+        let clock = block.out_clock()?;
+        let tag = |pos, key| Tag::new(pos, key, TagValue::Bool(true));
+        for (len, tags) in [
+            (2, vec![tag(1, "pending")]),
+            (2, vec![tag(0, "center"), tag(1, "next")]),
+            (3, vec![]),
+        ] {
+            let mut w = writer.write_buf()?;
+            w.fill_from_slice(&[1.0; 3][..len]);
+            w.produce(len, tags);
+            block.work()?;
+        }
+        for stream in [symbols, clock] {
+            let w = stream.read_buf()?;
+            assert_eq!(w.len(), 2);
+            assert_eq!(
+                w.consume(2),
+                [tag(0, "pending"), tag(0, "center"), tag(1, "next")]
+            );
+        }
+        Ok(())
+    }
     #[test]
     fn repeated_clock_creation_preserves_the_existing_output() -> Result<()> {
         let (mut block, _samples) =
