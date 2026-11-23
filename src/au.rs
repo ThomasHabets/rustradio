@@ -26,6 +26,7 @@ pub enum Encoding {
 
 This block takes a stream of floats between -1 and 1, and writes them
 as the bytes of an .au file.
+Sample tags accompany the first byte of the corresponding PCM sample.
 
 ```
 use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
@@ -151,8 +152,11 @@ impl Block for AuEncode {
             let val = (i.slice()[j] * scale) as S;
             o.slice()[j * ss..(j + 1) * ss].clone_from_slice(&val.to_be_bytes());
         }
-        i.consume_discard_tags(n);
-        o.produce(n * ss, &[]);
+        let mut tags = i.consume(n);
+        for tag in &mut tags {
+            tag.set_pos(tag.pos() * ss);
+        }
+        o.produce(n * ss, tags);
         Ok(BlockRet::Again)
     }
 }
@@ -165,6 +169,7 @@ enum DecodeState {
 }
 
 /// .au file decoder.
+/// Tags on PCM bytes follow their decoded sample. Header tags are discarded.
 ///
 /// Currently only accepts a very narrow header format of PCM16, mono,
 /// 44100 Hz.
@@ -286,8 +291,11 @@ impl Block for AuDecode {
                     .iter()
                     .map(|bytes| Float::from(i16::from_be_bytes(*bytes)) / 32767.0);
                 let written = o.fill_from_iter(samples)?;
-                o.produce(written, &[]);
-                i.consume_discard_tags(n);
+                let mut tags = i.consume(n);
+                for tag in &mut tags {
+                    tag.set_pos(tag.pos() / 2);
+                }
+                o.produce(written, tags);
                 self.state = DecodeState::Data(remaining.map(|left| left - n));
             }
         }
@@ -298,6 +306,30 @@ impl Block for AuDecode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pcm_tags_round_trip_past_header() -> Result<()> {
+        use crate::stream::{Tag, TagValue, new_stream};
+        let (w, input) = new_stream()?;
+        let mut window = w.write_buf()?;
+        window.fill_from_slice(&[0.0, 0.5]);
+        let marker = Tag::new(1, "marker", TagValue::Bool(true));
+        window.produce(2, vec![marker.clone()]);
+        let (mut encoder, bytes) = AuEncode::new(input, Encoding::Pcm16, 48000, 1)?;
+        encoder.work()?;
+        let header_len = bytes.read_buf()?.len();
+        encoder.work()?;
+        assert_eq!(
+            bytes.read_buf()?.tags().next().unwrap().pos(),
+            header_len + 2
+        );
+        let (mut decoder, out) = AuDecode::new(bytes, 48000)?;
+        for _ in 0..4 {
+            decoder.work()?;
+        }
+        assert_eq!(out.read_buf()?.consume(2), [marker]);
+        Ok(())
+    }
 
     #[test]
     fn decode_respects_data_length() -> Result<()> {
