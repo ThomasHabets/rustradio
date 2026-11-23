@@ -12,7 +12,7 @@ use crate::stream::{ReadStream, WriteStream};
 /// To add a constant value to a stream, instead use `AddConst`.
 ///
 /// ```
-/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 /// use rustradio::blocks::{ConstantSource, SignalSourceFloat, Add, NullSink};
 ///
 /// let mut graph = Graph::new();
@@ -24,9 +24,9 @@ use crate::stream::{ReadStream, WriteStream};
 /// // Sum up the streams.
 /// let (sum, sum_out) = Add::new(src1_out, src2_out).unwrap();
 ///
-/// graph.add(Box::new(src1));
-/// graph.add(Box::new(src2));
-/// graph.add(Box::new(sum));
+/// graph.add(src1);
+/// graph.add(src2);
+/// graph.add(sum);
 ///
 /// // Set up dummy sink.
 /// let sink = NullSink::new(sum_out);

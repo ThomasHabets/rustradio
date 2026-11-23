@@ -8,7 +8,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -52,11 +52,9 @@ fn run(opt: Opt) -> Result<()> {
             .build(prev)?,
         RtlSdrEncode::new(prev)?,
     ];
-    let sink = Box::new(
-        FileSink::builder("/dev/stdout")
-            .mode(Mode::Overwrite)
-            .build(prev)?,
-    );
+    let sink = FileSink::builder("/dev/stdout")
+        .mode(Mode::Overwrite)
+        .build(prev)?;
     g.add(sink);
     Ok(g.run()?)
 }

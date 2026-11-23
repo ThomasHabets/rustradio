@@ -7,7 +7,7 @@ use log::warn;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
         ]
     };
 
-    g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));
+    g.add(AudioSink::new(prev, opt.audio_rate as u64)?);
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

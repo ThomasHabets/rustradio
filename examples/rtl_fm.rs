@@ -14,7 +14,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 
 const SPECTRUM_SIZE: usize = 1024;
@@ -357,7 +357,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
     };
 
     let (block, spec_tee, prev) = Tee::new(prev)?;
-    g.add(Box::new(block));
+    g.add(block);
 
     // Send data to spectrum UI.
     {
@@ -373,7 +373,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
                 }
             })?
         ];
-        g.add(Box::new(NullSink::new(prev)));
+        g.add(NullSink::new(prev));
     }
 
     // Resample.
@@ -426,7 +426,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
             AuEncode::new(prev, rustradio::au::Encoding::Pcm16, opt.audio_rate, 1)?
         ];
         // Save to file.
-        g.add(Box::new(FileSink::new(prev, out, Mode::Overwrite)?));
+        g.add(FileSink::new(prev, out, Mode::Overwrite)?);
     } else if !cfg!(feature = "audio") {
         panic!(
             "Rustradio build without feature 'audio'. Can only write to file with -o, not play live."
@@ -435,9 +435,7 @@ fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<(
         #[cfg(feature = "audio")]
         {
             // Play live.
-            g.add(Box::new(
-                AudioSink::builder().build(prev, opt.audio_rate as u64)?,
-            ));
+            g.add(AudioSink::builder().build(prev, opt.audio_rate as u64)?);
         }
     }
     Ok(ui_thread)

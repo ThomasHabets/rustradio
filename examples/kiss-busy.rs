@@ -6,7 +6,7 @@ use clap::Parser;
 
 use rustradio::blockchain;
 use rustradio::blocks::{DebugSink, KissDecode, KissFrame, NCNullSink, TcpSource};
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 
 #[derive(clap::Parser)]
 struct Opt {
@@ -36,12 +36,12 @@ fn main() -> Result<()> {
         {
             let (mut b, prev) = KissDecode::new(prev);
             let null = NCNullSink::new(prev);
-            graph.add(Box::new(null));
+            graph.add(null);
             let prev = b.busy()?;
             (b, prev)
         },
     ];
-    graph.add(Box::new(DebugSink::new(prev)));
+    graph.add(DebugSink::new(prev));
     eprintln!("Running…");
     graph.run()?;
     Ok(())

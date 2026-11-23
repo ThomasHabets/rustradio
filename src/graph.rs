@@ -41,11 +41,11 @@ impl StreamWaitState {
 }
 
 /**
-Abstraction over graph executors.
+Abstraction over graph executors. Use [`GraphRunnerExt::add`] for an unboxed block.
 */
 pub trait GraphRunner {
-    /// Add a block to the graph.
-    fn add(&mut self, b: Box<dyn Block + Send>);
+    /// Add an already boxed block to the graph.
+    fn add_boxed(&mut self, b: Box<dyn Block>);
 
     /// Run the graph.
     ///
@@ -75,6 +75,19 @@ pub trait GraphRunner {
     fn cancel_token(&self) -> CancellationToken;
 }
 
+/// Convenience methods for concrete and dynamic graph runners.
+///
+/// This needs to be a separate trait because the generic method prevents
+/// creating `dyn GraphRunnerExt`, but we need `dyn GraphRunner`.
+pub trait GraphRunnerExt: GraphRunner {
+    /// Add a block to the graph, boxing it for storage.
+    fn add(&mut self, block: impl Block + 'static) {
+        self.add_boxed(Box::new(block));
+    }
+}
+
+impl<G: GraphRunner + ?Sized> GraphRunnerExt for G {}
+
 /**
 A graph is a thing that RustRadio runs, to let blocks "talk to each
 other" via streams.
@@ -82,17 +95,17 @@ other" via streams.
 # Example
 
 ```
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
 let (src, src_out) = FileSource::new("/dev/null")?;
 let (dec, dec_out) = RtlSdrDecode::new(src_out)?;
 let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0))?;
-let sink = Box::new(NullSink::new(add_out));
+let sink = NullSink::new(add_out);
 let mut g = Graph::new();
-g.add(Box::new(src));
-g.add(Box::new(dec));
-g.add(Box::new(add));
+g.add(src);
+g.add(dec);
+g.add(add);
 g.add(sink);
 g.run()?;
 # Ok::<(), anyhow::Error>(())
@@ -126,7 +139,7 @@ impl Graph {
 }
 
 impl GraphRunner for Graph {
-    fn add(&mut self, b: Box<dyn Block + Send>) {
+    fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.block_names.push(b.block_name().to_owned());
         self.blocks.push(Some(b));
     }
@@ -415,11 +428,11 @@ mod tests {
         let (src, src_out) = FileSource::new("/dev/null")?;
         let (dec, dec_out) = RtlSdrDecode::new(src_out)?;
         let (add, add_out) = AddConst::new(dec_out, Complex::new(1.1, 2.0))?;
-        let sink = Box::new(NullSink::new(add_out));
+        let sink = NullSink::new(add_out);
         let mut g = Graph::new();
-        g.add(Box::new(src));
-        g.add(Box::new(dec));
-        g.add(Box::new(add));
+        g.add(src);
+        g.add(dec);
+        g.add(add);
         g.add(sink);
         g.run()?;
         Ok(())
@@ -482,11 +495,11 @@ mod eof_tests {
         let (source, stream) = crate::vector_source::VectorSource::new(vec![1.0f32])?;
         let finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let mut graph = Graph::new();
-        graph.add(Box::new(ClosingSink {
+        graph.add(ClosingSink {
             src: stream,
             finished: finished.clone(),
-        }));
-        graph.add(Box::new(source));
+        });
+        graph.add(source);
         graph.run()?;
         assert!(finished.load(std::sync::atomic::Ordering::SeqCst));
         Ok(())

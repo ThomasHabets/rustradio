@@ -40,7 +40,7 @@ use clap::Parser;
 use rustradio::block::{Block, BlockRet};
 use rustradio::blockchain;
 use rustradio::blocks::{Agc, ComplexToMag2, FileSource, PwmDecoder, PwmFrame, PwmGapPulse};
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::{NCReadStream, ReadStream};
 use rustradio::{Complex, Float};
@@ -313,7 +313,7 @@ fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
     Ok(match opt.source {
         Source::File(ref o) => {
             let (b, prev) = FileSource::<Complex>::new(&o.input)?;
-            g.add(Box::new(b));
+            g.add(b);
             SourceOutput {
                 samples: prev,
                 #[cfg(feature = "soapysdr")]
@@ -329,7 +329,7 @@ fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
                     .channel(RX_CHANNEL)
                     .igain(o.igain)?
                     .build()?;
-            g.add(Box::new(b));
+            g.add(b);
             SourceOutput {
                 samples: prev,
                 device: Some(dev),
@@ -754,7 +754,7 @@ fn add_interactive_transmitter(
                 soapy.freq_offset as f32,
                 1.0,
             )?;
-            graph.add(Box::new(b));
+            graph.add(b);
             rustradio::blocks::Multiply::new(prev, xlat)?
         },
         {
@@ -856,11 +856,11 @@ fn main() -> Result<()> {
         .gap_pulse(PwmGapPulse::Data)
         .build(prev)?,
     ];
-    graph.add(Box::new(RestaurantPagerPrinter::new(
+    graph.add(RestaurantPagerPrinter::new(
         prev,
         opt.sample_rate as u32,
         output,
-    )));
+    ));
 
     let run_result = graph.run();
     #[cfg(feature = "soapysdr")]

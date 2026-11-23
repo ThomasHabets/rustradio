@@ -27,7 +27,7 @@ where
 /// Tags are preserved.
 ///
 /// ```
-/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 /// use rustradio::blocks::{ConstantSource, SignalSourceFloat, AddConst, NullSink};
 ///
 /// let mut graph = Graph::new();
@@ -38,8 +38,8 @@ where
 /// // Sum up the streams.
 /// let (sum, sum_out) = AddConst::new(src_out, 1.0).unwrap();
 ///
-/// graph.add(Box::new(src));
-/// graph.add(Box::new(sum));
+/// graph.add(src);
+/// graph.add(sum);
 ///
 /// // Set up dummy sink.
 /// let sink = NullSink::new(sum_out);

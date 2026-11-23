@@ -26,7 +26,7 @@ other" via streams.
 # Example
 
 ```
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
@@ -35,10 +35,10 @@ let (dec, prev) = RtlSdrDecode::new(prev)?;
 let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0))?;
 let sink = NullSink::new(prev);
 let mut g = MTGraph::new();
-g.add(Box::new(src));
-g.add(Box::new(dec));
-g.add(Box::new(add));
-g.add(Box::new(sink));
+g.add(src);
+g.add(dec);
+g.add(add);
+g.add(sink);
 g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
@@ -46,7 +46,7 @@ g.run()?;
 pub struct MTGraph {
     spent_time: Option<std::time::Duration>,
     spent_cpu_time: Option<std::time::Duration>,
-    blocks: Vec<Box<dyn Block + Send>>,
+    blocks: Vec<Box<dyn Block>>,
     cancel_token: CancellationToken,
     block_stats: BTreeMap<(usize, String), BlockStats>,
 }
@@ -76,7 +76,7 @@ impl Drop for CancelOnPanic {
 }
 
 impl crate::graph::GraphRunner for MTGraph {
-    fn add(&mut self, b: Box<dyn Block + Send>) {
+    fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.blocks.push(b);
     }
 
@@ -269,7 +269,7 @@ impl Default for MTGraph {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use crate::graph::GraphRunner;
+    use crate::graph::{GraphRunner, GraphRunnerExt};
     use crate::stream::{Tag, TagValue};
     use crate::tests::assert_almost_equal_complex;
     use crate::{Complex, Float};
@@ -319,18 +319,18 @@ mod tests {
             let mut graph = MTGraph::new();
             let barrier = Arc::new(Barrier::new(2));
             let released = Arc::new(AtomicBool::new(false));
-            graph.add(Box::new(Worker {
+            graph.add(Worker {
                 failure: Some(panic),
                 started: false,
                 barrier: barrier.clone(),
                 released: None,
-            }));
-            graph.add(Box::new(Worker {
+            });
+            graph.add(Worker {
                 failure: None,
                 started: false,
                 barrier,
                 released: Some(released.clone()),
-            }));
+            });
             assert!(graph.run().is_err());
             assert!(released.load(Ordering::SeqCst));
         }
@@ -347,12 +347,12 @@ mod tests {
         let sink = VectorSink::new(add2_out, 100);
         let hook = sink.hook();
         let mut g = MTGraph::new();
-        g.add(Box::new(src1));
-        g.add(Box::new(src2));
-        g.add(Box::new(conv));
-        g.add(Box::new(add1));
-        g.add(Box::new(add2));
-        g.add(Box::new(sink));
+        g.add(src1);
+        g.add(src2);
+        g.add(conv);
+        g.add(add1);
+        g.add(add2);
+        g.add(sink);
         g.run()?;
         assert_almost_equal_complex(hook.data().samples(), &[Complex::new(4.4, -9.0)]);
         assert_eq!(

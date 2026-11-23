@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustradio::Result;
 use rustradio::block::{Block, BlockEOF, BlockRet};
-use rustradio::graph::GraphRunner;
+use rustradio::graph::GraphRunnerExt;
 
 #[derive(rustradio_macros::Block)]
 #[rustradio(custom_name, noeof)]
@@ -40,14 +40,14 @@ impl Block for NamedBlock {
 #[cfg(not(feature = "wasm"))]
 #[test]
 fn graph_reuses_names_for_work_and_stats() -> Result<()> {
-    use rustradio::graph::Graph;
+    use rustradio::graph::{Graph, GraphRunner};
 
     let calls = Arc::new(AtomicUsize::new(0));
-    let mut graph = Graph::new();
-    graph.add(Box::new(NamedBlock {
+    let mut graph: Box<dyn GraphRunner> = Box::new(Graph::new());
+    graph.add(NamedBlock {
         name_calls: calls.clone(),
         work_calls: 0,
-    }));
+    });
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     graph.run()?;
     assert!(graph.generate_stats().unwrap().contains("CachedBlock"));
@@ -64,10 +64,10 @@ fn wasm_graph_reuses_names_across_work_calls() -> Result<()> {
 
     let calls = Arc::new(AtomicUsize::new(0));
     let mut graph = WasmGraph::new();
-    graph.add(Box::new(NamedBlock {
+    graph.add(NamedBlock {
         name_calls: calls.clone(),
         work_calls: 0,
-    }));
+    });
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     let (_sender, receiver) = async_channel::bounded(1);
     let mut run = std::pin::pin!(graph.run_async(receiver));

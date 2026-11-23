@@ -7,7 +7,7 @@ use log::warn;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
@@ -51,11 +51,11 @@ fn main() -> Result<()> {
         SignalSourceFloat::new(opt.audio_rate as Float, opt.freq, opt.volume)?
     ];
 
-    g.add(Box::new(
+    g.add(
         PipewireSink::builder()
             .audio_rate(opt.audio_rate)
             .build(prev)?,
-    ));
+    );
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

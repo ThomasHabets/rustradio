@@ -80,7 +80,7 @@ Here's a simple example that creates a couple of blocks, connects them
 with streams, and runs the graph.
 
 ```
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 use rustradio::blocks::{AddConst, VectorSource, DebugSink};
 use rustradio::Complex;
 let (src, prev) = VectorSource::new(
@@ -93,9 +93,9 @@ let (src, prev) = VectorSource::new(
 let (add, prev) = AddConst::new(prev, Complex::new(1.1, 2.0))?;
 let sink = DebugSink::new(prev);
 let mut g = Graph::new();
-g.add(Box::new(src));
-g.add(Box::new(add));
-g.add(Box::new(sink));
+g.add(src);
+g.add(add);
+g.add(sink);
 g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```
@@ -576,7 +576,7 @@ macro_rules! error_from {
 /// ## Example
 ///
 /// ```
-/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::graph::Graph;
 /// use rustradio::blocks::*;
 /// use rustradio::blockchain;
 ///
@@ -593,9 +593,10 @@ macro_rules! error_from {
 #[macro_export]
 macro_rules! blockchain {
     ($g:expr, $prev:ident, $($cons:expr),* $(,)?) => {{
+        use $crate::graph::GraphRunnerExt as _;
         $(
             let (block, $prev) = $cons;
-            $g.add(Box::new(block));
+            $g.add(block);
             )*
             $prev
     }};

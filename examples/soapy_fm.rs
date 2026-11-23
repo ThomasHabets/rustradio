@@ -8,7 +8,7 @@ use log::warn;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
@@ -117,7 +117,7 @@ pub fn main() -> Result<()> {
     ];
 
     // Save to file.
-    g.add(Box::new(FileSink::new(prev, opt.output, Mode::Overwrite)?));
+    g.add(FileSink::new(prev, opt.output, Mode::Overwrite)?);
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

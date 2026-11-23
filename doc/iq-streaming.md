@@ -601,7 +601,7 @@ A browser worker can connect as follows (the graph's processing blocks follow
 `output`):
 
 ```rust,ignore
-use rustradio::{Complex, graph::GraphRunner};
+use rustradio::{Complex, graph::GraphRunnerExt};
 use rustradio::iq_stream::StreamOptions;
 use rustradio_ui::worker::IqStreamSource;
 
@@ -611,7 +611,7 @@ let (source, output, handle) = IqStreamSource::<Complex>::connect(
 ).await?;
 let rate = handle.description().sample_rate_hz;
 let mut graph = rustradio::wasm::wasm_graph::WasmGraph::new();
-graph.add(Box::new(source));
+graph.add(source);
 // Add DSP and a sink connected to output, using rate for configuration.
 graph.run_async(wake).await?;
 ```

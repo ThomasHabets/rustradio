@@ -8,7 +8,7 @@ use rustradio::block::BlockRet;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::parse_frequency;
 use rustradio::sigmf::{self, Annotation, SigMF};
 use rustradio::stream::{ReadStream, TagValue, WriteStream};
@@ -177,11 +177,11 @@ fn main() -> Result<()> {
 
     // Save to file.
     let mode = Mode::Overwrite;
-    g.add(Box::new(
+    g.add(
         FileSink::builder(opt.output.with_extension("sigmf-data"))
             .mode(mode)
             .build(prev)?,
-    ));
+    );
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

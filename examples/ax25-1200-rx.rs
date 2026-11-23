@@ -39,7 +39,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use rustradio::blocks::*;
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::window::WindowType;
@@ -111,7 +111,7 @@ fn get_complex_input(
         let samp_rate = b
             .sample_rate()
             .ok_or(Error::msg("SigMF file does not specify sample rate"))?;
-        g.add(Box::new(b));
+        g.add(b);
         return Ok((prev, samp_rate as f32));
     }
 
@@ -217,13 +217,13 @@ fn main() -> Result<()> {
     /*
     // Save audio floats to file.
     let (tee, a, prev) = Tee::new(prev);
-    g.add(Box::new(tee));
+    g.add(tee);
     {
-        g.add(Box::new(FileSink::new(
+        g.add(FileSink::new(
             a,
             "test.f32",
             rustradio::file_sink::Mode::Overwrite,
-        )?));
+        )?);
     }
     */
 
@@ -250,12 +250,12 @@ fn main() -> Result<()> {
     /*
     // Save floats to file.
     let (b, a, prev) = Tee::new(prev);
-    g.add(Box::new(b));
-    g.add(Box::new(FileSink::new(
+    g.add(b);
+    g.add(FileSink::new(
         a,
         "test.f32",
         rustradio::file_sink::Mode::Overwrite,
-    )?));
+    )?);
      */
     let baud = 1200.0;
     let (prev, mut block) = {
@@ -275,23 +275,23 @@ fn main() -> Result<()> {
     let prev = if let Some(clockfile) = opt.clock_file {
         let clock = block.out_clock()?;
         let (block, a, prev) = Tee::new(prev)?;
-        g.add(Box::new(block));
+        g.add(block);
         let clock = blockchain![
             g,
             clock,
             AddConst::new(clock, -samp_rate / baud)?,
             ToText::new(vec![a, clock])?,
         ];
-        g.add(Box::new(FileSink::new(
+        g.add(FileSink::new(
             clock,
             clockfile,
             rustradio::file_sink::Mode::Overwrite,
-        )?));
+        )?);
         prev
     } else {
         prev
     };
-    g.add(Box::new(block));
+    g.add(block);
 
     let prev = blockchain![
         g,
@@ -301,12 +301,12 @@ fn main() -> Result<()> {
         // Save bits to file.
         /*
         let (b, a, prev) = Tee::new(prev);
-        g.add(Box::new(b));
-        g.add(Box::new(FileSink::new(
+        g.add(b);
+        g.add(FileSink::new(
             a,
             "test.u8",
             rustradio::file_sink::Mode::Overwrite,
-        )?));
+        )?);
          */
         {
             let (mut hdlc, prev) = HdlcDeframer::new(prev, 10, 1500);
@@ -315,9 +315,9 @@ fn main() -> Result<()> {
         },
     ];
     if let Some(o) = opt.output {
-        g.add(Box::new(PduWriter::new(prev, o)));
+        g.add(PduWriter::new(prev, o));
     } else {
-        g.add(Box::new(DebugSinkNoCopy::new(prev)));
+        g.add(DebugSinkNoCopy::new(prev));
     }
 
     let cancel = g.cancel_token();

@@ -4,7 +4,7 @@
 #[tokio::main]
 async fn main() -> rustradio::Result<()> {
     use rustradio::blocks::{IqStreamSink, ReaderSource};
-    use rustradio::graph::{Graph, GraphRunner};
+    use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
     use rustradio::iq_stream::IqServer;
     use std::io::Read;
 
@@ -30,8 +30,8 @@ async fn main() -> rustradio::Result<()> {
         .blocking(true)
         .build()?;
     let mut graph = Graph::new();
-    graph.add(Box::new(source));
-    graph.add(Box::new(sink));
+    graph.add(source);
+    graph.add(sink);
     let cancel = graph.cancel_token();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:50051").await?;
     println!("I/Q waterfall: 127.0.0.1:50051, source iq, blocking, 48000 samples/s");

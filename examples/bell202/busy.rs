@@ -7,7 +7,7 @@ use std::sync::{
 use anyhow::{Result, ensure};
 use rustradio::Sample;
 use rustradio::blocks::{Map, Tee};
-use rustradio::graph::GraphRunner;
+use rustradio::graph::GraphRunnerExt;
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 
@@ -107,7 +107,7 @@ pub(super) fn tap<T: Sample>(
     let mut previous_busy = false;
     let mut state_samples = 0u64;
     let (tee, data, level) = Tee::new(input)?;
-    graph.add(Box::new(tee));
+    graph.add(tee);
     let (map, busy) = Map::keep_tags(level, "ChannelBusy", move |value| {
         // Keep receive detection running during TX, so TX-off cannot falsely
         // clear a channel that still has a received carrier.
@@ -136,13 +136,14 @@ pub(super) fn tap<T: Sample>(
         previous_busy = active;
         state
     })?;
-    graph.add(Box::new(map));
+    graph.add(map);
     Ok((data, Some(busy)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rustradio::graph::GraphRunner;
 
     #[test]
     fn hysteresis_and_invalid_samples_recover() -> Result<()> {
@@ -189,7 +190,7 @@ mod tests {
         samples.extend(vec![0.0; rate / 5]);
         let mut graph = MTGraph::new();
         let (source, input) = VectorSource::new(samples)?;
-        graph.add(Box::new(source));
+        graph.add(source);
         let (data, busy) = tap(
             &mut graph,
             input,
@@ -198,16 +199,16 @@ mod tests {
             None,
             |sample| f64::from(sample).powi(2),
         )?;
-        graph.add(Box::new(NullSink::new(data)));
+        graph.add(NullSink::new(data));
         let (writer, packets) = new_nocopy_stream();
         drop(writer);
         let (encoder, frames) = KissEncode::new(packets);
-        graph.add(Box::new(encoder.with_busy(busy.unwrap())));
+        graph.add(encoder.with_busy(busy.unwrap()));
         let (flatten, wire) = PduToStream::new(frames)?;
-        graph.add(Box::new(flatten));
+        graph.add(flatten);
         let sink = VectorSink::new(wire, 100);
         let hook = sink.hook();
-        graph.add(Box::new(sink));
+        graph.add(sink);
         graph.run()?;
         assert_eq!(
             hook.data().samples(),
@@ -250,7 +251,7 @@ mod tests {
                 (!full_duplex).then(|| transmit.clone()),
                 |sample: f32| f64::from(sample).powi(2),
             )?;
-            graph.add(Box::new(NullSink::new(data)));
+            graph.add(NullSink::new(data));
             let states = states.unwrap();
             let worker = std::thread::spawn(move || graph.run());
             // Wait for each segment to pass through the real graph before

@@ -5,23 +5,23 @@
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     use rustradio::blocks::{AddConst, NullSink, SignalSourceComplex};
-    use rustradio::graph::{Graph, GraphRunner};
+    use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
     use rustradio::iq_stream::IqServer;
 
     let server = IqServer::new();
     server.register_all_streams();
     let mut graph = Graph::new();
     let (block, prev) = SignalSourceComplex::new(48_000., 1_000., 1.)?;
-    graph.add(Box::new(block));
+    graph.add(block);
     let prev = prev.with_name("tone").with_sample_rate(48_000.)?;
     let prev = rustradio::blockchain![
         graph,
         prev,
         AddConst::new(prev, rustradio::Complex::new(0.1, 0.))?,
     ];
-    graph.add(Box::new(NullSink::new(
+    graph.add(NullSink::new(
         prev.with_name("offset").with_sample_rate(48_000.)?,
-    )));
+    ));
     let cancel = graph.cancel_token();
     let address = std::env::args()
         .nth(1)

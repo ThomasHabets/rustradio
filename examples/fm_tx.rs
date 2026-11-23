@@ -13,7 +13,7 @@ use log::warn;
 use rustradio::Repeat;
 use rustradio::blockchain;
 use rustradio::blocks::*;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 
 #[derive(clap::Parser, Debug)]
@@ -90,11 +90,11 @@ fn main() -> Result<()> {
             2.0 * std::f64::consts::PI * opt.deviation as f64 / opt.sample_rate
         )?,
     ];
-    g.add(Box::new(
+    g.add(
         SoapySdrSink::builder(&dev, (1_000_000.0 * opt.freq).into(), opt.sample_rate)
             .ogain(opt.ogain.into())?
             .build(prev)?,
-    ));
+    );
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

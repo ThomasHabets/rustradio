@@ -160,7 +160,7 @@ use log::info;
 use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::{parse_frequency, parse_verbosity};
@@ -395,7 +395,7 @@ fn receive_audio(
         Some(busy) => encoder.with_busy(busy),
         None => encoder,
     };
-    g.add(Box::new(encoder));
+    g.add(encoder);
     Ok(blockchain![g, prev, PduToStream::new(prev)?])
 }
 
@@ -442,16 +442,16 @@ fn connect_audio(
     }
     let cancel = g.cancel_token();
     // Stop reception only after playback drains and PTT has been released.
-    g.add(Box::new(
+    g.add(
         sink.on_eof(move || cancel.cancel())
             .build(tx, opt.audio_rate as u64)?,
-    ));
+    );
     let mut source = AudioSource::builder();
     if let Some(name) = &opt.audio_input {
         source = source.device(name);
     }
     let (source, rx) = source.build(opt.audio_rate as u64)?;
-    g.add(Box::new(source));
+    g.add(source);
     Ok(rx)
 }
 
@@ -480,12 +480,12 @@ fn connect_sdr(g: &mut MTGraph, opt: &Opt, tx: ReadStream<Float>) -> Result<busy
         Vco::new(prev, 2.0 * std::f64::consts::PI * 5000.0 / opt.sample_rate)?,
     ];
     let cancel = g.cancel_token();
-    g.add(Box::new(
+    g.add(
         SoapySdrSink::builder(&dev, freq, opt.sample_rate)
             .ogain(opt.ogain)?
             .on_eof(move || cancel.cancel())
             .build(prev)?,
-    ));
+    );
     let prev = blockchain![
         g,
         prev,
@@ -598,7 +598,7 @@ fn run_session(opt: &Opt, io: KissIo, g: &mut MTGraph) -> Result<()> {
     info!("Setting up device");
     let (kiss, rx) = io;
     let (source, input) = ReaderSource::new(rx)?;
-    g.add(Box::new(source));
+    g.add(source);
     let tx_rate = if opt.audio { opt.audio_rate } else { 48000 };
     let tx = transmit_audio(g, input, tx_rate)?;
     let (rx_audio, busy) = if opt.audio {
@@ -617,7 +617,7 @@ fn run_session(opt: &Opt, io: KissIo, g: &mut MTGraph) -> Result<()> {
     };
     let rx_rate = if opt.audio { opt.audio_rate } else { 50000 };
     let output = receive_audio(g, rx_audio, rx_rate, busy, opt)?;
-    g.add(Box::new(WriterSink::new(output, kiss)));
+    g.add(WriterSink::new(output, kiss));
     g.run()?;
     println!("{}", g.generate_stats().expect("failed to generate stats"));
     Ok(())
@@ -652,11 +652,11 @@ mod tests {
     fn modulate(bytes: Vec<u8>, rate: u32) -> Result<Vec<Float>> {
         let mut g = MTGraph::new();
         let (source, input) = VectorSource::new(bytes)?;
-        g.add(Box::new(source));
+        g.add(source);
         let audio = transmit_audio(&mut g, input, rate)?;
         let sink = VectorSink::new(audio, 1_000_000);
         let hook = sink.hook();
-        g.add(Box::new(sink));
+        g.add(sink);
         g.run()?;
         let mut audio = hook.data().samples().to_vec();
         // Flush the receiver's FIR and FFT windows after the final HDLC flag.
@@ -668,11 +668,11 @@ mod tests {
         let opt = Opt::try_parse_from(["bell202", "--audio"])?;
         let mut g = MTGraph::new();
         let (source, input) = VectorSource::new(audio)?;
-        g.add(Box::new(source));
+        g.add(source);
         let bytes = receive_audio(&mut g, input, rate, None, &opt)?;
         let sink = VectorSink::new(bytes, 10000);
         let hook = sink.hook();
-        g.add(Box::new(sink));
+        g.add(sink);
         g.run()?;
         let result = hook.data().samples().to_vec();
         Ok(result)

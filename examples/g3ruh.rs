@@ -40,7 +40,7 @@ use log::info;
 use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::{parse_frequency, parse_verbosity};
@@ -201,7 +201,7 @@ fn receiver_wpcr(
     let iir_alpha = 0.01;
     let threshold = 0.1;
     let (b, prev, burst_tee) = Tee::new(prev)?;
-    g.add(Box::new(b));
+    g.add(b);
     let burst_tee = blockchain![
         g,
         burst_tee,
@@ -282,11 +282,11 @@ pub fn main() -> Result<()> {
             )?,
             Canary::new(prev, move || cancel.cancel())?,
         ];
-        g.add(Box::new(
+        g.add(
             SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
                 .ogain(opt.ogain)?
                 .build(prev)?,
-        ));
+        );
     }
 
     // Receiver.
@@ -323,7 +323,7 @@ pub fn main() -> Result<()> {
             KissEncode::new(prev),
             PduToStream::new(prev)?,
         ];
-        g.add(Box::new(WriterSink::new(prev, kiss)));
+        g.add(WriterSink::new(prev, kiss));
     }
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

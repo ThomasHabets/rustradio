@@ -2,7 +2,7 @@
 use clap::Parser;
 
 use rustradio::blocks::*;
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 use rustradio::{Result, blockchain};
 
 #[derive(clap::Parser, Debug)]
@@ -25,10 +25,10 @@ fn main() -> Result<()> {
         FileSource::new(opt.input.to_str().unwrap())?,
         RtlSdrDecode::new(prev)?,
     ];
-    g.add(Box::new(FileSink::new(
+    g.add(FileSink::new(
         prev,
         opt.output,
         rustradio::file_sink::Mode::Overwrite,
-    )?));
+    )?);
     g.run()
 }

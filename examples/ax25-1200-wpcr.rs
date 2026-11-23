@@ -15,6 +15,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use rustradio::blocks::*;
+use rustradio::graph::GraphRunnerExt;
 use rustradio::window::WindowType;
 use rustradio::{Float, blockchain};
 
@@ -87,7 +88,7 @@ fn main() -> Result<()> {
 
     // Tee out signal strength.
     let (b, prev, burst_tee) = Tee::new(prev)?;
-    g.add(Box::new(b));
+    g.add(b);
     let burst_tee = blockchain![
         g,
         burst_tee,
@@ -98,7 +99,7 @@ fn main() -> Result<()> {
     // Save burst stream
     /*
     let (a, burst_tee) = add_block![g, Tee::new(burst_tee)];
-    g.add(Box::new(FileSink::new(a, "test.f32", rustradio::file_sink::Mode::Overwrite)?));
+    g.add(FileSink::new(a, "test.f32", rustradio::file_sink::Mode::Overwrite)?);
      */
 
     let prev = blockchain![
@@ -135,7 +136,7 @@ fn main() -> Result<()> {
     ];
 
     // Save.
-    g.add(Box::new(PduWriter::new(prev, opt.output)));
+    g.add(PduWriter::new(prev, opt.output));
 
     // Run.
     let cancel = g.cancel_token();

@@ -4,7 +4,7 @@ use clap::Parser;
 use rustradio::Complex;
 use rustradio::blocks::{AddConst, DebugSink, PduWriter, StreamToPdu, VectorSource};
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -23,14 +23,13 @@ fn simple_copy() -> Result<()> {
     ])
     .repeat(rustradio::Repeat::finite(2))
     .build()?;
-    let src = Box::new(src);
 
     let (add, add_out) = AddConst::new(src_out, Complex::new(1.1, 2.0))?;
     let sink = DebugSink::new(add_out);
 
     g.add(src);
-    g.add(Box::new(add));
-    g.add(Box::new(sink));
+    g.add(add);
+    g.add(sink);
 
     g.run().map_err(Into::into)
 }
@@ -46,15 +45,10 @@ fn simple_noncopy() -> Result<()> {
     .repeat(rustradio::Repeat::finite(2))
     .build()?;
     let (to_pdu, prev) = StreamToPdu::new(src_out, "burst".to_string(), 10_000, 50);
-    g.add(Box::new(to_pdu));
-    g.add(Box::new(PduWriter::new(prev, ".")));
-    //let add = Box::new(AddConst::new(src.out(), Complex::new(1.1, 2.0)));
-    //let sink = Box::new(DebugSink::new(add.out()));
-    //let sink = Box::new(DebugSink::new(src.out()));
+    g.add(to_pdu);
+    g.add(PduWriter::new(prev, "."));
 
-    g.add(Box::new(src));
-    //g.add(add);
-    //g.add(sink);
+    g.add(src);
     g.run().map_err(Into::into)
 }
 

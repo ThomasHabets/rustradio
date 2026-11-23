@@ -532,20 +532,18 @@ mod tests {
     #[test]
     fn busy_encoder_finishes_in_single_and_multi_thread_graphs() -> Result<()> {
         use crate::blocks::{PduToStream, VectorSink};
-        use crate::graph::{Graph, GraphRunner};
+        use crate::graph::{Graph, GraphRunner, GraphRunnerExt};
         fn check(mut graph: impl GraphRunner) -> Result<()> {
             let (packets, input) = new_nocopy_stream();
             packets.push(vec![42], &[]);
             drop(packets);
             let (encoder, frames) = KissEncode::new(input);
-            graph.add(Box::new(
-                encoder.with_busy(ReadStream::from_slice(&[0, 1, 0])),
-            ));
+            graph.add(encoder.with_busy(ReadStream::from_slice(&[0, 1, 0])));
             let (flatten, wire) = PduToStream::new(frames)?;
-            graph.add(Box::new(flatten));
+            graph.add(flatten);
             let sink = VectorSink::new(wire, 100);
             let hook = sink.hook();
-            graph.add(Box::new(sink));
+            graph.add(sink);
             graph.run()?;
             assert_eq!(
                 hook.data().samples(),
@@ -567,17 +565,17 @@ mod tests {
     async fn async_busy_encoder_wakes_for_both_inputs_and_drains() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{PduToStream, VectorSink};
-        use crate::graph::GraphRunner;
+        use crate::graph::GraphRunnerExt;
         let (packets, input) = new_nocopy_stream();
         let (states, busy) = crate::stream::new_stream()?;
         let (encoder, frames) = KissEncode::new(input);
         let mut graph = AsyncGraph::new();
-        graph.add(Box::new(encoder.with_busy(busy)));
+        graph.add(encoder.with_busy(busy));
         let (flatten, wire) = PduToStream::new(frames)?;
-        graph.add(Box::new(flatten));
+        graph.add(flatten);
         let sink = VectorSink::new(wire, 100);
         let hook = sink.hook();
-        graph.add(Box::new(sink));
+        graph.add(sink);
         let producer = async move {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             let mut window = states.write_buf()?;

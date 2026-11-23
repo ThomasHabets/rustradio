@@ -3,7 +3,7 @@
 ## Example
 
 ```
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 use rustradio::blocks::{ToText, ConstantSource, FileSink};
 use rustradio::file_sink::Mode;
 use rustradio::Float;
@@ -12,10 +12,10 @@ let (src2, src2_out) = ConstantSource::new(-1.0)?;
 let (to_text, to_text_out) = ToText::new(vec![src1_out, src2_out])?;
 let sink = FileSink::new(to_text_out, "/dev/null", Mode::Append)?;
 let mut g = Graph::new();
-g.add(Box::new(src1));
-g.add(Box::new(src2));
-g.add(Box::new(to_text));
-g.add(Box::new(sink));
+g.add(src1);
+g.add(src2);
+g.add(to_text);
+g.add(sink);
 // g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```

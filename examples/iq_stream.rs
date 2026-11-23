@@ -4,7 +4,7 @@
 #[tokio::main]
 async fn main() -> rustradio::Result<()> {
     use rustradio::blocks::{IqStreamSink, IqStreamSource, VectorSink, VectorSource};
-    use rustradio::graph::{Graph, GraphRunner};
+    use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
     use rustradio::iq_stream::{IqServer, StreamOptions};
     use rustradio::stream::{Tag, TagValue};
 
@@ -17,8 +17,8 @@ async fn main() -> rustradio::Result<()> {
         .blocking(true)
         .build()?;
     let mut sender = Graph::new();
-    sender.add(Box::new(source));
-    sender.add(Box::new(sink));
+    sender.add(source);
+    sender.add(sink);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let (stop, stopped) = tokio::sync::oneshot::channel();
@@ -42,8 +42,8 @@ async fn main() -> rustradio::Result<()> {
     let sink = VectorSink::new(input, 48000);
     let result = sink.hook();
     let mut receiver = Graph::new();
-    receiver.add(Box::new(source));
-    receiver.add(Box::new(sink));
+    receiver.add(source);
+    receiver.add(sink);
     let sending = tokio::task::spawn_blocking(move || sender.run());
     tokio::task::spawn_blocking(move || receiver.run())
         .await

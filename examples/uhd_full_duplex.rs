@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 
 use rustradio::blocks::{Head, SignalSourceComplex, UhdDevice, UhdSink, UhdSource, VectorSink};
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, blockchain, parse_frequency};
 
@@ -100,7 +100,7 @@ fn main() -> Result<()> {
     ];
     let rx_sink = VectorSink::new(rx, sample_count_usize);
     let rx_hook = rx_sink.hook();
-    graph.add(Box::new(rx_sink));
+    graph.add(rx_sink);
 
     let tx = blockchain![
         graph,
@@ -108,12 +108,12 @@ fn main() -> Result<()> {
         SignalSourceComplex::new(opt.sample_rate as _, opt.tone_frequency as _, 0.05)?,
         Head::new(tx, sample_count)?,
     ];
-    graph.add(Box::new(
+    graph.add(
         UhdSink::builder(&device, opt.frequency, opt.sample_rate)
             .gain(opt.tx_gain)
             .antenna(&opt.tx_antenna)
             .build(tx)?,
-    ));
+    );
     graph.run()?;
 
     let received = rx_hook.data();

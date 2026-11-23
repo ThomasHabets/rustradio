@@ -20,7 +20,7 @@ use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
@@ -90,12 +90,12 @@ fn main() -> Result<()> {
 
             /*
             let (t, prev, b) = Tee::new(prev);
-            g.add(Box::new(t));
-            g.add(Box::new(FileSink::new(
+            g.add(t);
+            g.add(FileSink::new(
                 b,
                 "debug/00-audio.f32",
                 rustradio::file_sink::Mode::Overwrite,
-            )?));
+            )?);
              */
 
             (prev, opt.sample_rate as Float)
@@ -125,12 +125,12 @@ fn main() -> Result<()> {
 
         /*
                 let (t, prev, b) = Tee::new(prev);
-                g.add(Box::new(t));
-                g.add(Box::new(FileSink::new(
+                g.add(t);
+                g.add(FileSink::new(
                     b,
                     "debug/00-unfiltered.c32",
                     rustradio::file_sink::Mode::Overwrite,
-                )?));
+                )?);
         */
 
         // Filter RF.
@@ -174,23 +174,23 @@ fn main() -> Result<()> {
     let prev = if let Some(clockfile) = opt.clock_file {
         let clock = block.out_clock()?;
         let (b, a, prev) = Tee::new(prev)?;
-        g.add(Box::new(b));
+        g.add(b);
         let clock = blockchain![
             g,
             clock,
             AddConst::new(clock, -samp_rate / baud)?,
             ToText::new(vec![a, clock])?,
         ];
-        g.add(Box::new(FileSink::new(
+        g.add(FileSink::new(
             clock,
             clockfile,
             rustradio::file_sink::Mode::Overwrite,
-        )?));
+        )?);
         prev
     } else {
         prev
     };
-    g.add(Box::new(block));
+    g.add(block);
 
     let prev = blockchain![
         g,
@@ -204,7 +204,7 @@ fn main() -> Result<()> {
         HdlcDeframer::new(prev, 10, 1500),
     ];
 
-    g.add(Box::new(PduWriter::new(prev, opt.output)));
+    g.add(PduWriter::new(prev, opt.output));
 
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {

@@ -15,7 +15,7 @@ use log::info;
 
 use rustradio::blockchain;
 use rustradio::blocks::*;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, Float};
 use rustradio::{parse_duration, parse_frequency, parse_verbosity};
@@ -98,11 +98,11 @@ pub fn main() -> Result<()> {
                 .build()?,
         ];
         let mode = Mode::Overwrite;
-        g.add(Box::new(
+        g.add(
             FileSink::builder("morse-300ksps.c32")
                 .mode(mode)
                 .build(prev)?,
-        ));
+        );
     }
 
     let dev2 = dev.clone();
@@ -147,11 +147,11 @@ pub fn main() -> Result<()> {
             0.0
         ))?,
     ];
-    g.add(Box::new(
+    g.add(
         SoapySdrSink::builder(&dev, opt.freq, opt.sample_rate)
             .ogain(opt.ogain)?
             .build(prev)?,
-    ));
+    );
     let cancel = g.cancel_token();
     ctrlc::set_handler(move || {
         eprintln!("Received Ctrl+C!");

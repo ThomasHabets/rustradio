@@ -102,10 +102,10 @@ fn metadata_preserves_data_tags_and_eof() -> Result<()> {
 #[test]
 fn blockchain_arguments_accept_metadata() -> Result<()> {
     use rustradio::blocks::{AddConst, ConstantSource};
-    use rustradio::graph::{Graph, GraphRunner};
+    use rustradio::graph::{Graph, GraphRunnerExt};
     let (block, prev) = ConstantSource::new(1f32)?;
     let mut graph = Graph::new();
-    graph.add(Box::new(block));
+    graph.add(block);
     let output = rustradio::blockchain![
         graph,
         prev,

@@ -3,7 +3,7 @@ use clap::Parser;
 use log::warn;
 
 use rustradio::blocks::*;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, Float, blockchain};
 use rustradio::{parse_frequency, parse_verbosity};
@@ -83,13 +83,13 @@ pub fn main() -> Result<()> {
     ];
 
     if true {
-        g.add(Box::new(AudioSink::new(prev, opt.audio_rate as u64)?));
+        g.add(AudioSink::new(prev, opt.audio_rate as u64)?);
     } else {
-        g.add(Box::new(FileSink::new(
+        g.add(FileSink::new(
             prev,
             "out.f32",
             rustradio::file_sink::Mode::Overwrite,
-        )?));
+        )?);
     }
 
     let cancel = g.cancel_token();

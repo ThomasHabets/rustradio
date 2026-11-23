@@ -31,14 +31,14 @@ where
 /// ```
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), anyhow::Error> {
-/// use rustradio::graph::GraphRunner;
+/// use rustradio::graph::GraphRunnerExt;
 /// use rustradio::agraph::AsyncGraph;
 /// use rustradio::blocks::{VectorSource,NullSink};
 /// let (src, prev) = VectorSource::new(vec![0u8; 10]).unwrap();
 /// let sink = NullSink::new(prev);
 /// let mut g = AsyncGraph::new();
-/// g.add(Box::new(src));
-/// g.add(Box::new(sink));
+/// g.add(src);
+/// g.add(sink);
 /// eprintln!("Running graph");
 /// g.run_async().await?;
 /// # Ok(())
@@ -121,7 +121,7 @@ impl AsyncGraph {
 }
 
 impl GraphRunner for AsyncGraph {
-    fn add(&mut self, b: Box<dyn Block + Send>) {
+    fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.blocks.push(b);
     }
 
@@ -148,12 +148,12 @@ mod tests {
     async fn nullsink() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{NullSink, VectorSource};
-        use crate::graph::GraphRunner;
+        use crate::graph::GraphRunnerExt;
         let (src, prev) = VectorSource::new(vec![0u8; 10])?;
         let sink = NullSink::new(prev);
         let mut g = AsyncGraph::new();
-        g.add(Box::new(src));
-        g.add(Box::new(sink));
+        g.add(src);
+        g.add(sink);
         g.run_async().await?;
         Ok(())
     }
@@ -162,15 +162,15 @@ mod tests {
     async fn double() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{Map, VectorSink, VectorSource};
-        use crate::graph::GraphRunner;
+        use crate::graph::GraphRunnerExt;
         let (src, prev) = VectorSource::new(vec![1u8, 2, 3])?;
         let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2, Cow::Borrowed(tags)))?;
         let sink = VectorSink::new(prev, 100);
         let hook = sink.hook();
         let mut g = AsyncGraph::new();
-        g.add(Box::new(src));
-        g.add(Box::new(mul));
-        g.add(Box::new(sink));
+        g.add(src);
+        g.add(mul);
+        g.add(sink);
         g.run_async().await?;
         assert_eq!(hook.data().samples(), [2, 4, 6]);
         Ok(())
@@ -180,7 +180,7 @@ mod tests {
     async fn big() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{Map, VectorSink, VectorSource};
-        use crate::graph::GraphRunner;
+        use crate::graph::GraphRunnerExt;
         let n = 1_000_000;
         let (src, prev) = VectorSource::new(vec![Complex::new(1.0, 0.0); n])?;
         let (mul, prev) = Map::new(prev, "double", move |x, tags| {
@@ -189,9 +189,9 @@ mod tests {
         let sink = VectorSink::new(prev, n * 2);
         let hook = sink.hook();
         let mut g = AsyncGraph::new();
-        g.add(Box::new(src));
-        g.add(Box::new(mul));
-        g.add(Box::new(sink));
+        g.add(src);
+        g.add(mul);
+        g.add(sink);
         g.run_async().await?;
         assert_eq!(hook.data().samples(), vec![Complex::new(2.0, 0.0); n]);
         Ok(())

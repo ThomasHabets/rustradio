@@ -12,7 +12,7 @@ use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]
@@ -109,7 +109,7 @@ fn main() -> Result<()> {
     let samp_rate = new_samp_rate;
 
     let (b, datapath, magpath) = Tee::new(prev)?;
-    g.add(Box::new(b));
+    g.add(b);
     let magpath = blockchain![
         g,
         magpath,
@@ -123,7 +123,7 @@ fn main() -> Result<()> {
         BurstTagger::new(datapath, magpath, opt.threshold, "burst".to_string())?,
         StreamToPdu::new(datapath, "burst".to_string(), samp_rate as usize, opt.tail),
     ];
-    g.add(Box::new(PduWriter::new(prev, opt.output)));
+    g.add(PduWriter::new(prev, opt.output));
 
     // Set up Ctrl-C.
     let cancel = g.cancel_token();

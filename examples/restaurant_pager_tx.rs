@@ -19,7 +19,7 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 
 use rustradio::blocks::{Map, PwmEncoder, SoapySdrSink};
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 use rustradio::stream::{Tag, TagValue, new_nocopy_stream};
 use rustradio::{Complex, Float, parse_frequency, parse_verbosity};
 
@@ -173,19 +173,19 @@ fn main() -> Result<()> {
         .max_frame_bits(FRAME_BITS)
         .gap_pulse(opt.tx_timing.tx_gap_pulse.into())
         .build(packet_stream)?;
-    graph.add(Box::new(encoder));
+    graph.add(encoder);
     let amplitude = opt.amplitude;
     let (to_complex, samples) = Map::keep_tags(envelope, "OokToComplex", move |level| {
         Complex::new(amplitude * level, 0.0)
     })?;
-    graph.add(Box::new(to_complex));
+    graph.add(to_complex);
     let mut sink = SoapySdrSink::builder(&device, opt.frequency, opt.sample_rate)
         .channel(opt.channel)
         .ogain(opt.gain)?;
     if let Some(antenna) = opt.antenna {
         sink = sink.antenna(antenna);
     }
-    graph.add(Box::new(sink.build(samples)?));
+    graph.add(sink.build(samples)?);
 
     println!(
         "Transmitting {} message(s), {} frame(s) each at {} Hz; \

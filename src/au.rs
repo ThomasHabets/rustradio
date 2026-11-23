@@ -28,7 +28,7 @@ This block takes a stream of floats between -1 and 1, and writes them
 as the bytes of an .au file.
 
 ```
-use rustradio::graph::{Graph, GraphRunner};
+use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
 use rustradio::blocks::{AuEncode, VectorSource, FileSink};
 use rustradio::au::Encoding;
 use rustradio::file_sink::Mode;
@@ -39,9 +39,9 @@ let (src, src_out) = VectorSource::new(
 let (au, au_out) = AuEncode::new(src_out, Encoding::Pcm16, 48000, 1)?;
 let sink = FileSink::new(au_out, "/dev/null", Mode::Overwrite)?;
 let mut g = Graph::new();
-g.add(Box::new(src));
-g.add(Box::new(au));
-g.add(Box::new(sink));
+g.add(src);
+g.add(au);
+g.add(sink);
 g.run()?;
 # Ok::<(), anyhow::Error>(())
 ```

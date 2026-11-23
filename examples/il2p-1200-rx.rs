@@ -14,7 +14,7 @@ use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::window::WindowType;
 use rustradio::{Float, blockchain};
 
@@ -92,11 +92,11 @@ fn main() -> Result<()> {
     /*
     // Save floats to file.
     let (a, prev) = add_block![g, Tee::new(prev)];
-    g.add(Box::new(FileSink::new(
+    g.add(FileSink::new(
         a,
         "test.f32",
         rustradio::file_sink::Mode::Overwrite,
-    )?));
+    )?);
      */
     let baud = 1200.0;
     let prev = {
@@ -108,7 +108,7 @@ fn main() -> Result<()> {
             Box::new(rustradio::symbol_sync::TedZeroCrossing::new()),
             Box::new(clock_filter),
         )?;
-        g.add(Box::new(block));
+        g.add(block);
         prev
     };
 
@@ -121,16 +121,16 @@ fn main() -> Result<()> {
     ];
 
     let (b, a, prev) = Tee::new(prev)?;
-    g.add(Box::new(b));
+    g.add(b);
     let clock = blockchain![g, clock, ToText::new(vec![a])?];
-    g.add(Box::new(FileSink::new(
+    g.add(FileSink::new(
         clock,
         "test.u8",
         rustradio::file_sink::Mode::Overwrite,
-    )?));
+    )?);
 
     let _ = blockchain![g, prev, Il2pDeframer::new(prev)];
-    //g.add(Box::new(NullSink::new(prev)));
+    //g.add(NullSink::new(prev));
 
     // Run the graph.
     let cancel = g.cancel_token();

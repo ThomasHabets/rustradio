@@ -204,7 +204,7 @@ fn validate_fft_input(input: &[Complex], size: usize) -> Result<()> {
 /// FFT filter. Like a FIR filter, but more efficient when there are many taps.
 /// ```
 /// use rustradio::{Complex, Float};
-/// use rustradio::graph::{Graph, GraphRunner};
+/// use rustradio::graph::Graph;
 /// use rustradio::fir::low_pass_complex;
 /// use rustradio::blocks::{ConstantSource, FftFilter, NullSink};
 ///
@@ -603,10 +603,10 @@ mod tests {
         assert!(out.read_buf()?.0.is_empty());
         #[cfg(not(feature = "wasm"))]
         {
-            use crate::graph::{Graph, GraphRunner};
+            use crate::graph::{Graph, GraphRunner, GraphRunnerExt};
             let (filter, out) = make_filter()?;
             let mut graph = Graph::new();
-            graph.add(Box::new(filter));
+            graph.add(filter);
             let error = graph.run().unwrap_err();
             assert!(error.to_string().contains("test FFT backend failure"));
             assert!(out.read_buf()?.0.is_empty());

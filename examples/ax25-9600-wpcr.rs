@@ -8,7 +8,7 @@ use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::GraphRunner;
+use rustradio::graph::{GraphRunner, GraphRunnerExt};
 use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]
@@ -101,7 +101,7 @@ fn main() -> Result<()> {
 
     // Tee out signal strength.
     let (b, prev, burst_tee) = Tee::new(prev)?;
-    g.add(Box::new(b));
+    g.add(b);
     let burst_tee = blockchain![
         g,
         burst_tee,
@@ -138,7 +138,7 @@ fn main() -> Result<()> {
     ];
 
     // Save.
-    g.add(Box::new(PduWriter::new(prev, opt.output)));
+    g.add(PduWriter::new(prev, opt.output));
 
     // Run.
     g.run()?;

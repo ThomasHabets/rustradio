@@ -99,7 +99,7 @@ impl WasmGraph {
 }
 
 impl GraphRunner for WasmGraph {
-    fn add(&mut self, b: Box<dyn Block + Send>) {
+    fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.block_names.push(b.block_name().to_owned());
         self.blocks.push(Some(b));
     }
@@ -117,6 +117,7 @@ impl GraphRunner for WasmGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::GraphRunnerExt;
     use crate::stream::{ReadStream, WriteStream};
     use std::sync::{
         Arc,
@@ -198,16 +199,16 @@ mod tests {
         let sink = crate::vector_sink::VectorSink::new(output, 1);
         let result = sink.hook();
         let mut graph = WasmGraph::new();
-        graph.add(Box::new(ExternalSource {
+        graph.add(ExternalSource {
             dst: writer,
             produced: false,
-        }));
-        graph.add(Box::new(Steps {
+        });
+        graph.add(Steps {
             src: input,
             dst: writer2,
             steps: 0,
-        }));
-        graph.add(Box::new(sink));
+        });
+        graph.add(sink);
         let (_poke, wake) = async_channel::bounded(1);
         let mut run = Box::pin(graph.run_async(wake));
         let waker = Waker::noop();
@@ -224,11 +225,11 @@ mod tests {
         let (source, input) = crate::vector_source::VectorSource::new(vec![1.0f32])?;
         let finished = Arc::new(AtomicBool::new(false));
         let mut graph = WasmGraph::new();
-        graph.add(Box::new(ClosingSink {
+        graph.add(ClosingSink {
             src: input,
             finished: finished.clone(),
-        }));
-        graph.add(Box::new(source));
+        });
+        graph.add(source);
         let (_poke, wake) = async_channel::bounded(1);
         let mut run = Box::pin(graph.run_async(wake));
         let waker = Waker::noop();

@@ -134,7 +134,7 @@ impl Block for CheckHash {
 
 fn cmd_check(opt: CheckOpts) -> Result<()> {
     use rustradio::blocks::*;
-    use rustradio::graph::GraphRunner;
+    use rustradio::graph::{GraphRunner, GraphRunnerExt};
     let mut g = rustradio::mtgraph::MTGraph::new();
     let src = SigMFSource::<u8>::builder(opt.archive)
         .ignore_type_error()
@@ -145,7 +145,7 @@ fn cmd_check(opt: CheckOpts) -> Result<()> {
     };
     let in_meta = in_meta.to_owned();
     let prev = blockchain![g, prev, src, sha512(prev)];
-    g.add(Box::new(CheckHash::new(prev, in_meta)));
+    g.add(CheckHash::new(prev, in_meta));
     g.run().map_err(Into::into)
 }
 
