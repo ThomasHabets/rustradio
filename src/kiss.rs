@@ -13,28 +13,22 @@ const KISS_SET_HARDWARE: u8 = 0x06;
 const MESHCORE_CHANNEL_BUSY: u8 = 0x8e;
 const ENCODE_PORT_TAG: &str = "KissEncode:port";
 
-fn strip_fend(data: &[u8]) -> &[u8] {
-    let start = data
-        .iter()
-        .position(|&b| b != KISS_FEND)
-        .unwrap_or(data.len());
-    if start == data.len() {
-        return &[];
-    }
-    let end = data
-        .iter()
-        .rposition(|&b| b != KISS_FEND)
-        .map_or(0, |i| i + 1);
-    &data[start..end]
-}
-
 /// Escape and frame a complete KISS type byte and its payload.
 #[must_use]
-fn escape(bytes: &[u8], command: u8) -> Vec<u8> {
+fn escape(bytes: &[u8], command: u8, tags: &mut [Tag]) -> Vec<u8> {
     // Add 10% capacity to leave room for escaped
     let mut ret = Vec::with_capacity((3 + bytes.len()) * 110 / 100);
     ret.push(KISS_FEND);
-    for b in std::iter::once(command).chain(bytes.iter().copied()) {
+    let mut markers = tags.iter_mut().skip_while(|t| t.pos() == 0).peekable();
+    for (i, b) in std::iter::once(command)
+        .chain(bytes.iter().copied())
+        .enumerate()
+    {
+        if let Some(pos) = i.checked_sub(1) {
+            while let Some(tag) = markers.next_if(|t| t.pos() == pos) {
+                tag.set_pos(ret.len());
+            }
+        }
         match b {
             KISS_FEND => ret.extend(vec![KISS_FESC, KISS_TFEND]),
             KISS_FESC => ret.extend(vec![KISS_FESC, KISS_TFESC]),
@@ -46,10 +40,21 @@ fn escape(bytes: &[u8], command: u8) -> Vec<u8> {
 }
 
 /// Unescape KISS data stream.
-fn unescape(data: &[u8]) -> Result<Vec<u8>> {
+fn unescape(data: &[u8], start: usize, tags: &mut Vec<Tag>) -> Result<Vec<u8>> {
     let mut unescaped = Vec::with_capacity(data.len());
     let mut is_escaped = false;
-    for &byte in data {
+    let command_len = if data.first() == Some(&KISS_FESC) {
+        2
+    } else {
+        1
+    };
+    tags.retain(|t| t.pos() == 0 || (start + command_len..start + data.len()).contains(&t.pos()));
+    let mut markers = tags.iter_mut().skip_while(|t| t.pos() == 0).peekable();
+    for (i, &byte) in data.iter().enumerate() {
+        while let Some(tag) = markers.next_if(|t| t.pos() == start + i) {
+            // The command is still at index zero until the caller removes it.
+            tag.set_pos(unescaped.len() - 1);
+        }
         if is_escaped {
             unescaped.push(match byte {
                 KISS_TFESC => KISS_FESC,
@@ -79,6 +84,8 @@ fn unescape(data: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Decode KISS frame.
+/// Position-zero metadata stays on the packet. Tags on either byte of an
+/// escape sequence map to its payload byte. Framing and command bytes are skipped.
 ///
 /// This means trimming away `FEND` from both sides, and unescaping `HDLC`
 /// bytes.
@@ -133,11 +140,15 @@ impl Block for KissDecode {
             let Some((x, mut tags)) = self.src.pop() else {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             };
-            let x = strip_fend(&x);
-            if x.is_empty() {
+            let Some(start) = x.iter().position(|&byte| byte != KISS_FEND) else {
                 continue;
-            }
-            let mut out = match unescape(x) {
+            };
+            let end = x
+                .iter()
+                .rposition(|&byte| byte != KISS_FEND)
+                .expect("found non-delimiter");
+            let x = &x[start..=end];
+            let mut out = match unescape(x, start, &mut tags) {
                 Ok(o) => o,
                 Err(e) => {
                     log::debug!("Bad KISS packet: {e}");
@@ -291,8 +302,9 @@ impl Block for KissFrame {
 /// Encode packet PDUs as KISS data frames.
 ///
 /// `KissEncode:port` tags select the data port (default zero). Other packet
-/// tags retain their ordering. An optional busy stream reports channel state
-/// independently of packets using MeshCore SetHardware ChannelBusy frames on
+/// tags at position zero remain packet metadata. Positive payload positions map
+/// to the first wire byte of the encoded payload byte. An optional busy
+/// stream reports channel state independently of packets using MeshCore SetHardware ChannelBusy frames on
 /// port zero: `C0 06 8E state C0`. Busy-input tags are discarded.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new, noeof)]
@@ -337,8 +349,8 @@ impl KissEncode {
                 0
             }
         };
-        let out = escape(&x, (port as u8) << 4);
-        tags.retain(|tag| tag.key() != ENCODE_PORT_TAG);
+        tags.retain(|tag| tag.key() != ENCODE_PORT_TAG && (tag.pos() == 0 || tag.pos() < x.len()));
+        let out = escape(&x, (port as u8) << 4, &mut tags);
         let zeros = tags.partition_point(|tag| tag.pos() == 0);
         tags.splice(
             zeros..zeros,
@@ -405,7 +417,11 @@ impl Block for KissEncode {
                     break;
                 }
                 self.dst.push(
-                    escape(&[MESHCORE_CHANNEL_BUSY, u8::from(state)], KISS_SET_HARDWARE),
+                    escape(
+                        &[MESHCORE_CHANNEL_BUSY, u8::from(state)],
+                        KISS_SET_HARDWARE,
+                        &mut [],
+                    ),
                     &[],
                 );
                 self.last_busy = Some(state);
@@ -662,9 +678,9 @@ mod tests {
             b"\xC0\x30foo\xDB\xDCA\xDB\xDD".to_vec(),
             &[
                 Tag::new(0, "foobar", TagValue::String("baz".to_string())),
-                Tag::new(1, "first", TagValue::Bool(true)),
-                Tag::new(1, "second", TagValue::Bool(false)),
-                Tag::new(4, "later", TagValue::U64(42)),
+                Tag::new(5, "first", TagValue::Bool(true)),
+                Tag::new(6, "second", TagValue::Bool(false)),
+                Tag::new(7, "later", TagValue::U64(42)),
             ],
         );
         let (mut b, out) = KissDecode::new(rx);
@@ -683,8 +699,8 @@ mod tests {
                     "KissDecode:output-bytes",
                     TagValue::U64(want.len().try_into().unwrap())
                 ),
-                Tag::new(1, "first", TagValue::Bool(true)),
-                Tag::new(1, "second", TagValue::Bool(false)),
+                Tag::new(3, "first", TagValue::Bool(true)),
+                Tag::new(3, "second", TagValue::Bool(false)),
                 Tag::new(4, "later", TagValue::U64(42)),
             ]
         );
@@ -749,9 +765,9 @@ mod tests {
                     "KissEncode:output-bytes",
                     TagValue::U64(want.len().try_into().unwrap())
                 ),
-                Tag::new(1, "first", TagValue::Bool(true)),
-                Tag::new(1, "second", TagValue::Bool(false)),
-                Tag::new(4, "later", TagValue::U64(42)),
+                Tag::new(3, "first", TagValue::Bool(true)),
+                Tag::new(3, "second", TagValue::Bool(false)),
+                Tag::new(7, "later", TagValue::U64(42)),
             ]
         );
         Ok(())
@@ -805,20 +821,33 @@ mod tests {
         for port in 0..16 {
             for payload in [vec![], vec![0u8, KISS_FEND, KISS_FESC, 1]] {
                 let (tx, rx) = new_nocopy_stream();
-                tx.push(
-                    payload.clone(),
-                    &[Tag::new(0, ENCODE_PORT_TAG, TagValue::U64(port))],
-                );
+                let mut input_tags = vec![Tag::new(0, ENCODE_PORT_TAG, TagValue::U64(port))];
+                let markers: Vec<_> = (1..payload.len())
+                    .map(|pos| Tag::new(pos, "payload", TagValue::U64(pos as u64)))
+                    .collect();
+                input_tags.extend_from_slice(&markers);
+                tx.push(payload.clone(), input_tags);
                 let (mut encode, encoded) = KissEncode::new(rx);
                 encode.work()?;
-                let wire = encoded.pop().unwrap().0;
-                let (mut frame, framed) = KissFrame::new(ReadStream::from_slice(&wire));
+                let (wire, wire_tags) = encoded.pop().unwrap();
+                let (writer, reader) = crate::stream::new_stream()?;
+                let mut window = writer.write_buf()?;
+                window.fill_from_slice(&wire);
+                window.produce(wire.len(), wire_tags);
+                let (mut frame, framed) = KissFrame::new(reader);
                 frame.work()?;
                 let (mut decode, output) = KissDecode::new(framed);
                 decode.work()?;
                 let (data, tags) = output.pop().expect("data frame");
                 assert_eq!(data, payload, "port {port}");
                 assert_eq!(tags[0], Tag::new(0, "KissDecode:port", TagValue::U64(port)));
+                assert_eq!(
+                    tags.iter()
+                        .filter(|t| t.key() == "payload")
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    markers
+                );
                 assert!(output.pop().is_none());
             }
         }
