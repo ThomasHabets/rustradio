@@ -111,8 +111,7 @@ impl Block for QuadratureDemod {
                     *a = self.gain.algebraic_mul(b.im.atan2(b.re));
                 });
             }
-            inp.consume_discard_tags(n1);
-            out.produce(n1, &[]);
+            out.produce(n1, inp.consume(n1));
         }
     }
 }
