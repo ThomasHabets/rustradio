@@ -103,6 +103,8 @@ impl WpcrBuilder {
 }
 
 /// Whole packet clock recovery block.
+/// Burst tags accompany the first selected symbol at or after their input
+/// sample. Tags beyond the last recovered symbol are discarded.
 #[derive(rustradio_macros::Block)]
 #[rustradio(crate, new)]
 pub struct Wpcr {
@@ -127,7 +129,11 @@ impl Wpcr {
         self.samp_rate = s;
     }
 
-    fn process_one(&self, samples: &[Float]) -> Option<(Vec<Float>, Vec<Tag>)> {
+    fn process_one(
+        &self,
+        samples: &[Float],
+        input_tags: Vec<Tag>,
+    ) -> Option<(Vec<Float>, Vec<Tag>)> {
         if samples.len() < 4 {
             return None;
         }
@@ -177,9 +183,15 @@ impl Wpcr {
         // Extract symbols.
         let mut syms =
             Vec::with_capacity((samples.len() as Float * samples_per_symbol) as usize + 10);
-        for s in samples {
+        let mut input_tags = input_tags.into_iter().peekable();
+        let mut forwarded = Vec::new();
+        for (pos, s) in samples.iter().enumerate() {
             if clock_phase >= 1.0 {
                 clock_phase -= 1.0;
+                while let Some(mut tag) = input_tags.next_if(|t| t.pos() <= pos) {
+                    tag.set_pos(syms.len());
+                    forwarded.push(tag);
+                }
                 syms.push(*s);
             }
             clock_phase += samples_per_symbol;
@@ -193,21 +205,21 @@ impl Wpcr {
             tags.push(Tag::new(0, "frequency", TagValue::Float(frequency)));
         }
         debug!("WPCR: Bits: {}", syms.len());
+        tags.append(&mut forwarded);
         Some((syms, tags))
     }
 }
 
 impl Block for Wpcr {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        // TODO: handle tags.
         if self.dst.remaining() == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
-        let x = match self.src.pop() {
+        let (x, tags) = match self.src.pop() {
             None => return Ok(BlockRet::WaitForStream(&self.src, 1)),
-            Some((x, _tags)) => x,
+            Some(burst) => burst,
         };
-        if let Some((packet, tags)) = self.process_one(&x) {
+        if let Some((packet, tags)) = self.process_one(&x, tags) {
             self.dst.push(packet, tags);
         }
         Ok(BlockRet::Again)
@@ -244,13 +256,56 @@ mod tests {
     use crate::stream::new_nocopy_stream;
 
     #[test]
+    fn maps_burst_tags_to_the_actual_selected_symbols() -> Result<()> {
+        let (tx, rx) = new_nocopy_stream();
+        let (mut block, out) = Wpcr::new(rx);
+        // Preserve the periodic sign transitions while encoding the input
+        // index in the magnitude so each selected sample can be identified.
+        let samples = (0..65)
+            .map(|i| {
+                if (i / 4) % 2 == 0 {
+                    -(i as Float + 1.0)
+                } else {
+                    i as Float + 1.0
+                }
+            })
+            .collect::<Vec<_>>();
+        let markers = [0, 3, 4, 17, 64];
+        tx.push(
+            samples,
+            markers
+                .map(|pos| Tag::new(pos, "input", TagValue::U64(pos as u64)))
+                .to_vec(),
+        );
+        block.work()?;
+        let (symbols, tags) = out.pop().unwrap();
+        let expected = markers
+            .into_iter()
+            .filter_map(|i| {
+                symbols
+                    .iter()
+                    .position(|s| s.abs() as usize > i)
+                    .map(|pos| Tag::new(pos, "input", TagValue::U64(i as u64)))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            tags.into_iter()
+                .filter(|t| t.key() == "input")
+                .collect::<Vec<_>>(),
+            expected
+        );
+        Ok(())
+    }
+    #[test]
     fn low_symbol_rate_does_not_overallocate_output() {
         let (_tx, rx) = new_nocopy_stream();
         let (block, _out) = Wpcr::new(rx);
         let samples: Vec<Float> = (0..8193)
             .map(|n| if (n / 128) % 2 == 0 { -1.0 } else { 1.0 })
             .collect();
-        let (symbols, _) = block.process_one(&samples).expect("periodic signal");
+        let (symbols, _) = block
+            .process_one(&samples, Vec::new())
+            .expect("periodic signal");
         assert_eq!(symbols.len(), 64);
         assert!(
             symbols.capacity() <= samples.len(),
@@ -267,7 +322,9 @@ mod tests {
         let samples: Vec<Float> = (0..65)
             .map(|n| if (n / 4) % 2 == 0 { -1.0 } else { 1.0 })
             .collect();
-        let (_, tags) = block.process_one(&samples).expect("periodic signal");
+        let (_, tags) = block
+            .process_one(&samples, Vec::new())
+            .expect("periodic signal");
         let frequency = tags.iter().find(|tag| tag.key() == "frequency").unwrap();
         assert_eq!(frequency.val(), &TagValue::Float(1200.0));
     }
