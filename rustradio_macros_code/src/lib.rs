@@ -43,28 +43,6 @@ fn has_attr<'a, I: IntoIterator<Item = &'a Attribute>>(
     })
 }
 
-/// Return the inner type of a generic type.
-///
-/// E.g. given `ReadStream<Float>`, return `Float`.
-#[must_use]
-fn inner_type(ty: &syn::Type) -> &syn::Type {
-    if let syn::Type::Path(p) = &ty {
-        let segment = p.path.segments.last().unwrap();
-        //assert_eq!(segment.ident, "Streamp");
-        if let syn::PathArguments::AngleBracketed(angle_bracketed_args) = &segment.arguments {
-            for arg in &angle_bracketed_args.args {
-                if let syn::GenericArgument::Type(ty) = arg {
-                    return ty;
-                }
-            }
-        }
-    }
-    panic!(
-        "Tried to get the inner type of a non-generic, probably non-Stream: {}",
-        quote! { #ty }
-    )
-}
-
 #[derive(Default, PartialEq, Debug)]
 enum SyncBlock {
     // `sync`. Pass tags through as is.
@@ -362,37 +340,6 @@ impl<'a> Parsed<'a> {
             .collect()
     }
     #[must_use]
-    fn outval_types(&self) -> Vec<&syn::Type> {
-        self.outputs
-            .iter()
-            .map(|field| inner_type(&field.ty))
-            .collect()
-    }
-    #[must_use]
-    fn inval_name_types(&self) -> Vec<TokenStream> {
-        self.inputs
-            .iter()
-            .map(|field| {
-                let inner = inner_type(&field.ty);
-                let name = field.ident.as_ref().unwrap();
-                quote! { #name: #inner }
-            })
-            .collect()
-    }
-    #[must_use]
-    fn intag_name_types(&self) -> Vec<TokenStream> {
-        let path = self.attrs.path();
-        self.inputs
-            .iter()
-            .map(|field| {
-                let name = field.ident.as_ref().unwrap();
-                let tagname: syn::Ident = syn::parse_str(&format!("{name}_tag")).unwrap();
-                quote! { #tagname: &'a [#path::stream::Tag] }
-            })
-            .collect()
-    }
-
-    #[must_use]
     fn expand_sync_nocopy_work(&self) -> Option<TokenStream> {
         match self.attrs.sync {
             SyncBlock::NoCopyTag => {}
@@ -572,31 +519,6 @@ impl<'a> Parsed<'a> {
                     }
                 }
             }
-        })
-    }
-    #[must_use]
-    fn expand_sync_tags(&self) -> Option<TokenStream> {
-        if !matches!(self.attrs.sync, SyncBlock::Value) {
-            return None;
-        }
-        let name = self.name;
-        let path = self.attrs.path();
-        let (impl_generics, ty_generics, where_clause) = &self.generics;
-        let inval_name_types = self.inval_name_types();
-        let intag_name_types = self.intag_name_types();
-        let outval_types = self.outval_types();
-        let in_names = self.in_names();
-        let out_names = self.out_names();
-        let in_tag_names = self.in_tag_names();
-        let first_tags = &in_tag_names[0];
-        Some(quote! {
-                impl #impl_generics #name #ty_generics #where_clause {
-                    #[must_use]
-                    fn process_sync_tags<'a>(&mut self, #(#inval_name_types, #intag_name_types,)*) -> (#(#outval_types, std::borrow::Cow<'a, [#path::stream::Tag]>),*) {
-                        let (#(#out_names),*) = self.process_sync(#(#in_names,)*);
-                        (#(#out_names,std::borrow::Cow::Borrowed(#first_tags)),*)
-                    }
-                }
         })
     }
     #[must_use]
@@ -807,7 +729,6 @@ impl<'a> Parsed<'a> {
             self.expand_new(),
             self.expand_sync_nocopy_work(),
             self.expand_sync_work(),
-            self.expand_sync_tags(),
             Some(self.expand_blockname()),
             Some(self.expand_output_metadata()),
             self.expand_eof(),
@@ -1063,12 +984,8 @@ mod tests {
             actual.to_string()
         );
         assert!(!actual.to_string().contains("fn process_sync "));
-        assert!(
-            actual.to_string().contains("fn process_sync_tags "),
-            "{}",
-            actual.to_string()
-        );
-        assert!(actual.to_string().contains("process_sync_tags "));
+        assert!(actual.to_string().contains("self . process_sync "));
+        assert!(!actual.to_string().contains("process_sync_tags"));
     }
 
     #[test]
