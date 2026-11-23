@@ -83,7 +83,10 @@ impl MorseEncode {
     fn process_sync_tags<'a>(&mut self, msg: String, tags: &'a [Tag]) -> (Vec<u8>, Cow<'a, [Tag]>) {
         let mut tags = tags.to_vec();
         let enc = encode(&msg);
-        tags.push(Tag::new(0, "MorseEncode::message", TagValue::String(msg)));
+        tags.insert(
+            tags.partition_point(|t| t.pos() == 0),
+            Tag::new(0, "MorseEncode::message", TagValue::String(msg)),
+        );
         (enc, Cow::Owned(tags))
     }
 }
@@ -94,6 +97,24 @@ mod tests {
     use crate::block::{Block, BlockRet};
     use crate::stream::new_nocopy_stream;
 
+    #[test]
+    fn message_tag_precedes_nonzero_tags() {
+        let (tx, rx) = new_nocopy_stream();
+        let (mut block, out) = MorseEncode::new(rx);
+        tx.push(
+            "AA".into(),
+            vec![
+                Tag::new(0, "start", TagValue::Bool(true)),
+                Tag::new(1, "later", TagValue::Bool(true)),
+            ],
+        );
+        block.work().unwrap();
+        let (_, tags) = out.pop().unwrap();
+        assert_eq!(
+            tags.iter().map(Tag::key).collect::<Vec<_>>(),
+            ["start", "MorseEncode::message", "later"]
+        );
+    }
     #[test]
     fn simple() {
         let (tx, rx) = new_nocopy_stream();
