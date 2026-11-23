@@ -62,7 +62,7 @@ fn iterator_fill_reports_count_and_rejects_overflow() -> Result<()> {
     assert!(window.fill_from_iter(&mut oversized).is_err());
     assert_eq!(oversized.len(), 1);
     drop(window);
-    assert!(input.read_buf()?.0.is_empty());
+    assert!(input.read_buf()?.is_empty());
 
     let mut window = output.write_buf()?;
     assert_eq!(window.fill_from_iter([])?, 0);
@@ -70,6 +70,6 @@ fn iterator_fill_reports_count_and_rejects_overflow() -> Result<()> {
     let written = window.fill_from_iter(std::iter::repeat_n(5, capacity))?;
     assert_eq!(written, capacity);
     window.produce(written, &[]);
-    assert!(input.read_buf()?.0.iter().all(|sample| *sample == 5));
+    assert!(input.read_buf()?.iter().all(|sample| *sample == 5));
     Ok(())
 }

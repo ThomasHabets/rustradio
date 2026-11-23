@@ -113,7 +113,7 @@ impl<T: Sample> VectorSink<T> {
 impl<T: Sample> Block for VectorSink<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         let mut storage = self.storage.lock().unwrap();
-        let (i, tags) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
         let ilen = i.len();
         if storage.0.len() == self.max_size && ilen > 0 {
             return Err(crate::Error::msg(format!(
@@ -125,12 +125,10 @@ impl<T: Sample> Block for VectorSink<T> {
         if n > 0 {
             let previous = storage.0.len();
             storage.0.extend(&i.slice()[..n]);
-            storage.1.extend(
-                tags.iter()
-                    .take_while(|t| t.pos() < n)
-                    .map(|t| Tag::new(t.pos() + previous, t.key(), t.val().clone())),
-            );
-            i.consume(n);
+            storage.1.extend(i.consume(n).into_iter().map(|mut tag| {
+                tag.set_pos(tag.pos() + previous);
+                tag
+            }));
         }
         Ok(BlockRet::WaitForStream(&self.src, 1))
     }

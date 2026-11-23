@@ -333,14 +333,17 @@ impl<T: Default + Copy> ReadStream<T> {
     /// Return a `BufferReader` allowing you to read from the stream, and
     /// "consume" from it.
     ///
-    /// Tags are returned in ascending position order, preserving the order of
-    /// tags at the same position.
+    /// Inspect tags with `window.tags()` in ascending sample order, preserving
+    /// the order of tags at the same position. Drop the window to leave all
+    /// samples and tags unread. To forward a prefix one-to-one, pass
+    /// `window.consume(n)` to the output writer's `produce(n, tags)`. Use
+    /// `consume_discard_tags(n)` to consume the samples and discard its tags.
     ///
     /// Only one read window may be outstanding, until it is consumed or
     /// dropped. A second checkout returns an error.
     ///
     /// See [`WriteStream::write_buf`] for details about the refcount checks.
-    pub fn read_buf(&self) -> Result<(crate::sys::BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(&self) -> Result<crate::sys::BufferReader<T>> {
         let refcount = Arc::strong_count(&self.circ);
         debug_assert!(refcount < 4, "read_buf() called with refcount {refcount}");
         if refcount > 3 {
@@ -1013,7 +1016,7 @@ mod tests {
         let mut window = writer.write_buf()?;
         window.fill_from_slice(&[1, 2]);
         window.produce(2, &[]);
-        let (reading, _) = reader.read_buf()?;
+        let reading = reader.read_buf()?;
         let mut window = writer.write_buf()?;
         window.fill_from_slice(&[3, 4]);
         drop(writer);
@@ -1023,10 +1026,11 @@ mod tests {
         assert_eq!(reading.slice(), &[1, 2]);
         drop(reading);
         assert!(!reader.eof());
-        let (reading, tags) = reader.read_buf()?;
+        let reading = reader.read_buf()?;
+        let tags = reading.tags().cloned().collect::<Vec<_>>();
         assert_eq!(reading.slice(), &[1, 2, 3, 4]);
         assert_eq!(tags, [Tag::new(2, "last", TagValue::Bool(true))]);
-        reading.consume(4);
+        reading.consume_discard_tags(4);
         assert!(reader.eof());
         Ok(())
     }
@@ -1060,7 +1064,7 @@ mod tests {
         window.fill_from_slice(&[1]);
         window.produce(1, &[]);
         assert!(!reader.circ.metadata().ended());
-        reader.read_buf()?.0.consume(1);
+        reader.read_buf()?.consume_discard_tags(1);
         drop(writer);
         assert!(reader.circ.metadata().ended());
         assert!(reader.eof());
@@ -1104,7 +1108,7 @@ mod tests {
         drop(writer);
         assert_eq!(reader.wait_for_read(2), WaitOutcome::Ready);
         assert_eq!(reader.wait_for_read(3), WaitOutcome::Closed);
-        reader.read_buf()?.0.consume(2);
+        reader.read_buf()?.consume_discard_tags(2);
         assert_eq!(reader.wait_for_read(1), WaitOutcome::Closed);
         Ok(())
     }
@@ -1118,7 +1122,7 @@ mod tests {
         window.slice().fill(0);
         window.produce(size, &[]);
         assert_eq!(writer.wait_for_write(1), WaitOutcome::TimedOut);
-        reader.read_buf()?.0.consume(1);
+        reader.read_buf()?.consume_discard_tags(1);
         assert_eq!(writer.wait_for_write(1), WaitOutcome::Ready);
         drop(reader);
         assert_eq!(writer.wait_for_write(2), WaitOutcome::Closed);
@@ -1164,7 +1168,7 @@ mod tests {
         assert_eq!(reader.wait_async(size).await, WaitOutcome::Ready);
         drop(writer);
         assert_eq!(reader.wait_async(size).await, WaitOutcome::Ready);
-        reader.read_buf()?.0.consume(size);
+        reader.read_buf()?.consume_discard_tags(size);
         assert_eq!(reader.wait_async(1).await, WaitOutcome::Closed);
 
         let (writer, reader) = new_stream::<u8>()?;
@@ -1232,35 +1236,38 @@ mod tests {
         let (tx, rx) = new_stream::<u8>()?;
         let mut writer = tx.write_buf()?;
         assert!(tx.write_buf().is_err());
-        let (reader, _) = rx.read_buf()?;
+        let reader = rx.read_buf()?;
         //assert!(rx.read_buf().is_err());
         // Opposite endpoints can hold windows at the same time.
         writer.fill_from_slice(&[1, 2]);
         writer.produce(2, &[]);
         assert!(reader.is_empty());
         drop(reader);
-        let (reader, _) = rx.read_buf()?;
+        let reader = rx.read_buf()?;
         assert_eq!(reader.slice(), [1, 2]);
         let writer = tx.write_buf()?;
         //assert!(tx.write_buf().is_err());
-        reader.consume(2);
+        reader.consume_discard_tags(2);
         drop(writer);
         assert!(tx.write_buf().is_ok());
-        assert!(rx.read_buf()?.0.is_empty());
+        assert!(rx.read_buf()?.is_empty());
         Ok(())
     }
 
     #[test]
     fn reader_cannot_consume_samples_produced_after_checkout() -> Result<()> {
         let (tx, rx) = new_stream::<u8>()?;
-        let (reader, _) = rx.read_buf()?;
+        let reader = rx.read_buf()?;
         let mut writer = tx.write_buf()?;
         writer.fill_from_slice(&[1]);
         writer.produce(1, &[]);
         assert!(
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reader.consume(1))).is_err()
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || reader.consume_discard_tags(1)
+            ))
+            .is_err()
         );
-        assert_eq!(rx.read_buf()?.0.slice(), [1]);
+        assert_eq!(rx.read_buf()?.slice(), [1]);
         Ok(())
     }
 
@@ -1272,12 +1279,12 @@ mod tests {
         writer.slice().fill(1);
         writer.produce(len, &[]);
         let writer = tx.write_buf()?;
-        rx.read_buf()?.0.consume(1);
+        rx.read_buf()?.consume_discard_tags(1);
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| writer.produce(1, &[])))
                 .is_err()
         );
-        assert_eq!(rx.read_buf()?.0.len(), len - 1);
+        assert_eq!(rx.read_buf()?.len(), len - 1);
         Ok(())
     }
 

@@ -238,7 +238,7 @@ impl Block for HdlcDeframer {
             if output_space == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let (input, _tags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -253,7 +253,7 @@ impl Block for HdlcDeframer {
                     break;
                 }
             }
-            input.consume(to_consume);
+            input.consume_discard_tags(to_consume);
         }
     }
 }

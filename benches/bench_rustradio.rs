@@ -117,9 +117,9 @@ fn bench_fft_filter(b: &mut Bencher) {
         }
         // Empty output buffer.
         {
-            let (out, _) = out.read_buf().unwrap();
+            let out = out.read_buf().unwrap();
             let n = out.len();
-            out.consume(n);
+            out.consume_discard_tags(n);
         }
         assert!(matches![
             filter.work().unwrap(),
@@ -144,9 +144,9 @@ fn bench_fir_filter(b: &mut Bencher) {
         }
         // Empty output buffer.
         {
-            let (out, _) = out.read_buf().unwrap();
+            let out = out.read_buf().unwrap();
             let n = out.len();
-            out.consume(n);
+            out.consume_discard_tags(n);
         }
         loop {
             match filter.work().unwrap() {
@@ -169,9 +169,9 @@ fn bench_tee(b: &mut Bencher, samples_per_batch: usize) {
         window.produce(samples.len(), &[]);
         assert!(matches!(tee.work().unwrap(), BlockRet::WaitForStream(_, 1)));
         for output in [&first, &second] {
-            let (window, _) = output.read_buf().unwrap();
+            let window = output.read_buf().unwrap();
             std::hint::black_box(window.slice());
-            window.consume(samples.len());
+            window.consume_discard_tags(samples.len());
         }
     });
 }
@@ -224,10 +224,9 @@ fn bench_sync(b: &mut Bencher, tagged: bool, tag_aware: bool) {
             block.work().unwrap(),
             BlockRet::WaitForStream(_, 1)
         ));
-        let (window, tags) = output.read_buf().unwrap();
+        let window = output.read_buf().unwrap();
         std::hint::black_box(window.slice());
-        std::hint::black_box(tags);
-        window.consume(samples.len());
+        std::hint::black_box(window.consume(samples.len()));
     });
 }
 
@@ -298,9 +297,8 @@ fn bench_stream_tags(b: &mut Bencher, stride: usize, reverse: bool) {
         let mut window = writer.write_buf().unwrap();
         window.fill_from_slice(&samples[..]);
         window.produce(samples.len(), &tags);
-        let (window, tags) = reader.read_buf().unwrap();
-        std::hint::black_box(tags);
-        window.consume(samples.len());
+        let window = reader.read_buf().unwrap();
+        std::hint::black_box(window.consume(samples.len()));
     });
 }
 
@@ -349,9 +347,9 @@ fn bench_wasm_window(b: &mut Bencher, count: usize, fill: u8, wrapped: bool) {
             }
         }
         writer.produce(count, &[]);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         std::hint::black_box(reader.slice());
-        reader.consume(count);
+        reader.consume_discard_tags(count);
         if wrapped {
             let remaining = buffer.capacity() - count / 2;
             let mut writer = buffer.clone().write_buf().unwrap();

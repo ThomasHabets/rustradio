@@ -36,8 +36,6 @@ pub use source::{
 };
 pub use wire::{Decoded, decode_client, decode_server};
 
-#[cfg(not(target_arch = "wasm32"))]
-use crate::stream::Tag;
 use crate::stream::TagValue;
 use crate::{Complex, Error, Float, Result, SampleEncoding};
 
@@ -142,7 +140,7 @@ fn advance(cursor: u64, count: u64) -> Result<u64> {
         .ok_or_else(|| err("IQ stream counter overflow"))
 }
 #[cfg(not(target_arch = "wasm32"))]
-fn tag_to_wire(tag: &Tag, first: u64) -> Result<proto::Tag> {
+fn tag_to_wire(tag: &crate::stream::Tag, first: u64) -> Result<proto::Tag> {
     use proto::tag_value::Kind;
     if tag.key().is_empty() || reserved(tag.key()) {
         return Err(err("empty or reserved IQ tag key"));

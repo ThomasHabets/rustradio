@@ -481,12 +481,12 @@ mod eof_tests {
                     .store(true, std::sync::atomic::Ordering::SeqCst);
                 return Ok(BlockRet::EOF);
             }
-            let (input, _) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::Pending);
             }
             let n = input.len();
-            input.consume(n);
+            input.consume_discard_tags(n);
             Ok(BlockRet::Again)
         }
     }

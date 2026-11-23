@@ -1083,10 +1083,11 @@ mod tests {
             .collect::<Result<Vec<_>>>()?;
         accept(&transport, chunk(0, 0, &[1.0, -2.0, 3.0], wire_tags))?;
         assert!(matches!(source.work()?, BlockRet::Again));
-        let (data, actual_tags) = output.read_buf()?;
+        let data = output.read_buf()?;
+        let actual_tags = data.tags().cloned().collect::<Vec<_>>();
         assert_eq!(data.slice(), &[1.0, -2.0, 3.0]);
         assert_eq!(actual_tags, tags);
-        data.consume(3);
+        data.consume_discard_tags(3);
         assert!(matches!(
             transport.next_control().await.unwrap().body,
             Some(proto::client_message::Body::FlowControl(
@@ -1141,7 +1142,8 @@ mod tests {
         transport.next_control().await.unwrap();
         accept(&transport, chunk(1, missing, &[0.5], vec![]))?;
         source.work()?;
-        let (data, tags) = output.read_buf()?;
+        let data = output.read_buf()?;
+        let tags = data.tags().cloned().collect::<Vec<_>>();
         assert_eq!(data.slice(), &[0.5]);
         assert_eq!(
             tags,
@@ -1150,7 +1152,7 @@ mod tests {
                 Tag::new(0, SAMPLE_INDEX, TagValue::U64(missing))
             ]
         );
-        data.consume(1);
+        data.consume_discard_tags(1);
         transport.next_control().await.unwrap();
         accept(
             &transport,
@@ -1216,10 +1218,10 @@ mod tests {
         accept(&transport, chunk(0, 0, &[2.0], vec![]))?;
         assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
         assert_eq!(transport.handle.lock().retired, 0);
-        let (buffer, _) = output.read_buf()?;
-        buffer.consume(len);
+        let buffer = output.read_buf()?;
+        buffer.consume_discard_tags(len);
         source.work()?;
-        let (buffer, _) = output.read_buf()?;
+        let buffer = output.read_buf()?;
         assert_eq!(buffer.slice(), &[2.0]);
         assert_eq!(transport.handle.lock().retired, 1);
         Ok(())
@@ -1372,7 +1374,8 @@ mod tests {
         assert!(accept(&transport, chunk(0, 0, &[1., 2.], vec![missing])).is_err());
         accept(&transport, chunk(0, 0, &[1., 2.], tags.clone()))?;
         source.work()?;
-        let (samples, actual) = output.read_buf()?;
+        let samples = output.read_buf()?;
+        let actual = samples.tags().cloned().collect::<Vec<_>>();
         assert_eq!(samples.slice(), [1., 2.]);
         assert_eq!(actual, [Tag::new(0, "keep", TagValue::Bool(true))]);
         assert_eq!(handle.lock().retired, 1);

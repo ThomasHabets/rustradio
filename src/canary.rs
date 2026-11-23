@@ -57,7 +57,7 @@ mod tests {
         assert!(!c.load(Ordering::Relaxed));
         drop(b);
         assert!(c.load(Ordering::Relaxed));
-        let (res, _) = out.read_buf()?;
+        let res = out.read_buf()?;
         let got = res.slice().to_vec();
         let want = vec![1u8, 2, 3];
         assert_eq!(got, want);

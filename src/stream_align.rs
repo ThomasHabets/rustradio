@@ -110,13 +110,13 @@ impl Position {
     /// Apply markers on the next input sample once. Tags are ordered, so only
     /// the position-zero prefix matters. A colocated anchor includes the gap;
     /// without an anchor, advance the known position by the reported loss.
-    fn at_head(&mut self, tags: &[Tag]) -> Result<()> {
+    fn at_head<'a>(&mut self, tags: impl Iterator<Item = &'a crate::stream::Tag>) -> Result<()> {
         if self.head_processed {
             return Ok(());
         }
         let mut anchor = None;
         let mut gap = None;
-        for tag in tags.iter().take_while(|tag| tag.pos() == 0) {
+        for tag in tags.take_while(|tag| tag.pos() == 0) {
             if tag.key() != self.key && tag.key() != GAP_SAMPLES {
                 continue;
             }
@@ -154,9 +154,12 @@ impl Position {
     }
     /// Limit a batch to samples before the next position or gap marker. Copying
     /// and dropping both stop here so the next marker can update the cursor.
-    fn span(&self, tags: &[Tag], available: usize) -> usize {
-        tags.iter()
-            .find(|tag| tag.pos() > 0 && (tag.key() == self.key || tag.key() == GAP_SAMPLES))
+    fn span<'a>(
+        &self,
+        mut tags: impl Iterator<Item = &'a crate::stream::Tag>,
+        available: usize,
+    ) -> usize {
+        tags.find(|tag| tag.pos() > 0 && (tag.key() == self.key || tag.key() == GAP_SAMPLES))
             .map_or(available, |tag| tag.pos().min(available))
     }
     /// Commit a checked cursor advance after samples have been copied or
@@ -173,7 +176,6 @@ impl Position {
     fn output_tags(
         &self,
         tags: Vec<Tag>,
-        count: usize,
         anchor: Option<u64>,
         gap: Option<(u64, u64)>,
     ) -> Vec<Tag> {
@@ -185,13 +187,9 @@ impl Position {
             output.push(Tag::new(0, GAP_SAMPLES, TagValue::U64(missing)));
             output.push(Tag::new(0, SAMPLE_INDEX, TagValue::U64(index)));
         }
-        output.extend(
-            tags.into_iter()
-                .take_while(|tag| tag.pos() < count)
-                .filter(|tag| {
-                    tag.key() != self.key && !matches!(tag.key(), GAP_SAMPLES | SAMPLE_INDEX)
-                }),
-        );
+        output.extend(tags.into_iter().filter(|tag| {
+            tag.key() != self.key && !matches!(tag.key(), GAP_SAMPLES | SAMPLE_INDEX)
+        }));
         output
     }
 }
@@ -277,34 +275,34 @@ impl<T: Sample, U: Sample> Block for StreamAlign<T, U> {
                 return Ok(BlockRet::EOF);
             }
 
-            let (left, left_tags) = self.left.read_buf()?;
+            let left = self.left.read_buf()?;
             if left.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.left, 1));
             }
-            let (right, right_tags) = self.right.read_buf()?;
+            let right = self.right.read_buf()?;
             if right.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.right, 1));
             }
 
-            self.left_position.at_head(&left_tags)?;
-            self.right_position.at_head(&right_tags)?;
+            self.left_position.at_head(left.tags())?;
+            self.right_position.at_head(right.tags())?;
             let lp = self.left_position.next.expect("validated position");
             let rp = self.right_position.next.expect("validated position");
-            let left_span = self.left_position.span(&left_tags, left.len());
-            let right_span = self.right_position.span(&right_tags, right.len());
+            let left_span = self.left_position.span(left.tags(), left.len());
+            let right_span = self.right_position.span(right.tags(), right.len());
             // Discard lower-index samples until the cursors meet, but stop at
             // intervening markers which may change the next alignment target.
             if lp < rp {
                 let count = (rp - lp).min(left_span as u64) as usize;
                 let next = checked_add(lp, count as u64)?;
-                left.consume(count);
+                left.consume_discard_tags(count);
                 self.left_position.consumed(next);
                 continue;
             }
             if rp < lp {
                 let count = (lp - rp).min(right_span as u64) as usize;
                 let next = checked_add(rp, count as u64)?;
-                right.consume(count);
+                right.consume_discard_tags(count);
                 self.right_position.consumed(next);
                 continue;
             }
@@ -339,18 +337,16 @@ impl<T: Sample, U: Sample> Block for StreamAlign<T, U> {
             } else {
                 None
             };
-            let left_tags = self
-                .left_position
-                .output_tags(left_tags, count, anchor, gap);
-            let right_tags = self
-                .right_position
-                .output_tags(right_tags, count, anchor, gap);
             left_out.fill_from_slice(&left.slice()[..count]);
             right_out.fill_from_slice(&right.slice()[..count]);
+            let left_tags = self
+                .left_position
+                .output_tags(left.consume(count), anchor, gap);
+            let right_tags = self
+                .right_position
+                .output_tags(right.consume(count), anchor, gap);
             left_out.produce(count, left_tags);
             right_out.produce(count, right_tags);
-            left.consume(count);
-            right.consume(count);
             self.left_position.consumed(end);
             self.right_position.consumed(end);
             self.origin = Some(origin);
@@ -382,11 +378,11 @@ mod tests {
     }
     /// Inspect queued output without consuming it, allowing separate tag checks.
     fn samples<T: Sample>(stream: &ReadStream<T>) -> Result<Vec<T>> {
-        Ok(stream.read_buf()?.0.slice().to_vec())
+        Ok(stream.read_buf()?.slice().to_vec())
     }
     /// Inspect tags relative to the same unconsumed output window as samples().
     fn tags<T: Sample>(stream: &ReadStream<T>) -> Result<Vec<Tag>> {
-        Ok(stream.read_buf()?.1)
+        Ok(stream.read_buf()?.tags().cloned().collect::<Vec<_>>())
     }
 
     #[test]
@@ -629,7 +625,7 @@ mod tests {
             assert_eq!(block.left_position.next, Some(0));
             assert_eq!(block.right_position.next, Some(0));
             let blocked = if block_left { &l } else { &r };
-            blocked.read_buf()?.0.consume(capacity);
+            blocked.read_buf()?.consume_discard_tags(capacity);
             assert!(matches!(block.work()?, BlockRet::EOF));
             assert_eq!(samples(&l)?, [0, 4, 5]);
             assert_eq!(samples(&r)?, [0, 4, 5]);
@@ -675,9 +671,9 @@ mod tests {
             assert_eq!(block.left_position.next, Some(4));
             assert_eq!(block.right_position.next, Some(4));
         }
-        let (buffer, _) = l.read_buf()?;
+        let buffer = l.read_buf()?;
         assert_eq!(buffer.slice()[capacity - 1], 0);
-        buffer.consume(capacity);
+        buffer.consume_discard_tags(capacity);
         assert!(matches!(block.work()?, BlockRet::EOF));
         assert_eq!(samples(&l)?, [4, 5]);
         assert_eq!(samples(&r)?, [0, 4, 5]);

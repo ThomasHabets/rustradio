@@ -5,7 +5,7 @@ use log::info;
 
 use crate::Result;
 use crate::block::{Block, BlockRet};
-use crate::stream::{NCWriteStream, ReadStream, Tag};
+use crate::stream::{NCWriteStream, ReadStream};
 
 const HEADER_SIZE: usize = 15 * 8;
 
@@ -173,11 +173,10 @@ impl Block for Il2pDeframer {
         if self.dst.remaining() == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
-        let (input, tags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
-        let tags: Vec<Tag> = tags.into_iter().filter(|t| t.key() == "sync").collect();
 
         // If we hit an unexpected error, then go back to our default state.
         let mut oldstate = State::Unsynced;
@@ -186,13 +185,14 @@ impl Block for Il2pDeframer {
         // TODO: support delivering the payload, too.
         let (header, newstate) = match oldstate {
             State::Unsynced => {
-                if tags.is_empty() {
-                    let n = input.len();
-                    input.consume(n);
-                    (None as Option<Result<Header>>, State::Unsynced)
-                } else {
-                    input.consume(tags[0].pos() + 1);
+                let sync = input.tags().find(|t| t.key() == "sync").map(|t| t.pos());
+                if let Some(pos) = sync {
+                    input.consume_discard_tags(pos + 1);
                     (None, State::Header(Vec::new()))
+                } else {
+                    let n = input.len();
+                    input.consume_discard_tags(n);
+                    (None as Option<Result<Header>>, State::Unsynced)
                 }
             }
             State::Header(mut partial) => {
@@ -201,7 +201,7 @@ impl Block for Il2pDeframer {
                 for bit in input.iter().take(get) {
                     partial.push(*bit);
                 }
-                input.consume(get);
+                input.consume_discard_tags(get);
                 assert_eq![remaining == get, partial.len() == HEADER_SIZE];
                 if partial.len() == HEADER_SIZE {
                     let header_bytes = bits_to_bytes(&decode(&partial[..]));

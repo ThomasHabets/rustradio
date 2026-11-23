@@ -234,7 +234,7 @@ mod tests {
         let input = ReadStream::from_slice(input);
         let (mut agc, output) = builder.build(input)?;
         agc.work()?;
-        let (buffer, _) = output.read_buf()?;
+        let buffer = output.read_buf()?;
         Ok(buffer.slice().to_vec())
     }
 
@@ -304,7 +304,7 @@ mod tests {
 
         let (mut agc, output) = Agc::new(input, 0.1, 0.01)?;
         agc.work()?;
-        let (_, tags) = output.read_buf()?;
+        let tags = output.read_buf()?.tags().cloned().collect::<Vec<_>>();
         assert!(tags.contains(&tag));
         Ok(())
     }

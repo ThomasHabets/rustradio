@@ -150,7 +150,7 @@ fn numeric<T: IqSample>(
             resource,
             session,
             &input[offset..],
-            tags,
+            tags.iter(),
             super::advance(absolute, offset as u64)?,
             offset,
         )?;

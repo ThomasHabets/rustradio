@@ -152,7 +152,7 @@ mod tests {
         window.fill_from_slice(&samples[..2]);
         window.produce(2, &[]);
         let (recording, control) = attach::<T>(writer.id(), false, 2);
-        let (reading, _) = reader.read_buf()?;
+        let reading = reader.read_buf()?;
         let mut window = writer.write_buf()?;
         window.fill_from_slice(samples);
         let tags = vec![Tag::new(1, "batch", TagValue::Bool(true))];
@@ -174,9 +174,9 @@ mod tests {
         assert_eq!(reading.slice(), &samples[..2]);
         drop(reading);
         assert!(!reader.eof());
-        let (reading, _) = reader.read_buf()?;
+        let reading = reader.read_buf()?;
         assert_eq!(reading.slice(), [&samples[..2], samples].concat());
-        reading.consume(2 + samples.len());
+        reading.consume_discard_tags(2 + samples.len());
         assert!(reader.eof());
         Ok(())
     }
@@ -225,7 +225,7 @@ mod tests {
             *recording.events.lock().unwrap(),
             [Event::Samples(0, vec![1], vec![])]
         );
-        reader.read_buf()?.0.consume(3);
+        reader.read_buf()?.consume_discard_tags(3);
         assert!(reader.eof());
         Ok(())
     }

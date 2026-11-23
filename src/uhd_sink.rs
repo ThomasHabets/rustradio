@@ -203,7 +203,7 @@ impl UhdSink {
 impl Block for UhdSink {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
-            let (input, _tags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 if self.src.eof() {
                     self.end_burst()?;
@@ -222,7 +222,7 @@ impl Block for UhdSink {
             }
 
             self.start_of_burst = false;
-            input.consume(sent);
+            input.consume_discard_tags(sent);
             if sent == input_len {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }

@@ -1053,10 +1053,11 @@ mod tests {
             string_source.work()?;
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        let (buffer, tags) = output.read_buf()?;
+        let buffer = output.read_buf()?;
+        let tags = buffer.tags().cloned().collect::<Vec<_>>();
         assert_eq!(buffer.slice(), samples);
         assert!(tags.contains(&tag));
-        buffer.consume(samples.len());
+        buffer.consume_discard_tags(samples.len());
         assert!(output.eof());
         for expected in ["", "hello", "雪"] {
             let (value, tags) = strings.pop().expect("string received");
@@ -1560,7 +1561,8 @@ mod tests {
         })
         .await
         .map_err(|_| err("roundtrip timed out"))??;
-        let (buffer, received_tags) = out_a.read_buf()?;
+        let buffer = out_a.read_buf()?;
+        let received_tags = buffer.tags().cloned().collect::<Vec<_>>();
         assert_eq!(buffer.slice(), &[1.0, 2.0, 3.0]);
         let mut expected = vec![
             Tag::new(
@@ -1588,8 +1590,8 @@ mod tests {
         ));
         expected.extend(tags);
         assert_eq!(received_tags, expected);
-        buffer.consume(3);
-        let (buffer, _) = out_b.read_buf()?;
+        buffer.consume_discard_tags(3);
+        let buffer = out_b.read_buf()?;
         assert_eq!(
             buffer.slice(),
             &[
@@ -1597,7 +1599,7 @@ mod tests {
                 crate::Complex::new(2.0, -2.0)
             ]
         );
-        buffer.consume(2);
+        buffer.consume_discard_tags(2);
         assert_eq!(handle_b.description().sample_rate_hz, 96000.0);
         ws_task.await.map_err(|e| err(e.to_string()))??;
         let _ = shutdown_tx.send(());
@@ -1656,7 +1658,8 @@ mod tests {
             })
             .await
             .map_err(|_| err("u8 roundtrip timed out"))??;
-            let (buffer, received_tags) = output.read_buf()?;
+            let buffer = output.read_buf()?;
+            let received_tags = buffer.tags().cloned().collect::<Vec<_>>();
             assert_eq!(buffer.slice(), samples);
             assert_eq!(
                 received_tags
@@ -1665,7 +1668,7 @@ mod tests {
                     .collect::<Vec<_>>(),
                 tags
             );
-            buffer.consume(samples.len());
+            buffer.consume_discard_tags(samples.len());
             assert!(output.eof());
             let _ = shutdown_tx.send(());
             server_task.await.map_err(|e| err(e.to_string()))??;

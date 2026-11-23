@@ -192,9 +192,9 @@ mod tests {
                 break;
             }
         }
-        let (o, tags) = prev.read_buf()?;
+        let o = prev.read_buf()?;
         assert_eq!(o.slice(), b"hello world");
-        assert!(tags.is_empty());
+        assert!(o.tags().len() == 0);
         Ok(())
     }
 
@@ -208,9 +208,9 @@ mod tests {
                 break;
             }
         }
-        let (o, tags) = prev.read_buf()?;
+        let o = prev.read_buf()?;
         assert_eq!(o.slice(), &[0x44434241, 1]);
-        assert!(tags.is_empty());
+        assert!(o.tags().len() == 0);
         Ok(())
     }
 
@@ -229,9 +229,9 @@ mod tests {
                 break;
             }
         }
-        let (o, tags) = prev.read_buf()?;
+        let o = prev.read_buf()?;
         assert_eq!(o.slice(), &v);
-        assert!(tags.is_empty());
+        assert!(o.tags().len() == 0);
         Ok(())
     }
 }

@@ -47,7 +47,7 @@ pub struct QuadratureDemod {
 impl Block for QuadratureDemod {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
-            let (inp, _) = self.src.read_buf()?;
+            let inp = self.src.read_buf()?;
             if inp.len() < 2 {
                 return Ok(BlockRet::WaitForStream(&self.src, 2));
             }
@@ -111,7 +111,7 @@ impl Block for QuadratureDemod {
                     *a = self.gain.algebraic_mul(b.im.atan2(b.re));
                 });
             }
-            inp.consume(n1);
+            inp.consume_discard_tags(n1);
             out.produce(n1, &[]);
         }
     }
@@ -184,7 +184,7 @@ mod tests {
             ];
             let (mut block, out) = QuadratureDemod::new(ReadStream::from_slice(&input), gain)?;
             block.work()?;
-            let (output, _) = out.read_buf()?;
+            let output = out.read_buf()?;
             assert_eq!(output.len(), 2);
             for &sample in output.iter() {
                 let expected = gain * std::f32::consts::FRAC_PI_2;
@@ -205,7 +205,7 @@ mod tests {
         {
             (src, prev) = SignalSourceComplex::new(1200.0, 100.0, 1.0)?;
             src.work()?;
-            let (o, _) = prev.read_buf()?;
+            let o = prev.read_buf()?;
             assert_eq!(o.len(), 512_000);
             drop(o);
         }
@@ -214,7 +214,7 @@ mod tests {
         // Get one less, because quad demod is a difference.
         let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
-        assert_eq!(out.read_buf()?.0.len(), 511_999);
+        assert_eq!(out.read_buf()?.len(), 511_999);
 
         // Fill the quad input stream again. One element is still there, so this
         // adds 511999.
@@ -223,14 +223,14 @@ mod tests {
         // Run quad once more. Because floats are half the size, we get twice as
         // many, and we can fit them all.
         b.work()?;
-        assert_eq!(out.read_buf()?.0.len(), 2 * 511_999);
+        assert_eq!(out.read_buf()?.len(), 2 * 511_999);
 
         // Fill the quad input stream one more time.
         src.work()?;
 
         // Run quad one last time. This fills the output buffer.
         b.work()?;
-        assert_eq!(out.read_buf()?.0.len(), 2 * 512_000);
+        assert_eq!(out.read_buf()?.len(), 2 * 512_000);
 
         Ok(())
     }
@@ -241,7 +241,7 @@ mod tests {
         b.work()?;
         let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         assert_eq!(o.slice(), vec![0.0f32; 3]);
         Ok(())
     }
@@ -257,7 +257,7 @@ mod tests {
         b.work()?;
         let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         assert_almost_equal_float(
             o.slice(),
             &[
@@ -279,7 +279,7 @@ mod tests {
         b.work()?;
         let (mut b, out) = QuadratureDemod::new(prev, 1.0)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         assert_almost_equal_float(
             o.slice(),
             &[

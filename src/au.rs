@@ -138,7 +138,7 @@ impl Block for AuEncode {
         let scale = Float::from(S::MAX);
         let ss = std::mem::size_of::<S>();
 
-        let (i, _tags) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
@@ -151,7 +151,7 @@ impl Block for AuEncode {
             let val = (i.slice()[j] * scale) as S;
             o.slice()[j * ss..(j + 1) * ss].clone_from_slice(&val.to_be_bytes());
         }
-        i.consume(n);
+        i.consume_discard_tags(n);
         o.produce(n * ss, &[]);
         Ok(BlockRet::Again)
     }
@@ -201,7 +201,7 @@ impl Block for AuDecode {
         if matches!(self.state, DecodeState::Data(Some(0))) {
             return Ok(BlockRet::EOF);
         }
-        let (i, _tags) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
@@ -213,7 +213,7 @@ impl Block for AuDecode {
                 }
                 let magic = i.iter().take(4).copied().collect::<Vec<_>>();
                 let magic = u32::from_be_bytes(magic.try_into().unwrap());
-                i.consume(4);
+                i.consume_discard_tags(4);
                 if magic != AU_MAGIC {
                     return Err(Error::msg(".au magic value not found"));
                 }
@@ -225,7 +225,7 @@ impl Block for AuDecode {
                 }
                 let data_offset = i.iter().take(4).copied().collect::<Vec<_>>();
                 let data_offset = u32::from_be_bytes(data_offset.try_into().unwrap());
-                i.consume(4);
+                i.consume_discard_tags(4);
                 self.state = DecodeState::WaitingHeader(data_offset as usize);
             }
             DecodeState::WaitingHeader(data_offset) => {
@@ -264,7 +264,7 @@ impl Block for AuDecode {
                     }
                     Some(size as usize)
                 };
-                i.consume(header_rest_len);
+                i.consume_discard_tags(header_rest_len);
                 self.state = DecodeState::Data(remaining);
             }
             DecodeState::Data(remaining) => {
@@ -287,7 +287,7 @@ impl Block for AuDecode {
                     .map(|bytes| Float::from(i16::from_be_bytes(*bytes)) / 32767.0);
                 let written = o.fill_from_iter(samples)?;
                 o.produce(written, &[]);
-                i.consume(n);
+                i.consume_discard_tags(n);
                 self.state = DecodeState::Data(remaining.map(|left| left - n));
             }
         }
@@ -326,7 +326,7 @@ mod tests {
                 2 => 1,
                 _ => 2,
             };
-            assert_eq!(out.read_buf()?.0.len(), expected);
+            assert_eq!(out.read_buf()?.len(), expected);
         }
         Ok(())
     }
@@ -341,11 +341,11 @@ mod tests {
         buffer.slice()[..n].fill(0);
         buffer.produce(n, &[]);
         assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 2)));
-        let (buffer, _) = out.read_buf()?;
+        let buffer = out.read_buf()?;
         let n = buffer.len();
-        buffer.consume(n);
+        buffer.consume_discard_tags(n);
         assert!(matches!(encoder.work()?, BlockRet::Again));
-        assert_eq!(out.read_buf()?.0.slice(), &16383_i16.to_be_bytes());
+        assert_eq!(out.read_buf()?.slice(), &16383_i16.to_be_bytes());
         Ok(())
     }
 }

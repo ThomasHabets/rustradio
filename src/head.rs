@@ -21,7 +21,7 @@ impl<T: Sample + std::fmt::Debug> Block for Head<T> {
             if self.remaining == 0 {
                 return Ok(BlockRet::EOF);
             }
-            let (i, tags) = self.src.read_buf()?;
+            let i = self.src.read_buf()?;
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -36,12 +36,7 @@ impl<T: Sample + std::fmt::Debug> Block for Head<T> {
             let len = usize::try_from(len)?;
 
             o.slice()[..len].copy_from_slice(&i.slice()[..len]);
-            let tags = tags
-                .into_iter()
-                .take_while(|tag| tag.pos() < len)
-                .collect::<Vec<_>>();
-            o.produce(len, tags);
-            i.consume(len);
+            o.produce(len, i.consume(len));
         }
     }
 }
@@ -66,7 +61,7 @@ mod tests {
             } else {
                 assert!(matches![ret, BlockRet::WaitForStream(_, 1)], "{ret:?}");
             }
-            let (res, _) = out.read_buf()?;
+            let res = out.read_buf()?;
             let got = res.slice().to_vec();
             let want = [1u8, 2, 3, 4, 5, 6];
             let want = &want[..usize::try_from(first)?.min(indata.len())];

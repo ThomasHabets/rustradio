@@ -153,7 +153,7 @@ mod tests {
         let (mut cac, out) = CorrelateAccessCode::new(src, [0, 1], 0)?;
 
         cac.work()?;
-        let (buf, _) = out.read_buf()?;
+        let buf = out.read_buf()?;
 
         assert_eq!(buf.slice(), &[0]);
         Ok(())
@@ -165,7 +165,7 @@ mod tests {
         let (mut cac, out) = CorrelateAccessCodeTag::new(src, &[0, 1][..], "sync", 0)?;
 
         cac.work()?;
-        let (_, tags) = out.read_buf()?;
+        let tags = out.read_buf()?.tags().cloned().collect::<Vec<_>>();
 
         assert_eq!(tags, &[]);
         Ok(())

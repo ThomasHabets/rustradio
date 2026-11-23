@@ -69,17 +69,15 @@ impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
         let cur_block = 'outer: loop {
             let mut outs = Vec::new();
             for (cur_block, src) in self.srcs.iter_mut().enumerate() {
-                let (i, tags) = src.read_buf()?;
+                let i = src.read_buf()?;
                 if i.is_empty() {
                     break 'outer cur_block;
                 }
                 let mut s: String = format!("{:?}", i.slice()[0]);
-                if !tags.is_empty() && tags[0].pos() == 0 {
+                let mut tags = i.tags().take_while(|tag| tag.pos() == 0).peekable();
+                if tags.peek().is_some() {
                     s += " (";
                     for tag in tags {
-                        if tag.pos() != 0 {
-                            break;
-                        }
                         let _ = write!(s, "{}={:?}", tag.key(), tag.val());
                     }
                     s += ")";
@@ -101,8 +99,8 @@ impl<T: Sample + std::fmt::Debug> Block for ToText<T> {
             o.slice()[..out.len()].copy_from_slice(&out);
             o.produce(out.len(), &[]);
             for src in &mut self.srcs {
-                let (i, _tags) = src.read_buf()?;
-                i.consume(1);
+                let i = src.read_buf()?;
+                i.consume_discard_tags(1);
             }
         };
         Ok(BlockRet::WaitForStream(&self.srcs[cur_block], 1))

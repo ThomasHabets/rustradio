@@ -124,51 +124,53 @@ enum BurstTag {
 
 // Find the next marker relevant to the current state. Bound the search by the
 // span we can consume so tags beyond a size limit are not repeatedly scanned.
-fn next_burst_tag(tags: &[Tag], key: &str, start: bool, limit: usize) -> Option<(usize, BurstTag)> {
-    let (mut index, tag) = tags
-        .iter()
-        .enumerate()
-        .take_while(|(_, tag)| tag.pos() < limit)
-        .find(|(_, tag)| tag.key() == key && tag.val() == &TagValue::Bool(start))?;
-    let pos = tag.pos();
-    while index > 0 && tags[index - 1].pos() == pos {
-        index -= 1;
-    }
-    let mut starts = false;
-    let mut ends = false;
-    for tag in tags[index..].iter().take_while(|tag| tag.pos() == pos) {
-        if tag.key() == key {
-            match tag.val() {
-                TagValue::Bool(true) => starts = true,
-                TagValue::Bool(false) => ends = true,
-                _ => {}
+fn next_burst_tag<'a>(
+    tags: impl Iterator<Item = &'a crate::stream::Tag>,
+    key: &str,
+    start: bool,
+    limit: usize,
+) -> Option<(usize, BurstTag)> {
+    let mut tags = tags.take_while(|tag| tag.pos() < limit).peekable();
+    while let Some(head) = tags.peek() {
+        let pos = head.pos();
+        let mut starts = false;
+        let mut ends = false;
+        while let Some(tag) = tags.next_if(|tag| tag.pos() == pos) {
+            if tag.key() == key {
+                match tag.val() {
+                    TagValue::Bool(true) => starts = true,
+                    TagValue::Bool(false) => ends = true,
+                    _ => {}
+                }
             }
         }
+        if starts && ends {
+            return Some((pos, BurstTag::Both));
+        }
+        if start && starts {
+            return Some((pos, BurstTag::Start));
+        }
+        if !start && ends {
+            return Some((pos, BurstTag::End));
+        }
     }
-    let marker = match (starts, ends) {
-        (true, true) => BurstTag::Both,
-        (true, false) => BurstTag::Start,
-        (false, true) => BurstTag::End,
-        (false, false) => unreachable!("matched a Boolean burst tag"),
-    };
-    Some((pos, marker))
+    None
 }
 
-// Move only tags whose samples are included. The iterator also discards tags
-// from skipped spans and control markers, without cloning their payloads.
-fn append_span<T: Sample>(
+// Copy only tags belonging to samples retained in the packet.
+fn append_span<'a, T: Sample>(
     packet: &mut Vec<T>,
     packet_tags: &mut Vec<Tag>,
     input: &[T],
-    tags: &mut std::vec::IntoIter<Tag>,
+    tags: &mut std::iter::Peekable<impl Iterator<Item = &'a crate::stream::Tag>>,
     key: &str,
     start: usize,
     end: usize,
 ) {
     let offset = packet.len();
-    while tags.as_slice().first().is_some_and(|tag| tag.pos() < end) {
-        let mut tag = tags.next().unwrap();
+    while let Some(tag) = tags.next_if(|tag| tag.pos() < end) {
         if tag.pos() >= start && tag.key() != key {
+            let mut tag = tag.clone();
             tag.set_pos(tag.pos() - start + offset);
             packet_tags.push(tag);
         }
@@ -182,16 +184,16 @@ impl<T: Sample> Block for StreamToPdu<T> {
         if output_space == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
-        let (input, intags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
         let samples = input.slice();
-        let mut tags = intags.into_iter();
+        let mut tags = input.tags().peekable();
         let mut pos = 0;
         while pos < samples.len() {
             // Move the packet state once per span rather than once per sample.
             match std::mem::take(&mut self.state) {
                 State::Unsync => {
                     let Some((start, marker)) =
-                        next_burst_tag(tags.as_slice(), &self.tag, true, samples.len())
+                        next_burst_tag(tags.clone(), &self.tag, true, samples.len())
                     else {
                         pos = samples.len();
                         break;
@@ -212,7 +214,7 @@ impl<T: Sample> Block for StreamToPdu<T> {
                 State::Packet(mut packet, mut packet_tags) => {
                     let remaining = self.max_size - packet.len();
                     let limit = pos + (samples.len() - pos).min(remaining.saturating_add(1));
-                    let marker = next_burst_tag(tags.as_slice(), &self.tag, false, limit);
+                    let marker = next_burst_tag(tags.clone(), &self.tag, false, limit);
                     let end = marker.map_or(limit, |(end, _)| end);
                     if end == pos {
                         if self.tail == 0 {
@@ -266,16 +268,20 @@ impl<T: Sample> Block for StreamToPdu<T> {
                 }
             }
             // Discard tags on excluded end samples and skipped/oversized spans.
-            while tags.as_slice().first().is_some_and(|tag| tag.pos() < pos) {
+            while tags.peek().is_some_and(|tag| tag.pos() < pos) {
                 tags.next();
             }
             if output_space == 0 {
-                input.consume(pos);
-                return Ok(BlockRet::WaitForStream(&self.dst, 1));
+                break;
             }
         }
-        input.consume(pos);
-        Ok(BlockRet::WaitForStream(&self.src, 1))
+        drop(tags);
+        input.consume_discard_tags(pos);
+        if output_space == 0 {
+            Ok(BlockRet::WaitForStream(&self.dst, 1))
+        } else {
+            Ok(BlockRet::WaitForStream(&self.src, 1))
+        }
     }
 }
 
@@ -492,13 +498,14 @@ mod tests {
         }
         assert!(matches!(block.work()?, BlockRet::WaitForStream(stream, 1)
             if stream.id() == output_id));
-        let (window, _) = block.src.read_buf()?;
+        let window = block.src.read_buf()?;
         assert_eq!(window.len(), 10);
         drop(window);
         assert_eq!(out.pop(), Some((vec![], vec![])));
         assert!(matches!(block.work()?, BlockRet::WaitForStream(stream, 1)
             if stream.id() == output_id));
-        let (window, tags) = block.src.read_buf()?;
+        let window = block.src.read_buf()?;
+        let tags = window.tags().cloned().collect::<Vec<_>>();
         assert_eq!(window.slice(), &[4, 5, 6, 7, 8, 9]);
         assert_eq!(tags[0], marker(0, true));
         drop(window);

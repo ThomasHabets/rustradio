@@ -964,10 +964,10 @@ mod tests {
         let mut samples = Vec::new();
         loop {
             let ret = encoder.work()?;
-            let (buffer, _) = envelope.read_buf()?;
+            let buffer = envelope.read_buf()?;
             samples.extend_from_slice(buffer.slice());
             let count = buffer.len();
-            buffer.consume(count);
+            buffer.consume_discard_tags(count);
             if matches!(ret, BlockRet::EOF) {
                 break;
             }

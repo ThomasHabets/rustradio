@@ -84,7 +84,8 @@ mod tests {
 
         let (mut add, os) = Add::new(a, b)?;
         add.work()?;
-        let (res, tags) = os.read_buf()?;
+        let res = os.read_buf()?;
+        let tags = res.tags().cloned().collect::<Vec<_>>();
         let want: Vec<_> = (0..10).map(|i| 3 * i).collect();
         let got: Vec<_> = res.slice().iter().map(|f| *f as usize).collect();
         assert_eq!(got, want);

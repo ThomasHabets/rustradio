@@ -99,11 +99,13 @@ fn check_batches(
     tagged: bool,
 ) -> Result<()> {
     assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
-    let (window, tags) = sum.read_buf()?;
+    let window = sum.read_buf()?;
+    let tags = window.tags().cloned().collect::<Vec<_>>();
     assert_eq!(&window.slice()[filler..], &[11, 22]);
     assert_eq!(tags, [tag(filler, "a"), tag(filler, "a2")]);
-    window.consume(filler + 2);
-    let (window, tags) = difference.read_buf()?;
+    window.consume_discard_tags(filler + 2);
+    let window = difference.read_buf()?;
+    let tags = window.tags().cloned().collect::<Vec<_>>();
     assert_eq!(window.slice(), &[9, 18]);
     let expected = if tagged {
         vec![tag(0, "generated"), tag(1, "b"), tag(1, "generated")]
@@ -111,14 +113,16 @@ fn check_batches(
         vec![tag(0, "a"), tag(0, "a2")]
     };
     assert_eq!(tags, expected);
-    window.consume(2);
+    window.consume_discard_tags(2);
 
     assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
-    let (window, tags) = sum.read_buf()?;
+    let window = sum.read_buf()?;
+    let tags = window.tags().cloned().collect::<Vec<_>>();
     assert_eq!(window.slice(), &[33, 44, 55, 66]);
     assert_eq!(tags, [tag(0, "a3"), tag(3, "a4")]);
-    window.consume(4);
-    let (window, tags) = difference.read_buf()?;
+    window.consume_discard_tags(4);
+    let window = difference.read_buf()?;
+    let tags = window.tags().cloned().collect::<Vec<_>>();
     assert_eq!(window.slice(), &[27, 36, 45, 54]);
     let expected = if tagged {
         vec![
@@ -133,7 +137,7 @@ fn check_batches(
         vec![tag(0, "a3"), tag(3, "a4")]
     };
     assert_eq!(tags, expected);
-    window.consume(4);
+    window.consume_discard_tags(4);
     Ok(())
 }
 
@@ -143,7 +147,8 @@ fn plain_sync_forwards_first_input_tags_across_batches() -> Result<()> {
     let (mut block, sum, difference) = Plain::new(a, b)?;
     let filler = fill_output(&block.sum)?;
     check_batches(&mut block, sum, difference, filler, false)?;
-    let (remaining, tags) = block.b.read_buf()?;
+    let remaining = block.b.read_buf()?;
+    let tags = remaining.tags().cloned().collect::<Vec<_>>();
     assert_eq!(remaining.slice(), &[7]);
     assert_eq!(tags, [tag(0, "unconsumed")]);
     Ok(())
@@ -163,10 +168,11 @@ fn tagged_sync_can_generate_tags_without_input_tags() -> Result<()> {
     let b = input(&[1, 2, 3], &[])?;
     let (mut block, sum, difference) = Tagged::new(a, b)?;
     assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
-    let (window, tags) = sum.read_buf()?;
+    let window = sum.read_buf()?;
     assert_eq!(window.slice(), &[11, 22, 33]);
-    assert!(tags.is_empty());
-    let (window, tags) = difference.read_buf()?;
+    assert!(window.tags().len() == 0);
+    let window = difference.read_buf()?;
+    let tags = window.tags().cloned().collect::<Vec<_>>();
     assert_eq!(window.slice(), &[9, 18, 27]);
     assert_eq!(
         tags,
@@ -185,8 +191,8 @@ fn plain_sync_discards_tags_from_other_inputs() -> Result<()> {
     let b = input(&[1, 2], &[tag(0, "discard"), tag(1, "discard")])?;
     let (mut block, sum, difference) = Plain::new(a, b)?;
     assert!(matches!(block.work()?, BlockRet::WaitForStream(_, 1)));
-    assert!(sum.read_buf()?.1.is_empty());
-    assert!(difference.read_buf()?.1.is_empty());
+    assert!(sum.read_buf()?.tags().len() == 0);
+    assert!(difference.read_buf()?.tags().len() == 0);
     Ok(())
 }
 
@@ -227,7 +233,8 @@ fn owned_callback_tags_keep_positions_and_order_across_batches() -> Result<()> {
         let filler = fill_output(&block.first)?;
         for (samples, padding) in [(&[10, 20][..], filler), (&[30][..], 0)] {
             block.work()?;
-            let (window, tags) = first.read_buf()?;
+            let window = first.read_buf()?;
+            let tags = window.tags().cloned().collect::<Vec<_>>();
             assert_eq!(&window.slice()[padding..], samples);
             assert_eq!(
                 tags,
@@ -237,8 +244,9 @@ fn owned_callback_tags_keep_positions_and_order_across_batches() -> Result<()> {
                     .map(|(pos, sample)| { tag(padding + pos, &format!("first-{sample}")) })
                     .collect::<Vec<_>>()
             );
-            window.consume(padding + samples.len());
-            let (window, tags) = second.read_buf()?;
+            window.consume_discard_tags(padding + samples.len());
+            let window = second.read_buf()?;
+            let tags = window.tags().cloned().collect::<Vec<_>>();
             assert_eq!(window.slice(), samples);
             assert_eq!(
                 tags,
@@ -253,7 +261,7 @@ fn owned_callback_tags_keep_positions_and_order_across_batches() -> Result<()> {
                     })
                     .collect::<Vec<_>>()
             );
-            window.consume(samples.len());
+            window.consume_discard_tags(samples.len());
         }
     }
     Ok(())

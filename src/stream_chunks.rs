@@ -42,7 +42,7 @@ impl<T: Sample> Block for StreamChunks<T> {
             if output_space == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let (input, intags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             {
                 let inlen = input.len();
                 if inlen < self.size {
@@ -51,12 +51,8 @@ impl<T: Sample> Block for StreamChunks<T> {
             }
             self.dst.push(
                 input.slice()[..self.size].to_vec(),
-                intags
-                    .into_iter()
-                    .take_while(|t| t.pos() < self.size)
-                    .collect::<Vec<_>>(),
+                input.consume(self.size),
             );
-            input.consume(self.size);
         }
     }
 }

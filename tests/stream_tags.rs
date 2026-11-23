@@ -20,11 +20,12 @@ fn produce<'a>(
 }
 
 fn check(reader: &ReadStream<u32>, count: usize, expected: &[Tag], consume: usize) -> Result<()> {
-    let (window, tags) = reader.read_buf()?;
+    let window = reader.read_buf()?;
+    let tags = window.tags().cloned().collect::<Vec<_>>();
     assert_eq!(window.len(), count);
     assert!(window.iter().all(|sample| *sample == 42));
     assert_eq!(tags, expected);
-    window.consume(consume);
+    window.consume_discard_tags(consume);
     Ok(())
 }
 
@@ -125,4 +126,49 @@ fn owned_production_rejects_an_out_of_range_tag() {
     let mut window = writer.write_buf().unwrap();
     window.fill_from_slice(&[42]);
     window.produce(1, vec![tag(1, 1)]);
+}
+
+#[test]
+fn read_window_moves_tags_across_partial_reads_and_interleaved_writes() -> Result<()> {
+    let (writer, reader) = new_stream::<u32>()?;
+    let (output, forwarded) = new_stream::<u32>()?;
+    let original = Tag::new(1, "owned key", TagValue::String("owned value".into()));
+    let key_ptr = original.key().as_ptr();
+    let value_ptr = match original.val() {
+        TagValue::String(value) => value.as_ptr(),
+        _ => unreachable!(),
+    };
+    produce(&writer, 4, vec![original, tag(2, 1), tag(2, 2)])?;
+
+    let window = reader.read_buf()?;
+    produce(&writer, 1, vec![tag(0, 3)])?;
+    assert_eq!(window.tags().len(), 3);
+    assert_eq!(window.tags().next().unwrap().key().as_ptr(), key_ptr);
+    drop(window);
+    assert!(reader.read_buf()?.consume(0).is_empty());
+
+    let window = reader.read_buf()?;
+    assert_eq!(
+        window.tags().map(|t| t.pos()).collect::<Vec<_>>(),
+        [1, 2, 2, 4]
+    );
+    let mut out = output.write_buf()?;
+    out.fill_from_slice(&window.slice()[..2]);
+    out.produce(2, window.consume(2));
+    let window = forwarded.read_buf()?;
+    let samples = window.slice();
+    let moved: &Tag = window.tags().next().unwrap();
+    assert_eq!(samples[moved.pos()], 42);
+    assert_eq!(moved.pos(), 1);
+    assert_eq!(moved.key().as_ptr(), key_ptr);
+    assert!(matches!(moved.val(), TagValue::String(s) if s.as_ptr() == value_ptr));
+
+    let window = reader.read_buf()?;
+    produce(&writer, 1, vec![Tag::new(0, "last", TagValue::Bool(true))])?;
+    assert_eq!(window.consume(3), [tag(0, 1), tag(0, 2), tag(2, 3)]);
+    let window = reader.read_buf()?;
+    assert_eq!(window.tags().next().unwrap().pos(), 0);
+    window.consume_discard_tags(1);
+    assert!(reader.read_buf()?.is_empty());
+    Ok(())
 }

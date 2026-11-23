@@ -184,7 +184,7 @@ impl<T: Sample> Block for RationalResampler<T> {
             self.pending = None;
         }
 
-        let (i, _tags) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
         if i.is_empty() {
             o.produce(opos, &[]);
             return Ok(BlockRet::WaitForStream(&self.src, 1));
@@ -208,7 +208,7 @@ impl<T: Sample> Block for RationalResampler<T> {
                 }
             }
         }
-        i.consume(taken);
+        i.consume_discard_tags(taken);
         o.produce(opos, &[]);
         Ok(if out_full {
             BlockRet::WaitForStream(&self.dst, 1)
@@ -248,7 +248,7 @@ mod tests {
             assert!(matches![src.work()?, BlockRet::EOF]);
             let (mut b, os) = RationalResampler::new(src_out, 1, deci)?;
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
-            let (res, _) = os.read_buf()?;
+            let res = os.read_buf()?;
             // TODO: test tags
             assert_almost_equal_complex(
                 res.slice(),
@@ -265,7 +265,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut b, os) = RationalResampler::new(src_out, 25, 64)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = os.read_buf()?;
+        let res = os.read_buf()?;
         // TODO: test tags
         assert_eq!(
             res.slice(),
@@ -283,7 +283,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = os.read_buf()?;
+        let res = os.read_buf()?;
         assert_eq!(res.slice(), &[0, 5, 10, 15, 20, 25, 30, 35, 40, 46]);
         Ok(())
     }
@@ -300,13 +300,13 @@ mod tests {
         let (mut b, os) = RationalResampler::new(src_out, 3, 1)?;
 
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
-        let (first, _) = os.read_buf()?;
+        let first = os.read_buf()?;
         assert_eq!(first.len(), output_capacity);
         assert_eq!(first.slice()[output_capacity - 1], boundary_sample);
-        first.consume(output_capacity);
+        first.consume_discard_tags(output_capacity);
 
         assert!(matches![b.work()?, BlockRet::WaitForStream(_, 1)]);
-        let (second, _) = os.read_buf()?;
+        let second = os.read_buf()?;
         assert_eq!(second.slice(), &[boundary_sample, boundary_sample]);
         Ok(())
     }
@@ -322,7 +322,7 @@ mod tests {
 
             let (mut b, os) = RationalResampler::new(src_out, 25, 128)?;
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
-            os.read_buf()?.0
+            os.read_buf()?
         };
 
         // Path 2: first 1/2, then 25/64.
@@ -335,7 +335,7 @@ mod tests {
 
             let (mut b2, os) = RationalResampler::new(os1, 25, 64)?;
             assert!(matches![b2.work()?, BlockRet::WaitForStream(_, _)]);
-            os.read_buf()?.0
+            os.read_buf()?
         };
         assert_eq!(path1.len(), path2.len());
         path1
@@ -361,7 +361,7 @@ mod tests {
         src.work()?;
         let (mut resamp, os) = RationalResampler::new(src_out, interp, deci)?;
         resamp.work()?;
-        let (res, _) = os.read_buf()?;
+        let res = os.read_buf()?;
         assert_eq!(
             finalcount,
             res.len(),

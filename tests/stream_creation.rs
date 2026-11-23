@@ -51,7 +51,7 @@ fn mixed_outputs_are_fallible_and_nocopy_outputs_remain_infallible() -> Result<(
     let (mut block, samples, messages): (Mixed<u8>, ReadStream<u8>, NCReadStream<String>) =
         Mixed::new()?;
     block.work()?;
-    assert_eq!(samples.read_buf()?.0.slice(), &[0]);
+    assert_eq!(samples.read_buf()?.slice(), &[0]);
     assert_eq!(messages.pop().unwrap().0, "mixed");
     let (mut block, messages): (Messages, NCReadStream<String>) = Messages::new();
     block.work()?;

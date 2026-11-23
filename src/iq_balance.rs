@@ -111,7 +111,7 @@ mod tests {
                 IqBalance::with_alpha(ReadStream::from_slice(&[Complex::new(1.0, -2.0)]), alpha)?;
             block.work()?;
             assert_eq!(
-                output.read_buf()?.0.slice(),
+                output.read_buf()?.slice(),
                 &[Complex::new(1.0 - alpha, -2.0 * (1.0 - alpha))]
             );
         }
@@ -127,7 +127,7 @@ mod tests {
         let src = ReadStream::from_slice(&[Complex::new(1.0, -2.0); 8]);
         let (mut b, out) = IqBalance::with_alpha(src, 0.5)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         let s = o.slice();
         let last = s.last().copied().unwrap();
         assert!(last.re.abs() < 0.01, "unexpected residual I DC: {last:?}");
@@ -140,7 +140,7 @@ mod tests {
         let src = ReadStream::from_slice(&[Complex::new(1.0, -2.0); 8]);
         let (mut b, out) = IqBalance::with_alpha(src, 0.99)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         let s = o.slice();
         let last = s.last().copied().unwrap();
         assert!(last.re.abs() < 0.01, "unexpected residual I DC: {last:?}");
@@ -153,7 +153,7 @@ mod tests {
         let src = ReadStream::from_slice(&[Complex::new(1.0, -2.0); 8]);
         let (mut b, out) = IqBalance::with_alpha(src, 0.0000001)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         let s = o.slice();
         let last = s.last().copied().unwrap();
         assert!(

@@ -62,7 +62,7 @@ fn inventory_lifetime_follows_outstanding_windows() -> Result<()> {
     writing.produce(1, &[]);
     assert!(info(&name).ended);
     assert!(!reader.eof());
-    let (reading, _) = reader.read_buf()?;
+    let reading = reader.read_buf()?;
     assert_eq!(reading.slice(), &[7]);
     drop(reader);
     assert!(info(&name).ended);

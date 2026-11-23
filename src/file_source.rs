@@ -193,7 +193,7 @@ mod tests {
         std::fs::write(&path, [7])?;
         let (mut source, out) = FileSource::<NonzeroByte>::new(path)?;
         assert!(matches!(source.work()?, BlockRet::Again));
-        let (output, _) = out.read_buf()?;
+        let output = out.read_buf()?;
         assert_eq!(output.len(), 1);
         assert_eq!(output.slice()[0].0, 7);
         Ok(())
@@ -207,7 +207,7 @@ mod tests {
         let (mut source, out) = FileSource::<NonzeroByte>::new(path)?;
         let error = source.work().unwrap_err();
         assert!(error.to_string().contains("zero is not a valid sample"));
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         Ok(())
     }
 
@@ -220,7 +220,7 @@ mod tests {
             .repeat(Repeat::finite(0))
             .build()?;
         assert!(matches!(source.work()?, BlockRet::EOF));
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         Ok(())
     }
 
@@ -252,7 +252,7 @@ mod tests {
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::EOF], "{ret:?}");
 
-        let (res, _) = src_out.read_buf()?;
+        let res = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14, -3.14];
         assert_eq!(res.slice(), correct);
@@ -274,7 +274,7 @@ mod tests {
         assert!(matches![ret, BlockRet::Again], "{ret:?}");
         assert!(src.work().unwrap_err().to_string().contains("3 of 4 bytes"));
 
-        let (res, _) = src_out.read_buf()?;
+        let res = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14];
         assert_eq!(res.slice(), correct);
@@ -309,7 +309,7 @@ mod tests {
         let ret = src.work()?;
         assert!(matches![ret, BlockRet::EOF], "{ret:?}");
 
-        let (res, _) = src_out.read_buf()?;
+        let res = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![1.0 as Float, 3.0, 3.14, -3.14, 1.0, 3.0, 3.14, -3.14];
         assert_eq!(res.slice(), correct);
@@ -328,7 +328,7 @@ mod tests {
         assert!(matches!(src.work()?, BlockRet::Again));
         assert!(src.work().unwrap_err().to_string().contains("1 of 4 bytes"));
 
-        let (res, _) = src_out.read_buf()?;
+        let res = src_out.read_buf()?;
         assert_eq!(res.slice(), &[1]);
         Ok(())
     }
@@ -346,7 +346,7 @@ mod tests {
         let (mut src, src_out) = FileSource::<Complex>::new(&tmpfn)?;
         src.work()?;
 
-        let (res, _) = src_out.read_buf()?;
+        let res = src_out.read_buf()?;
         #[allow(clippy::approx_constant)]
         let correct = vec![Complex::new(0.0, 0.0), Complex::new(3.14, -2.7)];
         assert_eq!(res.slice(), correct);

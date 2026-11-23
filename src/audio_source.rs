@@ -225,8 +225,8 @@ mod tests {
         drop(sender);
         assert!(matches!(capture_state.work(&dst)?, BlockRet::Again));
         assert!(matches!(capture_state.work(&dst)?, BlockRet::EOF));
-        let (buf, tags) = reader.read_buf()?;
-        assert!(tags.is_empty());
+        let buf = reader.read_buf()?;
+        assert!(buf.tags().len() == 0);
         assert_eq!(buf.len(), 3);
         assert_eq!(buf[0], -1.0);
         assert_eq!(buf[1], 0.0);
@@ -249,21 +249,21 @@ mod tests {
         output.produce(n, &[]);
         capture(&[0.5f32], 1, &sender, &state.overrun);
         assert!(matches!(state.work(&dst)?, BlockRet::WaitForStream(_, 1)));
-        reader.read_buf()?.0.consume(n);
+        reader.read_buf()?.consume_discard_tags(n);
         assert!(matches!(state.work(&dst)?, BlockRet::Again));
-        assert_eq!(reader.read_buf()?.0.slice(), &[0.5]);
+        assert_eq!(reader.read_buf()?.slice(), &[0.5]);
         capture(&[0.1f32, 0.2], 1, &sender, &state.overrun);
         assert!(matches!(state.work(&dst)?, BlockRet::Again));
         assert!(!state.overrun.load(Ordering::Relaxed));
         let warned = state.last_overrun_warning;
         assert!(warned.is_some());
-        let (buf, _) = reader.read_buf()?;
+        let buf = reader.read_buf()?;
         assert_eq!(buf.slice(), &[0.5, 0.1]);
-        buf.consume(2);
+        buf.consume_discard_tags(2);
         // A later callback is accepted, and repeated overruns are throttled.
         capture(&[0.3f32, 0.4], 1, &sender, &state.overrun);
         assert!(matches!(state.work(&dst)?, BlockRet::Again));
-        assert_eq!(reader.read_buf()?.0.slice(), &[0.3]);
+        assert_eq!(reader.read_buf()?.slice(), &[0.3]);
         assert_eq!(state.last_overrun_warning, warned);
         Ok(())
     }

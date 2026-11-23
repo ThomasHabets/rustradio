@@ -409,11 +409,8 @@ impl<'a> Parsed<'a> {
                 let it = #it.map(|(#(#in_names),*)| self.process_sync(#(*#in_names),*));
                 #write_samples
                 // Only the first input's tags are forwarded, once per batch.
-                // read_buf() returns tags sorted by position.
-                let mut #first_tags = #first_tags;
-                #first_tags.truncate(#first_tags.partition_point(|tag| tag.pos() < n));
-                #(let _ = &#in_tag_names;)*
-                #(#in_names.consume(n);)*
+                let #first_tags = #first.consume(n);
+                #(#rest.consume_discard_tags(n);)*
                 #(#other_outputs.produce(n, &#first_tags);)*
                 #last_output.produce(n, #first_tags);
             }
@@ -446,21 +443,21 @@ impl<'a> Parsed<'a> {
             quote! {
                 #(let mut #out_tag_names = Vec::new();)*
                 // Select the tag-free path once per batch, outside the sample loop.
-                if true #(&& #in_tag_names.is_empty())* {
+                if true #(&& #in_names.tags().len() == 0)* {
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
                         #(let #in_tag_names: &[#path::stream::Tag] = &[];)*
                         #process_sample
                     });
                     #write_samples
                 } else {
-                    #(let mut #tag_iters = #in_tag_names.into_iter().peekable();)*
-                    // Reuse each sample's tag storage, moving tags out of the batch.
+                    #(let mut #tag_iters = #in_names.tags().peekable();)*
+                    // Reuse the temporary slice needed by each sample callback.
                     #(let mut #in_tag_names = Vec::new();)*
                     let it = #it.enumerate().map(|(pos, (#(#in_names),*))| {
                         #(
                             #in_tag_names.clear();
                             while #tag_iters.peek().is_some_and(|tag| tag.pos() == pos) {
-                                let mut tag = #tag_iters.next().expect("peeked tag");
+                                let mut tag = #tag_iters.next().expect("peeked tag").clone();
                                 tag.set_pos(0);
                                 #in_tag_names.push(tag);
                             }
@@ -469,7 +466,7 @@ impl<'a> Parsed<'a> {
                     });
                     #write_samples
                 }
-                #(#in_names.consume(n);)*
+                #(#in_names.consume_discard_tags(n);)*
                 #(#out_names.produce(n, #out_tag_names);)*
             }
         };
@@ -501,7 +498,7 @@ impl<'a> Parsed<'a> {
                         // In any case, this is a tiny micro optimization, so
                         // this comment is probably overthinking it.
                         let mut n = usize::MAX;
-                        #(let (#in_names, #in_tag_names) = self.#in_names.read_buf()?;
+                        #(let #in_names = self.#in_names.read_buf()?;
                           n = n.min(#in_names.len());
                           if n == 0 {
                               return Ok(#path::block::BlockRet::WaitForStream(&self.#in_names, 1));

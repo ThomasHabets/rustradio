@@ -11,10 +11,10 @@ fn main() -> Result<()> {
     let b2 = b.clone();
     std::thread::spawn(move || {
         loop {
-            let (rb, _) = Arc::clone(&b2).read_buf().unwrap();
+            let rb = Arc::clone(&b2).read_buf().unwrap();
             println!("read buf: {:?}", rb.slice());
             let l = rb.slice().len();
-            rb.consume(l);
+            rb.consume_discard_tags(l);
             std::thread::sleep(std::time::Duration::from_millis(1000));
         }
     });

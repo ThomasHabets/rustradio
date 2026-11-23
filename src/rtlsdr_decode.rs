@@ -19,7 +19,7 @@ impl Block for RtlSdrDecode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             // TODO: handle tags.
-            let (input, _tags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             let isamples = input.len() & !1;
             if isamples == 0 {
                 return Ok(BlockRet::WaitForStream(&self.src, 2));
@@ -39,7 +39,7 @@ impl Block for RtlSdrDecode {
                     .map(|e| (Float::from(e[0]), Float::from(e[1])))
                     .map(|(a, b)| Complex::new((a - 127.0) * 0.008, (b - 127.0) * 0.008)),
             )?;
-            input.consume(isamples);
+            input.consume_discard_tags(isamples);
             out.produce(osamples, &[]);
         }
     }
@@ -58,7 +58,7 @@ mod tests {
         assert!(matches![r, BlockRet::EOF], "Want EOF, got {r:?}");
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out)?;
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = dec_out.read_buf()?;
+        let res = dec_out.read_buf()?;
         assert_eq!(res.len(), 0);
         Ok(())
     }
@@ -69,7 +69,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out)?;
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = dec_out.read_buf()?;
+        let res = dec_out.read_buf()?;
         // Probably this should compare close to, but not equal.
         assert_eq!(
             res.slice(),
@@ -97,7 +97,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut dec, dec_out) = RtlSdrDecode::new(src_out)?;
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = dec_out.read_buf()?;
+        let res = dec_out.read_buf()?;
         assert_eq!(res.len(), 2);
         Ok(())
     }
@@ -111,9 +111,9 @@ mod tests {
         for n in 0..4 {
             eprintln!("loop iter: {n}");
             assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);
-            let (res, _) = dec_out.read_buf()?;
+            let res = dec_out.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE / 8);
-            res.consume(crate::stream::DEFAULT_STREAM_SIZE / 8);
+            res.consume_discard_tags(crate::stream::DEFAULT_STREAM_SIZE / 8);
         }
         // Finally there's no more input bytes to process.
         assert!(matches![dec.work()?, BlockRet::WaitForStream(_, _)]);

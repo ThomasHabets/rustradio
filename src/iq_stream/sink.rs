@@ -212,7 +212,7 @@ impl<T: IqSample> IqStreamSink<T> {
         if let Some(session) = state.active.as_mut() {
             flush_gap(&self.resource, session);
         }
-        let (input, tags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
         if input.is_empty() {
             drop(input);
             if self.src.eof() {
@@ -234,7 +234,7 @@ impl<T: IqSample> IqStreamSink<T> {
                 &self.resource,
                 session,
                 input.slice(),
-                &tags,
+                input.tags(),
                 absolute_position,
                 0,
             )?
@@ -248,7 +248,7 @@ impl<T: IqSample> IqStreamSink<T> {
             return Ok(BlockRet::Pending);
         }
         state.position = advance(state.position, n as u64)?;
-        input.consume(n);
+        input.consume_discard_tags(n);
         self.resource.notify.notify_one();
         Ok(BlockRet::Again)
     }
@@ -474,11 +474,11 @@ impl Drop for IqStreamStringSink {
 // Queue a retained or explicitly lost numeric prefix; zero means a blocking
 // sink must wait. Tags retain their original batch positions; tag_offset is
 // the number of batch samples already framed.
-pub(super) fn queue_numeric<T: IqSample>(
+pub(super) fn queue_numeric<'a, T: IqSample>(
     resource: &Resource,
     session: &mut Session,
     input: &[T],
-    tags: &[crate::stream::Tag],
+    tags: impl Iterator<Item = &'a crate::stream::Tag>,
     absolute_position: u64,
     tag_offset: usize,
 ) -> Result<usize> {
@@ -529,7 +529,6 @@ pub(super) fn queue_numeric<T: IqSample>(
             Vec::new()
         };
         for tag in tags
-            .iter()
             .skip_while(|t| t.pos() < tag_offset)
             .take_while(|t| t.pos() - tag_offset < n)
         {

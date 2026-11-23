@@ -67,7 +67,7 @@ struct Metadata {
 impl rustradio::block::Block for Metadata {
     fn work(&mut self) -> rustradio::Result<BlockRet<'_>> {
         loop {
-            let (i, mut tags) = self.src.read_buf()?;
+            let i = self.src.read_buf()?;
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -76,12 +76,10 @@ impl rustradio::block::Block for Metadata {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
             let n = std::cmp::min(i.len(), o.len());
-            tags.retain(|tag| tag.pos() < n);
             o.slice()[..n].copy_from_slice(&i.slice()[..n]);
-            i.consume(n);
-            o.produce(n, &tags);
+            let tags = i.consume(n);
             let mut new_capture = false;
-            for tag in tags {
+            for tag in &tags {
                 match (tag.key(), tag.val()) {
                     ("SoapySdrSource::frequency", TagValue::Float(f)) => {
                         let old = self.frequency;
@@ -114,6 +112,7 @@ impl rustradio::block::Block for Metadata {
                     ..Default::default()
                 });
             }
+            o.produce(n, tags);
             self.pos += n as u64;
         }
     }

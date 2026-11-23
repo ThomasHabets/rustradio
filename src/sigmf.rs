@@ -659,7 +659,7 @@ mod tests {
             assert!(!matches!(source.work()?, BlockRet::EOF));
         }
         assert!(matches!(source.work()?, BlockRet::EOF));
-        assert_eq!(out.read_buf()?.0.slice(), &[1.0, 1.0, 1.0]);
+        assert_eq!(out.read_buf()?.slice(), &[1.0, 1.0, 1.0]);
         Ok(())
     }
 
@@ -676,7 +676,7 @@ mod tests {
         assert!(matches!(source.work()?, BlockRet::Again));
         assert!(matches!(source.work()?, BlockRet::Again));
         assert!(matches!(source.work()?, BlockRet::EOF));
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         Ok(())
     }
 
@@ -691,7 +691,7 @@ mod tests {
             .repeat(Repeat::finite(0))
             .build()?;
         assert!(matches!(source.work()?, BlockRet::EOF));
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         Ok(())
     }
 
@@ -705,7 +705,7 @@ mod tests {
 
         let (mut src, out) = SigMFSource::<Float>::builder(base).build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         Ok(())
     }
 
@@ -726,7 +726,7 @@ mod tests {
         };
 
         assert!(matches!(src.work()?, BlockRet::Pending));
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         Ok(())
     }
 

@@ -799,7 +799,7 @@ impl Block for PwmDecoder {
                 return Ok(BlockRet::EOF);
             }
 
-            let (input, _tags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 drop(input);
                 if self.src.eof() {
@@ -820,7 +820,7 @@ impl Block for PwmDecoder {
                 }
             }
             let consumed = input.len();
-            input.consume(consumed);
+            input.consume_discard_tags(consumed);
 
             if self.src.eof() {
                 self.finalize_eof();

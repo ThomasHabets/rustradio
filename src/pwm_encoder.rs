@@ -654,7 +654,8 @@ mod tests {
         let mut tags = Vec::new();
         loop {
             let ret = encoder.work()?;
-            let (buffer, buffer_tags) = output.read_buf()?;
+            let buffer = output.read_buf()?;
+            let buffer_tags = buffer.tags().cloned().collect::<Vec<_>>();
             let offset = samples.len();
             samples.extend_from_slice(buffer.slice());
             tags.extend(
@@ -663,7 +664,7 @@ mod tests {
                     .map(|tag| Tag::new(offset + tag.pos(), tag.key(), tag.val().clone())),
             );
             let n = buffer.len();
-            buffer.consume(n);
+            buffer.consume_discard_tags(n);
             if matches!(ret, BlockRet::EOF) {
                 break;
             }
@@ -677,7 +678,8 @@ mod tests {
         samples: &mut usize,
         repeats: &mut Vec<u64>,
     ) -> Result<()> {
-        let (buffer, tags) = output.read_buf()?;
+        let buffer = output.read_buf()?;
+        let tags = buffer.tags().cloned().collect::<Vec<_>>();
         *samples += buffer.len();
         repeats.extend(tags.into_iter().filter_map(|tag| {
             if tag.key() == TAG_REPEAT
@@ -688,7 +690,7 @@ mod tests {
             None
         }));
         let n = buffer.len();
-        buffer.consume(n);
+        buffer.consume_discard_tags(n);
         Ok(())
     }
 
@@ -884,15 +886,15 @@ mod tests {
         assert!(!BlockEOF::eof(&mut encoder));
         let mut samples = Vec::new();
         loop {
-            let (buffer, _) = output.read_buf()?;
+            let buffer = output.read_buf()?;
             samples.extend_from_slice(buffer.slice());
             let n = buffer.len();
-            buffer.consume(n);
+            buffer.consume_discard_tags(n);
             if matches!(encoder.work()?, BlockRet::EOF) {
-                let (buffer, _) = output.read_buf()?;
+                let buffer = output.read_buf()?;
                 samples.extend_from_slice(buffer.slice());
                 let n = buffer.len();
-                buffer.consume(n);
+                buffer.consume_discard_tags(n);
                 break;
             }
         }

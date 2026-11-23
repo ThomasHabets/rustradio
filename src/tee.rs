@@ -82,16 +82,18 @@ mod tests {
 
         assert!(matches!(tee.work()?, BlockRet::WaitForStream(_, 1)));
         assert!(matches!(tee.work()?, BlockRet::WaitForStream(_, 1)));
-        second.read_buf()?.0.consume(padding_len);
+        second.read_buf()?.consume_discard_tags(padding_len);
         for output in [&first, &second] {
-            let (window, output_tags) = output.read_buf()?;
+            let window = output.read_buf()?;
+            let output_tags = window.tags().cloned().collect::<Vec<_>>();
             assert_eq!(window.slice(), &samples[..2]);
             assert_eq!(output_tags, &tags[..1]);
-            window.consume(2);
+            window.consume_discard_tags(2);
         }
         tee.work()?;
         for output in [&first, &second] {
-            let (window, output_tags) = output.read_buf()?;
+            let window = output.read_buf()?;
+            let output_tags = window.tags().cloned().collect::<Vec<_>>();
             assert_eq!(window.slice(), &samples[2..]);
             assert_eq!(
                 output_tags,
@@ -100,7 +102,7 @@ mod tests {
                     Tag::new(2, "late", TagValue::Bool(true)),
                 ]
             );
-            window.consume(3);
+            window.consume_discard_tags(3);
         }
         assert!(tee.src.eof());
         Ok(())

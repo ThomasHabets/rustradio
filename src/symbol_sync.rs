@@ -142,7 +142,7 @@ impl SymbolSync {
 
 impl Block for SymbolSync {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (input, _tags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
@@ -237,7 +237,7 @@ impl Block for SymbolSync {
                 break;
             }
         }
-        input.consume(n);
+        input.consume_discard_tags(n);
         o.produce(opos, &[]);
         if let Some(s) = out_clock {
             s.produce(opos, &[]);
@@ -264,7 +264,7 @@ mod tests {
         block.stream_pos = 16_777_216.0;
         block.next_sym_middle = block.stream_pos + 2.0;
         block.work()?;
-        assert_eq!(samples.read_buf()?.0.slice(), &[1.0; 4]);
+        assert_eq!(samples.read_buf()?.slice(), &[1.0; 4]);
         Ok(())
     }
 
@@ -280,7 +280,7 @@ mod tests {
         let clock = block.out_clock()?;
         assert!(block.out_clock().is_err());
         block.work()?;
-        assert_eq!(clock.read_buf()?.0.slice(), &[4.0; 3]);
+        assert_eq!(clock.read_buf()?.slice(), &[4.0; 3]);
         Ok(())
     }
 
@@ -339,12 +339,12 @@ mod tests {
         let clock = block.out_clock()?;
 
         assert!(matches!(block.work()?, BlockRet::Again));
-        let (symbols, _) = output.read_buf()?;
+        let symbols = output.read_buf()?;
         assert_eq!(symbols.len(), 20);
         for (i, symbol) in symbols.iter().enumerate() {
             assert_eq!(*symbol, if i % 2 == 0 { -1.0 } else { 1.0 });
         }
-        let (periods, _) = clock.read_buf()?;
+        let periods = clock.read_buf()?;
         assert_eq!(periods.len(), symbols.len());
         assert!(periods.iter().all(|period| *period == 4.0));
         Ok(())
@@ -362,7 +362,7 @@ mod tests {
         )?;
 
         assert!(matches![b.work()?, BlockRet::Again]);
-        assert_eq!(out.read_buf()?.0.len(), 2);
+        assert_eq!(out.read_buf()?.len(), 2);
         Ok(())
     }
 

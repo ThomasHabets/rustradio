@@ -155,7 +155,7 @@ mod tests {
     }
     impl Block for Steps {
         fn work(&mut self) -> crate::Result<BlockRet<'_>> {
-            let (input, _) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -166,7 +166,7 @@ mod tests {
             let mut output = self.dst.write_buf()?;
             output.slice()[0] = input.slice()[0];
             output.produce(1, &[]);
-            input.consume(1);
+            input.consume_discard_tags(1);
             Ok(BlockRet::Again)
         }
     }
@@ -183,12 +183,12 @@ mod tests {
                 self.finished.store(true, Ordering::SeqCst);
                 return Ok(BlockRet::EOF);
             }
-            let (input, _) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::Pending);
             }
             let n = input.len();
-            input.consume(n);
+            input.consume_discard_tags(n);
             Ok(BlockRet::Again)
         }
     }

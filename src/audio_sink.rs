@@ -104,7 +104,7 @@ impl Playback {
         mut control: Option<&mut TransmitControl>,
         now: impl FnOnce() -> StreamInstant,
     ) -> Result<BlockRet<'a>> {
-        let (input, _tags) = src.read_buf()?;
+        let input = src.read_buf()?;
         if input.is_empty() {
             return if self.status.idle(now) {
                 if let Some(control) = control {
@@ -134,12 +134,12 @@ impl Playback {
                 }
                 Err(TrySendError::Disconnected(_)) => {
                     self.status.queued.fetch_sub(1, Ordering::Relaxed);
-                    input.consume(n);
+                    input.consume_discard_tags(n);
                     return Err(Error::msg("audio output disconnected"));
                 }
             }
         }
-        input.consume(n);
+        input.consume_discard_tags(n);
         // A full audio channel is relieved by the device callback, not by
         // activity on src. Consume only the samples successfully enqueued.
         Ok(if n != 0 {
@@ -529,7 +529,7 @@ mod tests {
         window.slice()[0] = 0.5;
         window.produce(1, &[]);
         assert!(playback.work(&reader, Some(&mut control), now).is_err());
-        assert_eq!(reader.read_buf()?.0.slice(), &[0.5]);
+        assert_eq!(reader.read_buf()?.slice(), &[0.5]);
         assert_eq!(playback.status.queued.load(Ordering::Acquire), 0);
         drop(control);
         assert_eq!(*events.lock().unwrap(), [true, false]);
@@ -554,7 +554,7 @@ mod tests {
         assert!(matches!(state.work(&reader, None, now)?, BlockRet::Again));
         assert_eq!(state.status.queued.load(Ordering::Relaxed), 2);
         assert!(matches!(state.work(&reader, None, now)?, BlockRet::Pending));
-        assert_eq!(reader.read_buf()?.0.slice(), &[0.75]);
+        assert_eq!(reader.read_buf()?.slice(), &[0.75]);
         play(&mut output, 2, &receiver, &state.status, 48000, now());
         assert_eq!(output, [0.25, 0.25, -0.5, -0.5, 0.0, 0.0]);
         assert!(matches!(state.work(&reader, None, now)?, BlockRet::Again));

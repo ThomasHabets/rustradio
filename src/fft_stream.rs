@@ -76,7 +76,7 @@ impl FftStream {
 
 impl Block for FftStream {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (input, _tags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
         let ii = input.slice();
         if ii.len() < self.size {
             return Ok(BlockRet::WaitForStream(&self.src, self.size));
@@ -117,7 +117,7 @@ impl Block for FftStream {
             ));
         }
 
-        input.consume(len);
+        input.consume_discard_tags(len);
         o.produce(len, tags);
         Ok(BlockRet::Again)
     }
@@ -141,7 +141,8 @@ mod tests {
         let (mut fft, out) = FftStream::new(src, 4)?;
 
         assert!(matches!(fft.work()?, BlockRet::Again));
-        let (buf, tags) = out.read_buf()?;
+        let buf = out.read_buf()?;
+        let tags = buf.tags().cloned().collect::<Vec<_>>();
 
         assert_eq!(buf.len(), 8);
         assert_eq!(

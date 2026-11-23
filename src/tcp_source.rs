@@ -114,7 +114,7 @@ mod tests {
         count: usize,
     ) -> Result<()> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while out.read_buf()?.0.len() < count {
+        while out.read_buf()?.len() < count {
             assert!(!matches!(src.work()?, BlockRet::EOF), "unexpected TCP EOF");
             assert!(std::time::Instant::now() < deadline, "TCP source stalled");
             std::thread::yield_now();
@@ -177,14 +177,14 @@ mod tests {
         barrier.wait();
         read_samples(&mut src, &src_out, 1)?;
         {
-            let (res, _) = src_out.read_buf()?;
+            let res = src_out.read_buf()?;
             let want: Vec<Float> = [12345678.91817].into();
             assert_eq!(res.slice(), want, "first failed");
         }
         barrier.wait();
         read_samples(&mut src, &src_out, 2)?;
         {
-            let (res, _) = src_out.read_buf()?;
+            let res = src_out.read_buf()?;
             assert_eq!(
                 res.slice(),
                 vec![12345678.91817, 91_817.125],
@@ -195,7 +195,7 @@ mod tests {
         barrier.wait();
         read_samples(&mut src, &src_out, 4)?;
         {
-            let (res, _) = src_out.read_buf()?;
+            let res = src_out.read_buf()?;
             assert_eq!(
                 res.slice(),
                 vec![12345678.91817, 91_817.125, 7_589_234.5, 4712893.7589234],

@@ -28,7 +28,7 @@ impl Block for RtlSdrEncode {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             // TODO: handle tags.
-            let (input, _tags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -46,7 +46,7 @@ impl Block for RtlSdrEncode {
                     .take(isamples)
                     .flat_map(|sample| [encode_sample(sample.re), encode_sample(sample.im)]),
             )?;
-            input.consume(isamples);
+            input.consume_discard_tags(isamples);
             out.produce(osamples, &[]);
         }
     }
@@ -64,7 +64,7 @@ mod tests {
         assert!(matches![r, BlockRet::EOF], "Want EOF, got {r:?}");
         let (mut enc, enc_out) = RtlSdrEncode::new(src_out)?;
         assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = enc_out.read_buf()?;
+        let res = enc_out.read_buf()?;
         assert_eq!(res.len(), 0);
         Ok(())
     }
@@ -79,7 +79,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut enc, enc_out) = RtlSdrEncode::new(src_out)?;
         assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = enc_out.read_buf()?;
+        let res = enc_out.read_buf()?;
         assert_eq!(res.slice(), &[0, 10, 20, 10, 0, 13]);
         Ok(())
     }
@@ -90,7 +90,7 @@ mod tests {
         assert!(matches![src.work()?, BlockRet::EOF]);
         let (mut enc, enc_out) = RtlSdrEncode::new(src_out)?;
         assert!(matches![enc.work()?, BlockRet::WaitForStream(_, _)]);
-        let (res, _) = enc_out.read_buf()?;
+        let res = enc_out.read_buf()?;
         assert_eq!(res.slice(), &[0, 255]);
         Ok(())
     }

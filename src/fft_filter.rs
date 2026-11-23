@@ -328,9 +328,8 @@ impl<T: Engine> Block for FftFilter<T> {
         // Keep one snapshot for all FFT rounds that fit. In particular, WASM
         // read_buf() copies the unread window, so checking it out per round
         // would repeatedly copy the unprocessed suffix.
-        let (input, tags) = self.src.read_buf()?;
-        let mut tags = tags.into_iter().peekable();
-        let mut output_tags = Vec::new();
+        let input = self.src.read_buf()?;
+        let buffered = self.buf.len();
         let mut consumed = 0;
         let mut produced = 0;
         let output_len = output.len();
@@ -341,16 +340,8 @@ impl<T: Engine> Block for FftFilter<T> {
                 break;
             }
             let add = (input.len() - consumed).min(self.nsamples - self.buf.len());
-            let tag_offset = self.buf.len();
             self.buf
                 .extend_from_slice(&input.slice()[consumed..consumed + add]);
-            // Tags are ordered. Move each consumed tag exactly once, retaining
-            // tags for an incomplete round until its output is ready.
-            while tags.peek().is_some_and(|tag| tag.pos() < consumed + add) {
-                let mut tag = tags.next().unwrap();
-                tag.set_pos(tag.pos() - consumed + tag_offset);
-                self.tags.push(tag);
-            }
             consumed += add;
             if self.buf.len() < self.nsamples {
                 wait_for_output = false;
@@ -366,17 +357,29 @@ impl<T: Engine> Block for FftFilter<T> {
             }
             output.slice()[produced..produced + self.nsamples]
                 .copy_from_slice(&self.buf[..self.nsamples]);
-            output_tags.extend(self.tags.drain(..).map(|mut tag| {
-                tag.set_pos(tag.pos() + produced);
-                tag
-            }));
+
             produced += self.nsamples;
 
             self.tail
                 .copy_from_slice(&self.buf[self.nsamples..self.fft_size]);
             self.buf.clear();
         }
-        input.consume(consumed);
+        // Previous partial-round tags precede all newly consumed tags.
+        let mut output_tags = if produced == 0 {
+            Vec::new()
+        } else {
+            std::mem::take(&mut self.tags)
+        };
+        for mut tag in input.consume(consumed) {
+            let pos = buffered + tag.pos();
+            if pos < produced {
+                tag.set_pos(pos);
+                output_tags.push(tag);
+            } else {
+                tag.set_pos(pos - produced);
+                self.tags.push(tag);
+            }
+        }
         output.produce(produced, output_tags);
         Ok(if wait_for_output {
             BlockRet::WaitForStream(&self.dst, self.nsamples)
@@ -461,19 +464,14 @@ impl<T: Engine> Block for FftFilterFloat<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         // Convert input to Complex.
         {
-            let (outer_in, tags) = self.src.read_buf()?;
+            let outer_in = self.src.read_buf()?;
             let mut inner_to = self.inner_in.write_buf()?;
             let n = std::cmp::min(outer_in.len(), inner_to.len());
             let o = inner_to.slice();
             for (i, samp) in outer_in.iter().take(n).enumerate() {
                 o[i] = Complex::new(*samp, 0.0);
             }
-            let tags = tags
-                .into_iter()
-                .take_while(|tag| tag.pos() < n)
-                .collect::<Vec<_>>();
-            inner_to.produce(n, tags);
-            outer_in.consume(n);
+            inner_to.produce(n, outer_in.consume(n));
         }
 
         // Run Complex FftFilter.
@@ -483,7 +481,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
 
         // Replicate stream write.
         {
-            let (inner_from, tags) = self.inner_out.read_buf()?;
+            let inner_from = self.inner_out.read_buf()?;
             let mut outer_to = self.dst.write_buf()?;
             let n = std::cmp::min(inner_from.len(), outer_to.len());
             if n == 0 && !inner_from.is_empty() {
@@ -493,12 +491,7 @@ impl<T: Engine> Block for FftFilterFloat<T> {
             for (i, samp) in inner_from.iter().take(n).enumerate() {
                 o[i] = samp.re;
             }
-            let tags = tags
-                .into_iter()
-                .take_while(|tag| tag.pos() < n)
-                .collect::<Vec<_>>();
-            inner_from.consume(n);
-            outer_to.produce(n, tags);
+            outer_to.produce(n, inner_from.consume(n));
         }
 
         // Replace the inner stream wait with an outer stream wait.
@@ -600,7 +593,7 @@ mod tests {
         let (mut filter, out) = make_filter()?;
         let error = filter.work().unwrap_err();
         assert!(error.to_string().contains("test FFT backend failure"));
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         #[cfg(not(feature = "wasm"))]
         {
             use crate::graph::{Graph, GraphRunner, GraphRunnerExt};
@@ -609,7 +602,7 @@ mod tests {
             graph.add(filter);
             let error = graph.run().unwrap_err();
             assert!(error.to_string().contains("test FFT backend failure"));
-            assert!(out.read_buf()?.0.is_empty());
+            assert!(out.read_buf()?.is_empty());
         }
         Ok(())
     }
@@ -637,7 +630,8 @@ mod tests {
             head.work()?;
             // Filter the stream.
             fft.work()?;
-            let (out, tags) = out.read_buf()?;
+            let out = out.read_buf()?;
+            let tags = out.tags().cloned().collect::<Vec<_>>();
             let out = out
                 .iter()
                 .skip(taps_len) // I get garbage in the beginning.
@@ -673,7 +667,8 @@ mod tests {
         src.work()?;
         src.work()?;
         fft.work()?;
-        let (out, tags) = out.read_buf()?;
+        let out = out.read_buf()?;
+        let tags = out.tags().cloned().collect::<Vec<_>>();
         assert_eq!(
             tags,
             &[
@@ -724,14 +719,15 @@ mod tests {
             window.produce(end - start, &tags);
             assert!(matches!(filter.work()?, BlockRet::WaitForStream(stream, n)
                 if stream.id() == input_id && n == need));
-            let (window, tags) = out.read_buf()?;
+            let window = out.read_buf()?;
+            let tags = window.tags().cloned().collect::<Vec<_>>();
             assert_eq!(window.len(), expected_output);
             actual_tags.extend(tags.into_iter().map(|mut tag| {
                 tag.set_pos(tag.pos() + actual.len());
                 tag
             }));
             actual.extend_from_slice(window.slice());
-            window.consume(expected_output);
+            window.consume_discard_tags(expected_output);
         }
         assert_eq!(actual_tags, all_tags);
         for (i, value) in actual.iter().enumerate() {
@@ -781,20 +777,23 @@ mod tests {
         assert!(matches!(filter.work()?, BlockRet::WaitForStream(stream, 5)
             if stream.id() == output_id));
         assert!(filter.buf.is_empty());
-        let (window, tags) = filter.src.read_buf()?;
+        let window = filter.src.read_buf()?;
+        let tags = window.tags().cloned().collect::<Vec<_>>();
         assert_eq!(window.slice(), &samples[10..]);
         assert_eq!(tags[0].pos(), 0);
         drop(window);
-        let (window, tags) = out.read_buf()?;
+        let window = out.read_buf()?;
+        let tags = window.tags().cloned().collect::<Vec<_>>();
         assert_eq!(window.len(), prefix + 10);
         for (actual, expected) in window.slice()[prefix..].iter().zip(&samples[..10]) {
             assert!((*actual - *expected).norm() < 0.0001);
         }
         assert_eq!(tags, [Tag::new(prefix + 9, "before", TagValue::Bool(true))]);
-        window.consume(prefix + 10);
+        window.consume_discard_tags(prefix + 10);
         assert!(matches!(filter.work()?, BlockRet::WaitForStream(stream, 3)
             if stream.id() == input_id));
-        let (window, tags) = out.read_buf()?;
+        let window = out.read_buf()?;
+        let tags = window.tags().cloned().collect::<Vec<_>>();
         assert_eq!(window.len(), 5);
         assert_eq!(tags, [Tag::new(0, "after", TagValue::Bool(true))]);
         assert_eq!(filter.buf, samples[15..]);
@@ -837,11 +836,11 @@ mod tests {
             },
         )?;
         filter.work()?;
-        let (window, _) = out.read_buf()?;
+        let window = out.read_buf()?;
         assert_eq!(window.len(), 5);
-        window.consume(5);
+        window.consume_discard_tags(5);
         filter.work()?;
-        let (window, _) = out.read_buf()?;
+        let window = out.read_buf()?;
         assert_eq!(window.len(), 5);
         Ok(())
     }

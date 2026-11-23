@@ -642,7 +642,7 @@ where
     C: Copy + Send,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (input, mut tags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
 
         // Get number of input samples we intend to consume.
         let n = {
@@ -694,8 +694,7 @@ where
         // Sanity check the generated output.
         assert!(out_n <= out.len());
 
-        tags.retain(|tag| tag.pos() < n);
-        input.consume(n);
+        let mut tags = input.consume(n);
         if self.deci == 1 {
             out.produce(out_n, tags);
         } else {
@@ -909,7 +908,7 @@ mod tests {
         window.fill_from_slice(&[Complex::new(1.0, 0.0); 3]);
         window.produce(3, &[]);
         filter.work()?;
-        output.read_buf()?.0.consume(3);
+        output.read_buf()?.consume_discard_tags(3);
 
         let mut full = filter.dst.write_buf()?;
         let capacity = full.len();
@@ -923,9 +922,9 @@ mod tests {
         // Supersede the blocked disable request: zero frequency must hold the
         // phase reached after the initial three samples (positive pi/2).
         control.set_translation(8.0, 0.0)?;
-        output.read_buf()?.0.consume(capacity);
+        output.read_buf()?.consume_discard_tags(capacity);
         assert!(matches!(filter.work()?, BlockRet::Again));
-        let (window, _) = output.read_buf()?;
+        let window = output.read_buf()?;
         assert_eq!(window.len(), 2);
         for sample in window.iter() {
             assert!((*sample - Complex::new(0.0, 1.0)).norm() < 1e-6);
@@ -1017,7 +1016,8 @@ mod tests {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
-            let (res, tags) = os.read_buf()?;
+            let res = os.read_buf()?;
+            let tags = res.tags().cloned().collect::<Vec<_>>();
             let max = 2 * input.len() / deci;
             if !res.is_empty() {
                 assert_eq!(
@@ -1087,8 +1087,8 @@ mod tests {
         assert!(matches![manual.work()?, BlockRet::Again]);
         assert!(matches![manual.work()?, BlockRet::WaitForStream(_, _)]);
 
-        let (translated_res, _) = translated_out.read_buf()?;
-        let (manual_res, _) = manual_out.read_buf()?;
+        let translated_res = translated_out.read_buf()?;
+        let manual_res = manual_out.read_buf()?;
         assert_almost_equal_complex(translated_res.slice(), manual_res.slice());
         Ok(())
     }
@@ -1118,7 +1118,7 @@ mod tests {
         assert!(matches![filter.work()?, BlockRet::Again]);
         assert!(matches![filter.work()?, BlockRet::WaitForStream(_, _)]);
 
-        let (res, _) = out.read_buf()?;
+        let res = out.read_buf()?;
         let mean = res.iter().map(|sample| sample.norm()).sum::<Float>() / res.len() as Float;
         assert!(mean > 0.95, "translated tone mean magnitude: {mean}");
         Ok(())
@@ -1139,7 +1139,7 @@ mod tests {
         assert!(matches![filter.work()?, BlockRet::Again]);
         assert!(matches![filter.work()?, BlockRet::WaitForStream(_, _)]);
 
-        let (res, _) = out.read_buf()?;
+        let res = out.read_buf()?;
         let mean = res.iter().map(|sample| sample.norm()).sum::<Float>() / res.len() as Float;
         assert!(mean < 0.01, "translated DC mean magnitude: {mean}");
         Ok(())
@@ -1166,7 +1166,7 @@ mod tests {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
-            let (res, _) = os.read_buf()?;
+            let res = os.read_buf()?;
             let max = input.len() / deci;
             assert_almost_equal_complex(
                 res.slice(),
@@ -1203,7 +1203,7 @@ mod tests {
                 assert!(matches![b.work()?, BlockRet::Again]);
             }
             assert!(matches![b.work()?, BlockRet::WaitForStream(_, _)]);
-            let (res, _) = os.read_buf()?;
+            let res = os.read_buf()?;
             let max = (input.len() - 1) / deci;
             assert_almost_equal_complex(
                 res.slice(),

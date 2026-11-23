@@ -86,7 +86,7 @@ fn custom_encoding_round_trips_through_file_blocks() -> Result<()> {
     assert_eq!(std::fs::read(&path)?, [7, 9]);
     let (mut source, stream) = FileSource::<Custom>::new(&path)?;
     source.work()?;
-    let (window, _) = stream.read_buf()?;
+    let window = stream.read_buf()?;
     assert_eq!(
         window.iter().map(|sample| sample.0).collect::<Vec<_>>(),
         [7, 9]

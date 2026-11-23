@@ -30,10 +30,10 @@ impl Block for Hasher {
             self.finish();
             return Ok(BlockRet::EOF);
         }
-        let (i, _) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
         let n = i.len();
         self.hasher.update(i.slice());
-        i.consume(n);
+        i.consume_discard_tags(n);
         Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }

@@ -230,7 +230,7 @@ mod tests {
             f64::from(sample).powi(2)
         })?;
         assert!(busy.is_none());
-        assert_eq!(data.read_buf()?.0.slice(), &[0.25, -0.5]);
+        assert_eq!(data.read_buf()?.slice(), &[0.25, -0.5]);
         Ok(())
     }
 
@@ -271,12 +271,12 @@ mod tests {
                 let mut count = 0;
                 let mut last = 0;
                 while count < 1000 {
-                    let (window, _) = states.read_buf()?;
+                    let window = states.read_buf()?;
                     if let Some(&value) = window.slice().last() {
                         last = value;
                     }
                     let n = window.len();
-                    window.consume(n);
+                    window.consume_discard_tags(n);
                     count += n;
                     assert!(Instant::now() < deadline, "busy stream stalled");
                     if n == 0 {

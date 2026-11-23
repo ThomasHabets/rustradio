@@ -73,7 +73,7 @@ impl Hilbert {
 impl Block for Hilbert {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         debug_assert_eq!(self.ntaps, self.history.len());
-        let (ii, tags) = self.src.read_buf()?;
+        let ii = self.src.read_buf()?;
         let i = ii.slice();
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
@@ -105,14 +105,8 @@ impl Block for Hilbert {
             });
         }
 
-        let tags = tags
-            .into_iter()
-            .take_while(|tag| tag.pos() < n)
-            .collect::<Vec<_>>();
-        oo.produce(n, tags);
-
         self.history.clone_from_slice(&iv[n..len]);
-        ii.consume(n);
+        oo.produce(n, ii.consume(n));
         Ok(BlockRet::Again)
     }
 }
@@ -138,7 +132,7 @@ mod tests {
             &WindowType::Hamming,
         )?;
         assert!(matches!(block.work()?, BlockRet::Again));
-        assert_eq!(out.read_buf()?.0.len(), 3);
+        assert_eq!(out.read_buf()?.len(), 3);
         Ok(())
     }
 }

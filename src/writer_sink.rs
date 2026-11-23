@@ -52,7 +52,7 @@ where
                 continue;
             }
 
-            let (i, _) = self.src.read_buf()?;
+            let i = self.src.read_buf()?;
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -61,7 +61,7 @@ where
                 sample.serialize_into(&mut self.buf);
             }
             let n = i.len();
-            i.consume(n);
+            i.consume_discard_tags(n);
         }
     }
 }

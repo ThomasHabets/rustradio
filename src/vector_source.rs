@@ -163,7 +163,8 @@ mod tests {
         let (mut src, os) = VectorSource::new(vec![1u8, 2, 3])?;
         let r = src.work()?;
         assert!(matches![r, BlockRet::EOF], "res: {r:?}");
-        let (res, tags) = os.read_buf()?;
+        let res = os.read_buf()?;
+        let tags = res.tags().cloned().collect::<Vec<_>>();
         assert_eq!(res.slice(), &[1, 2, 3]);
         assert_eq!(
             tags,
@@ -182,7 +183,7 @@ mod tests {
             .repeat(Repeat::finite(0))
             .build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (res, _) = os.read_buf()?;
+        let res = os.read_buf()?;
         assert!(res.is_empty());
         Ok(())
     }
@@ -193,7 +194,7 @@ mod tests {
             .repeat(Repeat::finite(1))
             .build()?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (res, _) = os.read_buf()?;
+        let res = os.read_buf()?;
         assert_eq!(res.slice(), &[1u8, 2, 3]);
         Ok(())
     }
@@ -205,7 +206,8 @@ mod tests {
             .build()?;
         assert!(matches![src.work()?, BlockRet::Again]);
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (res, tags) = os.read_buf()?;
+        let res = os.read_buf()?;
+        let tags = res.tags().cloned().collect::<Vec<_>>();
         assert_eq!(res.slice(), &[1u8, 2, 3, 1, 2, 3]);
         assert_eq!(
             tags,
@@ -228,7 +230,8 @@ mod tests {
         for _ in 0..10 {
             assert!(matches![src.work()?, BlockRet::Again]);
         }
-        let (res, tags) = os.read_buf()?;
+        let res = os.read_buf()?;
+        let tags = res.tags().cloned().collect::<Vec<_>>();
         assert_eq!(
             res.slice(),
             (0..10).flat_map(|_| vec![1u8, 2, 3]).collect::<Vec<_>>()
@@ -255,7 +258,7 @@ mod tests {
     fn max() -> Result<()> {
         let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE])?;
         assert!(matches![src.work()?, BlockRet::EOF]);
-        let (res, _) = os.read_buf()?;
+        let res = os.read_buf()?;
         assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
         Ok(())
     }
@@ -265,7 +268,7 @@ mod tests {
         let (mut src, os) = VectorSource::new(vec![0u8; crate::stream::DEFAULT_STREAM_SIZE + 100])?;
         assert!(matches![src.work()?, BlockRet::Again]);
         {
-            let (res, _) = os.read_buf()?;
+            let res = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
         }
         {
@@ -276,13 +279,13 @@ mod tests {
             );
         }
         {
-            let (res, _) = os.read_buf()?;
+            let res = os.read_buf()?;
             assert_eq!(res.len(), crate::stream::DEFAULT_STREAM_SIZE);
-            res.consume(crate::stream::DEFAULT_STREAM_SIZE);
+            res.consume_discard_tags(crate::stream::DEFAULT_STREAM_SIZE);
         }
         assert!(matches![src.work()?, BlockRet::EOF]);
         {
-            let (res, _) = os.read_buf()?;
+            let res = os.read_buf()?;
             assert_eq!(res.len(), 100);
         }
         Ok(())

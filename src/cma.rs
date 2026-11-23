@@ -67,7 +67,7 @@ impl CmaEqualizer {
 
 impl Block for CmaEqualizer {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (input, tags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
         let mut output = self.dst.write_buf()?;
 
         let is = input.slice();
@@ -109,12 +109,7 @@ impl Block for CmaEqualizer {
             }
         }
 
-        let tags = tags
-            .into_iter()
-            .take_while(|tag| tag.pos() < len)
-            .collect::<Vec<_>>();
-        output.produce(len, tags);
-        input.consume(len);
+        output.produce(len, input.consume(len));
 
         Ok(BlockRet::Again)
     }
@@ -152,7 +147,7 @@ mod tests {
         let (mut b, out) = CmaEqualizer::new(taps.len(), 1.0, 0.0, ReadStream::from_slice(&input))?;
         b.taps = taps;
         assert!(matches!(b.work()?, BlockRet::Again));
-        let (output, _) = out.read_buf()?;
+        let output = out.read_buf()?;
         assert_eq!(output.len(), expected.len());
         for (got, want) in output.iter().zip(expected) {
             assert!((*got - want).norm() < 1e-4, "got {got}, want {want}");
@@ -170,7 +165,7 @@ mod tests {
         let (mut b, out) = CmaEqualizer::new(2, 1.0, 0.0, ReadStream::from_slice(&input))?;
 
         assert!(matches![b.work()?, BlockRet::Again]);
-        assert_eq!(out.read_buf()?.0.slice(), &input[..2]);
+        assert_eq!(out.read_buf()?.slice(), &input[..2]);
         Ok(())
     }
 }

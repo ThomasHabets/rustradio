@@ -139,7 +139,7 @@ where
     T: SampleEncoding + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (i, _tags) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
         let n = i.len();
         if n == 0 {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
@@ -155,7 +155,7 @@ where
         if self.flush {
             self.flush()?;
         }
-        i.consume(n);
+        i.consume_discard_tags(n);
         Ok(BlockRet::Again)
     }
 }

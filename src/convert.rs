@@ -67,7 +67,7 @@ impl<T: SampleEncoding> Block for Parse<T> {
         // TODO: make more efficient by doing batches.
         loop {
             // TODO: handle tags.
-            let (i, _) = self.src.read_buf()?;
+            let i = self.src.read_buf()?;
             if i.len() < T::ENCODED_SIZE.get() {
                 return Ok(BlockRet::WaitForStream(&self.src, T::ENCODED_SIZE.get()));
             }
@@ -87,7 +87,7 @@ impl<T: SampleEncoding> Block for Parse<T> {
                 os[n] = s?;
             }
             o.produce(items, &[]);
-            i.consume(items * T::ENCODED_SIZE.get());
+            i.consume_discard_tags(items * T::ENCODED_SIZE.get());
         }
     }
 }

@@ -18,7 +18,7 @@ pub struct Skip<T: Sample> {
 impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
-            let (i, tags) = self.src.read_buf()?;
+            let i = self.src.read_buf()?;
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -26,7 +26,7 @@ impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
             // Skip if there's skipping to do.
             if self.skip > 0 {
                 let n = self.skip.min(i.len() as u64) as usize;
-                i.consume(n);
+                i.consume_discard_tags(n);
                 self.skip -= n as u64;
                 continue;
             }
@@ -39,12 +39,7 @@ impl<T: Sample + std::fmt::Debug> Block for Skip<T> {
 
             let len = std::cmp::min(i.len(), o.len());
             o.slice()[..len].copy_from_slice(&i.slice()[..len]);
-            let tags = tags
-                .into_iter()
-                .take_while(|tag| tag.pos() < len)
-                .collect::<Vec<_>>();
-            o.produce(len, tags);
-            i.consume(len);
+            o.produce(len, i.consume(len));
         }
     }
 }
@@ -57,7 +52,7 @@ mod tests {
         let (mut block, out) = Skip::new(ReadStream::from_slice(&[1u8, 2, 3]), count)?;
         block.work()?;
         assert_eq!(block.skip, count - 3);
-        assert!(out.read_buf()?.0.is_empty());
+        assert!(out.read_buf()?.is_empty());
         Ok(())
     }
 
@@ -78,7 +73,8 @@ mod tests {
             let (mut b, out) = Skip::new(src, skip as u64)?;
             let ret = b.work()?;
             assert!(matches![ret, BlockRet::WaitForStream(_, _)], "{ret:?}");
-            let (res, tags) = out.read_buf()?;
+            let res = out.read_buf()?;
+            let tags = res.tags().cloned().collect::<Vec<_>>();
             let got = res.slice().to_vec();
             let want = [1u8, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6];
             let want = if skip > want.len() {

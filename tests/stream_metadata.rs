@@ -82,10 +82,11 @@ fn metadata_preserves_data_tags_and_eof() -> Result<()> {
     drop(writer);
     assert!(!reader.eof());
     assert_eq!(reader.name(), "samples");
-    let (buffer, received_tags) = reader.read_buf()?;
+    let buffer = reader.read_buf()?;
+    let received_tags = buffer.tags().cloned().collect::<Vec<_>>();
     assert_eq!(buffer.slice(), &[7, 8]);
     assert_eq!(received_tags, tags);
-    buffer.consume(2);
+    buffer.consume_discard_tags(2);
     assert!(reader.eof());
 
     let value = String::from("borrowed");

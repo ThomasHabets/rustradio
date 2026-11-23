@@ -74,12 +74,18 @@ TODO: document optional input and output streams.
 
 ## The block `work()` function
 
+Inspect a read window’s tags with `input.tags()`. Positions are relative
+to the start of the window. For a one-to-one transform, forward the consumed
+prefix with `output.produce(n, input.consume(n))` after writing the
+output samples. Use `input.consume_discard_tags(n)` to discard the prefix and its tags.
+Dropping a window leaves all its samples and tags for the next read.
+
 For general blocks, the core of a block is its `work()` function.
 
 ```
 impl Block for MyBlock {
     fn work(&mut self) -> Result<BlockRet, Error> {
-        let (input_buffer, input_tags) = self.src.read_buf()?;
+        let input_buffer = self.src.read_buf()?;
         let mut output_stream = self.dst.write_buf()?;
         let output_slice = output_stream.slice();
         let max_output_samples = output_slice.len();
@@ -87,7 +93,7 @@ impl Block for MyBlock {
         let out_len = mydata.len();
         output_slice[..out_len].copy_from_slice(&mydata);
 
-        input_buffer.consume(input_used);
+        input_buffer.consume_discard_tags(input_used);
         output_stream.produce(mydata.len(), &[…output_tags…]);
         if need_more_input {
             Ok(BlockRet::WaitForStream(&self.src, how_much_more))

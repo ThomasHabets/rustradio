@@ -105,7 +105,7 @@ fn transmit<'a>(
     }
     // Query before obtaining a read window, which itself retains the buffer.
     let finalize_burst = drain.is_some() && src.eof();
-    let (input, _tags) = src.read_buf()?;
+    let input = src.read_buf()?;
     if let Some(state) = drain.as_mut()
         && let Some(sample) = state.pending
     {
@@ -134,7 +134,7 @@ fn transmit<'a>(
         // Holding the sample locally allows even a capacity-one input to
         // accept more data and eventually signal EOF without deadlocking.
         state.pending = Some(input.slice()[0]);
-        input.consume(1);
+        input.consume_discard_tags(1);
         return Ok(BlockRet::Again);
     }
     let available = input.len();
@@ -142,7 +142,7 @@ fn transmit<'a>(
     // Both modes share partial-write, timeout, and input-consumption handling.
     let count = available - usize::from(drain.is_some());
     let n = tx.send(&input.slice()[..count], false)?;
-    input.consume(n);
+    input.consume_discard_tags(n);
     Ok(if n == 0 {
         BlockRet::Pending
     } else if n == available {

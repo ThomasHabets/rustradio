@@ -219,7 +219,7 @@ impl Block for KissFrame {
             if self.dst.remaining() == 0 {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
-            let (i, _tags) = self.src.read_buf()?;
+            let i = self.src.read_buf()?;
             if i.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -235,7 +235,7 @@ impl Block for KissFrame {
                             break;
                         }
                     }
-                    i.consume(n);
+                    i.consume_discard_tags(n);
                     if synced {
                         FrameState::Synced(vec![])
                     } else {
@@ -259,7 +259,7 @@ impl Block for KissFrame {
                             break;
                         }
                     }
-                    i.consume(n);
+                    i.consume_discard_tags(n);
                     if v.len() > MAX_LEN {
                         FrameState::Unsynced
                     } else if done {
@@ -382,7 +382,7 @@ impl Block for KissEncode {
                 return Ok(BlockRet::WaitForStream(&self.dst, 1));
             }
         }
-        let (input, _tags) = busy.read_buf()?;
+        let input = busy.read_buf()?;
         let mut consumed = 0;
         // Bound control work so a continuous busy stream cannot starve packets.
         for &value in input.iter().take(1024) {
@@ -400,7 +400,7 @@ impl Block for KissEncode {
             }
             consumed += 1;
         }
-        input.consume(consumed);
+        input.consume_discard_tags(consumed);
         if self.dst.remaining() == 0 {
             return Ok(BlockRet::WaitForStream(&self.dst, 1));
         }
@@ -477,23 +477,17 @@ mod tests {
         window.produce(4, &[]);
         drop(states);
         assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
-        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.0.len(), 4);
+        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.len(), 4);
         output.pop().unwrap();
         assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
         assert!(!encoder.src.is_empty());
-        assert_eq!(
-            encoder.busy.as_ref().unwrap().read_buf()?.0.slice(),
-            &[1, 0]
-        );
+        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.slice(), &[1, 0]);
         // Even with only one free slot, a packet gets a turn before more
         // queued control transitions. Neither input can monopolize output.
         assert!(output.pop().unwrap().0.is_empty());
         assert!(matches!(encoder.work()?, BlockRet::WaitForStream(_, 1)));
         assert!(encoder.src.is_empty());
-        assert_eq!(
-            encoder.busy.as_ref().unwrap().read_buf()?.0.slice(),
-            &[1, 0]
-        );
+        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.slice(), &[1, 0]);
         for _ in 2..capacity {
             assert!(output.pop().unwrap().0.is_empty());
         }
@@ -524,7 +518,7 @@ mod tests {
         assert!(matches!(encoder.work()?, BlockRet::Again));
         assert_eq!(output.pop().unwrap().0, [0xc0, 6, 0x8e, 1, 0xc0]);
         assert_eq!(output.pop().unwrap().0, [0xc0, 0, 42, 0xc0]);
-        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.0.len(), 1024);
+        assert_eq!(encoder.busy.as_ref().unwrap().read_buf()?.len(), 1024);
         Ok(())
     }
 

@@ -254,7 +254,7 @@ mod tests {
         let (mut b, prev) = NrziDecode::new(prev).unwrap();
         b.work().unwrap();
 
-        let (out, _) = prev.read_buf().unwrap();
+        let out = prev.read_buf().unwrap();
         let descrambled: Vec<_> = out.iter().copied().skip(17).collect();
         assert_eq!(descrambled, input);
     }

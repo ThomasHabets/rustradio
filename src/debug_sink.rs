@@ -59,7 +59,7 @@ where
     T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (i, tags) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
         if i.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
@@ -69,13 +69,16 @@ where
         }
         let wait_for_dst = l < i.len();
 
-        let tags: HashMap<usize, Vec<Tag>> =
-            tags.into_iter()
-                .map(|t| (t.pos(), t))
-                .fold(HashMap::new(), |mut acc, (pos, tag)| {
-                    acc.entry(pos).or_default().push(tag);
-                    acc
-                });
+        // TODO: don't do this nonsense. Just advance the samples and tags input
+        // in lockstep.
+        let tags: HashMap<usize, Vec<&Tag>> = i
+            .tags()
+            .take_while(|tag| tag.pos() < l)
+            .map(|t| (t.pos(), t))
+            .fold(HashMap::new(), |mut acc, (pos, tag)| {
+                acc.entry(pos).or_default().push(tag);
+                acc
+            });
 
         i.iter().take(l).enumerate().for_each(|(n, s)| {
             let ts = tags
@@ -89,7 +92,7 @@ where
                 .unwrap_or_default();
             self.dst.push(format!("{s:?} {ts}"), &[]);
         });
-        i.consume(l);
+        i.consume_discard_tags(l);
         if wait_for_dst {
             Ok(BlockRet::WaitForStream(&self.dst, 1))
         } else {
@@ -116,10 +119,12 @@ where
     T: Sample + std::fmt::Debug,
 {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (i, tags) = self.src.read_buf()?;
+        let i = self.src.read_buf()?;
 
-        let tags: HashMap<usize, Vec<Tag>> =
-            tags.into_iter()
+        // TODO: don't do this nonsense. Just advance the samples and tags input
+        // in lockstep.
+        let tags: HashMap<usize, Vec<&Tag>> =
+            i.tags()
                 .map(|t| (t.pos(), t))
                 .fold(HashMap::new(), |mut acc, (pos, tag)| {
                     acc.entry(pos).or_default().push(tag);
@@ -139,7 +144,7 @@ where
             println!("debug: {s:?} {ts}");
         });
         let l = i.slice().len();
-        i.consume(l);
+        i.consume_discard_tags(l);
         Ok(BlockRet::WaitForStream(&self.src, 1))
     }
 }

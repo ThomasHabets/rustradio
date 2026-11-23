@@ -108,7 +108,7 @@ impl ZeroCrossing {
 
 impl Block for ZeroCrossing {
     fn work(&mut self) -> Result<BlockRet<'_>> {
-        let (input, _tags) = self.src.read_buf()?;
+        let input = self.src.read_buf()?;
         if input.is_empty() {
             return Ok(BlockRet::WaitForStream(&self.src, 1));
         }
@@ -163,7 +163,7 @@ impl Block for ZeroCrossing {
                 break;
             }
         }
-        input.consume(n);
+        input.consume_discard_tags(n);
         o.produce(opos, &[]);
         if let Some(s) = out_clock {
             s.produce(opos, &[]);
@@ -181,7 +181,7 @@ mod tests {
         let clock = block.out_clock()?;
         assert!(block.out_clock().is_err());
         block.work()?;
-        assert_eq!(clock.read_buf()?.0.slice(), &[4.0; 3]);
+        assert_eq!(clock.read_buf()?.slice(), &[4.0; 3]);
         Ok(())
     }
 

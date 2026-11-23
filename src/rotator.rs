@@ -57,7 +57,7 @@ impl Rotator {
 impl Block for Rotator {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
-            let (input, tags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if input.is_empty() {
                 return Ok(BlockRet::WaitForStream(&self.src, 1));
             }
@@ -68,9 +68,7 @@ impl Block for Rotator {
             let n = input.len().min(output.len());
             self.translator
                 .mix(&input.slice()[..n], &mut output.slice()[..n])?;
-            let tags: Vec<_> = tags.into_iter().take_while(|tag| tag.pos() < n).collect();
-            output.produce(n, tags);
-            input.consume(n);
+            output.produce(n, input.consume(n));
         }
     }
 }
@@ -92,7 +90,8 @@ mod tests {
         window.produce(samples.len(), std::slice::from_ref(&tag));
         drop(writer);
         rotator.work()?;
-        let (window, tags) = output.read_buf()?;
+        let window = output.read_buf()?;
+        let tags = window.tags().cloned().collect::<Vec<_>>();
         assert_eq!(window.slice(), &samples);
         assert_eq!(tags, [tag]);
         Ok(())
@@ -109,7 +108,7 @@ mod tests {
                 window.slice()[..3].fill(Complex::new(1.0, 0.0));
                 window.produce(3, &[]);
                 rotator.work()?;
-                let (window, _) = output.read_buf()?;
+                let window = output.read_buf()?;
                 assert_eq!(window.len(), 3);
                 for (i, &sample) in window.iter().enumerate() {
                     let phase =
@@ -117,7 +116,7 @@ mod tests {
                     let expected = Complex::new(phase.cos() as f32, phase.sin() as f32);
                     assert!((sample - expected).norm() < 1e-6);
                 }
-                window.consume(3);
+                window.consume_discard_tags(3);
             }
         }
         Ok(())
@@ -135,9 +134,9 @@ mod tests {
         window.slice()[..2].fill(Complex::new(1.0, 0.0));
         window.produce(2, &[]);
         rotator.work()?;
-        output.read_buf()?.0.consume(capacity);
+        output.read_buf()?.consume_discard_tags(capacity);
         rotator.work()?;
-        let (window, _) = output.read_buf()?;
+        let window = output.read_buf()?;
         assert_eq!(window.len(), 2);
         assert_eq!(window.slice()[0], Complex::new(1.0, 0.0));
         assert!((window.slice()[1] - Complex::new(0.0, 1.0)).norm() < 1e-6);
@@ -163,15 +162,16 @@ mod tests {
         drop(writer);
         let mut expected = ComplexOscillator::new(8.0, 1.0)?;
         assert!(matches!(rotator.work()?, BlockRet::WaitForStream(_, 1)));
-        output.read_buf()?.0.consume(padding);
+        output.read_buf()?.consume_discard_tags(padding);
         for (count, name) in [(2, "first"), (3, "second")] {
-            let (window, tags) = output.read_buf()?;
+            let window = output.read_buf()?;
+            let tags = window.tags().cloned().collect::<Vec<_>>();
             assert_eq!(window.len(), count);
             for sample in window.iter() {
                 assert_eq!(*sample, samples[0] * expected.next().unwrap());
             }
             assert_eq!(tags, [Tag::new(1, name, TagValue::Bool(true))]);
-            window.consume(count);
+            window.consume_discard_tags(count);
             rotator.work()?;
         }
         assert!(rotator.src.eof());
@@ -188,9 +188,9 @@ mod tests {
             window.slice()[0] = sample;
             window.produce(1, &[]);
             rotator.work()?;
-            let (window, _) = output.read_buf()?;
+            let window = output.read_buf()?;
             let result = window.slice()[0];
-            window.consume(1);
+            window.consume_discard_tags(1);
             Ok(result)
         };
         let one = Complex::new(1.0, 0.0);

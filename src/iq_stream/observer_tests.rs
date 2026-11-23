@@ -54,7 +54,7 @@ async fn observer_producer_boundary_tags_offsets_and_outstanding_eof() -> crate:
     assert_eq!(desc.source_sample_offset, Some(2));
     assert_eq!(rx.refcount(), 2);
     credit(&connection, 8);
-    let (primary, _) = rx.read_buf()?;
+    let primary = rx.read_buf()?;
     let mut window = tx.write_buf()?;
     window.fill_from_slice(&[30., 40., 50.]);
     drop(tx);
@@ -89,9 +89,9 @@ async fn observer_producer_boundary_tags_offsets_and_outstanding_eof() -> crate:
         next(&connection).await,
         proto::server_message::Body::End(proto::End { next_sample: 3, .. })
     ));
-    let (primary, _) = rx.read_buf()?;
+    let primary = rx.read_buf()?;
     assert_eq!(primary.slice(), &[10., 20., 30., 40., 50.]);
-    primary.consume(5);
+    primary.consume_discard_tags(5);
     assert!(rx.eof());
     Ok(())
 }
@@ -145,7 +145,7 @@ async fn observer_overflow_final_gap_and_reconnect() -> crate::Result<()> {
         next(&connection).await,
         proto::server_message::Body::End(_)
     ));
-    assert_eq!(rx.read_buf()?.0.len(), 1011);
+    assert_eq!(rx.read_buf()?.len(), 1011);
     Ok(())
 }
 
@@ -162,7 +162,7 @@ async fn observer_failure_does_not_fail_primary_or_reconnect() -> crate::Result<
         vec![Tag::new(0, super::super::GAP_SAMPLES, TagValue::U64(1))],
     );
     assert!(connection.next().await.is_err());
-    assert_eq!(rx.read_buf()?.0.slice(), [1]);
+    assert_eq!(rx.read_buf()?.slice(), [1]);
     drop(connection);
     let (connection, _) = open::<u8>(&server, &rx.name(), &options());
     let mut window = tx.write_buf()?;
@@ -314,7 +314,7 @@ async fn numeric_transports<T: IqSample + PartialEq>(values: &[T]) -> crate::Res
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
         loop {
             source.work().unwrap();
-            if out.read_buf().unwrap().0.len() == values.len() {
+            if out.read_buf().unwrap().len() == values.len() {
                 break;
             }
             tokio::task::yield_now().await;
@@ -322,7 +322,7 @@ async fn numeric_transports<T: IqSample + PartialEq>(values: &[T]) -> crate::Res
     })
     .await
     .unwrap();
-    assert_eq!(out.read_buf()?.0.slice(), values);
+    assert_eq!(out.read_buf()?.slice(), values);
     drop((source, out, handle));
     let mut ws = super::tests::WsClient::connect(address).await?;
     // Use a fresh stream so the WebSocket handshake is independent of gRPC cancellation.
@@ -372,8 +372,8 @@ async fn numeric_transports<T: IqSample + PartialEq>(values: &[T]) -> crate::Res
         }
     }
     assert!(complete);
-    assert_eq!(rx.read_buf()?.0.slice(), values);
-    assert_eq!(ws_rx.read_buf()?.0.slice(), values);
+    assert_eq!(rx.read_buf()?.slice(), values);
+    assert_eq!(ws_rx.read_buf()?.slice(), values);
     drop(tx);
     let _ = stop.send(());
     task.await.unwrap()?;
@@ -405,10 +405,10 @@ async fn observation_does_not_change_concurrent_primary_consumption() -> crate::
     let consumer = std::thread::spawn(move || {
         let mut received = vec![];
         loop {
-            let (buffer, _) = rx.read_buf().unwrap();
+            let buffer = rx.read_buf().unwrap();
             let n = buffer.len();
             received.extend_from_slice(buffer.slice());
-            buffer.consume(n);
+            buffer.consume_discard_tags(n);
             if rx.eof() {
                 break;
             }
@@ -583,9 +583,9 @@ async fn observer_shutdown_and_failed_open_leave_primary_usable() -> crate::Resu
     window.fill_from_slice(&[1, 2, 3]);
     window.produce(3, &[]);
     drop(tx);
-    let (primary, _) = rx.read_buf()?;
+    let primary = rx.read_buf()?;
     assert_eq!(primary.slice(), [1, 2, 3]);
-    primary.consume(3);
+    primary.consume_discard_tags(3);
     assert!(rx.eof());
     Ok(())
 }

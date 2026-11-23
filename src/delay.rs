@@ -65,13 +65,13 @@ impl<T: Sample> Block for Delay<T> {
     fn work(&mut self) -> Result<BlockRet<'_>> {
         loop {
             // Check if we need to catch up.
-            let (input, tags) = self.src.read_buf()?;
+            let input = self.src.read_buf()?;
             if self.skip > 0 {
                 let n = std::cmp::min(input.len(), self.skip);
                 if n == 0 {
                     return Ok(BlockRet::WaitForStream(&self.src, 1));
                 }
-                input.consume(n);
+                input.consume_discard_tags(n);
                 debug!("Delay: skipped {n}");
                 self.skip -= n;
                 continue;
@@ -103,12 +103,7 @@ impl<T: Sample> Block for Delay<T> {
                 "can't happen: we already checked both input and output"
             );
             o.fill_from_slice(&input.slice()[..n]);
-            let tags = tags
-                .into_iter()
-                .take_while(|tag| tag.pos() < n)
-                .collect::<Vec<_>>();
-            o.produce(n, tags);
-            input.consume(n);
+            o.produce(n, input.consume(n));
         }
     }
 }
@@ -124,7 +119,7 @@ mod tests {
         let (tx, rx) = crate::stream::new_stream()?;
         let (mut delay, out) = Delay::new(rx, 2)?;
         delay.work()?;
-        out.read_buf()?.0.consume(2);
+        out.read_buf()?.consume_discard_tags(2);
 
         delay.set_delay(0);
         delay.set_delay(2);
@@ -132,7 +127,7 @@ mod tests {
         input.fill_from_slice(&[1u32, 2, 3]);
         input.produce(3, &[]);
         delay.work()?;
-        assert_eq!(out.read_buf()?.0.slice(), &[1, 2, 3]);
+        assert_eq!(out.read_buf()?.slice(), &[1, 2, 3]);
         Ok(())
     }
 
@@ -142,7 +137,7 @@ mod tests {
         let (mut delay, o) = Delay::new(s, 0)?;
 
         delay.work()?;
-        let (res, _) = o.read_buf()?;
+        let res = o.read_buf()?;
         assert_eq!(res.slice(), vec![1.0f32, 2.0, 3.0]);
         Ok(())
     }
@@ -153,7 +148,7 @@ mod tests {
         let (mut delay, o) = Delay::new(s, 1)?;
 
         delay.work()?;
-        let (res, _) = o.read_buf()?;
+        let res = o.read_buf()?;
         assert_eq!(res.slice(), vec![0.0f32, 1.0, 2.0, 3.0]);
         Ok(())
     }
@@ -165,7 +160,7 @@ mod tests {
 
         delay.set_delay(2);
         delay.work()?;
-        let (res, _) = o.read_buf()?;
+        let res = o.read_buf()?;
         assert_eq!(res.slice(), &[0, 0, 1, 2]);
         Ok(())
     }
@@ -177,7 +172,7 @@ mod tests {
 
         delay.set_delay(1);
         delay.work()?;
-        let (res, _) = o.read_buf()?;
+        let res = o.read_buf()?;
         assert_eq!(res.slice(), &[0, 1, 2]);
         Ok(())
     }
@@ -191,17 +186,17 @@ mod tests {
 
         delay.work()?;
         {
-            let (res, _) = o.read_buf()?;
+            let res = o.read_buf()?;
             let len = res.len();
             assert_eq!(len, cap);
             assert!(res.iter().all(|v| *v == 0));
-            res.consume(len);
+            res.consume_discard_tags(len);
         }
 
         delay.set_delay(cap - 1);
         delay.set_delay(cap - 2);
         delay.work()?;
-        let (res, _) = o.read_buf()?;
+        let res = o.read_buf()?;
         assert_eq!(res.slice(), &input[2..]);
         Ok(())
     }
@@ -216,9 +211,9 @@ mod tests {
         assert!(matches![delay.work()?, BlockRet::WaitForStream(_, 1)]);
         assert!(!crate::block::BlockEOF::eof(&mut delay));
 
-        let (res, _) = o.read_buf()?;
+        let res = o.read_buf()?;
         assert_eq!(res.len(), cap);
-        res.consume(cap);
+        res.consume_discard_tags(cap);
 
         assert!(matches![delay.work()?, BlockRet::WaitForStream(_, 1)]);
         assert!(crate::block::BlockEOF::eof(&mut delay));
@@ -232,7 +227,7 @@ mod tests {
 
         delay.work()?;
         {
-            let (res, _) = o.read_buf()?;
+            let res = o.read_buf()?;
             assert_eq!(res.slice(), vec![0, 1, 2]);
         }
 
@@ -247,7 +242,7 @@ mod tests {
         delay.set_delay(2);
         delay.work()?;
         {
-            let (res, _) = o.read_buf()?;
+            let res = o.read_buf()?;
             assert_eq!(res.slice(), vec![0, 1, 2, 0, 3, 4]);
         }
 
@@ -260,7 +255,7 @@ mod tests {
         delay.set_delay(0);
         delay.work()?;
         {
-            let (res, _) = o.read_buf()?;
+            let res = o.read_buf()?;
             assert_eq!(res.slice(), vec![0, 1, 2, 0, 3, 4]);
         }
 
@@ -273,7 +268,7 @@ mod tests {
         delay.set_delay(0);
         delay.work()?;
         {
-            let (res, _) = o.read_buf()?;
+            let res = o.read_buf()?;
             assert_eq!(res.slice(), vec![0, 1, 2, 0, 3, 4, 7]);
         }
         */

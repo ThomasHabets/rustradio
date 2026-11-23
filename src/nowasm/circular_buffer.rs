@@ -13,7 +13,7 @@ use libc::{c_uchar, c_void, size_t};
 use log::error;
 
 use crate::stream::{ByteCount, Tag};
-use crate::stream_tags::StreamTags;
+use crate::stream_tags::{ReadWindowTags, StreamTags};
 use crate::{Error, Result};
 
 const SYNC_SLEEP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
@@ -215,6 +215,7 @@ impl<T> BufferState<T> {
 
 /// `BufferReader` is an RAII'd fixed window read slice with some helper functions.
 pub struct BufferReader<T> {
+    tags: ReadWindowTags,
     parent: Arc<Buffer<T>>,
     start: usize,
     end: usize,
@@ -224,9 +225,10 @@ pub struct BufferReader<T> {
 
 impl<T: Copy> BufferReader<T> {
     #[must_use]
-    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize) -> Self {
+    fn new(parent: Arc<Buffer<T>>, start: usize, end: usize, tags: ReadWindowTags) -> Self {
         Self {
             parent,
+            tags: tags.rebased(),
             start,
             end,
             released: false,
@@ -244,10 +246,31 @@ impl<T: Copy> BufferReader<T> {
         self.slice().iter()
     }
 
-    /// We're done with the buffer. Consume `n` samples.
-    pub fn consume(mut self, n: usize) {
+    /// Iterate over borrowed tags in sample order.
+    /// Tags at the same position retain their original order.
+    pub fn tags(&self) -> impl ExactSizeIterator<Item = &Tag> + Clone {
+        self.tags.iter()
+    }
+
+    /// Consume the first `n` samples and discard their tags.
+    pub fn consume_discard_tags(mut self, n: usize) {
         assert!(n <= self.len(), "consume exceeds checked-out read window");
-        self.parent.consume(n);
+        drop(self.tags.drain_prefix(n));
+        self.finish(n);
+    }
+
+    /// Consume the first `n` samples, moving their tags out with positions
+    /// relative to this window. Tags at position `n` belong to the next read.
+    #[must_use]
+    pub fn consume(mut self, n: usize) -> Vec<Tag> {
+        assert!(n <= self.len(), "consume exceeds checked-out read window");
+        let tags = self.tags.drain_prefix(n).collect();
+        self.finish(n);
+        tags
+    }
+
+    fn finish(mut self, n: usize) {
+        self.parent.consume(n, std::mem::take(&mut self.tags));
         self.released = true;
     }
 
@@ -277,6 +300,7 @@ impl<T> Drop for BufferReader<T> {
         if !self.released
             && let Ok(mut state) = self.parent.state.lock.lock()
         {
+            state.tags.restore(std::mem::take(&mut self.tags));
             state.reader_active = false;
         }
     }
@@ -600,8 +624,9 @@ impl<T: Copy> Buffer<T> {
     /// Consume samples from input buffer.
     ///
     /// Will only be called from the read buffer.
-    pub(in crate::nowasm::circular_buffer) fn consume(&self, n: usize) {
+    fn consume(&self, n: usize, tags: ReadWindowTags) {
         let mut s = self.state.lock.lock().unwrap();
+        s.tags.restore(tags);
         if n == 0 {
             s.reader_active = false;
             return;
@@ -614,7 +639,6 @@ impl<T: Copy> Buffer<T> {
         );
         let newpos = (s.rpos + n) % s.capacity();
 
-        s.tags.consume(n);
         s.rpos = newpos;
         s.used -= n;
         s.reader_active = false;
@@ -685,7 +709,7 @@ impl<T: Copy> Buffer<T> {
     /// Get the read slice.
     ///
     /// TODO: no need for Result in API.
-    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(self: Arc<Self>) -> Result<BufferReader<T>> {
         let mut s = self.state.lock.lock().unwrap();
         if s.reader_active {
             return Err(Error::msg(
@@ -693,10 +717,10 @@ impl<T: Copy> Buffer<T> {
             ));
         }
         let (start, end) = s.read_range();
-        let tags = s.tags.read();
+        let tags = s.tags.checkout();
         s.reader_active = true;
         drop(s);
-        Ok((BufferReader::new(self, start, end), tags))
+        Ok(BufferReader::new(self, start, end, tags))
     }
 
     /// Get the write slice.
@@ -741,7 +765,7 @@ mod tests {
         let mut writer = buffer.clone().write_buf()?;
         assert!(writer.slice().iter().all(|sample| sample.0.get() == 7));
         writer.produce(4096, &[]);
-        let (reader, _) = buffer.read_buf()?;
+        let reader = buffer.read_buf()?;
         assert!(reader.iter().all(|sample| sample.0.get() == 7));
         Ok(())
     }
@@ -782,7 +806,7 @@ mod tests {
         writer.fill_from_slice(&[1, 2, 3]);
         writer.produce(3, &[]);
         assert_eq!(buffer.wait_for_write_async(2).await, 4093);
-        buffer.clone().read_buf()?.0.consume(1);
+        buffer.clone().read_buf()?.consume_discard_tags(1);
         assert_eq!(buffer.wait_for_write_async(2).await, 4094);
         Ok(())
     }
@@ -887,7 +911,7 @@ mod tests {
         let b = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
         // Initial.
-        assert!(b.clone().read_buf()?.0.is_empty());
+        assert!(b.clone().read_buf()?.is_empty());
         assert_eq!(b.clone().write_buf()?.len(), 4096);
 
         // Write a byte.
@@ -895,18 +919,18 @@ mod tests {
             let mut buf = b.clone().write_buf()?;
             buf.slice()[0] = 123;
             buf.produce(1, &[Tag::new(0, "start", TagValue::Bool(true))]);
-            assert_eq!(b.clone().read_buf()?.0.slice(), vec![123]);
+            assert_eq!(b.clone().read_buf()?.slice(), vec![123]);
             assert_eq!(
-                b.clone().read_buf()?.1,
+                b.clone().read_buf()?.tags().cloned().collect::<Vec<_>>(),
                 vec![Tag::new(0, "start", TagValue::Bool(true))]
             );
             assert_eq!(b.clone().write_buf()?.len(), 4095);
         }
 
         // Consume the byte.
-        b.consume(1);
-        assert!(b.clone().read_buf()?.0.is_empty());
-        assert!(b.clone().read_buf()?.1.is_empty());
+        b.clone().read_buf()?.consume_discard_tags(1);
+        assert!(b.clone().read_buf()?.is_empty());
+        assert!(b.clone().read_buf()?.tags().len() == 0);
         assert_eq!(b.clone().write_buf()?.len(), 4096);
 
         // Write towards the end bytes.
@@ -917,7 +941,8 @@ mod tests {
                 wb.slice()[i] = (i & 0xff) as u8;
             }
             wb.produce(n, &[Tag::new(1, "foo", TagValue::String("bar".into()))]);
-            let (rb, rt) = b.clone().read_buf()?;
+            let rb = b.clone().read_buf()?;
+            let rt = rb.tags().cloned().collect::<Vec<_>>();
             assert_eq!(rb.len(), n);
             for i in 0..n {
                 assert_eq!(rb.slice()[i], (i & 0xff) as u8);
@@ -925,7 +950,7 @@ mod tests {
             assert_eq!(rt, vec![Tag::new(1, "foo", TagValue::String("bar".into()))]);
             assert_eq!(b.clone().write_buf()?.len(), 4096 - n);
         }
-        b.consume(4000);
+        b.clone().read_buf()?.consume_discard_tags(4000);
 
         // Write 100 bytes.
         {
@@ -941,7 +966,8 @@ mod tests {
                     Tag::new(99, "last", TagValue::Bool(false)),
                 ],
             );
-            let (rb, rt) = b.clone().read_buf()?;
+            let rb = b.clone().read_buf()?;
+            let rt = rb.tags().cloned().collect::<Vec<_>>();
             assert_eq!(rb.len(), n);
             for i in 0..n {
                 assert_eq!(rb.slice()[i], ((n - i) & 0xff) as u8);
@@ -954,17 +980,17 @@ mod tests {
                 ]
             );
             drop(rb);
-            assert_eq!(b.clone().read_buf()?.0.len(), 100);
+            assert_eq!(b.clone().read_buf()?.len(), 100);
             assert_eq!(b.clone().write_buf()?.len(), 3996);
         }
 
         // Clear it.
         {
-            let (rb, _) = b.clone().read_buf()?;
+            let rb = b.clone().read_buf()?;
             let n = rb.len();
-            rb.consume(n);
-            assert_eq!(b.clone().read_buf()?.0.len(), 0);
-            assert!(b.clone().read_buf()?.1.is_empty());
+            rb.consume_discard_tags(n);
+            assert_eq!(b.clone().read_buf()?.len(), 0);
+            assert!(b.clone().read_buf()?.tags().len() == 0);
             assert_eq!(b.clone().write_buf()?.len(), 4096);
         }
         Ok(())
@@ -980,11 +1006,11 @@ mod tests {
             buf.slice()[1] = 123;
             buf.produce(10, &[Tag::new(1, "first", TagValue::Bool(true))]);
             assert_eq!(
-                b.clone().read_buf()?.0.slice(),
+                b.clone().read_buf()?.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0]
             );
             assert_eq!(
-                b.clone().read_buf()?.1,
+                b.clone().read_buf()?.tags().cloned().collect::<Vec<_>>(),
                 vec![Tag::new(1, "first", TagValue::Bool(true))]
             );
             assert_eq!(b.clone().write_buf()?.len(), 4086);
@@ -996,11 +1022,11 @@ mod tests {
             buf.slice()[2] = 42;
             buf.produce(5, &[Tag::new(2, "second", TagValue::Bool(false))]);
             assert_eq!(
-                b.clone().read_buf()?.0.slice(),
+                b.clone().read_buf()?.slice(),
                 vec![0, 123, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42, 0, 0]
             );
             assert_eq!(
-                b.clone().read_buf()?.1,
+                b.clone().read_buf()?.tags().cloned().collect::<Vec<_>>(),
                 vec![
                     Tag::new(1, "first", TagValue::Bool(true)),
                     Tag::new(12, "second", TagValue::Bool(false))
@@ -1010,9 +1036,9 @@ mod tests {
         }
 
         // Consume the byte.
-        b.consume(15);
-        assert!(b.clone().read_buf()?.0.is_empty());
-        assert!(b.clone().read_buf()?.1.is_empty());
+        b.clone().read_buf()?.consume_discard_tags(15);
+        assert!(b.clone().read_buf()?.is_empty());
+        assert!(b.clone().read_buf()?.tags().len() == 0);
         assert_eq!(b.clone().write_buf()?.len(), 4096);
         Ok(())
     }
@@ -1022,17 +1048,17 @@ mod tests {
         let b: Arc<Buffer<u8>> = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
         // Initial.
-        assert!(b.clone().read_buf()?.0.is_empty());
+        assert!(b.clone().read_buf()?.is_empty());
         assert_eq!(b.clone().write_buf()?.len(), 4096);
 
         // Full.
         b.clone().write_buf()?.produce(4096, &[]);
-        assert_eq!(b.clone().read_buf()?.0.len(), 4096);
+        assert_eq!(b.clone().read_buf()?.len(), 4096);
         assert_eq!(b.clone().write_buf()?.len(), 0);
 
         // Empty again.
-        b.clone().read_buf()?.0.consume(4096);
-        assert!(b.clone().read_buf()?.0.is_empty());
+        b.clone().read_buf()?.consume_discard_tags(4096);
+        assert!(b.clone().read_buf()?.is_empty());
         assert_eq!(b.clone().write_buf()?.len(), 4096);
         Ok(())
     }
@@ -1042,7 +1068,7 @@ mod tests {
         let b: Arc<Buffer<Float>> = Arc::new(Buffer::new(ByteCount::new(4096))?);
 
         // Initial.
-        assert!(b.clone().read_buf()?.0.is_empty());
+        assert!(b.clone().read_buf()?.is_empty());
         assert_eq!(b.clone().write_buf()?.len(), 1024);
 
         // Write a sample.
@@ -1051,12 +1077,12 @@ mod tests {
             wb.slice()[0] = 123.321;
             wb.produce(1, &[]);
         }
-        assert_eq!(b.clone().read_buf()?.0.slice(), vec![123.321]);
+        assert_eq!(b.clone().read_buf()?.slice(), vec![123.321]);
         assert_eq!(b.clone().write_buf()?.len(), 1023);
 
         // Consume the sample.
-        b.clone().read_buf()?.0.consume(1);
-        assert!(b.clone().read_buf()?.0.is_empty());
+        b.clone().read_buf()?.consume_discard_tags(1);
+        assert!(b.clone().read_buf()?.is_empty());
         assert_eq!(b.clone().write_buf()?.len(), 1024);
 
         // Write towards the end bytes.
@@ -1067,13 +1093,13 @@ mod tests {
                 wb.slice()[i] = i as Float;
             }
             wb.produce(n, &[]);
-            assert_eq!(b.clone().read_buf()?.0.len(), n);
+            assert_eq!(b.clone().read_buf()?.len(), n);
             for i in 0..n {
-                assert_eq!(b.clone().read_buf()?.0.slice()[i], i as Float);
+                assert_eq!(b.clone().read_buf()?.slice()[i], i as Float);
             }
             assert_eq!(b.clone().write_buf()?.len(), 24);
         }
-        b.clone().read_buf()?.0.consume(1000);
+        b.clone().read_buf()?.consume_discard_tags(1000);
 
         // Write 100 bytes.
         {
@@ -1083,12 +1109,12 @@ mod tests {
                 wb.slice()[i] = (n - i) as Float;
             }
             wb.produce(n, &[]);
-            assert_eq!(b.clone().read_buf()?.0.len(), n);
+            assert_eq!(b.clone().read_buf()?.len(), n);
             for i in 0..n {
-                assert_eq!(b.clone().read_buf()?.0.slice()[i], (n - i) as Float);
+                assert_eq!(b.clone().read_buf()?.slice()[i], (n - i) as Float);
             }
         }
-        assert_eq!(b.clone().read_buf()?.0.len(), 100);
+        assert_eq!(b.clone().read_buf()?.len(), 100);
         assert_eq!(b.clone().write_buf()?.len(), 1024 - 100);
         Ok(())
     }

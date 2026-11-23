@@ -69,7 +69,8 @@ fn streaming_custom_samples_need_no_encoding_or_translation_hooks() -> Result<()
     drop(writer);
     assert!(matches!(filter.work()?, BlockRet::Again));
     assert!(matches!(filter.work()?, BlockRet::WaitForStream(_, 2)));
-    let (window, tags) = output.read_buf()?;
+    let window = output.read_buf()?;
+    let tags = window.tags().cloned().collect::<Vec<_>>();
     assert_eq!(window.slice(), &[Stored(2.0), Stored(5.0)]);
     assert_eq!(tags, [Tag::new(1, "mark", TagValue::Bool(true))]);
     Ok(())
@@ -84,7 +85,7 @@ fn complex_streams_accept_real_coefficients() -> Result<()> {
     window.produce(2, &[]);
     drop(writer);
     filter.work()?;
-    assert_eq!(output.read_buf()?.0.slice(), &[Complex::new(29.0, 7.0)]);
+    assert_eq!(output.read_buf()?.slice(), &[Complex::new(29.0, 7.0)]);
     Ok(())
 }
 
@@ -114,7 +115,7 @@ fn translated_real_coefficients_match_explicit_input_mixing() -> Result<()> {
         window.produce(batch.len(), &[]);
         filter.work()?;
     }
-    let (window, _) = output.read_buf()?;
+    let window = output.read_buf()?;
     assert_eq!(window.len(), expected.len());
     for (&actual, expected) in window.iter().zip(expected) {
         assert!(
@@ -136,7 +137,7 @@ fn translation_settings_preserve_builder_and_filter_types() -> Result<()> {
     window.fill_from_slice(&[Complex::new(2.0, 3.0)]);
     window.produce(1, &[]);
     filter.work()?;
-    assert_eq!(output.read_buf()?.0.slice(), &[Complex::new(2.0, 3.0)]);
+    assert_eq!(output.read_buf()?.slice(), &[Complex::new(2.0, 3.0)]);
     Ok(())
 }
 
@@ -211,7 +212,8 @@ where
             })
             .collect();
         assert!(matches!(filter.work()?, BlockRet::Again));
-        let (window, tags) = output.read_buf()?;
+        let window = output.read_buf()?;
+        let tags = window.tags().cloned().collect::<Vec<_>>();
         assert_eq!(window.len(), count);
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].key(), "retune");
@@ -224,7 +226,7 @@ where
         if setting.is_none() {
             assert_eq!(window.slice(), &ordinary.filter_n(&pending, 2)[..count]);
         }
-        window.consume(count);
+        window.consume_discard_tags(count);
         pending.drain(..consumed);
         phase = (phase + step * consumed as f64).rem_euclid(2.0 * std::f64::consts::PI);
     }
@@ -264,7 +266,7 @@ fn invalid_retunes_leave_valid_pending_settings_unchanged() -> Result<()> {
     window.fill_from_slice(&[Complex::new(1.0, 0.0); 4]);
     window.produce(4, &[]);
     filter.work()?;
-    let (window, _) = output.read_buf()?;
+    let window = output.read_buf()?;
     for (&actual, expected) in window.iter().zip([
         Complex::new(1.0, 0.0),
         Complex::new(0.0, -1.0),

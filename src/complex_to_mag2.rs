@@ -42,7 +42,7 @@ mod tests {
         let (mut block, out) = ComplexToMag2::new(ReadStream::from_slice(&input))?;
         block.work()?;
         assert_eq!(
-            out.read_buf()?.0.slice(),
+            out.read_buf()?.slice(),
             &[0.0, 25.0, 25.0, 25.0, 25.0, 4.0, 0.25]
         );
         Ok(())

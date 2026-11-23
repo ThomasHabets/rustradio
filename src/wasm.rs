@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use wasm_bindgen::prelude::*;
 
 use crate::stream::{ByteCount, Tag};
-use crate::stream_tags::StreamTags;
+use crate::stream_tags::{ReadWindowTags, StreamTags};
 use crate::{Error, Result};
 
 pub mod wasm_graph;
@@ -152,7 +152,6 @@ impl<T> BufferState<T> {
             self.initialized[first].fill(false);
             self.initialized[second].fill(false);
         }
-        self.tags.consume(count);
         self.rpos = (self.rpos + count) % self.capacity();
         self.used -= count;
     }
@@ -239,8 +238,25 @@ impl<T> Buffer<T> {
     pub(crate) fn free(&self) -> usize {
         self.inner.state.lock().unwrap().free()
     }
+    /// Discard samples without checking out a read window.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a read window owns the samples or fewer than `n` are available.
     pub fn consume(&self, n: usize) {
-        self.inner.state.lock().unwrap().consume(n);
+        if n == 0 {
+            return;
+        }
+        let mut state = self.inner.state.lock().unwrap();
+        if state.reader_active {
+            drop(state);
+            panic!("consume called with an outstanding read window");
+        }
+        assert!(n <= state.used, "consume exceeds available samples");
+        let mut tags = state.tags.checkout();
+        drop(tags.drain_prefix(n));
+        state.tags.restore(tags);
+        state.consume(n);
     }
     /// Total buffer capacity in samples.
     #[must_use]
@@ -329,7 +345,7 @@ impl<T: Copy> Buffer<T> {
             .produce(samples, tags.into());
     }
 
-    pub fn read_buf(self: Arc<Self>) -> Result<(BufferReader<T>, Vec<Tag>)> {
+    pub fn read_buf(self: Arc<Self>) -> Result<BufferReader<T>> {
         let mut state = self.inner.state.lock().unwrap();
         if state.reader_active {
             return Err(Error::msg(
@@ -346,14 +362,15 @@ impl<T: Copy> Buffer<T> {
         stream.reserve(state.used);
         stream.extend_from_slice(&state.stream[first]);
         stream.extend_from_slice(&state.stream[second]);
-        let tags = state.tags.read();
+        let tags = state.tags.checkout();
         state.reader_active = true;
         drop(state);
-        Ok((BufferReader::new(self, stream), tags))
+        Ok(BufferReader::new(self, stream, tags))
     }
 }
 
 pub struct BufferReader<T> {
+    tags: ReadWindowTags,
     parent: Arc<Buffer<T>>,
     stream: Vec<T>,
     // consume already returned the cache and released the reader checkout.
@@ -361,9 +378,10 @@ pub struct BufferReader<T> {
 }
 impl<T> BufferReader<T> {
     #[must_use]
-    fn new(parent: Arc<Buffer<T>>, stream: Vec<T>) -> Self {
+    fn new(parent: Arc<Buffer<T>>, stream: Vec<T>, tags: ReadWindowTags) -> Self {
         Self {
             parent,
+            tags: tags.rebased(),
             stream,
             released: false,
         }
@@ -380,14 +398,32 @@ impl<T> BufferReader<T> {
         self.slice().iter()
     }
 
-    /// We're done with the buffer. Consume `n` samples.
-    pub fn consume(mut self, n: usize) {
-        assert!(
-            n <= self.stream.len(),
-            "trying to consume {n}, but read buffer only has {}",
-            self.stream.len()
-        );
+    /// Iterate over borrowed tags in sample order.
+    /// Tags at the same position retain their original order.
+    pub fn tags(&self) -> impl ExactSizeIterator<Item = &Tag> + Clone {
+        self.tags.iter()
+    }
+
+    /// Consume the first `n` samples and discard their tags.
+    pub fn consume_discard_tags(mut self, n: usize) {
+        assert!(n <= self.len(), "consume exceeds checked-out read window");
+        drop(self.tags.drain_prefix(n));
+        self.finish(n);
+    }
+
+    /// Consume the first `n` samples, moving their tags out with positions
+    /// relative to this window. Tags at position `n` belong to the next read.
+    #[must_use]
+    pub fn consume(mut self, n: usize) -> Vec<Tag> {
+        assert!(n <= self.len(), "consume exceeds checked-out read window");
+        let tags = self.tags.drain_prefix(n).collect();
+        self.finish(n);
+        tags
+    }
+
+    fn finish(mut self, n: usize) {
         let mut state = self.parent.inner.state.lock().unwrap();
+        state.tags.restore(std::mem::take(&mut self.tags));
         state.consume(n);
         state.recycle_reader(std::mem::take(&mut self.stream));
         state.reader_active = false;
@@ -411,6 +447,7 @@ impl<T> Drop for BufferReader<T> {
         if !self.released
             && let Ok(mut state) = self.parent.inner.state.lock()
         {
+            state.tags.restore(std::mem::take(&mut self.tags));
             state.reader_active = false;
             state.recycle_reader(std::mem::take(&mut self.stream));
         }
@@ -598,9 +635,9 @@ mod tests {
         assert_eq!(writer.slice().len(), 8);
         assert_eq!(writer.slice().as_ptr(), allocation);
         drop(writer);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         assert!(reader.iter().all(|sample| sample.0 == 42));
-        reader.consume(8);
+        reader.consume_discard_tags(8);
         let mut writer = buffer.clone().write_buf().unwrap();
         assert_eq!(writer.slice().len(), 16);
         assert_eq!(writer.slice().as_ptr(), allocation);
@@ -630,21 +667,21 @@ mod tests {
         let mut writer = buffer.clone().write_buf().unwrap();
         writer.fill_from_slice(&[11, 12, 13, 14, 15]);
         writer.produce(5, &[]);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice(), [11, 12, 13, 14, 15]);
         let allocation = reader.slice().as_ptr();
         drop(reader);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice().as_ptr(), allocation);
         let mut writer = buffer.clone().write_buf().unwrap();
         assert_eq!(writer.fill_from_iter([16, 17]).unwrap(), 2);
         writer.produce(2, &[]);
         // An outstanding reader owns a snapshot, independent of subsequent writes.
         assert_eq!(reader.slice(), [11, 12, 13, 14, 15]);
-        reader.consume(3);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        reader.consume_discard_tags(3);
+        let reader = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice(), [14, 15, 16, 17]);
-        reader.consume(4);
+        reader.consume_discard_tags(4);
         assert!(buffer.is_empty());
     }
 
@@ -658,18 +695,18 @@ mod tests {
         assert_eq!(writer.prepared, 2);
         assert_eq!(writer.stream.as_ref().unwrap().as_ptr(), allocation);
         writer.produce(2, &[]);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice(), [5, 6]);
-        reader.consume(2);
+        reader.consume_discard_tags(2);
         let mut writer = buffer.clone().write_buf().unwrap();
         assert!(writer.fill_from_iter(0..100).is_err());
         assert_eq!(writer.prepared, 0);
         writer.fill_from_slice(&[7]);
         assert_eq!(writer.prepared, 1);
         writer.produce(1, &[]);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice(), [7]);
-        reader.consume(1);
+        reader.consume_discard_tags(1);
     }
 
     #[test]
@@ -697,33 +734,33 @@ mod tests {
         let mut writer = buffer.clone().write_buf().unwrap();
         writer.fill_from_slice(&[3]);
         writer.produce(1, vec![]);
-        assert_eq!(buffer.clone().read_buf().unwrap().0.slice(), [3]);
+        assert_eq!(buffer.clone().read_buf().unwrap().slice(), [3]);
     }
 
     #[test]
     fn reader_drop_reuses_storage_without_consuming() {
         let buffer = buffer();
         buffer.produce(&[1, 2, 3, 4], &[]);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         let allocation = reader.slice().as_ptr();
         drop(reader);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice(), [1, 2, 3, 4]);
         assert_eq!(reader.slice().as_ptr(), allocation);
-        reader.consume(0);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        reader.consume_discard_tags(0);
+        let reader = buffer.clone().read_buf().unwrap();
         assert_eq!(reader.slice().as_ptr(), allocation);
-        reader.consume(4);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        reader.consume_discard_tags(4);
+        let reader = buffer.clone().read_buf().unwrap();
         assert!(reader.is_empty());
-        reader.consume(0);
+        reader.consume_discard_tags(0);
     }
 
     #[test]
     fn recycling_skips_poisoned_state_during_unwinding() {
         let buffer = buffer();
         buffer.produce(&[1], &[]);
-        let (reader, _) = buffer.clone().read_buf().unwrap();
+        let reader = buffer.clone().read_buf().unwrap();
         let mut writer = buffer.clone().write_buf().unwrap();
         writer.fill_from_slice(&[2]);
         let tags = [Tag::new(1, "invalid", crate::stream::TagValue::Bool(true))];

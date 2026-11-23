@@ -84,7 +84,7 @@ mod tests {
             PI / 2.0,
         )?;
         vco.work()?;
-        let (o, _tags) = output.read_buf()?;
+        let o = output.read_buf()?;
         assert!(o.iter().map(|c| c.norm()).all(|m| (m - 1.0).abs() < 0.0001));
         let phases: Vec<_> = o.iter().map(|c| c.arg() as f64).collect();
         let want = &[PI / 2.0, PI / 2.0, PI, 1.5 * PI, 0.0, PI / 2.0];
@@ -104,7 +104,7 @@ mod tests {
             PI / 2.0,
         )?;
         vco.work()?;
-        let (o, _tags) = output.read_buf()?;
+        let o = output.read_buf()?;
         assert!(o.iter().map(|c| c.norm()).all(|m| (m - 1.0).abs() < 0.0001));
         let phases: Vec<_> = o.iter().map(|c| c.arg() as f64).collect();
         let want = &[

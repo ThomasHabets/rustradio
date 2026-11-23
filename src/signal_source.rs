@@ -235,17 +235,18 @@ mod tests {
         let phase = source.oscillator.phase();
         assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
         assert_eq!(source.oscillator.phase(), phase);
-        let (buffer, tags) = output.read_buf()?;
+        let buffer = output.read_buf()?;
+        let tags = buffer.tags().cloned().collect::<Vec<_>>();
         let capacity = buffer.len();
         assert!(tags.is_empty());
         assert!(
             (buffer.slice()[0] - expected_sample(1_024_000.0, 100_000.0, 1.0, 1)).norm() < 1e-6
         );
-        buffer.consume(13);
+        buffer.consume_discard_tags(13);
         assert!(matches!(source.work()?, BlockRet::WaitForStream(_, 1)));
-        let (buffer, tags) = output.read_buf()?;
+        let buffer = output.read_buf()?;
         assert_eq!(buffer.len(), capacity);
-        assert!(tags.is_empty());
+        assert!(buffer.tags().len() == 0);
         for (offset, sample) in buffer.slice()[capacity - 13..].iter().enumerate() {
             let expected = expected_sample(1_024_000.0, 100_000.0, 1.0, capacity + offset + 1);
             assert!((*sample - expected).norm() < 1e-6);

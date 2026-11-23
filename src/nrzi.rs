@@ -82,7 +82,7 @@ mod tests {
         b.work()?;
         let (mut b, out) = NrziDecode::new(prev)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         assert_eq!(o.slice(), &[1, 1, 1, 1, 0, 1, 1, 1]);
         Ok(())
     }
@@ -93,7 +93,7 @@ mod tests {
         b.work()?;
         let (mut b, out) = NrziEncode::new(prev)?;
         b.work()?;
-        let (o, _) = out.read_buf()?;
+        let o = out.read_buf()?;
         assert_eq!(o.slice(), &[0, 0, 0, 0, 1, 1, 1, 1]);
         Ok(())
     }
@@ -110,7 +110,7 @@ mod tests {
         b.work()?;
         let (mut b, out) = NrziDecode::new(prev)?;
         b.work()?;
-        let (out, _) = out.read_buf()?;
+        let out = out.read_buf()?;
         let out = out.slice();
         assert_eq!(out, data);
         Ok(())
