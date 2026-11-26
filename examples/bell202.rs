@@ -19,6 +19,21 @@
 //!
 //! Kernel stack should now be up and working with bell202 as the modem.
 //!
+//! ### Running with an AIOC
+//!
+//! First find the device name for source and sink with
+//! `wpctl status -n | grep -A 40 ^Audio`. Then start rigctld and run bell202.
+//!
+//! ```
+//! rigctld -m 1 -P DTR  -p /dev/serial/by-id/usb-AIOC_All-In-One-Cable_XXXXXX-if04 -T 127.0.0.1 -t 4532 &
+//! cargo run --example bell202 -F audio,pipewire -- \
+//!     --audio \
+//!     --audio-input 'pipewire:alsa_input.usb-AIOC_All-In-One-Cable_XXXXX-00.mono-fallback' \
+//!     --audio-output 'pipewire:alsa_output.usb-AIOC_All-In-One-Cable_XXXXXX-00.mono-fallback' \
+//!     --tcp-listen '[::1]:7900' \
+//!     --rigctld 'localhost:4532'
+//! ```
+//!
 //! ### Audio with Dire Wolf over virtual audio cables
 //!
 //! Bell202 can also be used in the audio domain. Either with a radio that takes
