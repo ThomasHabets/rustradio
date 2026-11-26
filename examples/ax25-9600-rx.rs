@@ -20,7 +20,7 @@ use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner, GraphStats};
 use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]

@@ -14,7 +14,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner, GraphStats};
 use rustradio::mtgraph::MTGraph;
 
 const SPECTRUM_SIZE: usize = 1024;
@@ -296,7 +296,7 @@ async fn run_async(opt: Opt) -> Result<()> {
     Ok(())
 }
 
-fn build(g: &mut dyn GraphRunner, opt: &Opt) -> Result<std::thread::JoinHandle<()>> {
+fn build(g: &mut dyn GraphBuild, opt: &Opt) -> Result<std::thread::JoinHandle<()>> {
     let (ui_tx, rx) = std::sync::mpsc::channel();
     let (ui_tx_spec, rx_spec) = std::sync::mpsc::channel();
 

@@ -66,13 +66,15 @@ pub trait GraphBuild {
     fn cancel_token(&self) -> CancellationToken;
 }
 
-pub trait GraphRunner: GraphBuild {
+pub trait GraphRunner: GraphBuild + GraphStats {
     /// Run the graph.
     ///
     /// Runs the graph until all the blocks are "done", or until the graph is
     /// cancelled.
     fn run(&mut self) -> Result<()>;
+}
 
+pub trait GraphStats {
     /// Return a string with stats about where time went.
     fn generate_stats(&self) -> Option<String>;
 }
@@ -233,7 +235,9 @@ impl GraphRunner for Graph {
         }
         Ok(())
     }
+}
 
+impl GraphStats for Graph {
     fn generate_stats(&self) -> Option<String> {
         let elapsed = self.spent_time?;
         let elapsed_cpu = self.spent_cpu_time?.as_secs_f64();

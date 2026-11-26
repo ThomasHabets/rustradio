@@ -1,8 +1,8 @@
 use log::{debug, error, info};
 
+use crate::Result;
 use crate::block::{Block, BlockRet};
 use crate::graph::{CancellationToken, GraphBuild};
-use crate::{Error, Result};
 
 const SLEEP_TIME: tokio::time::Duration = tokio::time::Duration::from_millis(10);
 
@@ -130,11 +130,7 @@ impl GraphBuild for AsyncGraph {
     }
 }
 
-impl crate::graph::GraphRunner for AsyncGraph {
-    fn run(&mut self) -> Result<()> {
-        Err(Error::msg("async graph can't be called with sync run()"))
-    }
-
+impl crate::graph::GraphStats for AsyncGraph {
     fn generate_stats(&self) -> Option<String> {
         None
     }

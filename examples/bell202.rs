@@ -175,7 +175,7 @@ use log::info;
 use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
-use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner, GraphStats};
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::{parse_frequency, parse_verbosity};

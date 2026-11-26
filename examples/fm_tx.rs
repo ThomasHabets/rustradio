@@ -13,7 +13,7 @@ use log::warn;
 use rustradio::Repeat;
 use rustradio::blockchain;
 use rustradio::blocks::*;
-use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner, GraphStats};
 use rustradio::mtgraph::MTGraph;
 
 #[derive(clap::Parser, Debug)]

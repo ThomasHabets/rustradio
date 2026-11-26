@@ -12,7 +12,7 @@ use rustradio::Float;
 use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner, GraphStats};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]

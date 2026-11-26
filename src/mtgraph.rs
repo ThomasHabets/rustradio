@@ -8,7 +8,7 @@ use crate::Result;
 use log::{debug, error, info};
 
 use crate::block::{Block, BlockRet};
-use crate::graph::CancellationToken;
+use crate::graph::{CancellationToken, GraphStats};
 use crate::sys::get_cpu_time;
 
 const MIN_IDLE_SLEEP: std::time::Duration = std::time::Duration::from_millis(1);
@@ -184,7 +184,9 @@ impl crate::graph::GraphRunner for MTGraph {
         }
         Ok(())
     }
+}
 
+impl GraphStats for MTGraph {
     /// Return a string with stats about where time went.
     ///
     /// `MTGraph` can't measure per block CPU time, since rayon and other block

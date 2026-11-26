@@ -8,7 +8,7 @@ use rustradio::block::BlockRet;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner, GraphStats};
 use rustradio::parse_frequency;
 use rustradio::sigmf::{self, Annotation, SigMF};
 use rustradio::stream::{ReadStream, TagValue, WriteStream};

@@ -10,7 +10,7 @@
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::graph::{CancellationToken, GraphBuild, GraphRunner};
+use crate::graph::{CancellationToken, GraphBuild};
 
 /// Graph executor for use in WASM.
 ///
@@ -105,14 +105,6 @@ impl GraphBuild for WasmGraph {
     }
     fn cancel_token(&self) -> CancellationToken {
         todo!()
-    }
-}
-impl GraphRunner for WasmGraph {
-    fn run(&mut self) -> crate::Result<()> {
-        todo!()
-    }
-    fn generate_stats(&self) -> Option<String> {
-        None
     }
 }
 
