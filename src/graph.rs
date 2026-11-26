@@ -155,6 +155,9 @@ impl GraphRunner for Graph {
             .map(|_| StreamWaitState::default())
             .collect();
         loop {
+            // TODO: this logic is a bit flawed. If we have cycles, then
+            // `WaitForStream` from all blocks could still signal progress. Can
+            // also happen if blocks are registered in non-stream order.
             let mut done = true;
             let mut all_idle = true;
             if self.cancel_token.is_canceled() {
