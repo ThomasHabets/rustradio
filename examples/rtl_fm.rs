@@ -14,7 +14,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner, GraphStats};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 
 const SPECTRUM_SIZE: usize = 1024;
@@ -279,6 +279,8 @@ fn run_sync(opt: Opt) -> Result<()> {
 #[cfg(feature = "async")]
 #[tokio::main]
 async fn run_async(opt: Opt) -> Result<()> {
+    use rustradio::graph::GraphStats;
+
     let mut g = rustradio::agraph::AsyncGraph::new();
     let ui_thread = build(&mut g, &opt)?;
     let cancel = g.cancel_token();
