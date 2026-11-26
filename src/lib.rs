@@ -80,7 +80,7 @@ Here's a simple example that creates a couple of blocks, connects them
 with streams, and runs the graph.
 
 ```
-use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+use rustradio::graph::{Graph, GraphRunner, GraphBuildExt};
 use rustradio::blocks::{AddConst, VectorSource, DebugSink};
 use rustradio::Complex;
 let (src, prev) = VectorSource::new(
@@ -593,7 +593,7 @@ macro_rules! error_from {
 #[macro_export]
 macro_rules! blockchain {
     ($g:expr, $prev:ident, $($cons:expr),* $(,)?) => {{
-        use $crate::graph::GraphRunnerExt as _;
+        use $crate::graph::GraphBuildExt as _;
         $(
             let (block, $prev) = $cons;
             $g.add(block);

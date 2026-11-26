@@ -39,7 +39,7 @@ use anyhow::Result;
 use clap::Parser;
 
 use rustradio::blocks::*;
-use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+use rustradio::graph::{Graph, GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 use rustradio::window::WindowType;
@@ -98,10 +98,7 @@ struct Opt {
     multithread: bool,
 }
 
-fn get_complex_input(
-    g: &mut Box<dyn GraphRunner>,
-    opt: &Opt,
-) -> Result<(ReadStream<Complex>, f32)> {
+fn get_complex_input(g: &mut dyn GraphBuild, opt: &Opt) -> Result<(ReadStream<Complex>, f32)> {
     if let Some(ref read) = opt.read {
         let mut b = SigMFSource::builder(read.clone());
         if let Some(s) = opt.sample_rate {
@@ -137,7 +134,7 @@ fn get_complex_input(
     panic!("not read, not rtlsdr");
 }
 
-fn get_input(g: &mut Box<dyn GraphRunner>, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
+fn get_input(g: &mut dyn GraphBuild, opt: &Opt) -> Result<(ReadStream<Float>, f32)> {
     if opt.audio {
         if let Some(read) = &opt.read {
             let prev = blockchain![
@@ -213,7 +210,7 @@ fn main() -> Result<()> {
         Box::new(Graph::new())
     };
 
-    let (prev, samp_rate) = get_input(&mut g, &opt)?;
+    let (prev, samp_rate) = get_input(g.as_mut(), &opt)?;
     /*
     // Save audio floats to file.
     let (tee, a, prev) = Tee::new(prev);

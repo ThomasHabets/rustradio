@@ -26,7 +26,7 @@ where
 /// Tags are preserved.
 ///
 /// ```
-/// use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+/// use rustradio::graph::{Graph, GraphRunner, GraphBuildExt};
 /// use rustradio::blocks::{ConstantSource, SignalSourceFloat, AddConst, NullSink};
 ///
 /// let mut graph = Graph::new();

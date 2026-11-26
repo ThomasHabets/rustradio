@@ -7,7 +7,7 @@ use std::sync::{
 use anyhow::{Result, ensure};
 use rustradio::Sample;
 use rustradio::blocks::{Map, Tee};
-use rustradio::graph::GraphRunnerExt;
+use rustradio::graph::GraphBuildExt;
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::ReadStream;
 

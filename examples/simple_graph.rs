@@ -4,7 +4,7 @@ use clap::Parser;
 use rustradio::Complex;
 use rustradio::blocks::{AddConst, DebugSink, PduWriter, StreamToPdu, VectorSource};
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuildExt, GraphRunner};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]

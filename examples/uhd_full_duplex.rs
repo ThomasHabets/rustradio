@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 
 use rustradio::blocks::{Head, SignalSourceComplex, UhdDevice, UhdSink, UhdSource, VectorSink};
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, blockchain, parse_frequency};
 

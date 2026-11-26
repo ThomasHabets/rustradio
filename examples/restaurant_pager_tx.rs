@@ -19,7 +19,7 @@ use anyhow::{Result, ensure};
 use clap::Parser;
 
 use rustradio::blocks::{Map, PwmEncoder, SoapySdrSink};
-use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+use rustradio::graph::{Graph, GraphBuildExt, GraphRunner};
 use rustradio::stream::{Tag, TagValue, new_nocopy_stream};
 use rustradio::{Complex, Float, parse_frequency, parse_verbosity};
 

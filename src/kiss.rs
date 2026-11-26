@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn busy_encoder_finishes_in_single_and_multi_thread_graphs() -> Result<()> {
         use crate::blocks::{PduToStream, VectorSink};
-        use crate::graph::{Graph, GraphRunner, GraphRunnerExt};
+        use crate::graph::{Graph, GraphBuildExt, GraphRunner};
         fn check(mut graph: impl GraphRunner) -> Result<()> {
             let (packets, input) = new_nocopy_stream();
             packets.push(vec![42], &[]);
@@ -618,7 +618,7 @@ mod tests {
     async fn async_busy_encoder_wakes_for_both_inputs_and_drains() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{PduToStream, VectorSink};
-        use crate::graph::GraphRunnerExt;
+        use crate::graph::GraphBuildExt;
         let (packets, input) = new_nocopy_stream();
         let (states, busy) = crate::stream::new_stream()?;
         let (encoder, frames) = KissEncode::new(input);

@@ -10,7 +10,7 @@
 use log::{info, trace};
 
 use crate::block::{Block, BlockRet};
-use crate::graph::{CancellationToken, GraphRunner};
+use crate::graph::{CancellationToken, GraphBuild, GraphRunner};
 
 /// Graph executor for use in WASM.
 ///
@@ -98,26 +98,28 @@ impl WasmGraph {
     }
 }
 
-impl GraphRunner for WasmGraph {
+impl GraphBuild for WasmGraph {
     fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.block_names.push(b.block_name().to_owned());
         self.blocks.push(Some(b));
     }
+    fn cancel_token(&self) -> CancellationToken {
+        todo!()
+    }
+}
+impl GraphRunner for WasmGraph {
     fn run(&mut self) -> crate::Result<()> {
         todo!()
     }
     fn generate_stats(&self) -> Option<String> {
         None
     }
-    fn cancel_token(&self) -> CancellationToken {
-        todo!()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::GraphRunnerExt;
+    use crate::graph::GraphBuildExt;
     use crate::stream::{ReadStream, WriteStream};
     use std::sync::{
         Arc,

@@ -1,7 +1,7 @@
 use log::{debug, error, info};
 
 use crate::block::{Block, BlockRet};
-use crate::graph::{CancellationToken, GraphRunner};
+use crate::graph::{CancellationToken, GraphBuild};
 use crate::{Error, Result};
 
 const SLEEP_TIME: tokio::time::Duration = tokio::time::Duration::from_millis(10);
@@ -31,7 +31,7 @@ where
 /// ```
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), anyhow::Error> {
-/// use rustradio::graph::GraphRunnerExt;
+/// use rustradio::graph::GraphBuildExt;
 /// use rustradio::agraph::AsyncGraph;
 /// use rustradio::blocks::{VectorSource,NullSink};
 /// let (src, prev) = VectorSource::new(vec![0u8; 10]).unwrap();
@@ -120,21 +120,23 @@ impl AsyncGraph {
     }
 }
 
-impl GraphRunner for AsyncGraph {
+impl GraphBuild for AsyncGraph {
     fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.blocks.push(b);
     }
 
+    fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.clone()
+    }
+}
+
+impl crate::graph::GraphRunner for AsyncGraph {
     fn run(&mut self) -> Result<()> {
         Err(Error::msg("async graph can't be called with sync run()"))
     }
 
     fn generate_stats(&self) -> Option<String> {
         None
-    }
-
-    fn cancel_token(&self) -> CancellationToken {
-        self.cancel_token.clone()
     }
 }
 
@@ -147,7 +149,7 @@ mod tests {
     async fn nullsink() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{NullSink, VectorSource};
-        use crate::graph::GraphRunnerExt;
+        use crate::graph::GraphBuildExt;
         let (src, prev) = VectorSource::new(vec![0u8; 10])?;
         let sink = NullSink::new(prev);
         let mut g = AsyncGraph::new();
@@ -161,7 +163,7 @@ mod tests {
     async fn double() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{Map, VectorSink, VectorSource};
-        use crate::graph::GraphRunnerExt;
+        use crate::graph::GraphBuildExt;
         let (src, prev) = VectorSource::new(vec![1u8, 2, 3])?;
         let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2, tags))?;
         let sink = VectorSink::new(prev, 100);
@@ -179,7 +181,7 @@ mod tests {
     async fn big() -> Result<()> {
         use crate::agraph::AsyncGraph;
         use crate::blocks::{Map, VectorSink, VectorSource};
-        use crate::graph::GraphRunnerExt;
+        use crate::graph::GraphBuildExt;
         let n = 1_000_000;
         let (src, prev) = VectorSource::new(vec![Complex::new(1.0, 0.0); n])?;
         let (mul, prev) = Map::new(prev, "double", move |x, tags| (x * 2.0, tags))?;

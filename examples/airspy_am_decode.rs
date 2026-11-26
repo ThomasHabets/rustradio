@@ -3,7 +3,7 @@ use clap::Parser;
 use log::warn;
 
 use rustradio::blocks::*;
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, Float, blockchain};
 use rustradio::{parse_frequency, parse_verbosity};

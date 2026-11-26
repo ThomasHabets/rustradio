@@ -29,7 +29,7 @@ as the bytes of an .au file.
 Sample tags accompany the first byte of the corresponding PCM sample.
 
 ```
-use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+use rustradio::graph::{Graph, GraphRunner, GraphBuildExt};
 use rustradio::blocks::{AuEncode, VectorSource, FileSink};
 use rustradio::au::Encoding;
 use rustradio::file_sink::Mode;

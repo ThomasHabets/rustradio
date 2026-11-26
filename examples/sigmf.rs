@@ -134,7 +134,7 @@ impl Block for CheckHash {
 
 fn cmd_check(opt: CheckOpts) -> Result<()> {
     use rustradio::blocks::*;
-    use rustradio::graph::{GraphRunner, GraphRunnerExt};
+    use rustradio::graph::{GraphBuildExt, GraphRunner};
     let mut g = rustradio::mtgraph::MTGraph::new();
     let src = SigMFSource::<u8>::builder(opt.archive)
         .ignore_type_error()

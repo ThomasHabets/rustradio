@@ -14,7 +14,7 @@ use clap::Parser;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::window::WindowType;
 use rustradio::{Float, blockchain};
 

@@ -41,20 +41,11 @@ impl StreamWaitState {
 }
 
 /**
-Abstraction over graph executors. Use [`GraphRunnerExt::add`] for an unboxed block.
+Abstraction over graph executors. Use [`GraphBuildExt::add`] for an unboxed block.
 */
-pub trait GraphRunner {
+pub trait GraphBuild {
     /// Add an already boxed block to the graph.
     fn add_boxed(&mut self, b: Box<dyn Block>);
-
-    /// Run the graph.
-    ///
-    /// Runs the graph until all the blocks are "done", or until the graph is
-    /// cancelled.
-    fn run(&mut self) -> Result<()>;
-
-    /// Return a string with stats about where time went.
-    fn generate_stats(&self) -> Option<String>;
 
     /// Return a cancellation token, for asynchronously stopping the
     /// graph, for example if the user presses Ctrl-C.
@@ -63,7 +54,7 @@ pub trait GraphRunner {
     /// # Example
     ///
     /// ```no_run
-    /// use rustradio::graph::GraphRunner;
+    /// use rustradio::graph::{GraphBuild, GraphRunner};
     /// let mut g = rustradio::graph::Graph::new();
     /// let cancel = g.cancel_token();
     /// ctrlc::set_handler(move || {
@@ -75,18 +66,29 @@ pub trait GraphRunner {
     fn cancel_token(&self) -> CancellationToken;
 }
 
+pub trait GraphRunner: GraphBuild {
+    /// Run the graph.
+    ///
+    /// Runs the graph until all the blocks are "done", or until the graph is
+    /// cancelled.
+    fn run(&mut self) -> Result<()>;
+
+    /// Return a string with stats about where time went.
+    fn generate_stats(&self) -> Option<String>;
+}
+
 /// Convenience methods for concrete and dynamic graph runners.
 ///
 /// This needs to be a separate trait because the generic method prevents
-/// creating `dyn GraphRunnerExt`, but we need `dyn GraphRunner`.
-pub trait GraphRunnerExt: GraphRunner {
+/// creating `dyn GraphBuildExt`, but we need `dyn GraphRunner`.
+pub trait GraphBuildExt: GraphBuild {
     /// Add a block to the graph, boxing it for storage.
     fn add(&mut self, block: impl Block + 'static) {
         self.add_boxed(Box::new(block));
     }
 }
 
-impl<G: GraphRunner + ?Sized> GraphRunnerExt for G {}
+impl<G: GraphBuild + ?Sized> GraphBuildExt for G {}
 
 /**
 A graph is a thing that RustRadio runs, to let blocks "talk to each
@@ -95,7 +97,7 @@ other" via streams.
 # Example
 
 ```
-use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+use rustradio::graph::{Graph, GraphRunner, GraphBuildExt};
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
 let (src, src_out) = FileSource::new("/dev/null")?;
@@ -138,12 +140,18 @@ impl Graph {
     }
 }
 
-impl GraphRunner for Graph {
+impl GraphBuild for Graph {
     fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.block_names.push(b.block_name().to_owned());
         self.blocks.push(Some(b));
     }
 
+    fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.clone()
+    }
+}
+
+impl GraphRunner for Graph {
     fn run(&mut self) -> Result<()> {
         let st = Instant::now();
         let start_run_cpu = get_cpu_time();
@@ -303,10 +311,6 @@ impl GraphRunner for Graph {
             width = ml,
         );
         Some(s)
-    }
-
-    fn cancel_token(&self) -> CancellationToken {
-        self.cancel_token.clone()
     }
 }
 

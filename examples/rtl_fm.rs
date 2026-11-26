@@ -14,7 +14,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 
 const SPECTRUM_SIZE: usize = 1024;

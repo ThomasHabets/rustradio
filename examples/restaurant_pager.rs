@@ -40,7 +40,7 @@ use clap::Parser;
 use rustradio::block::{Block, BlockRet};
 use rustradio::blockchain;
 use rustradio::blocks::{Agc, ComplexToMag2, FileSource, PwmDecoder, PwmFrame, PwmGapPulse};
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 use rustradio::stream::{NCReadStream, ReadStream};
 use rustradio::{Complex, Float};
@@ -309,7 +309,7 @@ struct SourceOutput {
     device: Option<soapysdr::Device>,
 }
 
-fn source(opt: &Opt, g: &mut impl GraphRunner) -> Result<SourceOutput> {
+fn source(opt: &Opt, g: &mut impl GraphBuild) -> Result<SourceOutput> {
     Ok(match opt.source {
         Source::File(ref o) => {
             let (b, prev) = FileSource::<Complex>::new(&o.input)?;
@@ -709,7 +709,7 @@ fn prompt_loop(
 /// Add the interactive transmitter branch and start its input thread.
 #[cfg(feature = "soapysdr")]
 fn add_interactive_transmitter(
-    graph: &mut impl GraphRunner,
+    graph: &mut impl GraphBuild,
     device: &soapysdr::Device,
     opt: &Opt,
     soapy: &SoapyOpt,

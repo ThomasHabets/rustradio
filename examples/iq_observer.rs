@@ -5,7 +5,7 @@
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     use rustradio::blocks::{AddConst, NullSink, SignalSourceComplex};
-    use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+    use rustradio::graph::{Graph, GraphBuild, GraphBuildExt, GraphRunner};
     use rustradio::iq_stream::IqServer;
 
     let server = IqServer::new();

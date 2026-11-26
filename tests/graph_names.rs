@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustradio::Result;
 use rustradio::block::{Block, BlockEOF, BlockRet};
-use rustradio::graph::GraphRunnerExt;
+use rustradio::graph::GraphBuildExt;
 
 #[derive(rustradio_macros::Block)]
 #[rustradio(custom_name, noeof)]

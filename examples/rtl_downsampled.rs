@@ -8,7 +8,7 @@ use rustradio::blockchain;
 use rustradio::blocks::*;
 use rustradio::file_sink::Mode;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuildExt, GraphRunner};
 
 #[derive(clap::Parser, Debug)]
 #[command(version, about)]

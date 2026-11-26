@@ -596,7 +596,7 @@ mod tests {
         assert!(out.read_buf()?.is_empty());
         #[cfg(not(feature = "wasm"))]
         {
-            use crate::graph::{Graph, GraphRunner, GraphRunnerExt};
+            use crate::graph::{Graph, GraphBuildExt, GraphRunner};
             let (filter, out) = make_filter()?;
             let mut graph = Graph::new();
             graph.add(filter);

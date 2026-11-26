@@ -8,7 +8,7 @@ use crate::stream::{ReadStream, WriteStream};
 /// stream is discarded.
 ///
 /// ```
-/// use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+/// use rustradio::graph::{Graph, GraphRunner, GraphBuildExt};
 /// use rustradio::blocks::{ConstantSource, SignalSourceFloat, Multiply, NullSink};
 ///
 /// let mut graph = Graph::new();

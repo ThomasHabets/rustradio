@@ -2,7 +2,7 @@
 use clap::Parser;
 
 use rustradio::blocks::*;
-use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+use rustradio::graph::{Graph, GraphBuildExt, GraphRunner};
 use rustradio::{Result, blockchain};
 
 #[derive(clap::Parser, Debug)]

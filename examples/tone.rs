@@ -7,7 +7,7 @@ use log::warn;
 
 use rustradio::blocks::*;
 use rustradio::graph::Graph;
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::{Float, blockchain};
 
 #[derive(clap::Parser, Debug)]

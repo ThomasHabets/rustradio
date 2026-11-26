@@ -4,7 +4,7 @@
 #[tokio::main]
 async fn main() -> rustradio::Result<()> {
     use rustradio::blocks::{IqStreamSink, ReaderSource};
-    use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+    use rustradio::graph::{Graph, GraphBuild, GraphBuildExt, GraphRunner};
     use rustradio::iq_stream::IqServer;
     use std::io::Read;
 

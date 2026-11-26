@@ -26,7 +26,7 @@ other" via streams.
 # Example
 
 ```
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 use rustradio::Complex;
 use rustradio::blocks::{FileSource,RtlSdrDecode,AddConst,NullSink};
@@ -75,11 +75,17 @@ impl Drop for CancelOnPanic {
     }
 }
 
-impl crate::graph::GraphRunner for MTGraph {
+impl crate::graph::GraphBuild for MTGraph {
     fn add_boxed(&mut self, b: Box<dyn Block>) {
         self.blocks.push(b);
     }
 
+    fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.clone()
+    }
+}
+
+impl crate::graph::GraphRunner for MTGraph {
     fn run(&mut self) -> Result<()> {
         let st = Instant::now();
         let run_start_cpu = get_cpu_time();
@@ -253,10 +259,6 @@ impl crate::graph::GraphRunner for MTGraph {
         );
         Some(s)
     }
-
-    fn cancel_token(&self) -> CancellationToken {
-        self.cancel_token.clone()
-    }
 }
 
 impl Default for MTGraph {
@@ -269,7 +271,7 @@ impl Default for MTGraph {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use crate::graph::{GraphRunner, GraphRunnerExt};
+    use crate::graph::{GraphBuild, GraphBuildExt, GraphRunner};
     use crate::stream::{Tag, TagValue};
     use crate::tests::assert_almost_equal_complex;
     use crate::{Complex, Float};

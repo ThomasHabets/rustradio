@@ -15,7 +15,7 @@ use log::info;
 
 use rustradio::blockchain;
 use rustradio::blocks::*;
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuild, GraphBuildExt, GraphRunner};
 use rustradio::mtgraph::MTGraph;
 use rustradio::{Complex, Float};
 use rustradio::{parse_duration, parse_frequency, parse_verbosity};

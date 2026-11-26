@@ -4,7 +4,7 @@
 #[tokio::main]
 async fn main() -> rustradio::Result<()> {
     use rustradio::blocks::{IqStreamSink, IqStreamSource, VectorSink, VectorSource};
-    use rustradio::graph::{Graph, GraphRunner, GraphRunnerExt};
+    use rustradio::graph::{Graph, GraphBuildExt, GraphRunner};
     use rustradio::iq_stream::{IqServer, StreamOptions};
     use rustradio::stream::{Tag, TagValue};
 

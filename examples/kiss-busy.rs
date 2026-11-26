@@ -6,7 +6,7 @@ use clap::Parser;
 
 use rustradio::blockchain;
 use rustradio::blocks::{DebugSink, KissDecode, KissFrame, NCNullSink, TcpSource};
-use rustradio::graph::{GraphRunner, GraphRunnerExt};
+use rustradio::graph::{GraphBuildExt, GraphRunner};
 
 #[derive(clap::Parser)]
 struct Opt {
