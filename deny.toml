@@ -4,8 +4,7 @@ no-default-features = false
 
 [advisories]
 ignore = [
-    # Retain chrono until its replacement is adopted.
-    "RUSTSEC-2026-0543", # chrono: unmaintained
+    "RUSTSEC-2026-0543", # chrono: unmaintained, via stderrlog.
 ]
 
 [licenses]
